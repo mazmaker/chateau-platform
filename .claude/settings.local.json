@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(claude)",
+      "Bash(npx @z_ai/coding-helper)",
+      "Bash(npx @z_ai/cli ping:*)",
+      "Bash(npm logout:*)",
+      "Bash(npm login:*)",
+      "WebSearch"
+    ]
+  }
+}
