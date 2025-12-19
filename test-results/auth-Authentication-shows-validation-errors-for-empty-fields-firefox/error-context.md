@@ -1,0 +1,57 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - banner [ref=e5]:
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - heading "CHATEAU" [level=1] [ref=e9]
+          - generic [ref=e10]: Platform
+        - generic [ref=e12]: Prop Tech Intelligence
+    - main [ref=e13]:
+      - generic [ref=e14]:
+        - button "Show shadcn/ui Demo" [ref=e16]
+        - generic [ref=e18]:
+          - heading "Supabase Connection Status" [level=3] [ref=e19]
+          - generic [ref=e20]:
+            - generic [ref=e21]:
+              - generic [ref=e22]: ✅
+              - generic [ref=e23]: Environment variables
+            - generic [ref=e24]:
+              - generic [ref=e25]: ❌
+              - generic [ref=e26]: User authentication
+            - generic [ref=e27]:
+              - generic [ref=e28]: ❌
+              - generic [ref=e29]: "Tenant context: Not set"
+          - button "Test Database Connection" [ref=e30]
+        - generic [ref=e32]:
+          - generic [ref=e33]:
+            - heading "Sign in to CHATEAU" [level=2] [ref=e34]
+            - paragraph [ref=e35]:
+              - text: Or
+              - button "create a new account" [ref=e36]
+          - generic [ref=e37]:
+            - generic [ref=e38]:
+              - generic [ref=e39]:
+                - generic [ref=e40]: Email address
+                - textbox "Email address" [active] [ref=e41]
+              - generic [ref=e42]:
+                - generic [ref=e43]: Password
+                - textbox "Password" [ref=e44]
+                - button [ref=e45]:
+                  - img [ref=e46]
+            - button "Sign in" [ref=e50]
+            - generic [ref=e51]:
+              - text: Don't have an account?
+              - link "Create account" [ref=e52] [cursor=pointer]:
+                - /url: "#"
+            - link "Forgot your password?" [ref=e54] [cursor=pointer]:
+              - /url: "#"
+    - contentinfo [ref=e55]:
+      - generic [ref=e57]: © 2025 CHATEAU Platform. All rights reserved.
+  - generic [ref=e58]:
+    - img [ref=e60]
+    - button "Open Tanstack query devtools" [ref=e109] [cursor=pointer]:
+      - img [ref=e110]
+```

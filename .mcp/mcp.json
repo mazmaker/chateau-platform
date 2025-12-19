@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "context7": {
+      "command": "node",
+      "args": [
+        "/Users/baituaykitty/Desktop/MAZ/ CHATEAU PLATFORM/node_modules/@upstash/context7-mcp/dist/index.js"
+      ],
+      "env": {
+        "UPSTASH_REDIS_REST_URL": "http://localhost:7373",
+        "UPSTASH_REDIS_REST_TOKEN": "bridge-token-local-dev"
+      }
+    }
+  }
+}

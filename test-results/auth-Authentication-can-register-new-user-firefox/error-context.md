@@ -1,0 +1,66 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - banner [ref=e5]:
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - heading "CHATEAU" [level=1] [ref=e9]
+          - generic [ref=e10]: Platform
+        - generic [ref=e12]: Prop Tech Intelligence
+    - main [ref=e13]:
+      - generic [ref=e14]:
+        - button "Show shadcn/ui Demo" [ref=e16]
+        - generic [ref=e18]:
+          - heading "Supabase Connection Status" [level=3] [ref=e19]
+          - generic [ref=e20]:
+            - generic [ref=e21]:
+              - generic [ref=e22]: ✅
+              - generic [ref=e23]: Environment variables
+            - generic [ref=e24]:
+              - generic [ref=e25]: ❌
+              - generic [ref=e26]: User authentication
+            - generic [ref=e27]:
+              - generic [ref=e28]: ❌
+              - generic [ref=e29]: "Tenant context: Not set"
+          - button "Test Database Connection" [ref=e30]
+        - generic [ref=e32]:
+          - generic [ref=e33]:
+            - heading "Create your account" [level=2] [ref=e34]
+            - paragraph [ref=e35]:
+              - text: Or
+              - button "sign in to your existing account" [ref=e36]
+          - generic [ref=e37]:
+            - generic [ref=e38]:
+              - generic [ref=e39]:
+                - generic [ref=e40]: Full Name
+                - textbox "Full Name" [ref=e41]:
+                  - /placeholder: John Doe
+                  - text: Test User 1766136121258
+              - generic [ref=e42]:
+                - generic [ref=e43]: Email address
+                - textbox "Email address" [ref=e44]:
+                  - /placeholder: you@example.com
+                  - text: test1766136121258@example.com
+              - generic [ref=e45]:
+                - generic [ref=e46]: Password
+                - generic [ref=e47]:
+                  - textbox "Password" [ref=e48]:
+                    - /placeholder: •••••••••
+                    - text: Test123456!
+                  - button [ref=e49]:
+                    - img [ref=e50]
+                - paragraph [ref=e53]: Must be at least 6 characters
+            - button "Sign up" [active] [ref=e55]
+            - generic [ref=e56]:
+              - text: Already have an account?
+              - link "Sign in" [ref=e57] [cursor=pointer]:
+                - /url: "#"
+    - contentinfo [ref=e58]:
+      - generic [ref=e60]: © 2025 CHATEAU Platform. All rights reserved.
+  - generic [ref=e61]:
+    - img [ref=e63]
+    - button "Open Tanstack query devtools" [ref=e112] [cursor=pointer]:
+      - img [ref=e113]
+```

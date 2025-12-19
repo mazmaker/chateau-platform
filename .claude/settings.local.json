@@ -28,7 +28,29 @@
       "Bash(supabase login:*)",
       "Bash(npx playwright install:*)",
       "Bash(npx playwright test:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote add:*)",
+      "Bash(read:*)",
+      "Bash(echo:*)",
+      "Bash(./push-commands.sh:*)",
+      "Bash(git remote remove:*)",
+      "Bash(gh:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(npx shadcn@latest init:*)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(npm search:*)",
+      "Bash(npx @upstash/context7-mcp init:*)",
+      "Bash(npx context7)",
+      "Bash(upstash:*)",
+      "Bash(brew services start:*)",
+      "Bash(curl:*)",
+      "Bash(node:*)",
+      "Bash(claude mcp:*)",
+      "Bash(.specify/scripts/bash/setup-plan.sh:*)",
+      "Bash(git checkout:*)",
+      "Bash(.specify/scripts/bash/update-agent-context.sh:*)"
     ]
   }
 }
