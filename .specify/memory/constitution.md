@@ -1,50 +1,63 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!-- Sync Impact Report:
+- Version change: 0.0.0 → 1.0.0 (Initial constitution)
+- Modified principles: N/A (initial creation)
+- Added sections: Core Principles (5), Production Requirements, Development Workflow, Governance
+- Removed sections: N/A
+- Templates requiring updates: ✅ plan-template.md, ✅ spec-template.md, ✅ tasks-template.md (all aligned with new principles)
+- Follow-up TODOs: None
+-->
+
+# CHATEAU Constitution
+<!-- Prop Tech Intelligence Platform Constitution -->
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Prototype Experience Preservation
+All changes MUST preserve the working user experience that already exists. The prototype's proven user flows and UI/UX patterns are considered validated and should only be enhanced, not replaced. Any modification to core user journeys MUST provide measurable improvement without disrupting existing users.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. SaaS Multi-Tenancy First
+The system MUST implement strict multi-tenant architecture with complete data isolation between companies. All database operations MUST use tenant-scoped queries with Row Level Security (RLS). Development MUST test with multiple tenants to prevent data leakage. No tenant data should ever be accessible to another tenant under any circumstances.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Real-Time By Default
+All critical state changes (unit status, booking locks, user assignments) MUST propagate to all relevant users within 500ms. The system MUST use Supabase Realtime subscriptions for live updates. Background processing MUST be asynchronous with proper queuing. Dashboard data MUST refresh automatically without user intervention.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Security & Compliance Non-Negotiable
+All user data MUST be encrypted at rest (AES-256) and in transit (TLS 1.3). The system MUST maintain PDPA compliance with consent logging and data retention policies. All API endpoints MUST implement rate limiting and OWASP protection. Authentication MUST include session management with 30-minute auto-logout. No sensitive data may be logged or exposed in error messages.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. AI Score Integration
+Customer Potential Score and Financial Score MUST be integrated into all relevant workflows. Sales representatives MUST see these scores prominently in customer views. The scoring algorithm MUST be consistent and transparent. AI-based segmentation MUST be available for campaign targeting. All AI features MUST maintain explainability.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Production Requirements
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### Technology Stack Enforcement
+Frontend MUST use React.js with Tailwind CSS. Backend MUST use Node.js with NestJS framework. Database MUST be Supabase (PostgreSQL). All new components MUST follow established patterns from the prototype. Technology changes require architecture review and migration plan.
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+### Performance Standards
+Dashboard pages MUST load within 1.5 seconds. API responses MUST be under 200ms for non-computational endpoints. Real-time updates MUST reach all clients within 500ms. The system MUST support 1000 concurrent users per tenant. Database queries MUST use connection pooling via Supavisor.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### Data Integrity Requirements
+Unit locking MUST prevent double booking with 15-minute reservation windows. All financial transactions MUST be ACID compliant. Data imports MUST be validated and transactional. Audit logs MUST track all data modifications with user, timestamp, and change details. No customer data may be deleted without soft-delete and retention period.
+
+## Development Workflow
+
+### Test-First Implementation
+All new features MUST have failing tests before implementation. Integration tests MUST cover multi-tenant scenarios. Contract tests MUST verify API responses. UI tests MUST validate critical user journeys. No feature may be deployed without passing all tests in multi-tenant environment.
+
+### Incremental Delivery
+Features MUST be developed as independent, releasable units. Each user story MUST provide standalone value. MVP releases MUST preserve existing functionality. Feature flags MUST control rollouts. Hotfixes MUST be possible without full redeployment.
+
+### Code Quality Standards
+All code MUST pass linting and formatting rules. Complex business logic MUST have unit tests with >80% coverage. Database migrations MUST be forward and backward compatible. API changes MUST maintain backward compatibility for one version. Security reviews are mandatory for authentication and data access changes.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This constitution supersedes all conflicting practices. Amendments require:
+1. Written justification identifying the specific limitation
+2. Impact analysis on existing features and tenants
+3. Migration plan for backward compatibility
+4. Approval from system architect and product lead
+5. Version increment following semantic versioning
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+All pull requests MUST verify constitutional compliance. Complexity beyond these principles requires explicit approval and documentation. Use runtime guidance documents for day-to-day development decisions.
+
+**Version**: 1.0.0 | **Ratified**: 2025-01-19 | **Last Amended**: 2025-01-19

@@ -7,7 +7,28 @@
       "Bash(npx @z_ai/cli ping:*)",
       "Bash(npm logout:*)",
       "Bash(npm login:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(.specify/scripts/bash/check-prerequisites.sh:*)",
+      "Bash(npm --version)",
+      "Bash(npx @modelcontextprotocol/cli list-servers:*)",
+      "Bash(claude-code install-list:*)",
+      "Bash(chmod:*)",
+      "Bash(./scripts/context-helper.sh:*)",
+      "Bash(npx supabase init:*)",
+      "Bash(supabase start:*)",
+      "Bash(brew install:*)",
+      "Bash(./scripts/setup-supabase.sh:*)",
+      "Bash(npm run dev:*)",
+      "Bash(docker:*)",
+      "Bash(supabase status:*)",
+      "Bash(find:*)",
+      "Bash(npm run build:*)",
+      "Bash(open:*)",
+      "Bash(supabase link:*)",
+      "Bash(supabase login:*)",
+      "Bash(npx playwright install:*)",
+      "Bash(npx playwright test:*)",
+      "Bash(git add:*)"
     ]
   }
 }
