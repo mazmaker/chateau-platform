@@ -50,7 +50,16 @@
       "Bash(claude mcp:*)",
       "Bash(.specify/scripts/bash/setup-plan.sh:*)",
       "Bash(git checkout:*)",
-      "Bash(.specify/scripts/bash/update-agent-context.sh:*)"
+      "Bash(.specify/scripts/bash/update-agent-context.sh:*)",
+      "Bash(brew services:*)",
+      "Bash(lsof:*)",
+      "Bash(ps:*)",
+      "Bash(kill:*)",
+      "Bash(npm test)",
+      "Bash(osascript:*)",
+      "Bash(osascript -e 'tell application \"\"Safari\"\" to tell front window to reload')",
+      "Bash(pkill:*)",
+      "Bash(xargs sed:*)"
     ]
   }
 }

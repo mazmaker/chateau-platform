@@ -65,10 +65,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error('Error fetching user tenants:', error)
+      // Continue without tenants - for demo mode
     }
   }
 
   useEffect(() => {
+    // Add timeout to prevent infinite loading
+    const loadingTimeout = setTimeout(() => {
+      if (loading) {
+        console.log('Auth loading timeout - setting loading to false')
+        setLoading(false)
+      }
+    }, 5000) // 5 second timeout
+
     // Get initial session
     const getInitialSession = async () => {
       try {
@@ -78,31 +87,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (session?.user) {
           // Fetch user profile with tenants
-          const { data: profile } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single()
+          try {
+            const { data: profile } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', session.user.id)
+              .single()
 
-          if (profile) {
-            setUser(profile)
-            await fetchUserTenants(session.user.id)
+            if (profile) {
+              setUser(profile)
+              await fetchUserTenants(session.user.id)
 
-            // Check for saved tenant preference
-            const savedTenantId = localStorage.getItem('current_tenant_id')
-            if (savedTenantId) {
-              const savedTenant = userTenants.find(ut => ut.tenant_id === savedTenantId)
-              if (savedTenant) {
-                setCurrentTenant(savedTenant.tenants)
-                setUserRole(savedTenant.role)
+              // Check for saved tenant preference
+              const savedTenantId = localStorage.getItem('current_tenant_id')
+              if (savedTenantId) {
+                const savedTenant = userTenants.find(ut => ut.tenant_id === savedTenantId)
+                if (savedTenant) {
+                  setCurrentTenant(savedTenant.tenants)
+                  setUserRole(savedTenant.role)
+                }
               }
             }
+          } catch (profileError) {
+            console.error('Error fetching user profile:', profileError)
+            // Continue without user profile
           }
         }
       } catch (error) {
         console.error('Error getting initial session:', error)
+        // Continue without session - for demo mode
       } finally {
         setLoading(false)
+        clearTimeout(loadingTimeout)
       }
     }
 
@@ -117,15 +133,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (session?.user) {
           // Fetch user profile
-          const { data: profile } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single()
+          try {
+            const { data: profile } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', session.user.id)
+              .single()
 
-          if (profile) {
-            setUser(profile)
-            await fetchUserTenants(session.user.id)
+            if (profile) {
+              setUser(profile)
+              await fetchUserTenants(session.user.id)
+            }
+          } catch (profileError) {
+            console.error('Error fetching user profile on auth change:', profileError)
+            // Continue without user profile
           }
         } else {
           // User signed out
@@ -140,7 +161,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+      clearTimeout(loadingTimeout)
+    }
   }, [])
 
   const signIn = async (email: string, password: string) => {
