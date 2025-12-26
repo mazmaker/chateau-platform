@@ -1,0 +1,471 @@
+-- คัดลอก SQL ทั้งหมดตั้งแต่บรรทัดนี้ไปจนถึงบรรทัดสุดท้าย --
+-- ====================================================================
+-- 🚀 COMPLETE DATABASE SETUP FOR CHATEAU PLATFORM
+-- ====================================================================
+
+-- Step 1: Enable Extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "citext";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Step 2: Create Enums
+CREATE TYPE tenant_status AS ENUM ('trial', 'active', 'suspended', 'cancelled');
+CREATE TYPE subscription_plan AS ENUM ('free', 'professional', 'enterprise');
+CREATE TYPE user_role AS ENUM ('owner', 'admin', 'sales', 'viewer');
+CREATE TYPE property_type AS ENUM ('apartment', 'house', 'villa', 'condo', 'commercial', 'townhouse');
+CREATE TYPE booking_status AS ENUM ('pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled');
+CREATE TYPE payment_status AS ENUM ('pending', 'paid', 'failed', 'refunded');
+CREATE TYPE lead_status AS ENUM ('new', 'contacted', 'qualified', 'negotiation', 'converted', 'lost');
+CREATE TYPE customer_source AS ENUM ('walk_in', 'web_form', 'website', 'referral', 'social_media', 'advertising', 'other');
+CREATE TYPE campaign_type AS ENUM ('email', 'social', 'search', 'display', 'content', 'event');
+CREATE TYPE notification_type AS ENUM ('info', 'success', 'warning', 'error');
+
+-- Step 3: Create Core Tables
+
+-- Tenants Table (Multi-tenant Architecture)
+CREATE TABLE IF NOT EXISTS tenants (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name text NOT NULL,
+    slug citext UNIQUE NOT NULL,
+    domain citext UNIQUE,
+    status tenant_status DEFAULT 'trial',
+    subscription_plan subscription_plan DEFAULT 'free',
+    max_properties integer DEFAULT 5,
+    max_users integer DEFAULT 10,
+    trial_ends_at timestamptz,
+    logo_url text,
+    primary_color varchar(7) DEFAULT '#4f46e5',
+    secondary_color varchar(7) DEFAULT '#7c3aed',
+    custom_domain text,
+    billing_email text,
+    tax_id text,
+    phone text,
+    address jsonb,
+    settings jsonb DEFAULT '{}',
+    features jsonb DEFAULT '{}',
+    timezone text DEFAULT 'Asia/Bangkok',
+    currency char(3) DEFAULT 'THB',
+    properties_count integer DEFAULT 0,
+    users_count integer DEFAULT 0,
+    storage_used bigint DEFAULT 0,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
+
+-- Users Table
+CREATE TABLE IF NOT EXISTS users (
+    id uuid PRIMARY KEY DEFAULT auth.uid(),
+    email text UNIQUE NOT NULL,
+    full_name text,
+    avatar_url text,
+    phone text,
+    date_of_birth date,
+    metadata jsonb DEFAULT '{}',
+    preferences jsonb DEFAULT '{}',
+    email_verified boolean DEFAULT false,
+    phone_verified boolean DEFAULT false,
+    last_sign_in_at timestamptz,
+    last_activity_at timestamptz,
+    login_count integer DEFAULT 0,
+    is_active boolean DEFAULT true,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
+
+-- User-Tenants Table (Multi-tenant Relationship)
+CREATE TABLE IF NOT EXISTS user_tenants (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    role user_role DEFAULT 'viewer',
+    is_active boolean DEFAULT true,
+    permissions jsonb DEFAULT '[]',
+    invited_by uuid REFERENCES auth.users(id),
+    invited_at timestamptz,
+    joined_at timestamptz DEFAULT now(),
+    last_login_at timestamptz,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now(),
+    UNIQUE(user_id, tenant_id)
+);
+
+-- Step 4: Create Business Tables
+
+-- Projects Table
+CREATE TABLE IF NOT EXISTS projects (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name text NOT NULL,
+    code text,
+    description text,
+    property_type property_type NOT NULL,
+    address jsonb NOT NULL,
+    latitude decimal(10, 8),
+    longitude decimal(11, 8),
+    google_maps_url text,
+    developer text,
+    completion_date date,
+    building_count integer,
+    total_units integer,
+    total_area_sqm decimal(12, 2),
+    price_min decimal(12, 2),
+    price_max decimal(12, 2),
+    price_avg_per_sqm decimal(12, 2),
+    amenities jsonb DEFAULT '[]',
+    facilities jsonb DEFAULT '[]',
+    transport jsonb DEFAULT '[]',
+    nearby_places jsonb DEFAULT '[]',
+    images jsonb DEFAULT '[]',
+    videos jsonb DEFAULT '[]',
+    floor_plans jsonb DEFAULT '[]',
+    virtual_tour_url text,
+    is_active boolean DEFAULT true,
+    is_featured boolean DEFAULT false,
+    launch_date date,
+    slug text,
+    meta_title text,
+    meta_description text,
+    view_count integer DEFAULT 0,
+    favorite_count integer DEFAULT 0,
+    inquiry_count integer DEFAULT 0,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now(),
+    UNIQUE(tenant_id, code)
+);
+
+-- Units Table
+CREATE TABLE IF NOT EXISTS units (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    unit_number text NOT NULL,
+    unit_type text,
+    floor_number integer,
+    building text,
+    area_sqm decimal(8, 2) NOT NULL,
+    bedrooms integer DEFAULT 1,
+    bathrooms integer DEFAULT 1,
+    parking_spaces integer DEFAULT 0,
+    layout_description text,
+    facing_direction text,
+    balcony boolean DEFAULT false,
+    garden boolean DEFAULT false,
+    pool boolean DEFAULT false,
+    price decimal(12, 2) NOT NULL,
+    price_per_sqm decimal(10, 2),
+    discount_amount decimal(12, 2) DEFAULT 0,
+    status text DEFAULT 'available',
+    availability_date date,
+    images jsonb DEFAULT '[]',
+    floor_plan jsonb,
+    specifications jsonb DEFAULT '{}',
+    notes text,
+    locked_by uuid REFERENCES users(id),
+    locked_until timestamptz,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now(),
+    UNIQUE(project_id, unit_number)
+);
+
+-- Customers Table
+CREATE TABLE IF NOT EXISTS customers (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    first_name text NOT NULL,
+    last_name text NOT NULL,
+    email text,
+    phone text,
+    date_of_birth date,
+    gender text,
+    nationality text,
+    id_document jsonb,
+    address jsonb,
+    work_address jsonb,
+    emergency_contact jsonb,
+    budget_min decimal(12, 2),
+    budget_max decimal(12, 2),
+    preferred_locations jsonb DEFAULT '[]',
+    preferred_property_types jsonb DEFAULT '[]',
+    minimum_bedrooms integer,
+    minimum_area_sqm decimal(8, 2),
+    source customer_source DEFAULT 'walk_in',
+    lead_status lead_status DEFAULT 'new',
+    lead_score integer DEFAULT 0,
+    assigned_sales_id uuid REFERENCES users(id),
+    preferred_contact_method text,
+    communication_preferences jsonb DEFAULT '{}',
+    documents jsonb DEFAULT '[]',
+    verification_status text DEFAULT 'pending',
+    page_views integer DEFAULT 0,
+    property_inquiries integer DEFAULT 0,
+    viewing_count integer DEFAULT 0,
+    favorite_properties jsonb DEFAULT '[]',
+    notes text,
+    last_contact_date date,
+    next_follow_up_date date,
+    tags jsonb DEFAULT '[]',
+    custom_fields jsonb DEFAULT '{}',
+    is_active boolean DEFAULT true,
+    is_deleted boolean DEFAULT false,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now(),
+    UNIQUE(tenant_id, email)
+);
+
+-- Customer Interactions Table
+CREATE TABLE IF NOT EXISTS customer_interactions (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    customer_id uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    type text NOT NULL,
+    direction text,
+    duration_minutes integer,
+    subject text,
+    content text,
+    staff_id uuid NOT NULL REFERENCES users(id),
+    status text,
+    next_action text,
+    next_action_date date,
+    attachments jsonb DEFAULT '[]',
+    notes text,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
+
+-- Bookings Table
+CREATE TABLE IF NOT EXISTS bookings (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    booking_number text UNIQUE NOT NULL,
+    project_id uuid NOT NULL REFERENCES projects(id),
+    unit_id uuid NOT NULL REFERENCES units(id),
+    customer_id uuid NOT NULL REFERENCES customers(id),
+    type text NOT NULL,
+    status booking_status DEFAULT 'pending',
+    total_amount decimal(12, 2) NOT NULL,
+    currency char(3) DEFAULT 'THB',
+    down_payment_amount decimal(12, 2),
+    down_payment_paid decimal(12, 2) DEFAULT 0,
+    booking_date date NOT NULL,
+    check_in_date date,
+    check_out_date date,
+    created_by uuid NOT NULL REFERENCES users(id),
+    sales_staff_id uuid REFERENCES users(id),
+    special_terms text,
+    notes jsonb DEFAULT '{}',
+    documents jsonb DEFAULT '[]',
+    confirmed_at timestamptz,
+    cancelled_at timestamptz,
+    completed_at timestamptz,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
+
+-- Payments Table
+CREATE TABLE IF NOT EXISTS payments (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    booking_id uuid NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+    type text NOT NULL,
+    amount decimal(12, 2) NOT NULL,
+    due_date date NOT NULL,
+    paid_date date,
+    status payment_status DEFAULT 'pending',
+    payment_method text,
+    transaction_reference text,
+    receipt_url text,
+    late_fee_amount decimal(12, 2) DEFAULT 0,
+    late_fee_paid boolean DEFAULT false,
+    notes text,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
+
+-- Additional Tables (Notifications, Settings, Audit Logs)
+CREATE TABLE IF NOT EXISTS notifications (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    user_id uuid REFERENCES users(id) ON DELETE CASCADE,
+    customer_id uuid REFERENCES customers(id) ON DELETE CASCADE,
+    type notification_type NOT NULL,
+    title text NOT NULL,
+    message text NOT NULL,
+    channels jsonb DEFAULT '["in_app"]',
+    is_read boolean DEFAULT false,
+    is_sent boolean DEFAULT false,
+    sent_at timestamptz,
+    read_at timestamptz,
+    related_entity_type text,
+    related_entity_id uuid,
+    action_url text,
+    action_text text,
+    data jsonb DEFAULT '{}',
+    expires_at timestamptz,
+    created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS system_settings (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE,
+    category text NOT NULL,
+    key text NOT NULL,
+    value jsonb,
+    description text,
+    is_public boolean DEFAULT false,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now(),
+    UNIQUE(tenant_id, category, key)
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE,
+    user_id uuid REFERENCES users(id),
+    action text NOT NULL,
+    entity_type text,
+    entity_id uuid,
+    old_values jsonb,
+    new_values jsonb,
+    ip_address inet,
+    user_agent text,
+    created_at timestamptz DEFAULT now()
+);
+
+-- Step 5: Create Indexes
+CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug);
+CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants(status);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
+CREATE INDEX IF NOT EXISTS idx_user_tenants_user_id ON user_tenants(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_tenants_tenant_id ON user_tenants(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_user_tenants_active ON user_tenants(is_active);
+CREATE INDEX IF NOT EXISTS idx_user_tenants_role ON user_tenants(role);
+CREATE INDEX IF NOT EXISTS idx_projects_tenant_id ON projects(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(is_active);
+CREATE INDEX IF NOT EXISTS idx_projects_type ON projects(property_type);
+CREATE INDEX IF NOT EXISTS idx_units_tenant_id ON units(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_units_project_id ON units(project_id);
+CREATE INDEX IF NOT EXISTS idx_units_status ON units(status);
+CREATE INDEX IF NOT EXISTS idx_customers_tenant_id ON customers(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
+CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(lead_status);
+CREATE INDEX IF NOT EXISTS idx_customers_assigned ON customers(assigned_sales_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_tenant_id ON bookings(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status);
+CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(booking_date);
+CREATE INDEX IF NOT EXISTS idx_bookings_customer ON bookings(customer_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(is_read);
+
+-- Step 6: Enable Row Level Security
+ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_tenants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE units ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customer_interactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- Step 7: Create RLS Policies
+CREATE POLICY "Users can view their tenant" ON tenants FOR SELECT USING (
+    id IN (SELECT tenant_id FROM user_tenants WHERE user_id = auth.uid() AND is_active = true)
+);
+
+CREATE POLICY "Users can view own profile" ON users FOR SELECT USING (id = auth.uid());
+CREATE POLICY "Users can update own profile" ON users FOR UPDATE USING (id = auth.uid());
+
+CREATE POLICY "Users can view their tenant memberships" ON user_tenants FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "Service role can manage all user_tenants" ON user_tenants FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
+
+CREATE POLICY "Users can view projects in their tenant" ON projects FOR SELECT USING (
+    tenant_id IN (SELECT tenant_id FROM user_tenants WHERE user_id = auth.uid() AND is_active = true)
+);
+
+CREATE POLICY "Users can view units in their tenant" ON units FOR SELECT USING (
+    tenant_id IN (SELECT tenant_id FROM user_tenants WHERE user_id = auth.uid() AND is_active = true)
+);
+
+CREATE POLICY "Users can view customers in their tenant" ON customers FOR SELECT USING (
+    tenant_id IN (SELECT tenant_id FROM user_tenants WHERE user_id = auth.uid() AND is_active = true)
+);
+
+CREATE POLICY "Users can view bookings in their tenant" ON bookings FOR SELECT USING (
+    tenant_id IN (SELECT tenant_id FROM user_tenants WHERE user_id = auth.uid() AND is_active = true)
+);
+
+CREATE POLICY "Users can view their notifications" ON notifications FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "System can insert notifications" ON notifications FOR INSERT WITH CHECK (true);
+
+-- Step 8: Create Functions
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE OR REPLACE FUNCTION public.generate_booking_number()
+RETURNS text AS $$
+DECLARE
+    prefix text := 'BK';
+    sequence_num bigint;
+    booking_number text;
+BEGIN
+    -- Get the next sequence number
+    SELECT COALESCE(MAX(CAST(SUBSTRING(booking_number FROM 3) AS bigint)), 0) + 1
+    INTO sequence_num
+    FROM bookings
+    WHERE booking_number ~ '^BK[0-9]+$';
+
+    -- Format as BK000001, BK000002, etc.
+    booking_number := prefix || LPAD(sequence_num::text, 6, '0');
+
+    RETURN booking_number;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Step 9: Create Triggers
+CREATE TRIGGER update_tenants_updated_at BEFORE UPDATE ON tenants FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_user_tenants_updated_at BEFORE UPDATE ON user_tenants FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON projects FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_units_updated_at BEFORE UPDATE ON units FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_customers_updated_at BEFORE UPDATE ON customers FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_bookings_updated_at BEFORE UPDATE ON bookings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Step 10: Insert Demo Data
+INSERT INTO tenants (name, slug, status, subscription_plan) VALUES
+('Demo Properties Co.', 'demo-properties', 'active', 'professional')
+ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO users (id, email, full_name, email_verified)
+SELECT
+    uuid_generate_v4(),
+    'demo@chateau.com',
+    'Demo User',
+    true
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'demo@chateau.com');
+
+-- Create demo project
+INSERT INTO projects (tenant_id, name, code, property_type, address, total_units, price_min, price_max)
+SELECT
+    t.id,
+    'Chateau Tower',
+    'CT001',
+    'apartment',
+    '{"street": "123 Sukhumvit Rd", "city": "Bangkok", "country": "Thailand"}',
+    150,
+    2500000,
+    8500000
+FROM tenants t
+WHERE t.slug = 'demo-properties'
+AND NOT EXISTS (SELECT 1 FROM projects WHERE code = 'CT001');
+
+COMMIT;
+-- สิ้นสุด SQL คัดลอกได้ตั้งแต่บรรทัดแรกถึงบรรทัดนี้ --

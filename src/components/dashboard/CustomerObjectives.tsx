@@ -15,7 +15,7 @@ const sources = [
   { icon: Phone, value: 17, label: "อื่น", color: "text-muted-foreground" },
 ];
 
-export const CustomerObjectives = () => {
+const CustomerObjectives = () => {
   return (
     <div className="bg-card rounded-xl p-4 card-shadow mb-4">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -58,3 +58,5 @@ export const CustomerObjectives = () => {
     </div>
   );
 };
+
+export default CustomerObjectives;

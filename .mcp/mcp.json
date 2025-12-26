@@ -1,14 +1,35 @@
 {
   "mcpServers": {
     "context7": {
-      "command": "node",
-      "args": [
-        "/Users/baituaykitty/Desktop/MAZ/ CHATEAU PLATFORM/node_modules/@upstash/context7-mcp/dist/index.js"
-      ],
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"],
       "env": {
-        "UPSTASH_REDIS_REST_URL": "http://localhost:7373",
-        "UPSTASH_REDIS_REST_TOKEN": "bridge-token-local-dev"
+        "CONTEXT7_API_KEY": "ctx7sk-fe6370d3-6992-4c6f-85c4-5004189bd5d3"
       }
+    },
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--access-token",
+        "sbp_35ba23698fa56fe56d6817823dbb1585d7bb9c6d"
+      ]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest"
+      ]
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "shadcn@latest",
+        "mcp"
+      ]
     }
   }
 }

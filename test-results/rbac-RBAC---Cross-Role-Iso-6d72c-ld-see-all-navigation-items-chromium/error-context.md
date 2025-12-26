@@ -1,0 +1,57 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - region "Notifications (F8)":
+    - list
+  - region "Notifications alt+T"
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - img [ref=e9]
+        - heading "CHATEAU Platform" [level=1] [ref=e13]
+        - paragraph [ref=e14]: เข้าสู่ระบบเพื่อจัดการธุรกิจของคุณ
+      - generic [ref=e15]:
+        - generic [ref=e16]:
+          - generic [ref=e17]: อีเมล
+          - generic [ref=e18]:
+            - generic:
+              - img
+            - textbox "อีเมล" [ref=e19]:
+              - /placeholder: your@email.com
+              - text: mazmakerv2.sup@gmail.com
+        - generic [ref=e20]:
+          - generic [ref=e21]: รหัสผ่าน
+          - generic [ref=e22]:
+            - generic:
+              - img
+            - textbox "รหัสผ่าน" [ref=e23]:
+              - /placeholder: ••••••••
+              - text: Chateau2025!
+            - button [ref=e24] [cursor=pointer]:
+              - img [ref=e25]
+        - generic [ref=e28]:
+          - generic [ref=e29] [cursor=pointer]:
+            - checkbox "จดจำฉัน" [ref=e30]
+            - generic [ref=e31]: จดจำฉัน
+          - link "ลืมรหัสผ่าน?" [ref=e32] [cursor=pointer]:
+            - /url: "#"
+        - button "กำลังเข้าสู่ระบบ..." [disabled] [ref=e33]:
+          - img [ref=e34]
+          - generic [ref=e36]: กำลังเข้าสู่ระบบ...
+      - paragraph [ref=e38]:
+        - strong [ref=e39]: ยังไม่มีบัญชี?
+        - text: ติดต่อผู้ดูแลระบบเพื่อสร้างบัญชีผู้ใช้
+      - paragraph [ref=e41]:
+        - text: โดยการเข้าสู่ระบบ คุณยอมรับ
+        - link "เงื่อนไขการให้บริการ" [ref=e42] [cursor=pointer]:
+          - /url: "#"
+        - text: และ
+        - link "นโยบายความเป็นส่วนตัว" [ref=e43] [cursor=pointer]:
+          - /url: "#"
+    - generic [ref=e44]: © 2025 CHATEAU Platform. All rights reserved.
+  - generic [ref=e45]:
+    - img [ref=e47]
+    - button "Open Tanstack query devtools" [ref=e95] [cursor=pointer]:
+      - img [ref=e96]
+```

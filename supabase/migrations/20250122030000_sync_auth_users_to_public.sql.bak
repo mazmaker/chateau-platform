@@ -1,0 +1,99 @@
+-- ============================================
+-- SYNC AUTH USERS TO PUBLIC USERS WITH ROLE
+-- ============================================
+
+-- First, let's see what users exist in auth.users
+-- Run this first to check:
+-- SELECT id, email, created_at FROM auth.users;
+
+-- Step 1: Insert existing auth users into public.users with role
+-- The first user will be OWNER, others will be ADMIN by default
+
+-- Get or create default tenant
+DO $$
+DECLARE
+    default_tenant_id UUID;
+    user_record RECORD;
+    counter INTEGER := 0;
+BEGIN
+    -- Create default tenant if not exists
+    INSERT INTO tenants (id, name, slug, status, subscription_plan, max_properties, max_users)
+    VALUES (
+        '00000000-0000-0000-0000-000000000001',
+        'Default Company',
+        'default-company',
+        'active',
+        'professional',
+        100,
+        50
+    )
+    ON CONFLICT (id) DO NOTHING
+    RETURNING id INTO default_tenant_id;
+
+    -- If not inserted, get existing
+    IF default_tenant_id IS NULL THEN
+        SELECT id INTO default_tenant_id FROM tenants WHERE id = '00000000-0000-0000-0000-000000000001';
+    END IF;
+
+    RAISE NOTICE 'Default tenant ID: %', default_tenant_id;
+
+    -- Loop through auth users and add to public.users
+    FOR user_record IN
+        SELECT id, email, raw_user_meta_data, created_at
+        FROM auth.users
+        WHERE id NOT IN (SELECT id FROM public.users)
+    LOOP
+        counter := counter + 1;
+
+        -- First user = OWNER, rest = ADMIN
+        INSERT INTO public.users (id, email, role, tenant_id, is_active, created_at)
+        VALUES (
+            user_record.id,
+            user_record.email,
+            CASE WHEN counter = 1 THEN 'owner' ELSE 'admin' END,
+            default_tenant_id,
+            true,
+            user_record.created_at
+        )
+        ON CONFLICT (id) DO NOTHING;
+
+        RAISE NOTICE 'Added user: % as %', user_record.email, CASE WHEN counter = 1 THEN 'OWNER' ELSE 'ADMIN' END;
+    END LOOP;
+
+    RAISE NOTICE 'Total users added: %', counter;
+END $$;
+
+-- Step 2: Update auth.users metadata with role
+UPDATE auth.users
+SET raw_user_meta_data = jsonb_set(
+    COALESCE(raw_user_meta_data, '{}'::jsonb),
+    '{role}',
+    to_jsonb(u.role)
+)
+FROM public.users u
+WHERE auth.users.id = u.id;
+
+-- Step 3: Verify results
+SELECT
+    'PUBLIC USERS' as source,
+    id,
+    email,
+    role,
+    tenant_id,
+    is_active,
+    created_at
+FROM public.users
+ORDER BY created_at
+
+UNION ALL
+
+SELECT
+    'AUTH USERS (with metadata)' as source,
+    id,
+    email,
+    raw_user_meta_data->>'role' as role,
+    NULL as tenant_id,
+    NULL as is_active,
+    created_at
+FROM auth.users
+ORDER BY created_at;

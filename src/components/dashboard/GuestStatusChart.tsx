@@ -6,7 +6,7 @@ const guestStatusData = [
   { name: 'Pending', value: 8, color: '#f59e0b' },
 ];
 
-export const GuestStatusChart = () => {
+const GuestStatusChart = () => {
   return (
     <div className="bg-white rounded-lg border border-[#e2e8f0] p-6">
       <h3 className="text-base font-semibold text-gray-900 mb-4">Guest Status</h3>
@@ -55,3 +55,5 @@ export const GuestStatusChart = () => {
     </div>
   );
 };
+
+export default GuestStatusChart;

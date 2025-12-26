@@ -10,12 +10,18 @@ export interface Database {
           name: string
           slug: string
           domain: string | null
-          logo_url: string | null
-          theme_config: any
-          subscription_plan: 'standard' | 'premium'
-          subscription_expires_at: string | null
+          status: 'trial' | 'active' | 'suspended' | 'cancelled'
+          subscription_plan: 'free' | 'professional' | 'enterprise'
+          max_properties: number
           settings: any
-          is_active: boolean
+          logo_url: string | null
+          primary_color: string
+          secondary_color: string
+          custom_domain: string | null
+          billing_email: string | null
+          trial_ends_at: string | null
+          subscription_current_period_start: string | null
+          subscription_current_period_end: string | null
           created_at: string
           updated_at: string
         }
@@ -29,8 +35,9 @@ export interface Database {
           full_name: string | null
           avatar_url: string | null
           phone: string | null
-          is_active: boolean
-          last_login_at: string | null
+          metadata: any
+          email_verified: boolean
+          last_sign_in_at: string | null
           created_at: string
           updated_at: string
         }
@@ -43,8 +50,10 @@ export interface Database {
           user_id: string
           tenant_id: string
           role: 'owner' | 'admin' | 'sales' | 'viewer'
-          permissions: any
           is_active: boolean
+          invited_by: string | null
+          invited_at: string | null
+          joined_at: string
           created_at: string
           updated_at: string
         }
@@ -55,22 +64,19 @@ export interface Database {
         Row: {
           id: string
           tenant_id: string
-          project_id: string | null
-          unit_number: string
-          title: string
+          name: string
+          type: 'apartment' | 'house' | 'villa' | 'condo' | 'commercial'
           description: string | null
-          property_type: string
-          bedrooms: number | null
-          bathrooms: number | null
-          area_sqm: number | null
-          price: number | null
-          status: 'available' | 'reserved' | 'sold' | 'rented'
+          address: any
+          amenities: any[]
+          base_price: number
+          currency: string
+          max_guests: number
+          bedrooms: number
+          bathrooms: number
+          size_sqft: number | null
           images: any[]
-          floor_plan: any | null
-          specifications: any
-          pricing_history: any[]
-          lock_expires_at: string | null
-          locked_by: string | null
+          is_active: boolean
           created_at: string
           updated_at: string
         }
@@ -81,26 +87,14 @@ export interface Database {
         Row: {
           id: string
           tenant_id: string
-          assigned_sales_id: string | null
-          source: 'walk_in' | 'web_form' | 'line' | 'referral'
-          first_name: string
-          last_name: string
-          email: string | null
+          email: string
+          full_name: string
           phone: string | null
-          id_number: string | null
-          address: string | null
-          purpose: 'own_stay' | 'investment' | 'rental' | null
-          budget_min: number | null
-          budget_max: number | null
-          preferred_provinces: string[] | null
-          notes: string | null
-          documents: any[]
-          potential_score: number | null
-          financial_score: number | null
-          ai_analysis: any | null
-          status: 'lead' | 'contacted' | 'qualified' | 'converted' | 'lost'
-          last_contacted_at: string | null
-          created_by: string | null
+          date_of_birth: string | null
+          nationality: string | null
+          id_document: any
+          preferences: any
+          is_active: boolean
           created_at: string
           updated_at: string
         }
@@ -113,19 +107,15 @@ export interface Database {
           tenant_id: string
           property_id: string
           customer_id: string
-          sales_staff_id: string | null
-          booking_number: string
-          type: 'reservation' | 'sale' | 'rental'
-          status: 'pending' | 'confirmed' | 'cancelled' | 'completed'
-          total_amount: number | null
-          down_payment: number | null
-          payment_schedule: any[]
-          special_terms: string | null
-          documents: any[]
-          notes: string | null
-          confirmed_at: string | null
-          cancelled_at: string | null
-          completed_at: string | null
+          check_in_date: string
+          check_out_date: string
+          guests: number
+          total_amount: number
+          currency: string
+          status: 'pending' | 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled'
+          special_requests: string | null
+          notes: any
+          created_by: string | null
           created_at: string
           updated_at: string
         }

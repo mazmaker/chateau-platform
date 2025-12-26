@@ -1,0 +1,612 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - region "Notifications (F8)":
+      - list
+    - region "Notifications alt+T"
+    - generic [ref=e3]:
+      - complementary [ref=e4]:
+        - generic [ref=e6]:
+          - img [ref=e8]
+          - generic [ref=e11]: CHATEAU
+        - generic [ref=e14]:
+          - generic [ref=e17]: TA
+          - generic [ref=e18]:
+            - paragraph [ref=e19]: Test Admin
+            - paragraph [ref=e20]: admin
+        - navigation [ref=e21]:
+          - button "ภาพรวม" [ref=e22] [cursor=pointer]:
+            - img [ref=e23]
+            - generic [ref=e28]: ภาพรวม
+          - button "โครงการ & ยูนิต" [ref=e29] [cursor=pointer]:
+            - img [ref=e30]
+            - generic [ref=e34]: โครงการ & ยูนิต
+            - img [ref=e36]
+          - button "ระบบ Leads" [ref=e38] [cursor=pointer]:
+            - img [ref=e39]
+            - generic [ref=e42]: ระบบ Leads
+            - img [ref=e44]
+          - button "ลูกค้า" [ref=e46] [cursor=pointer]:
+            - img [ref=e47]
+            - generic [ref=e52]: ลูกค้า
+            - img [ref=e54]
+          - button "จัดการผู้ใช้" [ref=e56] [cursor=pointer]:
+            - img [ref=e57]
+            - generic [ref=e62]: จัดการผู้ใช้
+            - img [ref=e64]
+          - button "ปรับแต่งระบบ" [ref=e66] [cursor=pointer]:
+            - img [ref=e67]
+            - generic [ref=e73]: ปรับแต่งระบบ
+            - img [ref=e75]
+          - button "ตั้งค่า" [ref=e77] [cursor=pointer]:
+            - img [ref=e78]
+            - generic [ref=e81]: ตั้งค่า
+            - img [ref=e83]
+          - button "ออกจากระบบ" [ref=e85] [cursor=pointer]:
+            - img [ref=e86]
+            - generic [ref=e89]: ออกจากระบบ
+        - generic [ref=e91]:
+          - generic [ref=e92]:
+            - img [ref=e93]
+            - generic [ref=e95]: "สิทธิ์: ผู้ดูแลบริษัท"
+          - paragraph [ref=e97]: • จัดการบริษัท, โครงการ, ผู้ใช้
+        - paragraph [ref=e99]: © 2024 Chateau PropTech
+      - generic [ref=e100]:
+        - banner [ref=e101]:
+          - heading "Dashboard" [level=1] [ref=e103]
+          - generic [ref=e104]:
+            - generic [ref=e105]:
+              - img [ref=e106]
+              - textbox "Search..." [ref=e109]
+            - button [ref=e110] [cursor=pointer]:
+              - img
+            - button [ref=e111] [cursor=pointer]:
+              - img
+            - generic [ref=e114] [cursor=pointer]: TA
+        - main [ref=e115]:
+          - generic [ref=e116]:
+            - generic [ref=e117]:
+              - generic [ref=e118]:
+                - heading "Chateau Platform Dashboard" [level=1] [ref=e119]
+                - paragraph [ref=e120]: ภาพรวมการจัดการอสังหาริมทรัพย์แบบ Multi-tenant
+              - button "ตั้งค่า" [ref=e122] [cursor=pointer]:
+                - img
+                - text: ตั้งค่า
+            - generic [ref=e123]:
+              - heading "กำลังโหลดข้อมูล..." [level=3] [ref=e126]:
+                - generic [ref=e127]:
+                  - img [ref=e128]
+                  - text: กำลังโหลดข้อมูล...
+              - generic [ref=e130]:
+                - img [ref=e131]
+                - generic [ref=e134]:
+                  - generic [ref=e135]: "ความปลอดภัยข้อมูล:"
+                  - img [ref=e136]
+                  - generic [ref=e138]: กำลังตรวจสอบสิทธิ์...
+              - generic:
+                - generic:
+                  - heading "การกระทำด่วน" [level=3]
+                - generic:
+                  - generic:
+                    - button "จัดการทีม" [disabled]:
+                      - img
+                      - generic: จัดการทีม
+                    - button "รายงาน" [disabled]:
+                      - img
+                      - generic: รายงาน
+              - generic [ref=e139]:
+                - generic [ref=e140]:
+                  - img [ref=e141]
+                  - heading "ตัวกรองข้อมูลหลัก" [level=3] [ref=e143]
+                - generic [ref=e144]:
+                  - generic [ref=e145]:
+                    - generic [ref=e146]:
+                      - img [ref=e147]
+                      - text: ช่วงเวลา
+                    - combobox [ref=e149]:
+                      - option "วันนี้"
+                      - option "สัปดาห์นี้"
+                      - option "เดือนนี้" [selected]
+                      - option "เดือนที่แล้ว"
+                      - option "ไตรมาสนี้"
+                      - option "ปีนี้"
+                      - option "กำหนดเอง"
+                  - generic [ref=e150]:
+                    - generic [ref=e151]:
+                      - img [ref=e152]
+                      - text: โครงการ
+                    - combobox [ref=e155]:
+                      - option "ทุกโครงการ" [selected]
+                      - option "บ้านอิศรา"
+                      - option "เดอะ โนเบิล"
+                      - option "ศุภาลัย"
+                      - option "แลนด์แอนด์เฮาส์"
+                  - generic [ref=e156]:
+                    - generic [ref=e157]: ประเภทอสังหาฯ
+                    - combobox [ref=e158]:
+                      - option "ทุกประเภท" [selected]
+                      - option "คอนโด"
+                      - option "ทาวน์เฮาส์"
+                      - option "บ้านเดี่ยว"
+                      - option "พาณิชย์"
+                  - generic [ref=e159]:
+                    - generic [ref=e160]: ค้นหา
+                    - generic [ref=e161]:
+                      - img [ref=e162]
+                      - textbox "ค้นหาลูกค้า, โครงการ..." [ref=e165]
+                - generic [ref=e166]:
+                  - generic [ref=e167]: "ตัวกรองที่เลือก:"
+                  - generic [ref=e169]: เดือนนี้
+                  - button "ล้างตัวกรอง" [ref=e170] [cursor=pointer]
+              - generic [ref=e171]:
+                - heading "📊 Sales Overview" [level=2] [ref=e172]
+                - generic [ref=e173]:
+                  - generic [ref=e174]:
+                    - generic [ref=e175]:
+                      - heading "ภาพรวมการขาย (Real-time)" [level=3] [ref=e176]
+                      - generic [ref=e179]: "อัปเดตล่าสุด: 2 นาทีที่แล้ว"
+                    - generic [ref=e180]:
+                      - generic [ref=e181]:
+                        - img [ref=e183]
+                        - paragraph [ref=e185]: ฿40.5M
+                        - generic [ref=e186]:
+                          - img [ref=e187]
+                          - generic [ref=e190]: +15.3%
+                        - paragraph [ref=e191]: รายได้รวม
+                      - generic [ref=e192]:
+                        - img [ref=e194]
+                        - paragraph [ref=e197]: "116"
+                        - generic [ref=e198]:
+                          - img [ref=e199]
+                          - generic [ref=e202]: +12.7%
+                        - paragraph [ref=e203]: จำนวนยูนิต
+                      - generic [ref=e204]:
+                        - img [ref=e206]
+                        - paragraph [ref=e210]: "88"
+                        - generic [ref=e212]: จาก 404 Leads
+                        - paragraph [ref=e213]: การจอง
+                      - generic [ref=e214]:
+                        - img [ref=e216]
+                        - paragraph [ref=e221]: 21.8%
+                        - generic [ref=e222]:
+                          - img [ref=e223]
+                          - generic [ref=e226]: +3.2%
+                        - paragraph [ref=e227]: อัตรา Conversion
+                  - generic [ref=e228]:
+                    - heading "แนวโน้มรายได้ประจำเดือน" [level=3] [ref=e229]
+                    - application [ref=e233]:
+                      - generic [ref=e252]:
+                        - generic [ref=e253]:
+                          - generic [ref=e255]: 1 ธ.ค.
+                          - generic [ref=e257]: 5 ธ.ค.
+                          - generic [ref=e259]: 10 ธ.ค.
+                          - generic [ref=e261]: 15 ธ.ค.
+                          - generic [ref=e263]: 20 ธ.ค.
+                          - generic [ref=e265]: 25 ธ.ค.
+                          - generic [ref=e267]: 30 ธ.ค.
+                        - generic [ref=e268]:
+                          - generic [ref=e270]: ฿0.0M
+                          - generic [ref=e272]: ฿2.0M
+                          - generic [ref=e274]: ฿4.0M
+                          - generic [ref=e276]: ฿6.0M
+                          - generic [ref=e278]: ฿8.0M
+                  - generic [ref=e279]:
+                    - generic [ref=e280]:
+                      - heading "จำนวนยูนิตที่ขายได้" [level=3] [ref=e281]
+                      - application [ref=e285]:
+                        - generic [ref=e309]:
+                          - generic [ref=e310]:
+                            - generic [ref=e312]: 1 ธ.ค.
+                            - generic [ref=e314]: 5 ธ.ค.
+                            - generic [ref=e316]: 10 ธ.ค.
+                            - generic [ref=e318]: 15 ธ.ค.
+                            - generic [ref=e320]: 20 ธ.ค.
+                            - generic [ref=e322]: 25 ธ.ค.
+                            - generic [ref=e324]: 30 ธ.ค.
+                          - generic [ref=e325]:
+                            - generic [ref=e327]: "0"
+                            - generic [ref=e329]: "6"
+                            - generic [ref=e331]: "12"
+                            - generic [ref=e333]: "18"
+                            - generic [ref=e335]: "24"
+                    - generic [ref=e336]:
+                      - heading "Leads vs Bookings" [level=3] [ref=e337]
+                      - application [ref=e341]:
+                        - generic [ref=e375]:
+                          - generic [ref=e376]:
+                            - generic [ref=e378]: 1 ธ.ค.
+                            - generic [ref=e380]: 5 ธ.ค.
+                            - generic [ref=e382]: 10 ธ.ค.
+                            - generic [ref=e384]: 15 ธ.ค.
+                            - generic [ref=e386]: 20 ธ.ค.
+                            - generic [ref=e388]: 25 ธ.ค.
+                            - generic [ref=e390]: 30 ธ.ค.
+                          - generic [ref=e391]:
+                            - generic [ref=e393]: "0"
+                            - generic [ref=e395]: "20"
+                            - generic [ref=e397]: "40"
+                            - generic [ref=e399]: "60"
+                            - generic [ref=e401]: "80"
+              - generic [ref=e402]:
+                - heading "🏗️ Project Performance" [level=2] [ref=e403]
+                - generic [ref=e404]:
+                  - generic [ref=e405]:
+                    - generic [ref=e406]:
+                      - heading "สรุปผลงานโครงการ" [level=3] [ref=e407]
+                      - combobox [ref=e408]:
+                        - option "เดือนนี้" [selected]
+                        - option "ไตรมาสนี้"
+                        - option "ปีนี้"
+                    - generic [ref=e409]:
+                      - generic [ref=e410]:
+                        - img [ref=e412]
+                        - paragraph [ref=e414]: ฿325M
+                        - paragraph [ref=e415]: รายได้รวม
+                      - generic [ref=e416]:
+                        - img [ref=e418]
+                        - paragraph [ref=e421]: "198"
+                        - paragraph [ref=e422]: ยูนิตที่ขายได้
+                      - generic [ref=e423]:
+                        - img [ref=e425]
+                        - paragraph [ref=e429]: "5"
+                        - paragraph [ref=e430]: โครงการทั้งหมด
+                      - generic [ref=e431]:
+                        - img [ref=e433]
+                        - paragraph [ref=e436]: 38.8%
+                        - paragraph [ref=e437]: สัดส่วนการขาย
+                  - generic [ref=e438]:
+                    - generic [ref=e439]:
+                      - heading "รายได้แยกตามโครงการ" [level=3] [ref=e440]
+                      - application [ref=e444]:
+                        - generic [ref=e456]:
+                          - generic [ref=e457]:
+                            - generic [ref=e459]: ฿0M
+                            - generic [ref=e461]: ฿0M
+                            - generic [ref=e463]: ฿0M
+                            - generic [ref=e465]: ฿0M
+                            - generic [ref=e467]: ฿0M
+                          - generic [ref=e468]:
+                            - generic [ref=e470]: บ้านอิศรา
+                            - generic [ref=e472]: เดอะ โนเบิล
+                            - generic [ref=e474]: ศุภาลัย
+                            - generic [ref=e476]: แลนด์แอนด์ เฮาส์
+                            - generic [ref=e478]: พรีเมียร์เอสเตท
+                    - generic [ref=e479]:
+                      - heading "สถานะโครงการ" [level=3] [ref=e480]
+                      - application [ref=e484]
+                      - generic [ref=e485]:
+                        - generic [ref=e486]:
+                          - generic [ref=e489]: กำลังขาย
+                          - generic [ref=e490]: "4"
+                        - generic [ref=e491]:
+                          - generic [ref=e494]: พรีเมียม
+                          - generic [ref=e495]: "1"
+                        - generic [ref=e496]:
+                          - generic [ref=e499]: ขายหมดแล้ว
+                          - generic [ref=e500]: "0"
+                  - generic [ref=e501]:
+                    - heading "รายละเอียดโครงการ" [level=3] [ref=e502]
+                    - table [ref=e504]:
+                      - rowgroup [ref=e505]:
+                        - row "โครงการ รายได้ ขายแล้ว/ทั้งหมด ราคาเฉลี่ย สัดส่วน สถานะ" [ref=e506]:
+                          - columnheader "โครงการ" [ref=e507]
+                          - columnheader "รายได้" [ref=e508]
+                          - columnheader "ขายแล้ว/ทั้งหมด" [ref=e509]
+                          - columnheader "ราคาเฉลี่ย" [ref=e510]
+                          - columnheader "สัดส่วน" [ref=e511]
+                          - columnheader "สถานะ" [ref=e512]
+                      - rowgroup [ref=e513]:
+                        - row "บ้านอิศรา ฿68.0M 45/120 ฿1.51M 37.5% กำลังขาย" [ref=e514]:
+                          - cell "บ้านอิศรา" [ref=e515]
+                          - cell "฿68.0M" [ref=e516]
+                          - cell "45/120" [ref=e517]
+                          - cell "฿1.51M" [ref=e518]
+                          - cell "37.5%" [ref=e519]:
+                            - generic [ref=e523]: 37.5%
+                          - cell "กำลังขาย" [ref=e524]:
+                            - generic [ref=e525]: กำลังขาย
+                        - row "เดอะ โนเบิล ฿45.0M 28/80 ฿1.61M 35% กำลังขาย" [ref=e526]:
+                          - cell "เดอะ โนเบิล" [ref=e527]
+                          - cell "฿45.0M" [ref=e528]
+                          - cell "28/80" [ref=e529]
+                          - cell "฿1.61M" [ref=e530]
+                          - cell "35%" [ref=e531]:
+                            - generic [ref=e535]: 35%
+                          - cell "กำลังขาย" [ref=e536]:
+                            - generic [ref=e537]: กำลังขาย
+                        - row "ศุภาลัย ฿52.0M 38/100 ฿1.37M 38% กำลังขาย" [ref=e538]:
+                          - cell "ศุภาลัย" [ref=e539]
+                          - cell "฿52.0M" [ref=e540]
+                          - cell "38/100" [ref=e541]
+                          - cell "฿1.37M" [ref=e542]
+                          - cell "38%" [ref=e543]:
+                            - generic [ref=e547]: 38%
+                          - cell "กำลังขาย" [ref=e548]:
+                            - generic [ref=e549]: กำลังขาย
+                        - row "แลนด์ แอนด์ เฮาส์ ฿71.0M 52/150 ฿1.35M 34.7% กำลังขาย" [ref=e550]:
+                          - cell "แลนด์ แอนด์ เฮาส์" [ref=e551]
+                          - cell "฿71.0M" [ref=e552]
+                          - cell "52/150" [ref=e553]
+                          - cell "฿1.35M" [ref=e554]
+                          - cell "34.7%" [ref=e555]:
+                            - generic [ref=e559]: 34.7%
+                          - cell "กำลังขาย" [ref=e560]:
+                            - generic [ref=e561]: กำลังขาย
+                        - row "พรีเมียร์ เอสเตท ฿89.0M 35/60 ฿2.54M 58.3% พรีเมียม" [ref=e562]:
+                          - cell "พรีเมียร์ เอสเตท" [ref=e563]
+                          - cell "฿89.0M" [ref=e564]
+                          - cell "35/60" [ref=e565]
+                          - cell "฿2.54M" [ref=e566]
+                          - cell "58.3%" [ref=e567]:
+                            - generic [ref=e571]: 58.3%
+                          - cell "พรีเมียม" [ref=e572]:
+                            - generic [ref=e573]: พรีเมียม
+              - generic [ref=e574]:
+                - heading "👥 Customer Statistics" [level=2] [ref=e575]
+                - generic [ref=e576]:
+                  - generic [ref=e577]:
+                    - generic [ref=e578]:
+                      - heading "สถิติลูกค้า" [level=3] [ref=e579]
+                      - generic [ref=e580]:
+                        - img [ref=e581]
+                        - generic [ref=e583]: Live Data
+                    - generic [ref=e584]:
+                      - generic [ref=e585]:
+                        - img [ref=e587]
+                        - paragraph [ref=e592]: "1250"
+                        - paragraph [ref=e593]: Leads ทั้งหมด
+                      - generic [ref=e594]:
+                        - img [ref=e596]
+                        - paragraph [ref=e600]: "890"
+                        - paragraph [ref=e601]: Qualified Leads
+                      - generic [ref=e602]:
+                        - img [ref=e604]
+                        - paragraph [ref=e607]: "156"
+                        - paragraph [ref=e608]: ลูกค้า
+                      - generic [ref=e609]:
+                        - img [ref=e611]
+                        - paragraph [ref=e613]: 12.5%
+                        - paragraph [ref=e614]: Conversion Rate
+                  - generic [ref=e615]:
+                    - generic [ref=e616]:
+                      - heading "Conversion Funnel" [level=3] [ref=e617]
+                      - generic [ref=e618]:
+                        - generic [ref=e619]:
+                          - generic [ref=e620]: Leads
+                          - generic [ref=e623]: "1250"
+                          - generic [ref=e624]: 100%
+                        - generic [ref=e625]:
+                          - generic [ref=e626]: Qualified
+                          - generic [ref=e629]: "890"
+                          - generic [ref=e630]: 71.2%
+                        - generic [ref=e631]:
+                          - generic [ref=e632]: Interested
+                          - generic [ref=e635]: "567"
+                          - generic [ref=e636]: 45.4%
+                        - generic [ref=e637]:
+                          - generic [ref=e638]: Negotiation
+                          - generic [ref=e641]: "234"
+                          - generic [ref=e642]: 18.7%
+                        - generic [ref=e643]:
+                          - generic [ref=e644]: Customers
+                          - generic [ref=e647]: "156"
+                          - generic [ref=e648]: 12.5%
+                    - generic [ref=e649]:
+                      - heading "สัดส่วนลูกค้า" [level=3] [ref=e650]
+                      - application [ref=e654]
+                      - generic [ref=e655]:
+                        - generic [ref=e656]:
+                          - generic [ref=e659]: ลูกค้าใหม่
+                          - generic [ref=e660]: "156"
+                        - generic [ref=e661]:
+                          - generic [ref=e664]: ลูกค้าเก่า
+                          - generic [ref=e665]: "89"
+                        - generic [ref=e666]:
+                          - generic [ref=e669]: ลูกค้ารอการตัดสินใจ
+                          - generic [ref=e670]: "234"
+                        - generic [ref=e671]:
+                          - generic [ref=e674]: สนใจแต่ยังไม่ตัดสินใจ
+                          - generic [ref=e675]: "567"
+                  - generic [ref=e676]:
+                    - heading "แนวโน้มลูกค้ารายเดือน" [level=3] [ref=e677]
+                    - application [ref=e681]:
+                      - generic [ref=e722]:
+                        - generic [ref=e723]:
+                          - generic [ref=e725]: ม.ค.
+                          - generic [ref=e727]: ก.พ.
+                          - generic [ref=e729]: มี.ค.
+                          - generic [ref=e731]: เม.ย.
+                          - generic [ref=e733]: พ.ค.
+                          - generic [ref=e735]: มิ.ย.
+                        - generic [ref=e736]:
+                          - generic [ref=e738]: "0"
+                          - generic [ref=e740]: "80"
+                          - generic [ref=e742]: "160"
+                          - generic [ref=e744]: "240"
+                          - generic [ref=e746]: "320"
+                  - generic [ref=e747]:
+                    - heading "การจอง vs การยกเลิก" [level=3] [ref=e748]
+                    - application [ref=e752]:
+                      - generic [ref=e764]:
+                        - generic [ref=e765]:
+                          - generic [ref=e767]: ม.ค.
+                          - generic [ref=e769]: ก.พ.
+                          - generic [ref=e771]: มี.ค.
+                          - generic [ref=e773]: เม.ย.
+                          - generic [ref=e775]: พ.ค.
+                          - generic [ref=e777]: มิ.ย.
+                        - generic [ref=e778]:
+                          - generic [ref=e780]: "0"
+                          - generic [ref=e782]: "25"
+                          - generic [ref=e784]: "50"
+                          - generic [ref=e786]: "75"
+                          - generic [ref=e788]: "100"
+              - generic [ref=e789]:
+                - generic [ref=e791]:
+                  - heading "Revenue Overview" [level=3] [ref=e792]
+                  - generic [ref=e793]:
+                    - paragraph [ref=e794]: Total Revenue
+                    - paragraph [ref=e795]: ฿4,385,000
+                    - paragraph [ref=e796]: +12.5% from last month
+                  - application [ref=e800]:
+                    - generic [ref=e825]:
+                      - generic [ref=e826]:
+                        - generic [ref=e828]: ม.ค.
+                        - generic [ref=e830]: ก.พ.
+                        - generic [ref=e832]: มี.ค.
+                        - generic [ref=e834]: เม.ย.
+                        - generic [ref=e836]: พ.ค.
+                        - generic [ref=e838]: มิ.ย.
+                        - generic [ref=e840]: ก.ค.
+                        - generic [ref=e842]: ส.ค.
+                      - generic [ref=e843]:
+                        - generic [ref=e845]: ฿0k
+                        - generic [ref=e847]: ฿200k
+                        - generic [ref=e849]: ฿400k
+                        - generic [ref=e851]: ฿600k
+                        - generic [ref=e853]: ฿800k
+                - generic [ref=e855]:
+                  - heading "Guest Status" [level=3] [ref=e856]
+                  - application [ref=e860]
+                  - generic [ref=e861]:
+                    - generic [ref=e862]:
+                      - generic [ref=e865]: Checked-in
+                      - generic [ref=e866]: 68%
+                    - generic [ref=e867]:
+                      - generic [ref=e870]: Confirmed
+                      - generic [ref=e871]: 24%
+                    - generic [ref=e872]:
+                      - generic [ref=e875]: Pending
+                      - generic [ref=e876]: 8%
+              - generic [ref=e877]:
+                - generic [ref=e878]:
+                  - heading "Recent Bookings" [level=3] [ref=e879]
+                  - generic [ref=e880]:
+                    - generic [ref=e881]:
+                      - heading "Recent Bookings" [level=3] [ref=e882]
+                      - button "View all" [ref=e883] [cursor=pointer]
+                    - table [ref=e885]:
+                      - rowgroup [ref=e886]:
+                        - row "Booking ID Guest Name Property Check-in Check-out Status Amount" [ref=e887]:
+                          - columnheader "Booking ID" [ref=e888]
+                          - columnheader "Guest Name" [ref=e889]
+                          - columnheader "Property" [ref=e890]
+                          - columnheader "Check-in" [ref=e891]
+                          - columnheader "Check-out" [ref=e892]
+                          - columnheader "Status" [ref=e893]
+                          - columnheader "Amount" [ref=e894]
+                      - rowgroup [ref=e895]:
+                        - row "BKG-2024-001 John Doe Seaside Villa A Mar 21, 2024 Mar 25, 2024 Checked-in ฿12,000" [ref=e896]:
+                          - cell "BKG-2024-001" [ref=e897]
+                          - cell "John Doe" [ref=e898]
+                          - cell "Seaside Villa A" [ref=e899]
+                          - cell "Mar 21, 2024" [ref=e900]
+                          - cell "Mar 25, 2024" [ref=e901]
+                          - cell "Checked-in" [ref=e902]:
+                            - generic [ref=e903]: Checked-in
+                          - cell "฿12,000" [ref=e904]
+                        - row "BKG-2024-002 Jane Smith Mountain View B Mar 22, 2024 Mar 24, 2024 Confirmed ฿8,000" [ref=e905]:
+                          - cell "BKG-2024-002" [ref=e906]
+                          - cell "Jane Smith" [ref=e907]
+                          - cell "Mountain View B" [ref=e908]
+                          - cell "Mar 22, 2024" [ref=e909]
+                          - cell "Mar 24, 2024" [ref=e910]
+                          - cell "Confirmed" [ref=e911]:
+                            - generic [ref=e912]: Confirmed
+                          - cell "฿8,000" [ref=e913]
+                        - row "BKG-2024-003 Robert Johnson City Center C Mar 23, 2024 Mar 26, 2024 Pending ฿15,000" [ref=e914]:
+                          - cell "BKG-2024-003" [ref=e915]
+                          - cell "Robert Johnson" [ref=e916]
+                          - cell "City Center C" [ref=e917]
+                          - cell "Mar 23, 2024" [ref=e918]
+                          - cell "Mar 26, 2024" [ref=e919]
+                          - cell "Pending" [ref=e920]:
+                            - generic [ref=e921]: Pending
+                          - cell "฿15,000" [ref=e922]
+                        - row "BKG-2024-004 Mary Williams Beach Resort D Mar 24, 2024 Mar 28, 2024 Confirmed ฿20,000" [ref=e923]:
+                          - cell "BKG-2024-004" [ref=e924]
+                          - cell "Mary Williams" [ref=e925]
+                          - cell "Beach Resort D" [ref=e926]
+                          - cell "Mar 24, 2024" [ref=e927]
+                          - cell "Mar 28, 2024" [ref=e928]
+                          - cell "Confirmed" [ref=e929]:
+                            - generic [ref=e930]: Confirmed
+                          - cell "฿20,000" [ref=e931]
+                        - row "BKG-2024-005 David Brown Forest Lodge E Mar 25, 2024 Mar 27, 2024 Checked-in ฿10,000" [ref=e932]:
+                          - cell "BKG-2024-005" [ref=e933]
+                          - cell "David Brown" [ref=e934]
+                          - cell "Forest Lodge E" [ref=e935]
+                          - cell "Mar 25, 2024" [ref=e936]
+                          - cell "Mar 27, 2024" [ref=e937]
+                          - cell "Checked-in" [ref=e938]:
+                            - generic [ref=e939]: Checked-in
+                          - cell "฿10,000" [ref=e940]
+                - generic [ref=e941]:
+                  - heading "Top Properties" [level=3] [ref=e942]
+                  - generic [ref=e943]:
+                    - generic [ref=e944]:
+                      - heading "Top Properties" [level=3] [ref=e945]
+                      - button "View all" [ref=e946] [cursor=pointer]
+                    - generic [ref=e947]:
+                      - generic [ref=e948]:
+                        - generic [ref=e949]:
+                          - img "Seaside Villa A" [ref=e950]
+                          - generic [ref=e951]: "1"
+                        - generic [ref=e952]:
+                          - heading "Seaside Villa A" [level=4] [ref=e953]
+                          - generic [ref=e954]:
+                            - img [ref=e955]
+                            - generic [ref=e958]: Phuket, Thailand
+                        - generic [ref=e959]:
+                          - generic [ref=e960]:
+                            - img [ref=e961]
+                            - generic [ref=e963]: "4.8"
+                          - generic [ref=e964]:
+                            - img [ref=e965]
+                            - generic [ref=e968]: 92% occupied
+                          - paragraph [ref=e969]: ฿485,000
+                      - generic [ref=e970]:
+                        - generic [ref=e971]:
+                          - img "Mountain View B" [ref=e972]
+                          - generic [ref=e973]: "2"
+                        - generic [ref=e974]:
+                          - heading "Mountain View B" [level=4] [ref=e975]
+                          - generic [ref=e976]:
+                            - img [ref=e977]
+                            - generic [ref=e980]: Chiang Mai, Thailand
+                        - generic [ref=e981]:
+                          - generic [ref=e982]:
+                            - img [ref=e983]
+                            - generic [ref=e985]: "4.9"
+                          - generic [ref=e986]:
+                            - img [ref=e987]
+                            - generic [ref=e990]: 88% occupied
+                          - paragraph [ref=e991]: ฿412,000
+                      - generic [ref=e992]:
+                        - generic [ref=e993]:
+                          - img "Beach Resort D" [ref=e994]
+                          - generic [ref=e995]: "3"
+                        - generic [ref=e996]:
+                          - heading "Beach Resort D" [level=4] [ref=e997]
+                          - generic [ref=e998]:
+                            - img [ref=e999]
+                            - generic [ref=e1002]: Krabi, Thailand
+                        - generic [ref=e1003]:
+                          - generic [ref=e1004]:
+                            - img [ref=e1005]
+                            - generic [ref=e1007]: "4.7"
+                          - generic [ref=e1008]:
+                            - img [ref=e1009]
+                            - generic [ref=e1012]: 95% occupied
+                          - paragraph [ref=e1013]: ฿628,000
+              - generic [ref=e1016]:
+                - img [ref=e1017]
+                - generic [ref=e1019]: กำลังโหลดข้อมูลสิทธิ์...
+    - generic [ref=e1020]:
+      - img [ref=e1022]
+      - button "Open Tanstack query devtools" [ref=e1070] [cursor=pointer]:
+        - img [ref=e1071]
+  - generic [ref=e1119]: ฿0k
+```

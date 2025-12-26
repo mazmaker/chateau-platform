@@ -1,20 +1,42 @@
 -- Initial Schema for CHATEAU Platform
 -- Multi-tenant Property Management System
 
--- Enable necessary extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "citext";
+-- Enable necessary extensions (force ensure they are installed)
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'citext') THEN
+        CREATE EXTENSION "citext";
+    END IF;
+END $$;
 
--- Create custom types
+-- Create custom types (safe creation with drop if exists)
+DO $$ BEGIN
+    DROP TYPE IF EXISTS tenant_status CASCADE;
+    DROP TYPE IF EXISTS subscription_plan CASCADE;
+    DROP TYPE IF EXISTS user_role CASCADE;
+    DROP TYPE IF EXISTS booking_status CASCADE;
+    DROP TYPE IF EXISTS property_type CASCADE;
+END $$;
+
 CREATE TYPE tenant_status AS ENUM ('trial', 'active', 'suspended', 'cancelled');
 CREATE TYPE subscription_plan AS ENUM ('starter', 'professional', 'enterprise');
-CREATE TYPE user_role AS ENUM ('owner', 'admin', 'manager', 'staff');
+CREATE TYPE user_role AS ENUM ('owner', 'admin', 'sales');
 CREATE TYPE booking_status AS ENUM ('pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled');
 CREATE TYPE property_type AS ENUM ('apartment', 'house', 'villa', 'condo', 'commercial');
 
+-- Drop tables if they exist
+DROP TABLE IF EXISTS booking_guests CASCADE;
+DROP TABLE IF EXISTS bookings CASCADE;
+DROP TABLE IF EXISTS customers CASCADE;
+DROP TABLE IF EXISTS property_amenities CASCADE;
+DROP TABLE IF EXISTS amenities CASCADE;
+DROP TABLE IF EXISTS property_images CASCADE;
+DROP TABLE IF EXISTS properties CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS tenants CASCADE;
+
 -- Tenants table for multi-tenancy
 CREATE TABLE tenants (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     name text NOT NULL,
     slug citext UNIQUE NOT NULL,
     domain citext UNIQUE,
@@ -34,7 +56,7 @@ CREATE TABLE users (
     avatar_url text,
     phone text,
     tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
-    role user_role DEFAULT 'staff',
+    role user_role DEFAULT 'sales',
     is_active boolean DEFAULT true,
     last_sign_in_at timestamptz,
     created_at timestamptz DEFAULT now(),
@@ -44,7 +66,7 @@ CREATE TABLE users (
 
 -- Properties table
 CREATE TABLE properties (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
     name text NOT NULL,
     type property_type NOT NULL,
@@ -65,7 +87,7 @@ CREATE TABLE properties (
 
 -- Customers table
 CREATE TABLE customers (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
     email text NOT NULL,
     full_name text NOT NULL,
@@ -82,7 +104,7 @@ CREATE TABLE customers (
 
 -- Bookings table
 CREATE TABLE bookings (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
     property_id uuid REFERENCES properties(id) ON DELETE CASCADE NOT NULL,
     customer_id uuid REFERENCES customers(id) ON DELETE CASCADE NOT NULL,
@@ -189,7 +211,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Create trigger for new user signup
+-- Create trigger for new user signup (drop if exists first)
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();

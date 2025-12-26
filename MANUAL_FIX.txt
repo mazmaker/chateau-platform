@@ -1,0 +1,31 @@
+=================================================================
+CHATEAU Platform - Manual Fix Instructions
+=================================================================
+
+PROBLEM: "Database error creating new user"
+CAUSE: Trigger is trying to insert into users table before auth creates the user
+
+SOLUTION: Run this SQL in Supabase SQL Editor:
+
+1. Go to: https://pqnjvcbmnatrtvpqnrdx.supabase.co/project/sql
+
+2. Paste and RUN:
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+
+3. Now create user at: https://pqnjvcbmnatrtvpqnrdx.supabase.co/project/auth/users
+   - Email: mazmakerv2.sup@gmail.com
+   - Password: Chateau2025!
+   - ✅ Auto Confirm User
+
+4. After user created, run this to give OWNER role:
+
+INSERT INTO user_tenants (user_id, tenant_id, role, is_active, joined_at)
+SELECT 'USER_ID_HERE', id, 'owner', true, now()
+FROM tenants WHERE slug = 'chateau-platform'
+ON CONFLICT (user_id, tenant_id) DO UPDATE SET role = 'owner';
+
+(Replace USER_ID_HERE with the actual ID from Users page)
+
+5. Login at: http://localhost:5174/auth/login
+=================================================================

@@ -11,7 +11,7 @@ const countryRevenueData = [
   { country: 'Australia', revenue: 189000, bookings: 64 }
 ];
 
-export const RevenueByCountry = () => {
+const RevenueByCountry = () => {
   return (
     <div className="bg-white rounded-lg border border-[#e2e8f0] p-6">
       <div className="flex items-center justify-between mb-6">
@@ -65,3 +65,5 @@ export const RevenueByCountry = () => {
     </div>
   );
 };
+
+export default RevenueByCountry;

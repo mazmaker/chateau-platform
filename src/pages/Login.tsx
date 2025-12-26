@@ -1,18 +1,7 @@
-import React, { useState } from 'react'
-import { LoginForm } from '@/components/LoginForm'
-import { RegisterForm } from '@/components/RegisterForm'
-import { SupabaseTest } from '@/components/SupabaseTest'
-import { ShadcnDemo } from '@/components/ShadcnDemo'
-import { Button } from '@/components/ui/button'
+import React from 'react'
+import LoginForm from '@/components/auth/LoginForm'
 
 export function Login() {
-  const [isLoginMode, setIsLoginMode] = useState(true)
-  const [showDemo, setShowDemo] = useState(false)
-
-  const toggleMode = () => {
-    setIsLoginMode(!isLoginMode)
-  }
-
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="absolute inset-0 flex flex-col">
@@ -38,34 +27,8 @@ export function Login() {
         {/* Main Content */}
         <main className="flex-1 flex flex-col justify-center px-4 py-12">
           <div className="w-full max-w-4xl mx-auto">
-            {/* Demo Toggle */}
-            <div className="mb-6 text-center">
-              <Button
-                variant={showDemo ? "default" : "outline"}
-                onClick={() => setShowDemo(!showDemo)}
-              >
-                {showDemo ? "Hide shadcn/ui Demo" : "Show shadcn/ui Demo"}
-              </Button>
-            </div>
-
-            {/* Supabase Test Section */}
-            <div className="mb-12">
-              <SupabaseTest />
-            </div>
-
-            {/* shadcn Demo Section */}
-            {showDemo && (
-              <div className="mb-12">
-                <ShadcnDemo />
-              </div>
-            )}
-
-            {/* Login/Register Forms */}
-            {isLoginMode ? (
-              <LoginForm onToggleMode={toggleMode} />
-            ) : (
-              <RegisterForm onToggleMode={toggleMode} />
-            )}
+            {/* Login Form */}
+            <LoginForm />
           </div>
         </main>
 
