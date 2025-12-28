@@ -23,7 +23,7 @@ const Index = () => {
   const isDataReady = authChecked && currentTenant && userRole;
 
   return (
-    <div className="min-h-screen bg-[#f8fafc]">
+    <div className="min-h-screen bg-background">
       {/* Sidebar */}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
@@ -39,9 +39,9 @@ const Index = () => {
             description="ภาพรวมการจัดการอสังหาริมทรัพย์แบบ Multi-tenant"
           >
             {/* Role-specific welcome banner */}
-            <div className={`rounded-lg p-4 mb-6 ${
-              !isDataReady ? 'bg-gray-50 border border-gray-200' :
-              isOwner ? 'bg-yellow-50 border border-yellow-200' :
+            <div className={`rounded-xl p-5 mb-6 ${
+              !isDataReady ? 'bg-secondary border border-border' :
+              isOwner ? 'bg-purple-50 border border-purple-200' :
               isAdmin ? 'bg-blue-50 border border-blue-200' :
               'bg-green-50 border border-green-200'
             }`}>
@@ -75,19 +75,19 @@ const Index = () => {
 
             {/* Sales Overview - Available for all roles */}
             <div className="mb-8">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">📊 Sales Overview</h2>
+              <h2 className="text-lg font-semibold text-foreground mb-4">📊 Sales Overview</h2>
               <SalesOverview />
             </div>
 
             {/* Analytics Sections - All roles get full functionality */}
             <>
               <div className="mb-8">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">🏗️ Project Performance</h2>
+                <h2 className="text-lg font-semibold text-foreground mb-4">🏗️ Project Performance</h2>
                 <ProjectPerformance />
               </div>
 
               <div className="mb-8">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">👥 Customer Statistics</h2>
+                <h2 className="text-lg font-semibold text-foreground mb-4">👥 Customer Statistics</h2>
                 <CustomerStats />
               </div>
 
@@ -103,12 +103,12 @@ const Index = () => {
 
             {/* Recent Activities - All roles have access */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-lg border p-4">
-                <h3 className="text-lg font-medium mb-2">Recent Bookings</h3>
+              <div className="bg-card rounded-xl border border-border shadow-soft p-5">
+                <h3 className="text-lg font-medium mb-3">Recent Bookings</h3>
                 <BookingsTable />
               </div>
-              <div className="bg-white rounded-lg border p-4">
-                <h3 className="text-lg font-medium mb-2">Top Properties</h3>
+              <div className="bg-card rounded-xl border border-border shadow-soft p-5">
+                <h3 className="text-lg font-medium mb-3">Top Properties</h3>
                 <TopProperties />
               </div>
             </div>
@@ -116,8 +116,8 @@ const Index = () => {
             {/* Role-specific Information */}
             <div className="mt-8 space-y-4">
               {!isDataReady && (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-gray-600">
+                <div className="bg-secondary border border-border rounded-xl p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     <span className="text-sm">กำลังโหลดข้อมูลสิทธิ์...</span>
                   </div>
@@ -125,7 +125,7 @@ const Index = () => {
               )}
 
               {isDataReady && isSales && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4">
                   <h4 className="font-medium text-green-800 mb-2">💼 สิทธิ์พนักงานขาย:</h4>
                   <ul className="text-sm text-green-700 space-y-1">
                     <li>• สร้างและจัดการข้อมูลลูกค้าได้</li>
@@ -137,7 +137,7 @@ const Index = () => {
               )}
 
               {isDataReady && isAdmin && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                   <h4 className="font-medium text-blue-800 mb-2">🛡️ สิทธิ์ผู้ดูแลระบบ:</h4>
                   <ul className="text-sm text-blue-700 space-y-1">
                     <li>• จัดการผู้ใช้และสิทธิ์ได้</li>
@@ -149,9 +149,9 @@ const Index = () => {
               )}
 
               {isDataReady && isOwner && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <h4 className="font-medium text-yellow-800 mb-2">👑 สิทธิ์เจ้าของ:</h4>
-                  <ul className="text-sm text-yellow-700 space-y-1">
+                <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                  <h4 className="font-medium text-purple-800 mb-2">👑 สิทธิ์เจ้าของ:</h4>
+                  <ul className="text-sm text-purple-700 space-y-1">
                     <li>• ควบคุมทุกอย่างในระบบได้</li>
                     <li>• จัดการ billing และ subscription ได้</li>
                     <li>• ตั้งค่า security และ policies ได้</li>

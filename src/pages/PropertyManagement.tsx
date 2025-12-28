@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { AdminGuard } from '@/components/auth/PermissionGuard';
+import Sidebar from '@/components/dashboard/Sidebar';
+import Header from '@/components/dashboard/Header';
 import {
   Card,
   CardContent,
@@ -100,6 +102,7 @@ interface Unit {
 const PropertyManagement = () => {
   const navigate = useNavigate();
   const { currentTenant, userRole } = useSimpleAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [units, setUnits] = useState<Unit[]>([]);
@@ -356,19 +359,30 @@ const PropertyManagement = () => {
 
   return (
     <AdminGuard>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">โครงการและยูนิต</h1>
-            <p className="text-muted-foreground">
-              จัดการโครงการอสังหาและยูนิตทั้งหมดของบริษัท
-            </p>
-          </div>
-          <Button onClick={() => {
-            resetPropertyForm();
-            setShowPropertyDialog(true);
-          }}>
+      <div className="min-h-screen bg-background">
+        {/* Sidebar */}
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+        {/* Main Content */}
+        <div className="lg:ml-[260px] min-h-screen">
+          {/* Header */}
+          <Header onMenuClick={() => setSidebarOpen(true)} />
+
+          {/* Page Content */}
+          <main className="p-6">
+            <div className="space-y-6">
+              {/* Page Header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold tracking-tight">โครงการและยูนิต</h1>
+                  <p className="text-muted-foreground">
+                    จัดการโครงการอสังหาและยูนิตทั้งหมดของบริษัท
+                  </p>
+                </div>
+                <Button onClick={() => {
+                  resetPropertyForm();
+                  setShowPropertyDialog(true);
+                }}>
             <Plus className="w-4 h-4 mr-2" />
             เพิ่มโครงการใหม่
           </Button>
@@ -972,6 +986,9 @@ const PropertyManagement = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+            </div>
+          </main>
+        </div>
       </div>
     </AdminGuard>
   );

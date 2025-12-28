@@ -10,6 +10,9 @@ import { User as SupabaseUser, Session, AuthError } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { useNavigate } from 'react-router-dom'
 
+// Import company settings function
+import { getCompanySettings } from '@/lib/api/companySettings'
+
 // Types
 interface Tenant {
   id: string
@@ -19,6 +22,8 @@ interface Tenant {
   logo_url: string | null
   primary_color: string
   secondary_color: string
+  logo_url_cached?: string  // Cached from company_settings
+  company_name_cached?: string  // Cached from company_settings
 }
 
 interface UserProfile {
@@ -26,7 +31,11 @@ interface UserProfile {
   email: string
   full_name: string | null
   avatar_url: string | null
+  phone: string | null
+  role: 'owner' | 'admin' | 'sales' | null
   is_active: boolean
+  created_at: string | null
+  tenant_id?: string | null
 }
 
 interface UserTenant {
@@ -137,6 +146,46 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
       console.log('[Auth] Tenant data:', tenantData)
       console.log('[Auth] Tenant error:', tenantError)
 
+      // Fetch company settings in parallel and cache the logo
+      let logoUrlCached: string | null = null;
+      let companyNameCached: string | null = null;
+
+      if (tenantData) {
+        try {
+          // Try to get from localStorage cache first (5 min cache)
+          const cacheKey = `company_logo_${tenantData.id}`;
+          const cacheTimestamp = `company_logo_ts_${tenantData.id}`;
+          const cachedLogo = localStorage.getItem(cacheKey);
+          const cachedTime = localStorage.getItem(cacheTimestamp);
+
+          if (cachedLogo && cachedTime) {
+            const age = Date.now() - parseInt(cachedTime);
+            if (age < 5 * 60 * 1000) { // 5 minutes cache
+              logoUrlCached = cachedLogo;
+              const cachedName = localStorage.getItem(`company_name_${tenantData.id}`);
+              if (cachedName) companyNameCached = cachedName;
+              console.log('[Auth] Using cached logo');
+            }
+          }
+
+          // If no cached logo or expired, fetch from API
+          if (!logoUrlCached) {
+            const companySettings = await getCompanySettings(tenantData.id);
+            if (companySettings?.logo_url) {
+              logoUrlCached = companySettings.logo_url;
+              localStorage.setItem(cacheKey, companySettings.logo_url);
+              localStorage.setItem(cacheTimestamp, Date.now().toString());
+            }
+            if (companySettings?.company_name) {
+              companyNameCached = companySettings.company_name;
+              localStorage.setItem(`company_name_${tenantData.id}`, companySettings.company_name);
+            }
+          }
+        } catch (err) {
+          console.error('[Auth] Error fetching company settings:', err);
+        }
+      }
+
       // Transform to match expected format
       const transformed = [{
         id: userData.id,
@@ -144,7 +193,11 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
         tenant_id: userData.tenant_id,
         role: userData.role,
         is_active: userData.is_active,
-        tenants: tenantData || null
+        tenants: {
+          ...tenantData,
+          logo_url_cached: logoUrlCached || undefined,
+          company_name_cached: companyNameCached || undefined,
+        } || null
       }]
 
       console.log('[Auth] Transformed tenants:', transformed)

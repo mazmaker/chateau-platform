@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
+import Sidebar from '@/components/dashboard/Sidebar';
+import Header from '@/components/dashboard/Header';
 import {
   Card,
   CardContent,
@@ -69,6 +71,7 @@ const OwnerDashboard = () => {
   const navigate = useNavigate();
   const { user } = useSimpleAuth();
   const { isOwner } = usePermissions();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<DashboardStats>({
     totalTenants: 0,
@@ -208,26 +211,27 @@ const OwnerDashboard = () => {
 
   return (
     <OwnerGuard>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Owner Dashboard</h1>
-            <p className="text-muted-foreground">
-              ภาพรวมระบบ SaaS Platform - จัดการทั้งหมดจากที่เดียว
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate('/settings')}>
-              <Settings className="w-4 h-4 mr-2" />
-              ตั้งค่าระบบ
-            </Button>
-            <Button onClick={() => navigate('/tenants')}>
-              <Plus className="w-4 h-4 mr-2" />
-              เพิ่มบริษัทใหม่
-            </Button>
-          </div>
-        </div>
+      <div className="min-h-screen bg-background">
+        {/* Sidebar */}
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+        {/* Main Content */}
+        <div className="lg:ml-[260px] min-h-screen">
+          {/* Header */}
+          <Header onMenuClick={() => setSidebarOpen(true)} />
+
+          {/* Page Content */}
+          <main className="p-6">
+            <div className="space-y-6">
+              {/* Page Header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold tracking-tight">Owner Dashboard</h1>
+                  <p className="text-muted-foreground">
+                    ภาพรวมระบบ SaaS Platform - จัดการทั้งหมดจากที่เดียว
+                  </p>
+                </div>
+              </div>
 
         {/* Key Metrics */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -593,6 +597,9 @@ const OwnerDashboard = () => {
             </div>
           </CardContent>
         </Card>
+            </div>
+          </main>
+        </div>
       </div>
     </OwnerGuard>
   );
