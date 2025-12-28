@@ -40,18 +40,18 @@ npm install
 
 ### 3. ตั้งค่า Environment Variables
 
-สร้างไฟล์ `.env` ที่ root ของ project:
+**⚠️ สำคัญ: ไม่ต้องทำอะไรกับ Supabase**
 
-```bash
-cp .env.example .env
-```
+คนที่ 2 **ใช้ Supabase Project เดียวกันกับคนที่ 1** - ไม่ต้อง:
+- ❌ สร้าง project ใหม่
+- ❌ Run migrations
+- ❌ สร้าง tables
+- ❌ ตั้งค่า RLS
+- ❌ สร้าง storage buckets
 
-แล้วแก้ไขค่าใน `.env`:
+**ทุกอย่างพร้อมใน Supabase cloud แล้ว ✅**
 
-```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-```
+เพียงแค่ตรวจสอบว่าไฟล์ `.env` มีค่าถูกต้อง (คนที่ 1 ควรส่งไฟล์นี้ให้):
 
 ---
 
@@ -205,12 +205,22 @@ import { CompanyLogo } from "@/components/company/CompanyLogo";
 
 ---
 
-## การเช็คสถานะ Migrations
+## Supabase - ไม่ต้องทำอะไร! ⚠️
 
-```bash
-# เช็ค migrations ทั้งหมด
-SUPABASE_ACCESS_TOKEN="your-token" supabase migration list
-```
+**คนที่ 2 ไม่ต้องทำอะไรกับ Supabase เลย** เพราะ:
+
+| อย่าง | สถานะ | คนที่ 2 ต้องทำ? |
+|-------|--------|------------------|
+| Supabase Project | ✅ พร้อม (ใช้ร่วมกัน) | ❌ |
+| Database Tables | ✅ 14 migrations synced | ❌ |
+| RLS Policies | ✅ ตั้งค่าแล้ว | ❌ |
+| Storage Buckets | ✅ พร้อม (user-avatars, company-logos) | ❌ |
+| `.env` file | ✅ คนที่ 1 ส่งให้ | ❌ (แค่รับไฟล์) |
+
+เพียงแค่:
+1. รับไฟล์ `.env` จากคนที่ 1
+2. วางไว้ที่ root project
+3. `npm run dev` เริ่มทำงานได้เลย
 
 ---
 
