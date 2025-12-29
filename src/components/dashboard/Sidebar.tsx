@@ -37,7 +37,7 @@ const getAllNavItems = (): NavItem[] => [
   { icon: Building2, label: "จัดการบริษัท", href: "/tenants", requiredRoles: ["OWNER"] },
   { icon: CreditCard, label: "Billing & Invoices", href: "/billing", requiredRoles: ["OWNER"] },
   // Company features
-  { icon: Building2, label: "โครงการ & ยูนิต", href: "/properties", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
+  { icon: Building2, label: "โครงการ", href: "/properties", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
   { icon: FileText, label: "ระบบ Leads", href: "/leads", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
   { icon: Users, label: "ลูกค้า", href: "/customers", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
   // Admin features
@@ -177,14 +177,16 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
               onClick={() => handleNavClick(item)}
               className={cn(
                 "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
-                "hover:bg-secondary group text-left relative",
-                isActive(item.href) && !item.isLogout && "gradient-primary text-primary-foreground shadow-lg",
+                "group text-left relative",
+                isActive(item.href) && !item.isLogout
+                  ? "bg-primary hover:bg-indigo-600 text-white shadow-lg"
+                  : "hover:bg-secondary",
                 item.isLogout && "hover:bg-red-50 hover:text-red-600"
               )}
             >
               <item.icon className={cn(
                 "w-5 h-5 transition-colors",
-                isActive(item.href) && !item.isLogout ? "text-primary-foreground" :
+                isActive(item.href) && !item.isLogout ? "text-white" :
                 item.isLogout ? "text-muted-foreground group-hover:text-red-600" :
                 "text-muted-foreground group-hover:text-foreground"
               )} />
