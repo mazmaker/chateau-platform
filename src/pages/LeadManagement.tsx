@@ -372,18 +372,18 @@ const LeadManagement = () => {
   const conversionRate = totalLeads > 0 ? Math.round((closedLeads / totalLeads) * 100) : 0;
 
   return (
-    <SalesGuard>
-      <div className="min-h-screen bg-background">
-        {/* Sidebar */}
-        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+    <div className="min-h-screen bg-[#f8fafc]">
+      {/* Sidebar */}
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        {/* Main Content */}
-        <div className="lg:ml-[260px] min-h-screen">
-          {/* Header */}
-          <Header onMenuClick={() => setSidebarOpen(true)} />
+      {/* Main Content */}
+      <div className="lg:ml-[260px] min-h-screen">
+        {/* Header */}
+        <Header onMenuClick={() => setSidebarOpen(true)} />
 
-          {/* Page Content */}
-          <main className="p-6">
+        {/* Lead Management Content */}
+        <main className="p-6">
+          <SalesGuard>
             <div className="space-y-6">
               {/* Page Header */}
               <div className="flex items-center justify-between">
@@ -402,8 +402,8 @@ const LeadManagement = () => {
                 </Button>
               </div>
 
-            {/* Stats */}
-            <div className="grid gap-4 md:grid-cols-5">
+        {/* Stats */}
+        <div className="grid gap-4 md:grid-cols-5">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -860,10 +860,10 @@ const LeadManagement = () => {
           </DialogContent>
         </Dialog>
             </div>
-          </main>
-        </div>
+          </SalesGuard>
+        </main>
       </div>
-    </SalesGuard>
+    </div>
   );
 };
 

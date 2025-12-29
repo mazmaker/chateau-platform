@@ -1,36 +1,75 @@
 # คู่มือการติดตั้งสำหรับทีม (Team Setup Guide)
 
 **อัปเดตล่าสุด**: 29 ธันวาคม 2025
-**Branch**: `002-production-readiness`
 
 ---
 
 ## สำหรับคนที่ 2 (Frontend + Property Management)
 
-### 1. Clone หรือ Update Repository
+### Branch Strategy
+- **คนที่ 1**: ทำงานใน `002-production-readiness` (Backend + Settings)
+- **คนที่ 2**: ทำงานใน `feature/multi-role` (Frontend + Property)
 
-ถ้ายังไม่ได้ clone:
+---
+
+## ขั้นตอนการเริ่มต้น
+
+### Step 1: Clone Repository (ถ้ายังไม่ได้ clone)
+
 ```bash
 git clone https://github.com/mazmaker/chateau-platform.git
 cd chateau-platform
 ```
 
-ถ้ามี repository อยู่แล้ว:
+---
+
+### Step 2: Pull งานล่าสุดจากคนที่ 1
+
 ```bash
-cd chateau-platform
-git checkout 002-production-readiness
 git pull origin 002-production-readiness
+```
+
+**สิ่งที่จะได้รับ:**
+- Settings Page (Profile, Security, Preferences)
+- Avatar Upload System
+- Demo User Management
+- Company Logo System
+- 14 Supabase migrations (synced แล้ว)
+- UI components ทั้งหมด
+
+---
+
+### Step 3: สลับไป Branch ของตัวเอง
+
+```bash
+git checkout feature/multi-role
+```
+
+**ถ้ายังไม่มี branch นี้:**
+
+```bash
+git checkout -b feature/multi-role
 ```
 
 ---
 
-### 2. ติดตั้ง Dependencies
+### Step 4: อัปเดต Branch ของตัวเองให้เท่ากับงานล่าสุด
+
+```bash
+# รวมงานจาก 002-production-readiness เข้า feature/multi-role
+git merge 002-production-readiness
+```
+
+---
+
+### Step 5: Install Dependencies
 
 ```bash
 npm install
 ```
 
 หรือถ้ามีปัญหา:
+
 ```bash
 rm -rf node_modules package-lock.json
 npm install
@@ -38,38 +77,40 @@ npm install
 
 ---
 
-### 3. ตั้งค่า Environment Variables
+### Step 6: ตั้งค่า Environment Variables
 
-**⚠️ สำคัญ: ไม่ต้องทำอะไรกับ Supabase**
+**⚠️ สำคัญ: ใช้ Supabase Project เดียวกันกับคนที่ 1**
 
-คนที่ 2 **ใช้ Supabase Project เดียวกันกับคนที่ 1** - ไม่ต้อง:
-- ❌ สร้าง project ใหม่
+รับไฟล์ `.env` จากคนที่ 1 แล้ววางไว้ที่ root project
+
+```env
+VITE_SUPABASE_URL=https://pqnjvcbmnatrtvpqnrdx.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key-here
+```
+
+**ไม่ต้อง:**
+- ❌ สร้าง Supabase project ใหม่
 - ❌ Run migrations
 - ❌ สร้าง tables
 - ❌ ตั้งค่า RLS
-- ❌ สร้าง storage buckets
 
 **ทุกอย่างพร้อมใน Supabase cloud แล้ว ✅**
 
-เพียงแค่ตรวจสอบว่าไฟล์ `.env` มีค่าถูกต้อง (คนที่ 1 ควรส่งไฟล์นี้ให้):
-
 ---
 
-### 4. Start Development Server
+### Step 7: เริ่มทำงาน
 
 ```bash
 npm run dev
 ```
 
-เปิด browser ที่: `http://localhost:5173`
+เปิด browser: `http://localhost:5173`
 
 ---
 
-### 5. เข้าสู่ระบบ (Login)
+## การ Login ทดสอบ
 
-ใช้บัญชี Owner ของคุณ หรือสร้างบัญชีทดสอบ:
-
-#### สร้างบัญชีทดสอบ (Demo Users)
+### สร้างบัญชีทดสอบ (Demo Users)
 
 1. Login ด้วยบัญชี **Owner**
 2. ไปที่เมนู **จัดการผู้ใช้**
@@ -88,9 +129,9 @@ npm run dev
 
 ---
 
-## ฟีเจอร์ใหม่ล่าสุด (Latest Features)
+## ฟีเจอร์ใหม่ล่าสุด (จากคนที่ 1)
 
-### ✅ สิ่งที่คนที่ 1 ทำไปแล้ว:
+### ✅ พร้อมใช้งานแล้ว:
 
 1. **Settings Page** (หน้าตั้งค่า)
    - อัปโหลดรูปโปรไฟล์
@@ -128,34 +169,6 @@ npm run dev
 
 ---
 
-## โครงสร้างโปรเจ็กต์ที่สำคัญ
-
-```
-chateau-platform/
-├── src/
-│   ├── components/
-│   │   ├── dashboard/        # Header, Sidebar
-│   │   ├── company/          # CompanyLogo component
-│   │   ├── users/            # UserManagement, DemoUserModal
-│   │   └── ui/               # shadcn/ui components
-│   ├── contexts/
-│   │   └── AuthContextSimple.tsx
-│   ├── lib/
-│   │   ├── api/              # API functions
-│   │   └── supabase.ts
-│   └── pages/
-│       ├── Settings.tsx      # ✅ คนที่ 1 ทำเสร็จแล้ว
-│       ├── PropertyManagement.tsx
-│       ├── CustomerManagement.tsx
-│       └── LeadManagement.tsx
-├── docs/
-│   └── DEMO-USERS.md
-└── supabase/
-    └── migrations/           # ✅ 14 migrations synced
-```
-
----
-
 ## Component ที่ใช้ได้เลย
 
 ### CompanyLogo Component
@@ -188,20 +201,56 @@ import { CompanyLogo } from "@/components/company/CompanyLogo";
 
 ---
 
-## Supabase Migrations Status
+## การเช็คสถานะ Branch
 
-| Migration | Description | Status |
-|-----------|-------------|--------|
-| 20241219000000 | Initial setup | ✅ Synced |
-| 20250119020000 | Optimization | ✅ Synced |
-| 20250122000000 | RBAC base | ✅ Synced |
-| 20250122010000 | User tenants | ✅ Synced |
-| 20250122020000 | Properties | ✅ Synced |
-| 20250123000000 | Bookings | ✅ Synced |
-| 20251226100000 | Company settings | ✅ Synced |
-| 20251226100001 | Company logos bucket | ✅ Synced |
-| 20251228000000 | User avatars bucket | ✅ Synced |
-| ... | ... | ... |
+```bash
+# เช็ค branch ปัจจุบัน
+git branch --show-current
+
+# ดูทุก branch
+git branch
+
+# ดูสถานะ
+git status
+```
+
+คุณควรอยู่ใน: `feature/multi-role`
+
+---
+
+## การ Commit และ Push
+
+```bash
+# เช็คสถานะ
+git status
+
+# Add ไฟล์ที่แก้ไข
+git add .
+
+# Commit
+git commit -m "feat: your message"
+
+# Push ไป branch ของคุณ
+git push origin feature/multi-role
+```
+
+---
+
+## ปัญหาที่อาจเจอ
+
+### 1. รูปโปรไฟล์ไม่แสดง
+- ตรวจสอบว่า `userProfile.avatar_url` มีค่า
+- ตรวจสอบ Supabase Storage bucket permissions
+
+### 2. Login ไม่ได้
+- ตรวจสอบ `.env` ว่าถูกต้อง
+- ลองสร้างบัญชีใหม่ผ่าน Demo User feature
+
+### 3. Dependencies มีปัญหา
+```bash
+rm -rf node_modules package-lock.json
+npm install
+```
 
 ---
 
@@ -224,40 +273,34 @@ import { CompanyLogo } from "@/components/company/CompanyLogo";
 
 ---
 
-## ปัญหาที่อาจเจอ
+## สรุปแบบสั้นๆ
 
-### 1. รูปโปรไฟล์ไม่แสดง
-- ตรวจสอบว่า `userProfile.avatar_url` มีค่า
-- ตรวจสอบ Supabase Storage bucket permissions
-
-### 2. Login ไม่ได้
-- ตรวจสอบ `.env` ว่าถูกต้อง
-- ลองสร้างบัญชีใหม่ผ่าน Demo User feature
-
-### 3. Dependencies มีปัญหา
 ```bash
-rm -rf node_modules package-lock.json
+# 1. Pull งานล่าสุด
+git pull origin 002-production-readiness
+
+# 2. สลับไป branch ของตัวเอง
+git checkout feature/multi-role
+
+# 3. รวมงานล่าสุดเข้า branch ตัวเอง
+git merge 002-production-readiness
+
+# 4. Install dependencies
 npm install
+
+# 5. รับไฟล์ .env จากคนที่ 1
+
+# 6. เริ่มทำงาน
+npm run dev
 ```
 
 ---
 
-## การ Commit และ Push
-
-```bash
-git add .
-git commit -m "feat: your message"
-git push origin 002-production-readiness
-```
+**Happy Coding! 🚀**
 
 ---
 
 ## ติดต่อสอบถาม
 
 - GitHub: https://github.com/mazmaker/chateau-platform
-- Branch: `002-production-readiness`
 - Issues: https://github.com/mazmaker/chateau-platform/issues
-
----
-
-**Happy Coding! 🚀**

@@ -37,7 +37,7 @@ const getAllNavItems = (): NavItem[] => [
   { icon: Building2, label: "จัดการบริษัท", href: "/tenants", requiredRoles: ["OWNER"] },
   { icon: CreditCard, label: "Billing & Invoices", href: "/billing", requiredRoles: ["OWNER"] },
   // Company features
-  { icon: Building2, label: "โครงการ & ยูนิต", href: "/properties", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
+  { icon: Building2, label: "โครงการ", href: "/properties", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
   { icon: FileText, label: "ระบบ Leads", href: "/leads", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
   { icon: Users, label: "ลูกค้า", href: "/customers", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
   // Admin features
