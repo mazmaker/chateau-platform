@@ -15,7 +15,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PageTabs } from '@/components/ui/PageTabs';
+import type { TabItem } from '@/components/ui/PageTabs';
 import {
   Palette,
   Save,
@@ -57,6 +58,7 @@ const AdminCustomization = () => {
   const navigate = useNavigate();
   const { currentTenant, userRole } = useSimpleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('logo-brand');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -291,6 +293,13 @@ const AdminCustomization = () => {
     );
   }
 
+  // Define tabs
+  const tabs: TabItem[] = [
+    { id: 'logo-brand', label: 'โลโก้และแบรนด์', icon: Building2 },
+    { id: 'theme', label: 'ธีมระบบ', icon: Palette },
+    { id: 'preview', label: 'ตัวอย่าง', icon: Eye },
+  ];
+
   return (
     <AdminGuard>
       <div className="min-h-screen bg-background">
@@ -315,38 +324,31 @@ const AdminCustomization = () => {
                 </div>
               </div>
 
-              <Tabs defaultValue="logo-brand" className="space-y-6">
-                <TabsList className="grid w-full max-w-md grid-cols-3">
-                  <TabsTrigger value="logo-brand">
-                    <Building2 className="w-4 h-4 mr-2" />
-                    โลโก้และแบรนด์
-                  </TabsTrigger>
-                  <TabsTrigger value="theme">
-                    <Palette className="w-4 h-4 mr-2" />
-                    ธีมระบบ
-                  </TabsTrigger>
-                  <TabsTrigger value="preview">
-                    <Eye className="w-4 h-4 mr-2" />
-                    ตัวอย่าง
-                  </TabsTrigger>
-                </TabsList>
+              <div className="flex flex-col md:flex-row gap-6">
+                {/* Left Sidebar - Tabs */}
+                <div className="w-full md:w-56">
+                  <PageTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
+                </div>
 
-          {/* Logo & Brand Settings (Combined) */}
-          <TabsContent value="logo-brand" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Building2 className="w-5 h-5" />
-                  ตั้งค่าโลโก้และแบรนด์บริษัท
-                </CardTitle>
-                <CardDescription>
-                  {userRole === 'owner'
-                    ? 'เลือกบริษัทและอัปโหลดโลโก้ ปรับแต่งสีแบรนด์'
-                    : 'อัปโหลดโลโก้และปรับแต่งสีแบรนด์ของบริษัทคุณ'
-                  }
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
+                {/* Right Content */}
+                <div className="flex-1">
+                  {/* Logo & Brand Settings */}
+                  {activeTab === 'logo-brand' && (
+                    <>
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <Building2 className="w-5 h-5" />
+                            ตั้งค่าโลโก้และแบรนด์บริษัท
+                          </CardTitle>
+                          <CardDescription>
+                            {userRole === 'owner'
+                              ? 'เลือกบริษัทและอัปโหลดโลโก้ ปรับแต่งสีแบรนด์'
+                              : 'อัปโหลดโลโก้และปรับแต่งสีแบรนด์ของบริษัทคุณ'
+                            }
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
                 {/* Company Selector (Owner only) */}
                 {userRole === 'owner' && allTenants.length > 0 && (
                   <div className="space-y-2">
@@ -520,296 +522,302 @@ const AdminCustomization = () => {
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
+                    </>
+                  )}
 
-          {/* Theme Settings */}
-          <TabsContent value="theme" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>ตั้งค่าธีมระบบ</CardTitle>
-                <CardDescription>
-                  เลือกโทนสีหลักของระบบ หรือเลือกจาก Preset ที่เตรียมไว้
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Preset Colors */}
-                <div>
-                  <Label>สีที่เตรียมไว้ (Presets)</Label>
-                  <div className="grid grid-cols-4 gap-3 mt-2">
-                    {colorPresets.map((preset) => (
-                      <button
-                        key={preset.name}
-                        onClick={() => applyPreset(preset)}
-                        className="group relative p-3 rounded-lg border-2 border-transparent hover:border-gray-300 transition-all"
-                      >
-                        <div className="flex gap-1 mb-2">
-                          <div
-                            className="w-6 h-6 rounded-full"
-                            style={{ backgroundColor: preset.primary }}
-                          />
-                          <div
-                            className="w-6 h-6 rounded-full"
-                            style={{ backgroundColor: preset.secondary }}
-                          />
-                          <div
-                            className="w-6 h-6 rounded-full"
-                            style={{ backgroundColor: preset.accent }}
-                          />
-                        </div>
-                        <p className="text-xs text-center">{preset.name}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Custom Colors */}
-                <div className="grid grid-cols-3 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="themePrimary">สีหลัก (Primary)</Label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        id="themePrimary"
-                        value={themeSettings.primaryColor}
-                        onChange={(e) => setThemeSettings({ ...themeSettings, primaryColor: e.target.value })}
-                        className="w-12 h-12 rounded cursor-pointer border-0"
-                      />
-                      <Input
-                        value={themeSettings.primaryColor}
-                        onChange={(e) => setThemeSettings({ ...themeSettings, primaryColor: e.target.value })}
-                        placeholder="#3b82f6"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="themeSecondary">สีรอง (Secondary)</Label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        id="themeSecondary"
-                        value={themeSettings.secondaryColor}
-                        onChange={(e) => setThemeSettings({ ...themeSettings, secondaryColor: e.target.value })}
-                        className="w-12 h-12 rounded cursor-pointer border-0"
-                      />
-                      <Input
-                        value={themeSettings.secondaryColor}
-                        onChange={(e) => setThemeSettings({ ...themeSettings, secondaryColor: e.target.value })}
-                        placeholder="#8b5cf6"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="themeAccent">สีเน้น (Accent)</Label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        id="themeAccent"
-                        value={themeSettings.accentColor}
-                        onChange={(e) => setThemeSettings({ ...themeSettings, accentColor: e.target.value })}
-                        className="w-12 h-12 rounded cursor-pointer border-0"
-                      />
-                      <Input
-                        value={themeSettings.accentColor}
-                        onChange={(e) => setThemeSettings({ ...themeSettings, accentColor: e.target.value })}
-                        placeholder="#10b981"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Preview of current theme */}
-                <div className="border rounded-lg p-4">
-                  <Label className="mb-3">ตัวอย่าง</Label>
-                  <div
-                    className="p-4 rounded-lg"
-                    style={{
-                      backgroundColor: themeSettings.primaryColor,
-                      color: 'white'
-                    }}
-                  >
-                    <p className="font-medium mb-2">Primary Color - หัวข้อ</p>
-                  </div>
-                  <div className="flex gap-2 mt-2">
-                    <div
-                      className="flex-1 p-3 rounded text-center text-white"
-                      style={{ backgroundColor: themeSettings.secondaryColor }}
-                    >
-                      Secondary
-                    </div>
-                    <div
-                      className="flex-1 p-3 rounded text-center text-white"
-                      style={{ backgroundColor: themeSettings.accentColor }}
-                    >
-                      Accent
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-2 pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    onClick={handleResetTheme}
-                  >
-                    <RotateCcw className="w-4 h-4 mr-2" />
-                    รีเซ็ตเป็นค่าเริ่มต้น
-                  </Button>
-                  <Button
-                    onClick={handleSaveTheme}
-                    disabled={saving}
-                  >
-                    {saving ? (
-                      <>กำลังบันทึก...</>
-                    ) : saved ? (
-                      <>
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        บันทึกแล้ว
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4 mr-2" />
-                        บันทึก
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Preview */}
-          <TabsContent value="preview" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>ตัวอย่างหน้าจอ</CardTitle>
-                <CardDescription>
-                  ดูตัวอย่างหน้าจอด้วยธีมที่เลือก
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="border rounded-lg overflow-hidden">
-                  {/* Header Preview */}
-                  <div className="p-4 flex items-center gap-4" style={{ backgroundColor: themeSettings.primaryColor }}>
-                    {logoUrl ? (
-                      <img
-                        src={logoUrl}
-                        alt="Logo"
-                        className="w-10 h-10 object-contain rounded-lg bg-white"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                        <Building2 className="w-6 h-6 text-white" />
-                      </div>
-                    )}
-                    <div className="text-white">
-                      <h2 className="text-xl font-bold">{companyName || 'Company Name'}</h2>
-                      <p className="text-sm opacity-80">Dashboard</p>
-                    </div>
-                    <div className="ml-auto flex gap-2">
-                      <div className="w-8 h-8 rounded-full bg-white/20" />
-                      <div className="w-8 h-8 rounded-full bg-white/20" />
-                    </div>
-                  </div>
-
-                  {/* Sidebar Preview */}
-                  <div className="flex">
-                    <div className="w-48 bg-muted p-4 space-y-2">
-                      {logoUrl ? (
-                        <div className="flex items-center gap-3 mb-4">
-                          <img
-                            src={logoUrl}
-                            alt="Logo"
-                            className="w-10 h-10 object-contain rounded-lg"
-                          />
-                          <span className="font-medium">{companyName || 'Company'}</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-3 mb-4">
-                          <div className="w-10 h-10 bg-muted-foreground/10 rounded-lg flex items-center justify-center">
-                            <Building2 className="w-6 h-6 text-muted-foreground" />
-                          </div>
-                          <span className="font-medium">{companyName || 'Company'}</span>
-                        </div>
-                      )}
-                      <div
-                        className="p-2 rounded text-white text-sm"
-                        style={{ backgroundColor: themeSettings.secondaryColor }}
-                      >
-                        Dashboard
-                      </div>
-                      <div className="p-2 rounded text-sm text-muted-foreground">
-                        Properties
-                      </div>
-                      <div className="p-2 rounded text-sm text-muted-foreground">
-                        Leads
-                      </div>
-                      <div className="p-2 rounded text-sm text-muted-foreground">
-                        Settings
-                      </div>
-                    </div>
-                    <div className="flex-1 p-4 space-y-4">
-                      {/* Card Preview */}
-                      <div className="border rounded-lg p-4">
-                        <h3 className="font-medium mb-2">Statistics</h3>
-                        <div className="grid grid-cols-3 gap-4">
-                          <div className="text-center">
-                            <div
-                              className="text-2xl font-bold"
-                              style={{ color: themeSettings.primaryColor }}
-                            >
-                              24
+                  {/* Theme Settings */}
+                  {activeTab === 'theme' && (
+                    <>
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>ตั้งค่าธีมระบบ</CardTitle>
+                          <CardDescription>
+                            เลือกโทนสีหลักของระบบ หรือเลือกจาก Preset ที่เตรียมไว้
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                          {/* Preset Colors */}
+                          <div>
+                            <Label>สีที่เตรียมไว้ (Presets)</Label>
+                            <div className="grid grid-cols-4 gap-3 mt-2">
+                              {colorPresets.map((preset) => (
+                                <button
+                                  key={preset.name}
+                                  onClick={() => applyPreset(preset)}
+                                  className="group relative p-3 rounded-lg border-2 border-transparent hover:border-gray-300 transition-all"
+                                >
+                                  <div className="flex gap-1 mb-2">
+                                    <div
+                                      className="w-6 h-6 rounded-full"
+                                      style={{ backgroundColor: preset.primary }}
+                                    />
+                                    <div
+                                      className="w-6 h-6 rounded-full"
+                                      style={{ backgroundColor: preset.secondary }}
+                                    />
+                                    <div
+                                      className="w-6 h-6 rounded-full"
+                                      style={{ backgroundColor: preset.accent }}
+                                    />
+                                  </div>
+                                  <p className="text-xs text-center">{preset.name}</p>
+                                </button>
+                              ))}
                             </div>
-                            <p className="text-xs text-muted-foreground">Leads</p>
                           </div>
-                          <div className="text-center">
-                            <div
-                              className="text-2xl font-bold"
-                              style={{ color: themeSettings.secondaryColor }}
-                            >
-                              12
-                            </div>
-                            <p className="text-xs text-muted-foreground">Active</p>
-                          </div>
-                          <div className="text-center">
-                            <div
-                              className="text-2xl font-bold"
-                              style={{ color: themeSettings.accentColor }}
-                            >
-                              8
-                            </div>
-                            <p className="text-xs text-muted-foreground">Closed</p>
-                          </div>
-                        </div>
-                      </div>
 
-                      {/* Button Preview */}
-                      <div className="flex gap-2">
-                        <div
-                          className="px-4 py-2 rounded text-white text-sm"
-                          style={{ backgroundColor: themeSettings.primaryColor }}
-                        >
-                          Primary Button
-                        </div>
-                        <div
-                          className="px-4 py-2 rounded text-white text-sm"
-                          style={{ backgroundColor: themeSettings.secondaryColor }}
-                        >
-                          Secondary
-                        </div>
-                        <div
-                          className="px-4 py-2 rounded text-white text-sm"
-                          style={{ backgroundColor: themeSettings.accentColor }}
-                        >
-                          Accent
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                          {/* Custom Colors */}
+                          <div className="grid grid-cols-3 gap-6">
+                            <div className="space-y-2">
+                              <Label htmlFor="themePrimary">สีหลัก (Primary)</Label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="color"
+                                  id="themePrimary"
+                                  value={themeSettings.primaryColor}
+                                  onChange={(e) => setThemeSettings({ ...themeSettings, primaryColor: e.target.value })}
+                                  className="w-12 h-12 rounded cursor-pointer border-0"
+                                />
+                                <Input
+                                  value={themeSettings.primaryColor}
+                                  onChange={(e) => setThemeSettings({ ...themeSettings, primaryColor: e.target.value })}
+                                  placeholder="#3b82f6"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="themeSecondary">สีรอง (Secondary)</Label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="color"
+                                  id="themeSecondary"
+                                  value={themeSettings.secondaryColor}
+                                  onChange={(e) => setThemeSettings({ ...themeSettings, secondaryColor: e.target.value })}
+                                  className="w-12 h-12 rounded cursor-pointer border-0"
+                                />
+                                <Input
+                                  value={themeSettings.secondaryColor}
+                                  onChange={(e) => setThemeSettings({ ...themeSettings, secondaryColor: e.target.value })}
+                                  placeholder="#8b5cf6"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="themeAccent">สีเน้น (Accent)</Label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="color"
+                                  id="themeAccent"
+                                  value={themeSettings.accentColor}
+                                  onChange={(e) => setThemeSettings({ ...themeSettings, accentColor: e.target.value })}
+                                  className="w-12 h-12 rounded cursor-pointer border-0"
+                                />
+                                <Input
+                                  value={themeSettings.accentColor}
+                                  onChange={(e) => setThemeSettings({ ...themeSettings, accentColor: e.target.value })}
+                                  placeholder="#10b981"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Preview of current theme */}
+                          <div className="border rounded-lg p-4">
+                            <Label className="mb-3">ตัวอย่าง</Label>
+                            <div
+                              className="p-4 rounded-lg"
+                              style={{
+                                backgroundColor: themeSettings.primaryColor,
+                                color: 'white'
+                              }}
+                            >
+                              <p className="font-medium mb-2">Primary Color - หัวข้อ</p>
+                            </div>
+                            <div className="flex gap-2 mt-2">
+                              <div
+                                className="flex-1 p-3 rounded text-center text-white"
+                                style={{ backgroundColor: themeSettings.secondaryColor }}
+                              >
+                                Secondary
+                              </div>
+                              <div
+                                className="flex-1 p-3 rounded text-center text-white"
+                                style={{ backgroundColor: themeSettings.accentColor }}
+                              >
+                                Accent
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex gap-2 pt-4 border-t">
+                            <Button
+                              variant="outline"
+                              onClick={handleResetTheme}
+                            >
+                              <RotateCcw className="w-4 h-4 mr-2" />
+                              รีเซ็ตเป็นค่าเริ่มต้น
+                            </Button>
+                            <Button
+                              onClick={handleSaveTheme}
+                              disabled={saving}
+                            >
+                              {saving ? (
+                                <>กำลังบันทึก...</>
+                              ) : saved ? (
+                                <>
+                                  <CheckCircle className="w-4 h-4 mr-2" />
+                                  บันทึกแล้ว
+                                </>
+                              ) : (
+                                <>
+                                  <Save className="w-4 h-4 mr-2" />
+                                  บันทึก
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </>
+                  )}
+
+                  {/* Preview */}
+                  {activeTab === 'preview' && (
+                    <>
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>ตัวอย่างหน้าจอ</CardTitle>
+                          <CardDescription>
+                            ดูตัวอย่างหน้าจอด้วยธีมที่เลือก
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="border rounded-lg overflow-hidden">
+                            {/* Header Preview */}
+                            <div className="p-4 flex items-center gap-4" style={{ backgroundColor: themeSettings.primaryColor }}>
+                              {logoUrl ? (
+                                <img
+                                  src={logoUrl}
+                                  alt="Logo"
+                                  className="w-10 h-10 object-contain rounded-lg bg-white"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                                  <Building2 className="w-6 h-6 text-white" />
+                                </div>
+                              )}
+                              <div className="text-white">
+                                <h2 className="text-xl font-bold">{companyName || 'Company Name'}</h2>
+                                <p className="text-sm opacity-80">Dashboard</p>
+                              </div>
+                              <div className="ml-auto flex gap-2">
+                                <div className="w-8 h-8 rounded-full bg-white/20" />
+                                <div className="w-8 h-8 rounded-full bg-white/20" />
+                              </div>
+                            </div>
+
+                            {/* Sidebar Preview */}
+                            <div className="flex">
+                              <div className="w-48 bg-muted p-4 space-y-2">
+                                {logoUrl ? (
+                                  <div className="flex items-center gap-3 mb-4">
+                                    <img
+                                      src={logoUrl}
+                                      alt="Logo"
+                                      className="w-10 h-10 object-contain rounded-lg"
+                                    />
+                                    <span className="font-medium">{companyName || 'Company'}</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-3 mb-4">
+                                    <div className="w-10 h-10 bg-muted-foreground/10 rounded-lg flex items-center justify-center">
+                                      <Building2 className="w-6 h-6 text-muted-foreground" />
+                                    </div>
+                                    <span className="font-medium">{companyName || 'Company'}</span>
+                                  </div>
+                                )}
+                                <div
+                                  className="p-2 rounded text-white text-sm"
+                                  style={{ backgroundColor: themeSettings.secondaryColor }}
+                                >
+                                  Dashboard
+                                </div>
+                                <div className="p-2 rounded text-sm text-muted-foreground">
+                                  Properties
+                                </div>
+                                <div className="p-2 rounded text-sm text-muted-foreground">
+                                  Leads
+                                </div>
+                                <div className="p-2 rounded text-sm text-muted-foreground">
+                                  Settings
+                                </div>
+                              </div>
+                              <div className="flex-1 p-4 space-y-4">
+                                {/* Card Preview */}
+                                <div className="border rounded-lg p-4">
+                                  <h3 className="font-medium mb-2">Statistics</h3>
+                                  <div className="grid grid-cols-3 gap-4">
+                                    <div className="text-center">
+                                      <div
+                                        className="text-2xl font-bold"
+                                        style={{ color: themeSettings.primaryColor }}
+                                      >
+                                        24
+                                      </div>
+                                      <p className="text-xs text-muted-foreground">Leads</p>
+                                    </div>
+                                    <div className="text-center">
+                                      <div
+                                        className="text-2xl font-bold"
+                                        style={{ color: themeSettings.secondaryColor }}
+                                      >
+                                        12
+                                      </div>
+                                      <p className="text-xs text-muted-foreground">Active</p>
+                                    </div>
+                                    <div className="text-center">
+                                      <div
+                                        className="text-2xl font-bold"
+                                        style={{ color: themeSettings.accentColor }}
+                                      >
+                                        8
+                                      </div>
+                                      <p className="text-xs text-muted-foreground">Closed</p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Button Preview */}
+                                <div className="flex gap-2">
+                                  <div
+                                    className="px-4 py-2 rounded text-white text-sm"
+                                    style={{ backgroundColor: themeSettings.primaryColor }}
+                                  >
+                                    Primary Button
+                                  </div>
+                                  <div
+                                    className="px-4 py-2 rounded text-white text-sm"
+                                    style={{ backgroundColor: themeSettings.secondaryColor }}
+                                  >
+                                    Secondary
+                                  </div>
+                                  <div
+                                    className="px-4 py-2 rounded text-white text-sm"
+                                    style={{ backgroundColor: themeSettings.accentColor }}
+                                  >
+                                    Accent
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </>
+                  )}
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-              </Tabs>
+              </div>
             </div>
           </main>
         </div>

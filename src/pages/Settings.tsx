@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { User, Mail, Phone, Lock, Bell, Globe, Camera, Shield, Loader2, ArrowLeft, Eye, EyeOff, Check, X } from 'lucide-react';
+import { User, Mail, Phone, Lock, Bell, Globe, Camera, Shield, Loader2, ArrowLeft, Eye, EyeOff, Check, X, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { supabase } from '@/lib/supabase';
@@ -8,8 +8,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
-
-type TabType = 'profile' | 'security' | 'preferences';
+import { PageTabs } from '@/components/ui/PageTabs';
 
 // Password strength levels
 type PasswordStrength = 'weak' | 'medium' | 'strong' | 'very-strong';
@@ -30,7 +29,7 @@ const Settings = () => {
   const navigate = useNavigate();
   const { user, userProfile, refreshUser, currentTenant } = useSimpleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabType>('profile');
+  const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(false);
   const [avatarLoading, setAvatarLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -179,9 +178,9 @@ const Settings = () => {
   }, [passwordData.newPassword]);
 
   const tabs = [
-    { id: 'profile' as TabType, label: 'โปรไฟล์', icon: User },
-    { id: 'security' as TabType, label: 'ความปลอดภัย', icon: Shield },
-    { id: 'preferences' as TabType, label: 'การตั้งค่า', icon: Bell },
+    { id: 'profile', label: 'โปรไฟล์', icon: User },
+    { id: 'security', label: 'ความปลอดภัย', icon: Shield },
+    { id: 'preferences', label: 'การแจ้งเตือน', icon: Bell },
   ];
 
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -414,10 +413,10 @@ const Settings = () => {
 
       if (error) throw error;
 
-      toast.success('บันทึกการตั้งค่าสำเร็จ');
+      toast.success('บันทึกการแจ้งเตือนสำเร็จ');
     } catch (error) {
       console.error('Error saving preferences:', error);
-      toast.error('ไม่สามารถบันทึกการตั้งค่าได้');
+      toast.error('ไม่สามารถบันทึกการแจ้งเตือนได้');
     } finally {
       setLoading(false);
     }
@@ -812,7 +811,7 @@ const Settings = () => {
             disabled={loading}
             className="gradient-primary text-primary-foreground px-6 rounded-xl"
           >
-            {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> กำลังบันทึก</> : 'บันทึกการตั้งค่า'}
+            {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> กำลังบันทึก</> : 'บันทึกการแจ้งเตือน'}
           </Button>
         </div>
       </div>
@@ -825,40 +824,21 @@ const Settings = () => {
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Main Content */}
-      <div className="lg:ml-[260px] min-h-screen">
-        {/* Header */}
+      <div className="lg:ml-[260px]">
         <Header onMenuClick={() => setSidebarOpen(true)} />
 
-        {/* Settings Content */}
         <main className="p-6">
           {/* Page Header */}
           <div className="mb-6">
-            <h1 className="text-[30px] font-bold text-foreground">Settings Profile</h1>
-            <p className="text-sm text-muted-foreground">จัดการข้อมูลโปรไฟล์และการตั้งค่าของคุณ</p>
+            <h1 className="text-2xl font-bold text-foreground">Profile Settings</h1>
+            <p className="text-muted-foreground mt-1">จัดการข้อมูลโปรไฟล์และการตั้งค่าของคุณ</p>
           </div>
 
+          {/* Settings Content */}
           <div className="flex flex-col md:flex-row gap-6">
             {/* Sidebar Navigation */}
             <div className="w-full md:w-56">
-              <nav className="bg-white rounded-2xl p-3 shadow-sm border border-border">
-                {tabs.map((tab) => {
-                  const Icon = tab.icon;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
-                        activeTab === tab.id
-                          ? 'bg-[#E4DAF4] text-[#676AF1] font-semibold'
-                          : 'text-muted-foreground hover:bg-secondary/50'
-                      }`}
-                    >
-                      <Icon className="w-5 h-5" />
-                      {tab.label}
-                    </button>
-                  );
-                })}
-              </nav>
+              <PageTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
             </div>
 
             {/* Content */}

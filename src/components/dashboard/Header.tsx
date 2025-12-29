@@ -138,7 +138,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
 
             <DropdownMenuItem onClick={() => navigate('/settings')}>
               <Settings className="w-4 h-4 mr-2" />
-              ตั้งค่า
+              แก้ไขโปรไฟล์
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />

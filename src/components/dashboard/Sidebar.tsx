@@ -43,7 +43,7 @@ const getAllNavItems = (): NavItem[] => [
   // Admin features
   { icon: Users, label: "จัดการผู้ใช้", href: "/users", requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Palette, label: "ปรับแต่งระบบ", href: "/customization", requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: Settings, label: "ตั้งค่า", href: "/settings", requiredRoles: ["OWNER", "ADMIN"] },
+  { icon: Settings, label: "แก้ไขโปรไฟล์", href: "/settings", requiredRoles: ["OWNER", "ADMIN"] },
   { icon: LogOut, label: "ออกจากระบบ", href: "/logout", isLogout: true },
 ];
 

@@ -105,7 +105,7 @@ export const DashboardControls: React.FC<DashboardControlsProps> = ({
             <ManageSettingsGuard>
               <Button variant="outline" size="sm">
                 <SettingsIcon className="w-4 h-4 mr-2" />
-                ตั้งค่า
+                แก้ไขโปรไฟล์
               </Button>
             </ManageSettingsGuard>
           </div>
@@ -131,7 +131,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ isDataReady = true }
 
   const ownerActions = [
     { icon: Users, label: 'จัดการผู้ใช้', href: '/users', color: 'text-blue-600' },
-    { icon: Building2, label: 'ตั้งค่าองค์กร', href: '/settings', color: 'text-green-600' },
+    { icon: Building2, label: 'แก้ไขโปรไฟล์', href: '/settings', color: 'text-green-600' },
     { icon: FileText, label: 'รายงาน', href: '/reports', color: 'text-purple-600' },
   ];
 
