@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { SalesGuard } from '@/components/auth/PermissionGuard';
+import Sidebar from '@/components/dashboard/Sidebar';
+import Header from '@/components/dashboard/Header';
 import {
   Card,
   CardContent,
@@ -103,6 +105,7 @@ interface Property {
 const LeadManagement = () => {
   const navigate = useNavigate();
   const { currentTenant, userRole, userProfile } = useSimpleAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -370,26 +373,37 @@ const LeadManagement = () => {
 
   return (
     <SalesGuard>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">ระบบติดตามลูกค้า (Leads)</h1>
-            <p className="text-muted-foreground">
-              จัดการลูกค้าและติดตามสถานะการขายอสังหาริมทรัพย์
-            </p>
-          </div>
-          <Button onClick={() => {
-            resetLeadForm();
-            setShowLeadDialog(true);
-          }}>
-            <Plus className="w-4 h-4 mr-2" />
-            เพิ่ม Lead ใหม่
-          </Button>
-        </div>
+      <div className="min-h-screen bg-background">
+        {/* Sidebar */}
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        {/* Stats */}
-        <div className="grid gap-4 md:grid-cols-5">
+        {/* Main Content */}
+        <div className="lg:ml-[260px] min-h-screen">
+          {/* Header */}
+          <Header onMenuClick={() => setSidebarOpen(true)} />
+
+          {/* Page Content */}
+          <main className="p-6">
+            <div className="space-y-6">
+              {/* Page Header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold tracking-tight">ระบบติดตามลูกค้า (Leads)</h1>
+                  <p className="text-muted-foreground">
+                    จัดการลูกค้าและติดตามสถานะการขายอสังหาริมทรัพย์
+                  </p>
+                </div>
+                <Button onClick={() => {
+                  resetLeadForm();
+                  setShowLeadDialog(true);
+                }}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  เพิ่ม Lead ใหม่
+                </Button>
+              </div>
+
+            {/* Stats */}
+            <div className="grid gap-4 md:grid-cols-5">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -845,6 +859,9 @@ const LeadManagement = () => {
             )}
           </DialogContent>
         </Dialog>
+            </div>
+          </main>
+        </div>
       </div>
     </SalesGuard>
   );

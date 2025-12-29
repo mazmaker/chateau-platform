@@ -13,6 +13,7 @@ import BillingManagement from "./pages/BillingManagement";
 import PropertyManagement from "./pages/PropertyManagement";
 import LeadManagement from "./pages/LeadManagement";
 import AdminCustomization from "./pages/AdminCustomization";
+import Settings from "./pages/Settings";
 import { ProtectedRouteSimple } from "@/components/auth/ProtectedRouteSimple";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
@@ -158,6 +159,20 @@ const App = () => (
           >
             <ProtectedRouteSimple>
               <AdminCustomization />
+            </ProtectedRouteSimple>
+          </ErrorBoundary>
+        } />
+
+        {/* Settings Route - Available to all authenticated users */}
+        <Route path="/settings" element={
+          <ErrorBoundary
+            showRetry={true}
+            showHome={true}
+            errorMessage="ไม่สามารถโหลดหน้าตั้งค่าได้"
+            context={{ page: 'settings' }}
+          >
+            <ProtectedRouteSimple>
+              <Settings />
             </ProtectedRouteSimple>
           </ErrorBoundary>
         } />

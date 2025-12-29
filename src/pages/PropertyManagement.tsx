@@ -610,22 +610,22 @@ const PropertyManagement = () => {
         <main className="p-6">
           <AdminGuard>
             <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">โครงการ</h1>
-            <p className="text-muted-foreground">
-              จัดการโครงการอสังหาและยูนิตทั้งหมดของบริษัท
-            </p>
-          </div>
-          <Button onClick={() => {
-            setEditingProperty(null);
-            setShowPropertyDialog(true);
-          }}>
-            <Plus className="w-4 h-4 mr-2" />
-            เพิ่มโครงการใหม่
-          </Button>
-        </div>
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold tracking-tight">โครงการ</h1>
+                  <p className="text-muted-foreground">
+                    จัดการโครงการอสังหาและยูนิตทั้งหมดของบริษัท
+                  </p>
+                </div>
+                <Button onClick={() => {
+                  setEditingProperty(null);
+                  setShowPropertyDialog(true);
+                }}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  เพิ่มโครงการใหม่
+                </Button>
+              </div>
 
         {/* Property List or Units */}
         {!selectedProperty ? (

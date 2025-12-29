@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { OwnerGuard } from '@/components/auth/PermissionGuard';
+import Sidebar from '@/components/dashboard/Sidebar';
+import Header from '@/components/dashboard/Header';
 import {
   Card,
   CardContent,
@@ -78,6 +80,7 @@ interface TenantStats {
 
 const TenantManagement = () => {
   const navigate = useNavigate();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [tenantStats, setTenantStats] = useState<Record<string, TenantStats>>({});
   const [loading, setLoading] = useState(true);
@@ -310,23 +313,34 @@ const TenantManagement = () => {
 
   return (
     <OwnerGuard>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">จัดการบริษัท (Tenants)</h1>
-            <p className="text-muted-foreground">
-              จัดการบริษัททั้งหมดในระบบ SaaS
-            </p>
-          </div>
-          <Button onClick={() => {
-            resetForm();
-            setShowCreateDialog(true);
-          }}>
-            <Plus className="w-4 h-4 mr-2" />
-            เพิ่มบริษัทใหม่
-          </Button>
-        </div>
+      <div className="min-h-screen bg-background">
+        {/* Sidebar */}
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+        {/* Main Content */}
+        <div className="lg:ml-[260px] min-h-screen">
+          {/* Header */}
+          <Header onMenuClick={() => setSidebarOpen(true)} />
+
+          {/* Page Content */}
+          <main className="p-6">
+            <div className="space-y-6">
+              {/* Page Header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold tracking-tight">จัดการบริษัท (Tenants)</h1>
+                  <p className="text-muted-foreground">
+                    จัดการบริษัททั้งหมดในระบบ SaaS
+                  </p>
+                </div>
+                <Button onClick={() => {
+                  resetForm();
+                  setShowCreateDialog(true);
+                }}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  เพิ่มบริษัทใหม่
+                </Button>
+              </div>
 
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-4">
@@ -730,6 +744,9 @@ const TenantManagement = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+            </div>
+          </main>
+        </div>
       </div>
     </OwnerGuard>
   );

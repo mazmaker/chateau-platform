@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
+import { supabase } from '@/lib/supabase';
 import { AdminGuard } from '@/components/auth/PermissionGuard';
+import Sidebar from '@/components/dashboard/Sidebar';
+import Header from '@/components/dashboard/Header';
 import {
   Card,
   CardContent,
@@ -15,37 +18,53 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Palette,
-  Image,
   Save,
   RotateCcw,
   Eye,
   CheckCircle,
-  Upload
+  Upload,
+  X,
+  Loader2,
+  Building2,
+  AlertCircle
 } from 'lucide-react';
+import {
+  getCompanySettings,
+  uploadCompanyLogo,
+  updateCompanyLogo as updateCompanyLogoApi,
+  updateCompanyColors,
+  deleteCompanyLogo
+} from '@/lib/api/companySettings';
+import { notifyLogoUpdated } from '@/components/company/CompanyLogo';
+
+// File validation constants
+const ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg'];
+const RECOMMENDED_SIZE = 400; // 400x400 px
+
+interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+}
 
 interface ThemeSettings {
   primaryColor: string;
   secondaryColor: string;
   accentColor: string;
-  logo?: string;
-  favicon?: string;
-}
-
-interface BrandSettings {
-  name: string;
-  tagline: string;
-  primaryColor: string;
-  secondaryColor: string;
-  fontFamily: string;
-  borderRadius: string;
 }
 
 const AdminCustomization = () => {
   const navigate = useNavigate();
   const { currentTenant, userRole } = useSimpleAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  // For Owner: all tenants, For Admin: only their tenant
+  const [allTenants, setAllTenants] = useState<Tenant[]>([]);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
 
   // Theme settings
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>({
@@ -54,17 +73,14 @@ const AdminCustomization = () => {
     accentColor: '#10b981'
   });
 
-  // Brand settings
-  const [brandSettings, setBrandSettings] = useState<BrandSettings>({
-    name: 'Chateau Platform',
-    tagline: 'Property Management System',
-    primaryColor: '#3b82f6',
-    secondaryColor: '#8b5cf6',
-    fontFamily: 'Inter',
-    borderRadius: 'medium'
-  });
+  // Company Logo & Brand settings
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [companyName, setCompanyName] = useState<string | null>(null);
+  const [brandPrimaryColor, setBrandPrimaryColor] = useState('#676AF1');
+  const [brandSecondaryColor, setBrandSecondaryColor] = useState('#38B6FFCC');
+  const [uploading, setUploading] = useState(false);
 
-  // Preset color schemes
+  // Preset color schemes for Theme
   const colorPresets = [
     { name: 'Default (Blue)', primary: '#3b82f6', secondary: '#8b5cf6', accent: '#10b981' },
     { name: 'Ocean', primary: '#06b6d4', secondary: '#0ea5e9', accent: '#14b8a6' },
@@ -79,12 +95,56 @@ const AdminCustomization = () => {
   useEffect(() => {
     if (currentTenant) {
       fetchThemeSettings();
+      // Initialize selected tenant
+      setSelectedTenantId(currentTenant.id);
     }
-  }, [currentTenant]);
+
+    // Fetch all tenants if Owner
+    if (userRole === 'owner') {
+      fetchAllTenants();
+    }
+  }, [currentTenant, userRole]);
+
+  // Fetch all tenants (for Owner only)
+  const fetchAllTenants = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tenants')
+        .select('id, name, slug')
+        .order('name');
+
+      if (!error && data) {
+        setAllTenants(data);
+      }
+    } catch (error) {
+      console.error('Error fetching tenants:', error);
+    }
+  };
+
+  // Fetch company logo settings for selected tenant
+  const fetchCompanyLogoSettings = async (tenantId: string) => {
+    try {
+      const settings = await getCompanySettings(tenantId);
+      if (settings) {
+        setLogoUrl(settings.logo_url);
+        setCompanyName(settings.company_name);
+        setBrandPrimaryColor(settings.primary_color);
+        setBrandSecondaryColor(settings.secondary_color);
+      }
+    } catch (error) {
+      console.error('Error fetching company logo settings:', error);
+    }
+  };
+
+  // When selected tenant changes
+  useEffect(() => {
+    if (selectedTenantId) {
+      fetchCompanyLogoSettings(selectedTenantId);
+    }
+  }, [selectedTenantId]);
 
   const fetchThemeSettings = async () => {
     try {
-      // Fetch from tenant settings
       const { data } = await supabase
         .from('tenants')
         .select('settings')
@@ -93,9 +153,6 @@ const AdminCustomization = () => {
 
       if (data?.settings?.theme) {
         setThemeSettings(data.settings.theme);
-      }
-      if (data?.settings?.brand) {
-        setBrandSettings(data.settings.brand);
       }
     } catch (error) {
       console.error('Error fetching theme settings:', error);
@@ -107,7 +164,6 @@ const AdminCustomization = () => {
     setSaved(false);
 
     try {
-      // Save to tenant settings
       const { data: tenantData } = await supabase
         .from('tenants')
         .select('settings')
@@ -122,41 +178,12 @@ const AdminCustomization = () => {
         .update({ settings: currentSettings })
         .eq('id', currentTenant?.id);
 
-      // Apply theme to document
       applyTheme(themeSettings);
 
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
       console.error('Error saving theme:', error);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSaveBrand = async () => {
-    setSaving(true);
-    setSaved(false);
-
-    try {
-      const { data: tenantData } = await supabase
-        .from('tenants')
-        .select('settings')
-        .eq('id', currentTenant?.id)
-        .single();
-
-      const currentSettings = tenantData?.settings || {};
-      currentSettings.brand = brandSettings;
-
-      await supabase
-        .from('tenants')
-        .update({ settings: currentSettings })
-        .eq('id', currentTenant?.id);
-
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (error) {
-      console.error('Error saving brand:', error);
     } finally {
       setSaving(false);
     }
@@ -180,10 +207,76 @@ const AdminCustomization = () => {
   };
 
   const applyTheme = (theme: ThemeSettings) => {
-    // Apply CSS custom properties
     document.documentElement.style.setProperty('--primary', theme.primaryColor);
     document.documentElement.style.setProperty('--secondary', theme.secondaryColor);
     document.documentElement.style.setProperty('--accent', theme.accentColor);
+  };
+
+  // Company Logo handlers
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedTenantId) return;
+
+    // Validate file extension first
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
+      setFileError(`รองรับเฉพาะไฟล์ ${ALLOWED_EXTENSIONS.join(', ').toUpperCase()} เท่านั้น`);
+      return;
+    }
+    setFileError(null);
+
+    setUploading(true);
+    try {
+      const result = await uploadCompanyLogo(selectedTenantId, file);
+      if (result) {
+        await updateCompanyLogoApi(selectedTenantId, {
+          logo_url: result.url,
+          logo_storage_path: result.path
+        });
+        setLogoUrl(result.url);
+        // Notify all CompanyLogo components to refresh
+        notifyLogoUpdated();
+      }
+    } catch (error) {
+      console.error('Error uploading logo:', error);
+      setFileError('อัปโหลดโลโก้ไม่สำเร็จ กรุณาลองใหม่');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteLogo = async () => {
+    if (!selectedTenantId) return;
+    setUploading(true);
+    try {
+      await deleteCompanyLogo(selectedTenantId);
+      setLogoUrl(null);
+      // Notify all CompanyLogo components to refresh
+      notifyLogoUpdated();
+    } catch (error) {
+      console.error('Error deleting logo:', error);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSaveBrandColors = async () => {
+    if (!selectedTenantId) return;
+    setSaving(true);
+    try {
+      await updateCompanyColors(selectedTenantId, {
+        primary_color: brandPrimaryColor,
+        secondary_color: brandSecondaryColor
+      });
+      document.documentElement.style.setProperty('--foreground', brandPrimaryColor);
+      document.documentElement.style.setProperty('--muted-foreground', brandSecondaryColor);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (error) {
+      console.error('Error saving company colors:', error);
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Only Owner and Admin can customize
@@ -200,43 +293,240 @@ const AdminCustomization = () => {
 
   return (
     <AdminGuard>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">ปรับแต่งระบบ (Customization)</h1>
-            <p className="text-muted-foreground">
-              ปรับแต่งสีและดีไซนของระบบให้เข้ากับแบรนด์บริษัทคุณ
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate('/properties')}>
-              ยกเลิก
-            </Button>
-          </div>
-        </div>
+      <div className="min-h-screen bg-background">
+        {/* Sidebar */}
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        <Tabs defaultValue="colors" className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-3">
-            <TabsTrigger value="colors">
-              <Palette className="w-4 h-4 mr-2" />
-              สี
-            </TabsTrigger>
-            <TabsTrigger value="brand">
-              <Image className="w-4 h-4 mr-2" />
-              แบรนด์
-            </TabsTrigger>
-            <TabsTrigger value="preview">
-              <Eye className="w-4 h-4 mr-2" />
-              ตัวอย่าง
-            </TabsTrigger>
-          </TabsList>
+        {/* Main Content */}
+        <div className="lg:ml-[260px] min-h-screen">
+          {/* Header */}
+          <Header onMenuClick={() => setSidebarOpen(true)} />
 
-          {/* Color Settings */}
-          <TabsContent value="colors" className="space-y-6">
+          {/* Page Content */}
+          <main className="p-6">
+            <div className="space-y-6">
+              {/* Page Header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold tracking-tight">ตั้งค่าระบบ (Settings)</h1>
+                  <p className="text-muted-foreground">
+                    ปรับแต่งโลโก้ สี และดีไซน์ของระบบให้เข้ากับแบรนด์บริษัทคุณ
+                  </p>
+                </div>
+              </div>
+
+              <Tabs defaultValue="logo-brand" className="space-y-6">
+                <TabsList className="grid w-full max-w-md grid-cols-3">
+                  <TabsTrigger value="logo-brand">
+                    <Building2 className="w-4 h-4 mr-2" />
+                    โลโก้และแบรนด์
+                  </TabsTrigger>
+                  <TabsTrigger value="theme">
+                    <Palette className="w-4 h-4 mr-2" />
+                    ธีมระบบ
+                  </TabsTrigger>
+                  <TabsTrigger value="preview">
+                    <Eye className="w-4 h-4 mr-2" />
+                    ตัวอย่าง
+                  </TabsTrigger>
+                </TabsList>
+
+          {/* Logo & Brand Settings (Combined) */}
+          <TabsContent value="logo-brand" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>ตั้งค่าสี</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Building2 className="w-5 h-5" />
+                  ตั้งค่าโลโก้และแบรนด์บริษัท
+                </CardTitle>
+                <CardDescription>
+                  {userRole === 'owner'
+                    ? 'เลือกบริษัทและอัปโหลดโลโก้ ปรับแต่งสีแบรนด์'
+                    : 'อัปโหลดโลโก้และปรับแต่งสีแบรนด์ของบริษัทคุณ'
+                  }
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Company Selector (Owner only) */}
+                {userRole === 'owner' && allTenants.length > 0 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="tenantSelect">เลือกบริษัท</Label>
+                    <select
+                      id="tenantSelect"
+                      value={selectedTenantId || ''}
+                      onChange={(e) => setSelectedTenantId(e.target.value)}
+                      className="w-full max-w-xs px-3 py-2 border rounded-md bg-background"
+                    >
+                      {allTenants.map((tenant) => (
+                        <option key={tenant.id} value={tenant.id}>
+                          {tenant.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Logo Upload Section */}
+                <div className="space-y-3">
+                  <Label>โลโก้บริษัท</Label>
+                  <div className="flex items-start gap-6">
+                    <div className="flex-shrink-0">
+                      {selectedTenantId && (
+                        <div className="w-24 h-24 border border-border rounded-lg flex items-center justify-center bg-muted">
+                          {logoUrl ? (
+                            <img
+                              src={logoUrl}
+                              alt={companyName || 'Company Logo'}
+                              className="w-full h-full object-contain rounded-lg"
+                              onError={() => setLogoUrl(null)}
+                            />
+                          ) : (
+                            <Building2 className="w-12 h-12 text-muted-foreground" />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-3">
+                      {logoUrl && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDeleteLogo}
+                          disabled={uploading}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <X className="w-4 h-4 mr-2" />
+                          ลบโลโก้
+                        </Button>
+                      )}
+                      <div>
+                        <Input
+                          type="file"
+                          accept=".png,.jpg,.jpeg"
+                          onChange={handleFileUpload}
+                          disabled={uploading}
+                          className="max-w-xs"
+                        />
+                        <div className="mt-1 space-y-0.5">
+                          <p className="text-xs text-muted-foreground">
+                            รองรับ: PNG, JPG (สูงสุด 500KB)
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            ขนาดแนะนำ: {RECOMMENDED_SIZE}x{RECOMMENDED_SIZE} px
+                          </p>
+                        </div>
+                      </div>
+                      {fileError && (
+                        <div className="flex items-center gap-2 text-destructive text-sm">
+                          <AlertCircle className="w-4 h-4" />
+                          {fileError}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Brand Colors */}
+                <div className="space-y-4">
+                  <h4 className="font-medium">สีแบรนด์</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="brandPrimaryColor">สีหลัก (Primary)</Label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Input
+                          id="brandPrimaryColor"
+                          type="color"
+                          value={brandPrimaryColor}
+                          onChange={(e) => setBrandPrimaryColor(e.target.value)}
+                          className="w-16 h-10 p-1 cursor-pointer"
+                        />
+                        <Input
+                          type="text"
+                          value={brandPrimaryColor}
+                          onChange={(e) => setBrandPrimaryColor(e.target.value)}
+                          className="flex-1 font-mono text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="brandSecondaryColor">สีรอง (Secondary)</Label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Input
+                          id="brandSecondaryColor"
+                          type="color"
+                          value={brandSecondaryColor}
+                          onChange={(e) => setBrandSecondaryColor(e.target.value)}
+                          className="w-16 h-10 p-1 cursor-pointer"
+                        />
+                        <Input
+                          type="text"
+                          value={brandSecondaryColor}
+                          onChange={(e) => setBrandSecondaryColor(e.target.value)}
+                          className="flex-1 font-mono text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Preview */}
+                  <div className="p-4 bg-secondary rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-2">ตัวอย่าง:</p>
+                    <h4 className="text-lg font-semibold" style={{ color: brandPrimaryColor }}>
+                      หัวข้อหลัก (H1-H6)
+                    </h4>
+                    <p style={{ color: brandSecondaryColor }}>
+                      นี่คือข้อความรอง (paragraphs) แสดงให้เห็นการใช้งานสีทั้งสอง
+                    </p>
+                  </div>
+
+                  <Button
+                    onClick={handleSaveBrandColors}
+                    disabled={saving || uploading}
+                    className="w-full"
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        กำลังบันทึก...
+                      </>
+                    ) : saved ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        บันทึกแล้ว
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 mr-2" />
+                        บันทึกสีแบรนด์
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {/* Current company info */}
+                {companyName && (
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      บริษัท: <span className="font-medium text-foreground">{companyName}</span>
+                    </p>
+                  </div>
+                )}
+
+                {/* Info banner */}
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    <strong>หมายเหตุ:</strong> โลโก้ที่อัปโหลดจะแสดงที่ Header และ Sidebar ของระบบ
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Theme Settings */}
+          <TabsContent value="theme" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>ตั้งค่าธีมระบบ</CardTitle>
                 <CardDescription>
                   เลือกโทนสีหลักของระบบ หรือเลือกจาก Preset ที่เตรียมไว้
                 </CardDescription>
@@ -275,11 +565,11 @@ const AdminCustomization = () => {
                 {/* Custom Colors */}
                 <div className="grid grid-cols-3 gap-6">
                   <div className="space-y-2">
-                    <Label htmlFor="primaryColor">สีหลัก (Primary)</Label>
+                    <Label htmlFor="themePrimary">สีหลัก (Primary)</Label>
                     <div className="flex items-center gap-2">
                       <input
                         type="color"
-                        id="primaryColor"
+                        id="themePrimary"
                         value={themeSettings.primaryColor}
                         onChange={(e) => setThemeSettings({ ...themeSettings, primaryColor: e.target.value })}
                         className="w-12 h-12 rounded cursor-pointer border-0"
@@ -292,11 +582,11 @@ const AdminCustomization = () => {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="secondaryColor">สีรอง (Secondary)</Label>
+                    <Label htmlFor="themeSecondary">สีรอง (Secondary)</Label>
                     <div className="flex items-center gap-2">
                       <input
                         type="color"
-                        id="secondaryColor"
+                        id="themeSecondary"
                         value={themeSettings.secondaryColor}
                         onChange={(e) => setThemeSettings({ ...themeSettings, secondaryColor: e.target.value })}
                         className="w-12 h-12 rounded cursor-pointer border-0"
@@ -309,11 +599,11 @@ const AdminCustomization = () => {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="accentColor">สีเน้น (Accent)</Label>
+                    <Label htmlFor="themeAccent">สีเน้น (Accent)</Label>
                     <div className="flex items-center gap-2">
                       <input
                         type="color"
-                        id="accentColor"
+                        id="themeAccent"
                         value={themeSettings.accentColor}
                         onChange={(e) => setThemeSettings({ ...themeSettings, accentColor: e.target.value })}
                         className="w-12 h-12 rounded cursor-pointer border-0"
@@ -387,111 +677,6 @@ const AdminCustomization = () => {
             </Card>
           </TabsContent>
 
-          {/* Brand Settings */}
-          <TabsContent value="brand" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>ตั้งค่าแบรนด์</CardTitle>
-                <CardDescription>
-                  ปรับแต่งชื่อ และตัวตนของบริษัทคุณ
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="brandName">ชื่อบริษัท</Label>
-                    <Input
-                      id="brandName"
-                      value={brandSettings.name}
-                      onChange={(e) => setBrandSettings({ ...brandSettings, name: e.target.value })}
-                      placeholder="ABC Property Co., Ltd."
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="tagline">คำขวนการ</Label>
-                    <Input
-                      id="tagline"
-                      value={brandSettings.tagline}
-                      onChange={(e) => setBrandSettings({ ...brandSettings, tagline: e.target.value })}
-                      placeholder="Your Trusted Real Estate Partner"
-                    />
-                  </div>
-                </div>
-
-                {/* Logo Upload */}
-                <div className="space-y-2">
-                  <Label>โลโก้</Label>
-                  <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                    <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground mb-2">
-                      ลากไฟล์โลโก้มาวางที่นี่ หรือคลิกเพื่ออัปโหลด
-                    </p>
-                    <Button variant="outline" size="sm">
-                      เลือกไฟล์
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    รองรับ PNG, SVG, JPG (สูงสุด 2MB)
-                  </p>
-                </div>
-
-                {/* Favicon Upload */}
-                <div className="space-y-2">
-                  <Label>Favicon</Label>
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 border rounded-lg flex items-center justify-center bg-muted">
-                      <Image className="w-8 h-8 text-muted-foreground" />
-                    </div>
-                    <div className="flex-1">
-                      <Button variant="outline" size="sm">
-                        เปลี่ยน Favicon
-                      </Button>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        ICO, PNG (32x32 หรือ 16x16 pixels)
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-2 pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    onClick={() => setBrandSettings({
-                      name: 'Chateau Platform',
-                      tagline: 'Property Management System',
-                      primaryColor: '#3b82f6',
-                      secondaryColor: '#8b5cf6',
-                      fontFamily: 'Inter',
-                      borderRadius: 'medium'
-                    })}
-                  >
-                    <RotateCcw className="w-4 h-4 mr-2" />
-                    รีเซ็ต
-                  </Button>
-                  <Button
-                    onClick={handleSaveBrand}
-                    disabled={saving}
-                  >
-                    {saving ? (
-                      <>กำลังบันทึก...</>
-                    ) : saved ? (
-                      <>
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        บันทึกแล้ว
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4 mr-2" />
-                        บันทึก
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
           {/* Preview */}
           <TabsContent value="preview" className="space-y-6">
             <Card>
@@ -504,25 +689,48 @@ const AdminCustomization = () => {
               <CardContent>
                 <div className="border rounded-lg overflow-hidden">
                   {/* Header Preview */}
-                  <div
-                    className="p-4"
-                    style={{ backgroundColor: themeSettings.primaryColor, color: 'white' }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h2 className="text-xl font-bold">{brandSettings.name}</h2>
-                        <p className="text-sm opacity-80">{brandSettings.tagline}</p>
+                  <div className="p-4 flex items-center gap-4" style={{ backgroundColor: themeSettings.primaryColor }}>
+                    {logoUrl ? (
+                      <img
+                        src={logoUrl}
+                        alt="Logo"
+                        className="w-10 h-10 object-contain rounded-lg bg-white"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                        <Building2 className="w-6 h-6 text-white" />
                       </div>
-                      <div className="flex gap-2">
-                        <div className="w-8 h-8 rounded-full bg-white/20" />
-                        <div className="w-8 h-8 rounded-full bg-white/20" />
-                      </div>
+                    )}
+                    <div className="text-white">
+                      <h2 className="text-xl font-bold">{companyName || 'Company Name'}</h2>
+                      <p className="text-sm opacity-80">Dashboard</p>
+                    </div>
+                    <div className="ml-auto flex gap-2">
+                      <div className="w-8 h-8 rounded-full bg-white/20" />
+                      <div className="w-8 h-8 rounded-full bg-white/20" />
                     </div>
                   </div>
 
                   {/* Sidebar Preview */}
                   <div className="flex">
                     <div className="w-48 bg-muted p-4 space-y-2">
+                      {logoUrl ? (
+                        <div className="flex items-center gap-3 mb-4">
+                          <img
+                            src={logoUrl}
+                            alt="Logo"
+                            className="w-10 h-10 object-contain rounded-lg"
+                          />
+                          <span className="font-medium">{companyName || 'Company'}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 bg-muted-foreground/10 rounded-lg flex items-center justify-center">
+                            <Building2 className="w-6 h-6 text-muted-foreground" />
+                          </div>
+                          <span className="font-medium">{companyName || 'Company'}</span>
+                        </div>
+                      )}
                       <div
                         className="p-2 rounded text-white text-sm"
                         style={{ backgroundColor: themeSettings.secondaryColor }}
@@ -601,7 +809,10 @@ const AdminCustomization = () => {
               </CardContent>
             </Card>
           </TabsContent>
-        </Tabs>
+              </Tabs>
+            </div>
+          </main>
+        </div>
       </div>
     </AdminGuard>
   );

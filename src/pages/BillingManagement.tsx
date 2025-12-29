@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { OwnerGuard } from '@/components/auth/PermissionGuard';
+import Sidebar from '@/components/dashboard/Sidebar';
+import Header from '@/components/dashboard/Header';
 import {
   Card,
   CardContent,
@@ -73,6 +75,7 @@ interface Tenant {
 }
 
 const BillingManagement = () => {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -223,23 +226,34 @@ const BillingManagement = () => {
 
   return (
     <OwnerGuard>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Billing & Invoices</h1>
-            <p className="text-muted-foreground">
-              จัดการการชำระเงินและใบแจ้งหนี้ของบริษัททั้งหมด
-            </p>
-          </div>
-          <Button onClick={() => setShowInvoiceDialog(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            สร้างใบแจ้งหนี้
-          </Button>
-        </div>
+      <div className="min-h-screen bg-background">
+        {/* Sidebar */}
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        {/* Summary Stats */}
-        <div className="grid gap-4 md:grid-cols-4">
+        {/* Main Content */}
+        <div className="lg:ml-[260px] min-h-screen">
+          {/* Header */}
+          <Header onMenuClick={() => setSidebarOpen(true)} />
+
+          {/* Page Content */}
+          <main className="p-6">
+            <div className="space-y-6">
+              {/* Page Header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold tracking-tight">Billing & Invoices</h1>
+                  <p className="text-muted-foreground">
+                    จัดการการชำระเงินและใบแจ้งหนี้ของบริษัททั้งหมด
+                  </p>
+                </div>
+                <Button onClick={() => setShowInvoiceDialog(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  สร้างใบแจ้งหนี้
+                </Button>
+              </div>
+
+            {/* Summary Stats */}
+            <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -458,6 +472,9 @@ const BillingManagement = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+            </div>
+          </main>
+        </div>
       </div>
     </OwnerGuard>
   );

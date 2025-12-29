@@ -1,13 +1,12 @@
 
 
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -84,32 +83,32 @@ code {
 }
 
 :root {
-  /* Lovable-inspired modern design system */
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  /* Lovable-inspired Modern Design System - CHATEAU Platform */
+  --background: #F0F8FD;
+  --foreground: #676AF1;
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #1a1a1a;
   --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --primary: #4f46e5;
+  --popover-foreground: #1a1a1a;
+  --primary: #7c3aed;
   --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #0f172a;
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
-  --accent: #e0e7ff;
-  --accent-foreground: #0f172a;
+  --secondary: #f3f4f6;
+  --secondary-foreground: #1a1a1a;
+  --muted: #f3f4f6;
+  --muted-foreground: #38B6FFCC;
+  --accent: #ddd6fe;
+  --accent-foreground: #1a1a1a;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #4f46e5;
-  --chart-1: #4f46e5;
-  --chart-2: #7c3aed;
-  --chart-3: #a21caf;
-  --chart-4: #be185d;
-  --chart-5: #dc2626;
-  --radius: 0.875rem;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --ring: #7c3aed;
+  --chart-1: #7c3aed;
+  --chart-2: #3b82f6;
+  --chart-3: #10b981;
+  --chart-4: #f59e0b;
+  --chart-5: #ef4444;
+  --radius: 0.75rem;
 }
 
 .dark {
@@ -165,12 +164,31 @@ code {
 
 @layer base {
   * {
-    border-color: #e2e8f0;
+    border-color: #e5e7eb;
   }
   body {
-    background-color: #f8fafc;
-    color: #0f172a;
+    background-color: #F0F8FD;
+    color: #38B6FFCC;
     font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+
+  /* Headings (H1-H6) - Use #676AF1 */
+  h1, h2, h3, h4, h5, h6 {
+    color: #676AF1 !important;
+  }
+
+  /* Paragraphs - Use #38B6FFCC */
+  p {
+    color: #38B6FFCC;
+  }
+
+  /* Tailwind text-foreground override */
+  .text-foreground {
+    color: #676AF1 !important;
+  }
+
+  .text-muted-foreground {
+    color: #38B6FFCC !important;
   }
 
   /* Smooth scrolling */
@@ -178,22 +196,108 @@ code {
     scroll-behavior: smooth;
   }
 
-  /* Custom scrollbar */
+  /* Modern scrollbar */
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
 
   ::-webkit-scrollbar-track {
-    background-color: #f1f5f9;
+    background-color: #f3f4f6;
   }
 
   ::-webkit-scrollbar-thumb {
     background-color: #d1d5db;
-    border-radius: 50%;
+    border-radius: 4px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
     background-color: #9ca3af;
   }
+}
+
+/* Lovable-inspired Modern gradient utilities */
+.gradient-primary {
+  background: linear-gradient(135deg, #676AF1 0%, #7c3aed 50%, #a78bfa 100%);
+}
+
+.gradient-primary-text {
+  background: linear-gradient(135deg, #676AF1 0%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-secondary {
+  background: linear-gradient(135deg, #38B6FF 0%, #3b82f6 100%);
+}
+
+.gradient-card {
+  background: #FFFFFF;
+  box-shadow: 0 2px 12px rgba(103, 106, 241, 0.08);
+  border: 1px solid #e5e7eb;
+}
+
+.gradient-card-hover {
+  transition: all 0.3s ease;
+}
+
+.gradient-card-hover:hover {
+  box-shadow: 0 4px 20px rgba(103, 106, 241, 0.15);
+  transform: translateY(-2px);
+}
+
+/* Glass morphism for modern feel */
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(103, 106, 241, 0.1);
+}
+
+/* Button modern styles */
+.btn-primary {
+  background: linear-gradient(135deg, #676AF1 0%, #7c3aed 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(103, 106, 241, 0.3);
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  box-shadow: 0 4px 12px rgba(103, 106, 241, 0.4);
+  transform: translateY(-1px);
+}
+
+/* Stat card modern styling */
+.stat-card {
+  background: linear-gradient(180deg, #FFFFFF 0%, #F0F8FD 100%);
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 2px 12px rgba(103, 106, 241, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #676AF1, #7c3aed, #a78bfa);
+}
+
+/* Card utilities */
+.card-shadow {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.card-hover {
+  transition: all 0.2s ease;
+}
+
+.card-hover:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
 }

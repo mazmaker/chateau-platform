@@ -98,7 +98,9 @@
       "Bash(PGPASSWORD='' /opt/homebrew/Cellar/libpq/18.1/bin/psql:*)",
       "Bash(npm run test:rbac:*)",
       "Bash(PGPASSWORD='postgres' /opt/homebrew/Cellar/libpq/18.1/bin/psql:*)",
-      "Bash(xargs kill:*)"
+      "Bash(xargs kill:*)",
+      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_35ba23698fa56fe56d6817823dbb1585d7bb9c6d\" supabase migration repair:*)",
+      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_35ba23698fa56fe56d6817823dbb1585d7bb9c6d\" supabase db remote --db-url \"postgres://postgres:[YOUR-PASSWORD]@db.pqnjvcbmnatrtvpqnrdx.supabase.co:5432/postgres\")"
     ]
   }
 }

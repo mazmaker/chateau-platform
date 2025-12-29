@@ -1,14 +1,18 @@
 import { useState, useEffect } from "react";
-import { Search, Plus, Filter, MoreHorizontal, Mail, User, Calendar, Shield, ToggleLeft, ToggleRight, Trash2, Edit, UserPlus } from "lucide-react";
+import { Search, Plus, Filter, MoreHorizontal, Mail, User, Calendar, Shield, ToggleLeft, ToggleRight, Trash2, Edit, UserPlus, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useAuth } from "@/contexts/AuthContext";
-import { UserRole } from "@/lib/database-types";
+import { useSimpleAuth } from "@/contexts/AuthContextSimple";
+import { supabase } from "@/lib/supabase";
 import InviteUserModal from "./InviteUserModal";
 import EditUserModal from "./EditUserModal";
+import DemoUserModal from "./DemoUserModal";
+import { toast } from "sonner";
+
+type UserRole = 'owner' | 'admin' | 'sales';
 
 interface UserData {
   id: string;
@@ -31,8 +35,9 @@ const UserManagementContent = () => {
   const [loading, setLoading] = useState(true);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDemoModal, setShowDemoModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
-  const { currentTenant, supabase } = useAuth();
+  const { currentTenant } = useSimpleAuth();
 
   useEffect(() => {
     fetchUsers();
@@ -46,7 +51,7 @@ const UserManagementContent = () => {
     if (!currentTenant) return;
 
     try {
-      // Fetch from users table (new 3-role system)
+      // Fetch from users table
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -57,6 +62,7 @@ const UserManagementContent = () => {
       setUsers(data || []);
     } catch (error) {
       console.error('Error fetching users:', error);
+      toast.error('ไม่สามารถโหลดข้อมูลผู้ใช้ได้');
     } finally {
       setLoading(false);
     }
@@ -101,8 +107,11 @@ const UserManagementContent = () => {
       setUsers(prev => prev.map(user =>
         user.id === userId ? { ...user, is_active: !currentStatus } : user
       ));
+
+      toast.success(!currentStatus ? 'เปิดใช้งานบัญชีสำเร็จ' : 'ระงับบัญชีสำเร็จ');
     } catch (error) {
       console.error('Error updating user status:', error);
+      toast.error('ไม่สามารถอัปเดตสถานะผู้ใช้ได้');
     }
   };
 
@@ -119,28 +128,30 @@ const UserManagementContent = () => {
 
       // Update local state
       setUsers(prev => prev.filter(user => user.id !== userId));
+      toast.success('ลบผู้ใช้สำเร็จ');
     } catch (error) {
       console.error('Error removing user:', error);
+      toast.error('ไม่สามารถลบผู้ใช้ได้');
     }
   };
 
   const getRoleBadge = (role: UserRole) => {
     const styles = {
-      [UserRole.OWNER]: "bg-purple-100 text-purple-800 border-purple-300",
-      [UserRole.ADMIN]: "bg-blue-100 text-blue-800 border-blue-300",
-      [UserRole.SALES]: "bg-green-100 text-green-800 border-green-300"
+      owner: "bg-purple-100 text-purple-800 border-purple-300",
+      admin: "bg-blue-100 text-blue-800 border-blue-300",
+      sales: "bg-green-100 text-green-800 border-green-300"
     };
 
     const labels = {
-      [UserRole.OWNER]: "เจ้าของแพลตฟอร์ม",
-      [UserRole.ADMIN]: "ผู้ดูแลบริษัท",
-      [UserRole.SALES]: "พนักงานขาย"
+      owner: "เจ้าของแพลตฟอร์ม",
+      admin: "ผู้ดูแลบริษัท",
+      sales: "พนักงานขาย"
     };
 
     const icons = {
-      [UserRole.OWNER]: "👑",
-      [UserRole.ADMIN]: "🔧",
-      [UserRole.SALES]: "💼"
+      owner: "👑",
+      admin: "🔧",
+      sales: "💼"
     };
 
     return (
@@ -173,13 +184,23 @@ const UserManagementContent = () => {
           <h1 className="text-2xl font-bold text-gray-900">จัดการผู้ใช้</h1>
           <p className="text-gray-600 mt-1">จัดการผู้ใช้และสิทธิ์ในระบบของคุณ</p>
         </div>
-        <Button
-          onClick={() => setShowInviteModal(true)}
-          className="flex items-center gap-2"
-        >
-          <UserPlus className="w-4 h-4" />
-          เชิญผู้ใช้ใหม่
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => setShowDemoModal(true)}
+            variant="outline"
+            className="flex items-center gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
+          >
+            <Sparkles className="w-4 h-4" />
+            ทดสอบ
+          </Button>
+          <Button
+            onClick={() => setShowInviteModal(true)}
+            className="flex items-center gap-2"
+          >
+            <UserPlus className="w-4 h-4" />
+            เชิญผู้ใช้ใหม่
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -220,7 +241,7 @@ const UserManagementContent = () => {
               </div>
               <div className="ml-3">
                 <p className="text-sm text-gray-600">เจ้าของ</p>
-                <p className="text-xl font-semibold">{users.filter(u => u.role === UserRole.OWNER).length}</p>
+                <p className="text-xl font-semibold">{users.filter(u => u.role === 'owner').length}</p>
               </div>
             </div>
           </CardContent>
@@ -234,7 +255,7 @@ const UserManagementContent = () => {
               </div>
               <div className="ml-3">
                 <p className="text-sm text-gray-600">แอดมิน</p>
-                <p className="text-xl font-semibold">{users.filter(u => u.role === UserRole.ADMIN).length}</p>
+                <p className="text-xl font-semibold">{users.filter(u => u.role === 'admin').length}</p>
               </div>
             </div>
           </CardContent>
@@ -248,7 +269,7 @@ const UserManagementContent = () => {
               </div>
               <div className="ml-3">
                 <p className="text-sm text-gray-600">พนักงานขาย</p>
-                <p className="text-xl font-semibold">{users.filter(u => u.role === UserRole.SALES).length}</p>
+                <p className="text-xl font-semibold">{users.filter(u => u.role === 'sales').length}</p>
               </div>
             </div>
           </CardContent>
@@ -277,9 +298,9 @@ const UserManagementContent = () => {
               className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <option value="all">ทุกตำแหน่ง</option>
-              <option value={UserRole.OWNER}>👑 เจ้าของแพลตฟอร์ม</option>
-              <option value={UserRole.ADMIN}>🔧 ผู้ดูแลบริษัท</option>
-              <option value={UserRole.SALES}>💼 พนักงานขาย</option>
+              <option value="owner">👑 เจ้าของแพลตฟอร์ม</option>
+              <option value="admin">🔧 ผู้ดูแลบริษัท</option>
+              <option value="sales">💼 พนักงานขาย</option>
             </select>
 
             <select
@@ -316,9 +337,13 @@ const UserManagementContent = () => {
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
                         <Avatar>
-                          <AvatarFallback>
-                            {getUserInitials(user.full_name, user.email)}
-                          </AvatarFallback>
+                          {user.avatar_url ? (
+                            <img src={user.avatar_url} alt={user.full_name || user.email} className="w-full h-full object-cover" />
+                          ) : (
+                            <AvatarFallback>
+                              {getUserInitials(user.full_name, user.email)}
+                            </AvatarFallback>
+                          )}
                         </Avatar>
                         <div>
                           <p className="font-medium text-gray-900">
@@ -348,7 +373,7 @@ const UserManagementContent = () => {
                           variant="ghost"
                           size="sm"
                           onClick={() => toggleUserStatus(user.id, user.is_active)}
-                          disabled={user.role === UserRole.OWNER}
+                          disabled={user.role === 'owner'}
                           className="p-1"
                         >
                           {user.is_active ? (
@@ -364,7 +389,7 @@ const UserManagementContent = () => {
                             setSelectedUser(user);
                             setShowEditModal(true);
                           }}
-                          disabled={user.role === UserRole.OWNER}
+                          disabled={user.role === 'owner'}
                           className="p-1"
                         >
                           <Edit className="w-4 h-4 text-blue-600" />
@@ -373,7 +398,7 @@ const UserManagementContent = () => {
                           variant="ghost"
                           size="sm"
                           onClick={() => removeUser(user.id)}
-                          disabled={user.role === UserRole.OWNER}
+                          disabled={user.role === 'owner'}
                           className="p-1"
                         >
                           <Trash2 className="w-4 h-4 text-red-600" />
@@ -393,6 +418,13 @@ const UserManagementContent = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Demo User Modal */}
+      <DemoUserModal
+        isOpen={showDemoModal}
+        onClose={() => setShowDemoModal(false)}
+        onSuccess={fetchUsers}
+      />
 
       {/* Invite User Modal */}
       <InviteUserModal

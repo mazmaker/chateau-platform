@@ -1,5 +1,4 @@
-import { Search, Bell, Globe, Menu, Settings, LogOut, Crown, Shield, Briefcase } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Search, Bell, Globe, Menu, Settings, LogOut, Crown, Shield, Briefcase, Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
 import TenantSwitcher from "@/components/tenants/TenantSwitcher";
 import { usePermissions, ManageSettingsGuard, ManageUsersGuard } from "@/components/auth/PermissionGuard";
+import { CompanyLogo } from "@/components/company/CompanyLogo";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -21,7 +21,7 @@ interface HeaderProps {
 
 const Header = ({ onMenuClick }: HeaderProps) => {
   const navigate = useNavigate();
-  const { user, signOut, userRole } = useSimpleAuth();
+  const { user, signOut, userRole, userProfile } = useSimpleAuth();
   const { isOwner, isAdmin, isSales } = usePermissions();
 
   const handleSignOut = async () => {
@@ -30,14 +30,14 @@ const Header = ({ onMenuClick }: HeaderProps) => {
   };
 
   const getUserInitials = () => {
-    if ((user as any)?.user_metadata?.full_name) {
-      return (user as any).user_metadata.full_name.split(' ').map((n: string) => n[0]).join('').toUpperCase();
+    if (userProfile?.full_name) {
+      return userProfile.full_name.split(' ').map((n: string) => n[0]).join('').toUpperCase();
     }
     return user?.email?.split('@')[0].toUpperCase() || 'U';
   };
 
   const getUserName = () => {
-    return (user as any)?.user_metadata?.full_name || user?.email || 'User';
+    return userProfile?.full_name || user?.email || 'User';
   };
 
   const getRoleIcon = () => {
@@ -66,7 +66,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
   };
 
   return (
-    <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6">
+    <header className="h-16 bg-[#F0F8FD] border-b border-border flex items-center justify-between px-6">
       {/* Left Side */}
       <div className="flex items-center gap-4">
         <Button
@@ -77,7 +77,11 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         >
           <Menu className="w-5 h-5" />
         </Button>
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+
+        {/* Company Logo */}
+        <CompanyLogo size="2xl" className="hidden sm:block" />
+
+        <h1 className="text-2xl font-bold text-foreground hidden sm:block">Dashboard</h1>
 
         {/* Tenant Switcher */}
         <TenantSwitcher />
@@ -116,11 +120,15 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Avatar className="w-9 h-9 cursor-pointer ring-2 ring-border hover:ring-primary transition-all">
-              <AvatarFallback className="gradient-primary text-primary-foreground text-sm">
-                {getUserInitials()}
-              </AvatarFallback>
-            </Avatar>
+            <div className="w-9 h-9 cursor-pointer rounded-full overflow-hidden bg-gradient-to-br from-[#676AF1] to-[#38B6FFCC] flex items-center justify-center ring-2 ring-border hover:ring-primary transition-all">
+              {userProfile?.avatar_url ? (
+                <img src={userProfile.avatar_url} alt={getUserName()} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-white text-sm font-semibold">
+                  {getUserInitials()}
+                </span>
+              )}
+            </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <div className="px-4 py-2 border-b border-border">
@@ -130,7 +138,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
 
             <DropdownMenuItem onClick={() => navigate('/settings')}>
               <Settings className="w-4 h-4 mr-2" />
-              Settings
+              ตั้งค่า
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />
