@@ -99,8 +99,24 @@
       "Bash(npm run test:rbac:*)",
       "Bash(PGPASSWORD='postgres' /opt/homebrew/Cellar/libpq/18.1/bin/psql:*)",
       "Bash(xargs kill:*)",
+      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_35ba23698fa56fe56d6817823dbb1585d7bb9c6d\" supabase projects list:*)",
+      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_35ba23698fa56fe56d6817823dbb1585d7bb9c6d\" supabase orgs list)",
+      "mcp__ide__getDiagnostics",
+      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_35ba23698fa56fe56d6817823dbb1585d7bb9c6d\" supabase migration repair --status reverted 20251226100000)",
       "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_35ba23698fa56fe56d6817823dbb1585d7bb9c6d\" supabase migration repair:*)",
-      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_35ba23698fa56fe56d6817823dbb1585d7bb9c6d\" supabase db remote --db-url \"postgres://postgres:[YOUR-PASSWORD]@db.pqnjvcbmnatrtvpqnrdx.supabase.co:5432/postgres\")"
+      "Bash(powershell -Command:*)",
+      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_35ba23698fa56fe56d6817823dbb1585d7bb9c6d\" supabase migration:*)",
+      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_35ba23698fa56fe56d6817823dbb1585d7bb9c6d\" supabase migration repair --status reverted 20251226100000 20251226100001 20251228160808 --linked)",
+      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_35ba23698fa56fe56d6817823dbb1585d7bb9c6d\" supabase migration repair --status applied 20251228100001 --linked)",
+      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_35ba23698fa56fe56d6817823dbb1585d7bb9c6d\" supabase db shell -c \"SELECT COUNT\\(*\\) as total, type FROM properties GROUP BY type ORDER BY total DESC;\" --linked)",
+      "Bash(supabase --version:*)",
+      "Bash(supabase db push:*)",
+      "Bash(supabase projects:*)",
+      "Bash(where:*)",
+      "Bash(node -e:*)",
+      "Bash(node scripts/seed-forestias-units.cjs:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)"
     ]
   }
 }
