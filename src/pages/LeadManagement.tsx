@@ -4,6 +4,8 @@ import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { SalesGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
+import AddLeadModal from '@/components/leads/AddLeadModal';
+import EditLeadModal from '@/components/leads/EditLeadModal';
 import {
   Card,
   CardContent,
@@ -58,7 +60,9 @@ import {
   FileText,
   Clock,
   CheckCircle,
-  XCircle
+  XCircle,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -89,17 +93,50 @@ interface Lead {
   updated_at: string;
 }
 
+interface CustomerPreferences {
+  first_name?: string;
+  last_name?: string;
+  gender?: string;
+  age?: number;
+  profile_image?: string;
+  occupation?: string;
+  marital_status?: string;
+  monthly_income?: number;
+  monthly_debt?: number;
+  family_members?: number;
+  education?: string;
+  workplace?: string;
+  address?: {
+    province?: string;
+    district?: string;
+    sub_district?: string;
+    postal_code?: string;
+  };
+  news_source?: string;
+  purchase_purpose?: string;
+  consent_given?: boolean;
+  signature?: string;
+  consent_date?: string;
+}
+
 interface Customer {
   id: string;
   name: string;
   email: string;
   phone: string;
+  preferences?: CustomerPreferences;
 }
 
 interface Property {
   id: string;
   name: string;
   type: string;
+}
+
+interface Unit {
+  id: string;
+  unit_number: string;
+  project_id: string;
 }
 
 const LeadManagement = () => {
@@ -109,6 +146,7 @@ const LeadManagement = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -118,8 +156,12 @@ const LeadManagement = () => {
   // Dialog states
   const [showLeadDialog, setShowLeadDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
+  const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Form state
   const [leadForm, setLeadForm] = useState({
@@ -139,6 +181,7 @@ const LeadManagement = () => {
       fetchLeads();
       fetchCustomers();
       fetchProperties();
+      fetchUnits();
     }
   }, [currentTenant, activeTab]);
 
@@ -146,44 +189,43 @@ const LeadManagement = () => {
     setLoading(true);
     try {
       let query = supabase
-        .from('bookings') // Using bookings table as leads temporarily
+        .from('leads')
         .select('*')
         .eq('tenant_id', currentTenant?.id)
         .order('created_at', { ascending: false });
 
       // Filter by assigned user if viewing "my" leads
       if (activeTab === 'my' && userProfile) {
-        // query = query.eq('assigned_to', userProfile.id);
+        query = query.eq('assigned_to', userProfile.id);
       }
 
       const { data, error } = await query;
 
       if (error) throw error;
 
-      // Transform data to lead format
-      const transformedLeads = (data || []).map((item: any) => ({
+      // Map leads data to the expected format
+      const mappedLeads = (data || []).map((item: any) => ({
         id: item.id,
         tenant_id: item.tenant_id,
         customer_id: item.customer_id,
         property_id: item.property_id,
-        unit_id: undefined,
-        status: mapStatusToLead(item.status),
-        source: 'website',
-        budget_min: undefined,
-        budget_max: item.total_amount,
+        unit_id: item.unit_id,
+        status: item.status || 'new',
+        source: item.source || 'website',
+        budget_min: item.estimated_value,
+        budget_max: item.estimated_value,
         preferred_location: undefined,
         notes: item.notes || '',
-        assigned_to: item.created_by,
-        next_follow_up: undefined,
+        assigned_to: item.assigned_to,
+        next_follow_up: item.next_follow_up,
         created_at: item.created_at,
         updated_at: item.updated_at
       }));
 
-      setLeads(transformedLeads);
+      setLeads(mappedLeads);
     } catch (error) {
       console.error('Error fetching leads:', error);
-      // Generate mock data
-      setLeads(generateMockLeads());
+      setLeads([]);
     } finally {
       setLoading(false);
     }
@@ -230,7 +272,7 @@ const LeadManagement = () => {
     try {
       const { data } = await supabase
         .from('customers')
-        .select('id, full_name, email, phone')
+        .select('id, full_name, email, phone, preferences')
         .eq('tenant_id', currentTenant?.id);
 
       // Transform to customer format
@@ -238,19 +280,14 @@ const LeadManagement = () => {
         id: c.id,
         name: c.full_name,
         email: c.email,
-        phone: c.phone || '-'
+        phone: c.phone || '-',
+        preferences: c.preferences || {}
       }));
 
       setCustomers(transformed);
     } catch (error) {
       console.error('Error fetching customers:', error);
-      // Generate mock customers
-      setCustomers(Array.from({ length: 10 }, (_, i) => ({
-        id: `cust-${i + 1}`,
-        name: `ลูกค้า ${i + 1}`,
-        email: `customer${i + 1}@example.com`,
-        phone: `08${String(Math.floor(Math.random() * 100000000)).padStart(8, '0')}`
-      })));
+      setCustomers([]);
     }
   };
 
@@ -267,6 +304,19 @@ const LeadManagement = () => {
     }
   };
 
+  const fetchUnits = async () => {
+    try {
+      const { data } = await supabase
+        .from('units')
+        .select('id, unit_number, project_id')
+        .order('unit_number');
+
+      setUnits(data || []);
+    } catch (error) {
+      console.error('Error fetching units:', error);
+    }
+  };
+
   const handleSaveLead = async () => {
     try {
       // TODO: Implement lead creation
@@ -280,13 +330,76 @@ const LeadManagement = () => {
 
   const handleUpdateStatus = async (lead: Lead, newStatus: LeadStatus) => {
     try {
-      // TODO: Implement status update
+      const { error } = await supabase
+        .from('leads')
+        .update({ status: newStatus })
+        .eq('id', lead.id);
+
+      if (error) throw error;
+
       setLeads(leads.map(l =>
         l.id === lead.id ? { ...l, status: newStatus } : l
       ));
     } catch (error) {
       console.error('Error updating lead status:', error);
     }
+  };
+
+  const handleDeleteLead = async () => {
+    if (!leadToDelete) return;
+
+    setDeleteLoading(true);
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .delete()
+        .eq('id', leadToDelete.id);
+
+      if (error) throw error;
+
+      setLeads(leads.filter(l => l.id !== leadToDelete.id));
+      setShowDeleteDialog(false);
+      setLeadToDelete(null);
+    } catch (error) {
+      console.error('Error deleting lead:', error);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleEditLead = async () => {
+    if (!editingLead) return;
+
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .update({
+          status: editingLead.status,
+          notes: editingLead.notes,
+          next_follow_up: editingLead.next_follow_up || null,
+        })
+        .eq('id', editingLead.id);
+
+      if (error) throw error;
+
+      setLeads(leads.map(l =>
+        l.id === editingLead.id ? editingLead : l
+      ));
+      setShowEditDialog(false);
+      setEditingLead(null);
+    } catch (error) {
+      console.error('Error updating lead:', error);
+    }
+  };
+
+  const openEditDialog = (lead: Lead) => {
+    setEditingLead({ ...lead });
+    setShowEditDialog(true);
+  };
+
+  const openDeleteDialog = (lead: Lead) => {
+    setLeadToDelete(lead);
+    setShowDeleteDialog(true);
   };
 
   const resetLeadForm = () => {
@@ -324,15 +437,102 @@ const LeadManagement = () => {
   };
 
   const getSourceLabel = (source: string) => {
-    const labels: Record<string, string> = {
-      website: 'Website',
-      facebook: 'Facebook',
-      line: 'LINE',
-      referral: 'แนะนำ',
-      walk_in: 'Walk-in',
-      advertising: 'โฆษณา'
+    if (!source) return '-';
+    // Handle complex source strings like "online_google" or "online_facebook_other: xxx"
+    const sourceMap: Record<string, string> = {
+      'website': 'Website',
+      'facebook': 'Facebook',
+      'line': 'LINE',
+      'referral': 'แนะนำ',
+      'walk_in': 'Walk-in',
+      'advertising': 'โฆษณา',
+      'online': 'ออนไลน์',
+      'online_google': 'Google',
+      'online_facebook': 'Facebook',
+      'online_line': 'LINE OA',
+      'online_tiktok': 'TikTok',
+      'online_youtube': 'YouTube',
+      'billboard': 'ป้ายโฆษณา',
+      'brochure': 'แผ่นพับ/โบรชัวร์',
+      'event': 'งานอีเว้นท์',
+      'friend': 'เพื่อน/ญาติแนะนำ',
     };
-    return labels[source] || source;
+    // Check for exact match first
+    if (sourceMap[source]) return sourceMap[source];
+    // Check for partial matches
+    for (const [key, label] of Object.entries(sourceMap)) {
+      if (source.startsWith(key)) return label;
+    }
+    return source;
+  };
+
+  const getGenderLabel = (gender: string) => {
+    const labels: Record<string, string> = {
+      male: 'ชาย',
+      female: 'หญิง',
+      other: 'อื่นๆ'
+    };
+    return labels[gender] || gender || '-';
+  };
+
+  const getOccupationLabel = (occupation: string) => {
+    const labels: Record<string, string> = {
+      business_owner: 'ธุรกิจส่วนตัว',
+      government: 'รับราชการ / พนักงานของรัฐ',
+      state_enterprise: 'พนักงานรัฐวิสาหกิจ',
+      private_company: 'พนักงานบริษัทเอกชน',
+      farmer: 'เกษตรกร',
+      employee: 'รับจ้าง',
+      other: 'อื่นๆ'
+    };
+    return labels[occupation] || occupation || '-';
+  };
+
+  const getMaritalStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      single: 'โสด',
+      married: 'สมรส',
+      widowed: 'หม้าย',
+      divorced: 'หย่า',
+      separated: 'แยกกันอยู่'
+    };
+    return labels[status] || status || '-';
+  };
+
+  const getEducationLabel = (education: string) => {
+    const labels: Record<string, string> = {
+      primary: 'ระดับประถมศึกษา',
+      junior_high: 'ระดับมัธยมศึกษาตอนต้น',
+      senior_high: 'ระดับมัธยมศึกษาตอนปลาย',
+      vocational: 'ระดับ ปวช./ปวส.',
+      bachelor: 'ระดับปริญญาตรี',
+      master: 'ระดับปริญญาโท',
+      doctorate: 'ระดับปริญญาเอก',
+      other: 'อื่นๆ'
+    };
+    return labels[education] || education || '-';
+  };
+
+  const getPurchasePurposeLabel = (purpose: string) => {
+    if (!purpose) return '-';
+    const labels: Record<string, string> = {
+      residence: 'เพื่ออยู่อาศัย',
+      speculation: 'เก็งกำไร',
+      monthly_rent: 'ปล่อยเช่ารายเดือน',
+      daily_rent: 'ปล่อยเช่ารายวัน',
+      flip: 'ซ่อมแล้วขาย',
+      investment: 'ลงทุน/ปล่อยเช่า',
+      children: 'ซื้อให้บุตรหลาน',
+      parents: 'ซื้อให้พ่อแม่'
+    };
+    if (labels[purpose]) return labels[purpose];
+    if (purpose.startsWith('other:')) return purpose.replace('other:', 'อื่นๆ: ').trim();
+    if (purpose.startsWith('other')) return 'อื่นๆ';
+    return purpose;
+  };
+
+  const getCustomerData = (customerId: string) => {
+    return customers.find(c => c.id === customerId);
   };
 
   const getCustomerName = (customerId: string) => {
@@ -343,6 +543,12 @@ const LeadManagement = () => {
   const getPropertyName = (propertyId: string) => {
     const property = properties.find(p => p.id === propertyId);
     return property?.name || '-';
+  };
+
+  const getUnitNumber = (unitId: string | undefined) => {
+    if (!unitId) return '-';
+    const unit = units.find(u => u.id === unitId);
+    return unit?.unit_number || '-';
   };
 
   const formatCurrency = (amount: number) => {
@@ -563,7 +769,62 @@ const LeadManagement = () => {
                         {getCustomerName(lead.customer_id)}
                       </TableCell>
                       <TableCell>{getPropertyName(lead.property_id)}</TableCell>
-                      <TableCell>{getStatusBadge(lead.status)}</TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Select
+                          value={lead.status}
+                          onValueChange={(value: LeadStatus) => handleUpdateStatus(lead, value)}
+                        >
+                          <SelectTrigger className="w-[140px] h-8 text-xs">
+                            <SelectValue>
+                              {getStatusBadge(lead.status)}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="new">
+                              <div className="flex items-center gap-2">
+                                <FileText className="w-3 h-3" />
+                                <span>ใหม่</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="contacted">
+                              <div className="flex items-center gap-2">
+                                <Phone className="w-3 h-3" />
+                                <span>ติดต่อแล้ว</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="qualified">
+                              <div className="flex items-center gap-2">
+                                <CheckCircle className="w-3 h-3" />
+                                <span>มีคุณสมบัติ</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="proposal">
+                              <div className="flex items-center gap-2">
+                                <FileText className="w-3 h-3" />
+                                <span>เสนอขาย</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="negotiation">
+                              <div className="flex items-center gap-2">
+                                <TrendingUp className="w-3 h-3" />
+                                <span>เจรจา</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="closed">
+                              <div className="flex items-center gap-2">
+                                <CheckCircle className="w-3 h-3 text-green-600" />
+                                <span>ปิดการขาย</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="lost">
+                              <div className="flex items-center gap-2">
+                                <XCircle className="w-3 h-3 text-red-600" />
+                                <span>สูญเสีย</span>
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
                       <TableCell>
                         {lead.budget_min || lead.budget_max ? (
                           <div className="text-sm">
@@ -587,21 +848,23 @@ const LeadManagement = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => navigate(`/leads/${lead.id}`)}>
+                            <DropdownMenuItem onClick={() => {
+                              setSelectedLead(lead);
+                              setShowDetailDialog(true);
+                            }}>
                               <Eye className="w-4 h-4 mr-2" />
                               ดูรายละเอียด
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openEditDialog(lead)}>
                               <Edit className="w-4 h-4 mr-2" />
                               แก้ไข
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Phone className="w-4 h-4 mr-2" />
-                              ติดต่อลูกค้า
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Calendar className="w-4 h-4 mr-2" />
-                              นัดหมาย
+                            <DropdownMenuItem
+                              onClick={() => openDeleteDialog(lead)}
+                              className="text-red-600 focus:text-red-600"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              ลบ
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -614,249 +877,294 @@ const LeadManagement = () => {
           </CardContent>
         </Card>
 
-        {/* Create/Edit Lead Dialog */}
-        <Dialog open={showLeadDialog} onOpenChange={setShowLeadDialog}>
-          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {editingLead ? 'แก้ไข Lead' : 'เพิ่ม Lead ใหม่'}
-              </DialogTitle>
-              <DialogDescription>
-                กรอกข้อมูลลูกค้าและรายละเอียด
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="customer">ลูกค้า *</Label>
-                  <Select>
-                    <SelectTrigger id="customer">
-                      <SelectValue placeholder="เลือกลูกค้า" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customers.map(customer => (
-                        <SelectItem key={customer.id} value={customer.id}>
-                          {customer.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="property">โครงการที่สนใจ *</Label>
-                  <Select>
-                    <SelectTrigger id="property">
-                      <SelectValue placeholder="เลือกโครงการ" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {properties.map(property => (
-                        <SelectItem key={property.id} value={property.id}>
-                          {property.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="status">สถานะ</Label>
-                  <Select
-                    value={leadForm.status}
-                    onValueChange={(value: any) => setLeadForm({ ...leadForm, status: value })}
-                  >
-                    <SelectTrigger id="status">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="new">ใหม่</SelectItem>
-                      <SelectItem value="contacted">ติดต่อแล้ว</SelectItem>
-                      <SelectItem value="qualified">มีคุณสมบัติ</SelectItem>
-                      <SelectItem value="proposal">เสนอขาย</SelectItem>
-                      <SelectItem value="negotiation">เจรจา</SelectItem>
-                      <SelectItem value="closed">ปิดการขาย</SelectItem>
-                      <SelectItem value="lost">สูญเสีย</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="source">แหล่งที่มา</Label>
-                  <Select
-                    value={leadForm.source}
-                    onValueChange={(value) => setLeadForm({ ...leadForm, source: value })}
-                  >
-                    <SelectTrigger id="source">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="website">Website</SelectItem>
-                      <SelectItem value="facebook">Facebook</SelectItem>
-                      <SelectItem value="line">LINE</SelectItem>
-                      <SelectItem value="referral">แนะนำ</SelectItem>
-                      <SelectItem value="walk_in">Walk-in</SelectItem>
-                      <SelectItem value="advertising">โฆษณา</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="follow_up">วันนัดติดตาม</Label>
-                  <Input id="follow_up" type="date" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="budget_min">งบประมาณต่ำสุด</Label>
-                  <Input
-                    id="budget_min"
-                    type="number"
-                    value={leadForm.budget_min}
-                    onChange={(e) => setLeadForm({ ...leadForm, budget_min: e.target.value })}
-                    placeholder="2,000,000"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="budget_max">งบประมาณสูงสุด</Label>
-                  <Input
-                    id="budget_max"
-                    type="number"
-                    value={leadForm.budget_max}
-                    onChange={(e) => setLeadForm({ ...leadForm, budget_max: e.target.value })}
-                    placeholder="10,000,000"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="location">พื้นที่ที่สนใจ</Label>
-                <Input
-                  id="location"
-                  value={leadForm.preferred_location}
-                  onChange={(e) => setLeadForm({ ...leadForm, preferred_location: e.target.value })}
-                  placeholder="เช่น บางนา, ลาดพร้าว"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="notes">บันทึก</Label>
-                <Textarea
-                  id="notes"
-                  value={leadForm.notes}
-                  onChange={(e) => setLeadForm({ ...leadForm, notes: e.target.value })}
-                  placeholder="ข้อมูลเพิ่มเติมเกี่ยวกับลูกค้า..."
-                  rows={3}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowLeadDialog(false)}>
-                ยกเลิก
-              </Button>
-              <Button onClick={handleSaveLead}>
-                {editingLead ? 'บันทึก' : 'สร้าง Lead'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* Add Lead Modal */}
+        <AddLeadModal
+          isOpen={showLeadDialog}
+          onClose={() => setShowLeadDialog(false)}
+          onLeadCreated={() => {
+            setShowLeadDialog(false);
+            fetchLeads();
+          }}
+        />
 
         {/* Lead Detail Dialog */}
         <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
-          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>รายละเอียด Lead</DialogTitle>
+              <DialogTitle className="text-xl">รายละเอียด Lead</DialogTitle>
+              <DialogDescription>
+                ข้อมูลลูกค้าและรายละเอียดที่เกี่ยวข้อง
+              </DialogDescription>
             </DialogHeader>
-            {selectedLead && (
-              <div className="space-y-6">
-                {/* Customer Info */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-2">ข้อมูลลูกค้า</h3>
-                    <div className="space-y-1">
-                      <p className="font-medium">{getCustomerName(selectedLead.customer_id)}</p>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Phone className="w-3 h-3" />
-                        {customers.find(c => c.id === selectedLead.customer_id)?.phone || '-'}
+            {selectedLead && (() => {
+              const customer = getCustomerData(selectedLead.customer_id);
+              const prefs = customer?.preferences || {};
+              return (
+                <div className="space-y-6">
+                  {/* Header with Photo and Basic Info */}
+                  <div className="flex gap-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl">
+                    {/* Profile Image */}
+                    <div className="flex-shrink-0">
+                      {prefs.profile_image ? (
+                        <img
+                          src={prefs.profile_image}
+                          alt="รูปโปรไฟล์"
+                          className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-lg"
+                        />
+                      ) : (
+                        <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center border-4 border-white shadow-lg">
+                          <Users className="w-10 h-10 text-gray-400" />
+                        </div>
+                      )}
+                    </div>
+                    {/* Basic Info */}
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h2 className="text-2xl font-bold text-gray-800">
+                            {prefs.first_name || ''} {prefs.last_name || customer?.name || '-'}
+                          </h2>
+                          <div className="mt-2 space-y-1">
+                            <div className="flex items-center gap-2 text-gray-600">
+                              <Phone className="w-4 h-4" />
+                              <span>{customer?.phone || '-'}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-gray-600">
+                              <Mail className="w-4 h-4" />
+                              <span>{customer?.email || '-'}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          {getStatusBadge(selectedLead.status)}
+                          <p className="text-xs text-gray-500 mt-2">
+                            สร้างเมื่อ {new Date(selectedLead.created_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Mail className="w-3 h-3" />
-                        {customers.find(c => c.id === selectedLead.customer_id)?.email || '-'}
+                    </div>
+                  </div>
+
+                  {/* Project Interest Section */}
+                  <div className="bg-white border rounded-xl p-4">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-blue-600" />
+                      ข้อมูลโครงการที่สนใจ
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-500">โครงการ</p>
+                        <p className="font-medium">{getPropertyName(selectedLead.property_id)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">ยูนิตที่สนใจ</p>
+                        <p className="font-medium">{getUnitNumber(selectedLead.unit_id)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">แหล่งที่มา</p>
+                        <Badge variant="outline">{getSourceLabel(selectedLead.source)}</Badge>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">จุดประสงค์การซื้อ</p>
+                        <p className="font-medium">{getPurchasePurposeLabel(prefs.purchase_purpose || '')}</p>
+                      </div>
+                      {selectedLead.next_follow_up && (
+                        <div>
+                          <p className="text-sm text-gray-500">นัดติดตามครั้งต่อไป</p>
+                          <p className="font-medium text-orange-600">
+                            {new Date(selectedLead.next_follow_up).toLocaleDateString('th-TH')}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Personal Info Section */}
+                  <div className="bg-white border rounded-xl p-4">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <Users className="w-5 h-5 text-green-600" />
+                      ข้อมูลส่วนตัว
+                    </h3>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-500">เพศ</p>
+                        <p className="font-medium">{getGenderLabel(prefs.gender || '')}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">อายุ</p>
+                        <p className="font-medium">{prefs.age ? `${prefs.age} ปี` : '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">สถานภาพ</p>
+                        <p className="font-medium">{getMaritalStatusLabel(prefs.marital_status || '')}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">การศึกษา</p>
+                        <p className="font-medium">{getEducationLabel(prefs.education || '')}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">จำนวนสมาชิกในครอบครัว</p>
+                        <p className="font-medium">{prefs.family_members ? `${prefs.family_members} คน` : '-'}</p>
                       </div>
                     </div>
                   </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-2">สถานะ</h3>
-                    {getStatusBadge(selectedLead.status)}
-                  </div>
-                </div>
 
-                {/* Property Interest */}
-                <div>
-                  <h3 className="text-sm font-medium text-muted-foreground mb-2">โครงการที่สนใจ</h3>
-                  <p className="font-medium">{getPropertyName(selectedLead.property_id)}</p>
-                </div>
-
-                {/* Budget */}
-                <div>
-                  <h3 className="text-sm font-medium text-muted-foreground mb-2">งบประมาณ</h3>
-                  {selectedLead.budget_min || selectedLead.budget_max ? (
-                    <p className="font-medium">
-                      {selectedLead.budget_min ? formatCurrency(selectedLead.budget_min) : '-'}
-                      {selectedLead.budget_max && selectedLead.budget_min && ' - '}
-                      {selectedLead.budget_max ? formatCurrency(selectedLead.budget_max) : ''}
-                    </p>
-                  ) : '-'}
-                </div>
-
-                {/* Preferred Location */}
-                {selectedLead.preferred_location && (
-                  <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-2">พื้นที่ที่สนใจ</h3>
-                    <div className="flex items-center gap-1">
-                      <MapPin className="w-4 h-4 text-muted-foreground" />
-                      <p>{selectedLead.preferred_location}</p>
+                  {/* Financial Info Section */}
+                  <div className="bg-white border rounded-xl p-4">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <DollarSign className="w-5 h-5 text-yellow-600" />
+                      ข้อมูลทางการเงิน
+                    </h3>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-500">อาชีพ</p>
+                        <p className="font-medium">{getOccupationLabel(prefs.occupation || '')}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">รายได้ต่อเดือน</p>
+                        <p className="font-medium text-green-600">
+                          {prefs.monthly_income ? formatCurrency(prefs.monthly_income) : '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">ภาระหนี้ต่อเดือน</p>
+                        <p className="font-medium text-red-600">
+                          {prefs.monthly_debt ? formatCurrency(prefs.monthly_debt) : '-'}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                )}
 
-                {/* Notes */}
-                {selectedLead.notes && (
-                  <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-2">บันทึก</h3>
-                    <p className="text-sm bg-muted p-3 rounded-lg">{selectedLead.notes}</p>
-                  </div>
-                )}
-
-                {/* Timeline */}
-                <div>
-                  <h3 className="text-sm font-medium text-muted-foreground mb-2">Timeline</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-muted-foreground" />
-                      <span>สร้างเมื่อ {new Date(selectedLead.created_at).toLocaleDateString('th-TH')}</span>
+                  {/* Work Address Section */}
+                  <div className="bg-white border rounded-xl p-4">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <MapPin className="w-5 h-5 text-red-600" />
+                      ที่อยู่ที่ทำงาน
+                    </h3>
+                    <div className="space-y-2">
+                      <div>
+                        <p className="text-sm text-gray-500">สถานที่ทำงาน</p>
+                        <p className="font-medium">{prefs.workplace || '-'}</p>
+                      </div>
+                      {prefs.address && (
+                        <div>
+                          <p className="text-sm text-gray-500">ที่อยู่</p>
+                          <p className="font-medium">
+                            {[
+                              prefs.address.sub_district && `ต.${prefs.address.sub_district}`,
+                              prefs.address.district && `อ.${prefs.address.district}`,
+                              prefs.address.province && `จ.${prefs.address.province}`,
+                              prefs.address.postal_code
+                            ].filter(Boolean).join(' ') || '-'}
+                          </p>
+                        </div>
+                      )}
                     </div>
-                    {selectedLead.next_follow_up && (
+                  </div>
+
+                  {/* Notes Section */}
+                  {selectedLead.notes && (
+                    <div className="bg-white border rounded-xl p-4">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                        <FileText className="w-5 h-5 text-purple-600" />
+                        บันทึก
+                      </h3>
+                      <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">{selectedLead.notes}</p>
+                    </div>
+                  )}
+
+                  {/* Consent Section */}
+                  <div className="bg-white border rounded-xl p-4">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <CheckCircle className="w-5 h-5 text-teal-600" />
+                      การยินยอม
+                    </h3>
+                    <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-orange-500" />
-                        <span>ติดตามครั้งต่อไป {new Date(selectedLead.next_follow_up).toLocaleDateString('th-TH')}</span>
+                        {prefs.consent_given ? (
+                          <Badge className="bg-green-100 text-green-800">ยินยอม</Badge>
+                        ) : (
+                          <Badge variant="secondary">ไม่ยินยอม</Badge>
+                        )}
+                      </div>
+                      {prefs.consent_date && (
+                        <p className="text-sm text-gray-500">
+                          วันที่ยินยอม: {new Date(prefs.consent_date).toLocaleDateString('th-TH')}
+                        </p>
+                      )}
+                    </div>
+                    {prefs.signature && (
+                      <div className="mt-3">
+                        <p className="text-sm text-gray-500 mb-2">ลายเซ็น</p>
+                        <img
+                          src={prefs.signature}
+                          alt="ลายเซ็น"
+                          className="h-16 border rounded bg-white p-1"
+                        />
                       </div>
                     )}
                   </div>
-                </div>
 
-                {/* Actions */}
-                <div className="flex gap-2 pt-4 border-t">
-                  <Button className="flex-1">
-                    <Phone className="w-4 h-4 mr-2" />
-                    โทรติดต่อ
-                  </Button>
-                  <Button variant="outline" className="flex-1">
-                    <Mail className="w-4 h-4 mr-2" />
-                    ส่งอีเมล
-                  </Button>
-                  <Button variant="outline" className="flex-1">
-                    <Edit className="w-4 h-4 mr-2" />
-                    แก้ไขสถานะ
-                  </Button>
+                  {/* Actions */}
+                  <div className="flex gap-3 pt-4 border-t">
+                    <Button variant="outline" className="flex-1" onClick={() => {
+                      setShowDetailDialog(false);
+                      if (selectedLead) openEditDialog(selectedLead);
+                    }}>
+                      <Edit className="w-4 h-4 mr-2" />
+                      แก้ไข
+                    </Button>
+                    <Button variant="destructive" className="flex-1" onClick={() => {
+                      setShowDetailDialog(false);
+                      if (selectedLead) openDeleteDialog(selectedLead);
+                    }}>
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      ลบ
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Lead Modal */}
+        <EditLeadModal
+          isOpen={showEditDialog}
+          onClose={() => {
+            setShowEditDialog(false);
+            setEditingLead(null);
+          }}
+          onLeadUpdated={() => {
+            setShowEditDialog(false);
+            setEditingLead(null);
+            fetchLeads();
+            fetchCustomers();
+          }}
+          lead={editingLead}
+        />
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>ยืนยันการลบ Lead</DialogTitle>
+              <DialogDescription>
+                คุณต้องการลบ Lead "{leadToDelete ? getCustomerName(leadToDelete.customer_id) : ''}" ใช่หรือไม่?
+                <br /><br />
+                <span className="text-red-600 font-medium">
+                  การกระทำนี้ไม่สามารถกู้คืนได้
+                </span>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={deleteLoading}>
+                ยกเลิก
+              </Button>
+              <Button variant="destructive" onClick={handleDeleteLead} disabled={deleteLoading}>
+                {deleteLoading ? 'กำลังลบ...' : 'ลบ Lead'}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
             </div>

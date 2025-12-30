@@ -39,7 +39,6 @@ const getAllNavItems = (): NavItem[] => [
   // Company features
   { icon: Building2, label: "โครงการ", href: "/properties", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
   { icon: FileText, label: "ระบบ Leads", href: "/leads", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
-  { icon: Users, label: "ลูกค้า", href: "/customers", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
   // Admin features
   { icon: Users, label: "จัดการผู้ใช้", href: "/users", requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Palette, label: "ปรับแต่งระบบ", href: "/customization", requiredRoles: ["OWNER", "ADMIN"] },
