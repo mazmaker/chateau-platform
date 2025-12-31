@@ -1,45 +1,52 @@
 import { useState, useEffect } from "react";
-import { X, Shield, User } from "lucide-react";
+import { X, Shield, User, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { UserRole } from "@/lib/database-types";
-import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 
-interface UserTenantData {
+// Flat user data structure from users table
+interface UserData {
   id: string;
-  user_id: string;
+  email: string;
+  full_name?: string;
+  avatar_url?: string;
+  role: UserRole | string;
   tenant_id: string;
-  role: UserRole;
   is_active: boolean;
   created_at: string;
-  last_login_at?: string;
-  users: {
-    id: string;
-    email: string;
-    full_name?: string;
-    avatar_url?: string;
-  };
+  last_sign_in_at?: string;
 }
 
 interface EditUserModalProps {
   isOpen: boolean;
   onClose: () => void;
-  user: UserTenantData | null;
+  user: UserData | null;
   onUpdateSuccess: () => void;
+  currentUserRole?: 'owner' | 'admin' | 'sales' | null;
 }
 
-const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess }: EditUserModalProps) => {
+const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess, currentUserRole }: EditUserModalProps) => {
+  // ADMIN can only manage SALES users
+  const isAdmin = currentUserRole === 'admin';
+  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<UserRole>(UserRole.SALES);
   const [isActive, setIsActive] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const { supabase } = useAuth();
 
   useEffect(() => {
     if (user) {
-      setRole(user.role);
+      setEmail(user.email || "");
+      setFullName(user.full_name || "");
+      // Normalize role to UserRole enum
+      const normalizedRole = typeof user.role === 'string'
+        ? user.role.toUpperCase() as UserRole
+        : user.role;
+      setRole(normalizedRole);
       setIsActive(user.is_active);
       setError("");
     }
@@ -53,10 +60,17 @@ const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess }: EditUserModal
     setError("");
 
     try {
+      // For ADMIN, always use 'sales' role
+      // For others, convert role to lowercase string
+      const roleValue = isAdmin ? 'sales' : (role ? String(role).toLowerCase() : 'sales');
+
+      // Update users table directly
       const { error } = await supabase
-        .from('user_tenants')
+        .from('users')
         .update({
-          role: role,
+          email: email.toLowerCase(),
+          full_name: fullName,
+          role: roleValue,
           is_active: isActive
         })
         .eq('id', user.id);
@@ -81,24 +95,6 @@ const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess }: EditUserModal
     }
   };
 
-  const getRoleBadge = (role: UserRole) => {
-    const styles = {
-      [UserRole.ADMIN]: "bg-blue-100 text-blue-800",
-      [UserRole.SALES]: "bg-green-100 text-green-800"
-    };
-
-    const labels = {
-      [UserRole.ADMIN]: "แอดมิน",
-      [UserRole.SALES]: "พนักงานขาย"
-    };
-
-    return (
-      <Badge className={styles[role]}>
-        {labels[role]}
-      </Badge>
-    );
-  };
-
   if (!isOpen || !user) return null;
 
   return (
@@ -106,7 +102,9 @@ const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess }: EditUserModal
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-semibold text-gray-900">แก้ไขข้อมูลผู้ใช้</h2>
+          <h2 className="text-xl font-semibold text-gray-900">
+            {isAdmin ? 'แก้ไขข้อมูลพนักงานขาย' : 'แก้ไขข้อมูลผู้ใช้'}
+          </h2>
           <button
             onClick={handleClose}
             disabled={loading}
@@ -117,26 +115,38 @@ const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess }: EditUserModal
         </div>
 
         <form onSubmit={handleSubmit} className="p-6">
-          {/* User Info */}
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center">
-                {user.users.full_name
-                  ? user.users.full_name.split(' ').map(n => n[0]).join('').toUpperCase()
-                  : user.users.email.slice(0, 2).toUpperCase()
-                }
-              </div>
-              <div>
-                <p className="font-medium text-gray-900">
-                  {user.users.full_name || "ไม่ระบุชื่อ"}
-                </p>
-                <p className="text-sm text-gray-600">{user.users.email}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">ตำแหน่งปัจจุบัน:</span>
-              {getRoleBadge(user.role)}
-            </div>
+          {/* Email */}
+          <div className="mb-4">
+            <Label htmlFor="edit-email" className="block text-sm font-medium text-gray-700 mb-2">
+              <Mail className="w-4 h-4 inline mr-1" />
+              อีเมล
+            </Label>
+            <Input
+              id="edit-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="user@example.com"
+              required
+              disabled={loading}
+            />
+          </div>
+
+          {/* Full Name */}
+          <div className="mb-4">
+            <Label htmlFor="edit-fullName" className="block text-sm font-medium text-gray-700 mb-2">
+              <User className="w-4 h-4 inline mr-1" />
+              ชื่อ-นามสกุล
+            </Label>
+            <Input
+              id="edit-fullName"
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="สมชาย ใจดี"
+              required
+              disabled={loading}
+            />
           </div>
 
           {/* Role */}
@@ -145,35 +155,49 @@ const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess }: EditUserModal
               <Shield className="w-4 h-4 inline mr-1" />
               ตำแหน่ง
             </Label>
-            <Select
-              value={role}
-              onValueChange={(value: UserRole) => setRole(value)}
-              disabled={loading}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={UserRole.ADMIN}>
-                  <div className="flex items-center gap-2">
-                    <Shield className="w-4 h-4" />
-                    <div>
-                      <div className="font-medium">แอดมิน</div>
-                      <div className="text-xs text-gray-600">จัดการผู้ใช้และระบบ</div>
+            {isAdmin ? (
+              // Show read-only input for ADMIN
+              <Input
+                value="พนักงานขาย"
+                disabled
+                className="bg-gray-100"
+              />
+            ) : (
+              <Select
+                value={role}
+                onValueChange={(value: UserRole) => setRole(value)}
+                disabled={loading}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={UserRole.ADMIN}>
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-4 h-4" />
+                      <div>
+                        <div className="font-medium">แอดมิน</div>
+                        <div className="text-xs text-gray-600">จัดการผู้ใช้และระบบ</div>
+                      </div>
                     </div>
-                  </div>
-                </SelectItem>
-                <SelectItem value={UserRole.SALES}>
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4" />
-                    <div>
-                      <div className="font-medium">พนักงานขาย</div>
-                      <div className="text-xs text-gray-600">จัดการลูกค้าและโครงการ</div>
+                  </SelectItem>
+                  <SelectItem value={UserRole.SALES}>
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      <div>
+                        <div className="font-medium">พนักงานขาย</div>
+                        <div className="text-xs text-gray-600">จัดการลูกค้าและโครงการ</div>
+                      </div>
                     </div>
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+            {isAdmin && (
+              <p className="text-xs text-gray-500 mt-1">
+                * แอดมินสามารถจัดการได้เฉพาะตำแหน่งพนักงานขาย
+              </p>
+            )}
           </div>
 
           {/* Status */}
@@ -211,8 +235,8 @@ const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess }: EditUserModal
             </div>
           </div>
 
-          {/* Warning */}
-          {role !== user.role && (
+          {/* Warning - only show for non-admin when role changes */}
+          {!isAdmin && role.toLowerCase() !== (typeof user.role === 'string' ? user.role.toLowerCase() : user.role) && (
             <div className="mb-6 p-3 bg-amber-50 border border-amber-200 rounded-lg">
               <p className="text-sm text-amber-800">
                 <strong>คำเตือน:</strong> การเปลี่ยนตำแหน่งอาจส่งผลต่อสิทธิ์การเข้าถึงฟีเจอร์ต่างๆ

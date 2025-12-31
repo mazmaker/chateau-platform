@@ -5,26 +5,30 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserRole } from "@/lib/database-types";
-import { useAuth } from "@/contexts/AuthContext";
+import { useSimpleAuth } from "@/contexts/AuthContextSimple";
+import { supabase } from "@/lib/supabase";
 
 interface InviteUserModalProps {
   isOpen: boolean;
   onClose: () => void;
   onInviteSuccess: () => void;
+  currentUserRole?: 'owner' | 'admin' | 'sales' | null;
 }
 
-const InviteUserModal = ({ isOpen, onClose, onInviteSuccess }: InviteUserModalProps) => {
+const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: InviteUserModalProps) => {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<UserRole>(UserRole.ADMIN);
+  // ADMIN can only add SALES users
+  const isAdmin = currentUserRole === 'admin';
+  const [role, setRole] = useState<UserRole>(isAdmin ? UserRole.SALES : UserRole.ADMIN);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const { currentTenant, supabase } = useAuth();
+  const { currentTenant } = useSimpleAuth();
 
   const resetForm = () => {
     setEmail("");
     setFullName("");
-    setRole(UserRole.SALES);
+    setRole(isAdmin ? UserRole.SALES : UserRole.ADMIN);
     setError("");
   };
 
@@ -42,86 +46,42 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess }: InviteUserModalPr
         return;
       }
 
-      // Check if user already exists in this tenant
-      const { data: existingUser, error: checkError } = await supabase
-        .from('user_tenants')
-        .select('id, users!inner(email)')
+      // Check if user already exists in this tenant (check in users table directly)
+      const { data: existingUsers, error: checkError } = await supabase
+        .from('users')
+        .select('id, email')
         .eq('tenant_id', currentTenant?.id)
-        .eq('users.email', email.toLowerCase())
-        .single();
+        .eq('email', email.toLowerCase());
 
-      if (checkError && checkError.code !== 'PGRST116') {
+      if (checkError) {
         throw checkError;
       }
 
-      if (existingUser) {
+      if (existingUsers && existingUsers.length > 0) {
         setError("ผู้ใช้นี้มีอยู่ในระบบแล้ว");
         setLoading(false);
         return;
       }
 
-      // Create user or get existing user
-      let userId: string;
+      // Generate UUID for new user
+      const userId = crypto.randomUUID();
 
-      // Check if user exists in auth.users
-      const { data: authUser, error: authError } = await supabase
-        .rpc('get_user_by_email', { email: email.toLowerCase() });
-
-      if (authError && authError.code !== 'PGRST116') {
-        throw authError;
-      }
-
-      if (authUser) {
-        // User exists, get their ID
-        userId = authUser.id;
-      } else {
-        // User doesn't exist, create them with temporary password
-        const tempPassword = Math.random().toString(36).slice(-8);
-
-        const { data: newUser, error: signUpError } = await supabase.auth.signUp({
-          email: email.toLowerCase(),
-          password: tempPassword,
-          options: {
-            data: {
-              full_name: fullName,
-              invited_by_tenant: currentTenant?.name
-            }
-          }
-        });
-
-        if (signUpError) throw signUpError;
-        if (!newUser.user) throw new Error("Failed to create user");
-
-        userId = newUser.user.id;
-
-        // Send invitation email with temporary password
-        // In a real app, this would be sent via your email service
-        console.log(`Sending invitation to ${email} with temporary password: ${tempPassword}`);
-      }
-
-      // Add user to tenant
-      const { error: tenantError } = await supabase
-        .from('user_tenants')
-        .insert({
-          user_id: userId,
-          tenant_id: currentTenant?.id,
-          role: role,
-          is_active: true
-        });
-
-      if (tenantError) throw tenantError;
-
-      // Create user record if not exists
-      await supabase
+      // Create user record directly in users table
+      const { error: userError } = await supabase
         .from('users')
-        .upsert({
+        .insert({
           id: userId,
           email: email.toLowerCase(),
           full_name: fullName,
+          tenant_id: currentTenant?.id,
+          role: role.toLowerCase(),
+          is_active: true,
           created_at: new Date().toISOString()
-        }, {
-          onConflict: 'id'
         });
+
+      if (userError) throw userError;
+
+      console.log(`User ${email} added successfully with ID: ${userId}`);
 
       onInviteSuccess();
       resetForm();
@@ -149,7 +109,9 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess }: InviteUserModalPr
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-semibold text-gray-900">เชิญผู้ใช้ใหม่</h2>
+          <h2 className="text-xl font-semibold text-gray-900">
+            {isAdmin ? 'เพิ่มพนักงานขายใหม่' : 'เชิญผู้ใช้ใหม่'}
+          </h2>
           <button
             onClick={handleClose}
             disabled={loading}
@@ -200,23 +162,28 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess }: InviteUserModalPr
               <Shield className="w-4 h-4 inline mr-1" />
               ตำแหน่ง
             </Label>
-            <Select value={role} onValueChange={(value: UserRole) => setRole(value)} disabled={loading}>
+            <Select value={role} onValueChange={(value: UserRole) => setRole(value)} disabled={loading || isAdmin}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={UserRole.OWNER}>
-                  <div className="flex items-center gap-2">
-                    <Crown className="w-4 h-4 text-yellow-600" />
-                    เจ้าของบริษัท - สิทธิ์สูงสุด
-                  </div>
-                </SelectItem>
-                <SelectItem value={UserRole.ADMIN}>
-                  <div className="flex items-center gap-2">
-                    <Shield className="w-4 h-4" />
-                    แอดมิน - จัดการผู้ใช้และระบบ
-                  </div>
-                </SelectItem>
+                {/* ADMIN can only add SALES users, OWNER can add all roles */}
+                {!isAdmin && (
+                  <>
+                    <SelectItem value={UserRole.OWNER}>
+                      <div className="flex items-center gap-2">
+                        <Crown className="w-4 h-4 text-yellow-600" />
+                        เจ้าของบริษัท - สิทธิ์สูงสุด
+                      </div>
+                    </SelectItem>
+                    <SelectItem value={UserRole.ADMIN}>
+                      <div className="flex items-center gap-2">
+                        <Shield className="w-4 h-4" />
+                        แอดมิน - จัดการผู้ใช้และระบบ
+                      </div>
+                    </SelectItem>
+                  </>
+                )}
                 <SelectItem value={UserRole.SALES}>
                   <div className="flex items-center gap-2">
                     <User className="w-4 h-4" />
@@ -225,6 +192,11 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess }: InviteUserModalPr
                 </SelectItem>
               </SelectContent>
             </Select>
+            {isAdmin && (
+              <p className="text-xs text-gray-500 mt-1">
+                * แอดมินสามารถเพิ่มได้เฉพาะตำแหน่งพนักงานขาย
+              </p>
+            )}
           </div>
 
           {/* Error Message */}

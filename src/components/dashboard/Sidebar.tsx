@@ -38,9 +38,9 @@ const getAllNavItems = (): NavItem[] => [
   { icon: CreditCard, label: "Billing & Invoices", href: "/billing", requiredRoles: ["OWNER"] },
   // Company features
   { icon: Building2, label: "โครงการ", href: "/properties", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
-  { icon: FileText, label: "ระบบ Leads", href: "/leads", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
   // Admin features
   { icon: Users, label: "จัดการผู้ใช้", href: "/users", requiredRoles: ["OWNER", "ADMIN"] },
+  { icon: FileText, label: "Leads", href: "/leads", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
   { icon: Palette, label: "ปรับแต่งระบบ", href: "/customization", requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Settings, label: "แก้ไขโปรไฟล์", href: "/settings", requiredRoles: ["OWNER", "ADMIN"] },
   { icon: LogOut, label: "ออกจากระบบ", href: "/logout", isLogout: true },
@@ -109,10 +109,18 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
 
   const getFilteredNavItems = (): NavItem[] => {
     const allItems = getAllNavItems();
-    return allItems.filter(item => {
-      if (!item.requiredRoles) return true;
-      return item.requiredRoles.includes(userRole?.toUpperCase() || '');
-    });
+    return allItems
+      .filter(item => {
+        if (!item.requiredRoles) return true;
+        return item.requiredRoles.includes(userRole?.toUpperCase() || '');
+      })
+      .map(item => {
+        // ADMIN sees "พนักงานขาย" instead of "จัดการผู้ใช้"
+        if (item.href === '/users' && isAdmin && !isOwner) {
+          return { ...item, label: 'พนักงานขาย' };
+        }
+        return item;
+      });
   };
 
   return (

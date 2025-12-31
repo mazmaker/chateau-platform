@@ -62,7 +62,8 @@ import {
   CheckCircle,
   XCircle,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  Target
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -735,7 +736,8 @@ const LeadManagement = () => {
                   <TableHead>ชื่อลูกค้า</TableHead>
                   <TableHead>โครงการที่สนใจ</TableHead>
                   <TableHead>สถานะ</TableHead>
-                  <TableHead>งบประมาณ</TableHead>
+                  <TableHead>Potential Score</TableHead>
+                  <TableHead>วงเงินกู้ (฿)</TableHead>
                   <TableHead>แหล่งที่มา</TableHead>
                   <TableHead>วันที่สร้าง</TableHead>
                   <TableHead className="text-right">ดำเนินการ</TableHead>
@@ -744,13 +746,13 @@ const LeadManagement = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={8} className="text-center py-8">
                       กำลังโหลด...
                     </TableCell>
                   </TableRow>
                 ) : filteredLeads.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
                       ไม่พบ Leads
                     </TableCell>
@@ -826,13 +828,29 @@ const LeadManagement = () => {
                         </Select>
                       </TableCell>
                       <TableCell>
-                        {lead.budget_min || lead.budget_max ? (
-                          <div className="text-sm">
-                            {lead.budget_min ? formatCurrency(lead.budget_min) : '-'}
-                            {lead.budget_max && lead.budget_min && ' - '}
-                            {lead.budget_max ? formatCurrency(lead.budget_max) : ''}
-                          </div>
-                        ) : '-'}
+                        {/* Mock Potential Score based on lead id */}
+                        {(() => {
+                          const score = Math.floor((parseInt(lead.id.replace(/\D/g, '') || '0') % 40) + 60);
+                          const colorClass = score >= 80 ? 'text-green-600' : score >= 60 ? 'text-yellow-600' : 'text-red-600';
+                          return (
+                            <span className={`font-semibold ${colorClass}`}>
+                              {score}%
+                            </span>
+                          );
+                        })()}
+                      </TableCell>
+                      <TableCell>
+                        {/* Mock Loan Amount - roughly 70-90% of budget based on lead id */}
+                        {(() => {
+                          const idNum = parseInt(lead.id.replace(/\D/g, '') || '0');
+                          const mockBudget = lead.budget_min || (2000000 + (idNum % 8) * 500000);
+                          const loanAmount = Math.round(mockBudget * (0.7 + ((idNum % 20) / 100)));
+                          return (
+                            <span className="text-sm font-medium text-blue-600">
+                              {formatCurrency(loanAmount)}
+                            </span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{getSourceLabel(lead.source)}</Badge>
@@ -848,6 +866,10 @@ const LeadManagement = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => navigate(`/leads/${lead.id}/cdp`)}>
+                              <Target className="w-4 h-4 mr-2 text-indigo-600" />
+                              CDP
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => {
                               setSelectedLead(lead);
                               setShowDetailDialog(true);

@@ -12,6 +12,7 @@ import TenantManagement from "./pages/TenantManagement";
 import BillingManagement from "./pages/BillingManagement";
 import PropertyManagement from "./pages/PropertyManagement";
 import LeadManagement from "./pages/LeadManagement";
+import LeadCDP from "./pages/LeadCDP";
 import AdminCustomization from "./pages/AdminCustomization";
 import Settings from "./pages/Settings";
 import { ProtectedRouteSimple } from "@/components/auth/ProtectedRouteSimple";
@@ -146,6 +147,19 @@ const App = () => (
           >
             <ProtectedRouteSimple>
               <LeadManagement />
+            </ProtectedRouteSimple>
+          </ErrorBoundary>
+        } />
+
+        <Route path="/leads/:leadId/cdp" element={
+          <ErrorBoundary
+            showRetry={true}
+            showHome={true}
+            errorMessage="ไม่สามารถโหลดหน้า CDP ได้"
+            context={{ page: 'lead-cdp' }}
+          >
+            <ProtectedRouteSimple>
+              <LeadCDP />
             </ProtectedRouteSimple>
           </ErrorBoundary>
         } />

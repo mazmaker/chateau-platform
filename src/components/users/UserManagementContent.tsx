@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
 import { supabase } from "@/lib/supabase";
 import InviteUserModal from "./InviteUserModal";
@@ -36,12 +37,17 @@ const UserManagementContent = () => {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDemoModal, setShowDemoModal] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
-  const { currentTenant } = useSimpleAuth();
+  const [deletingUser, setDeletingUser] = useState<UserData | null>(null);
+  const { currentTenant, userRole } = useSimpleAuth();
+
+  // ADMIN can only see SALES users in their tenant
+  const isAdmin = userRole === 'admin';
 
   useEffect(() => {
     fetchUsers();
-  }, [currentTenant]);
+  }, [currentTenant, isAdmin]);
 
   useEffect(() => {
     filterUsers();
@@ -52,11 +58,18 @@ const UserManagementContent = () => {
 
     try {
       // Fetch from users table
-      const { data, error } = await supabase
+      let query = supabase
         .from('users')
         .select('*')
         .eq('tenant_id', currentTenant.id)
         .order('created_at', { ascending: false });
+
+      // ADMIN can only see SALES users
+      if (isAdmin) {
+        query = query.eq('role', 'sales');
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setUsers(data || []);
@@ -115,20 +128,22 @@ const UserManagementContent = () => {
     }
   };
 
-  const removeUser = async (userId: string) => {
-    if (!confirm("คุณแน่ใจหรือไม่ว่าต้องการลบผู้ใช้นี้?")) return;
+  const handleDeleteUser = async () => {
+    if (!deletingUser) return;
 
     try {
       const { error } = await supabase
         .from('users')
         .delete()
-        .eq('id', userId);
+        .eq('id', deletingUser.id);
 
       if (error) throw error;
 
       // Update local state
-      setUsers(prev => prev.filter(user => user.id !== userId));
+      setUsers(prev => prev.filter(user => user.id !== deletingUser.id));
       toast.success('ลบผู้ใช้สำเร็จ');
+      setShowDeleteDialog(false);
+      setDeletingUser(null);
     } catch (error) {
       console.error('Error removing user:', error);
       toast.error('ไม่สามารถลบผู้ใช้ได้');
@@ -181,8 +196,15 @@ const UserManagementContent = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">จัดการผู้ใช้</h1>
-          <p className="text-gray-600 mt-1">จัดการผู้ใช้และสิทธิ์ในระบบของคุณ</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {isAdmin ? 'จัดการพนักงานขาย' : 'จัดการผู้ใช้'}
+          </h1>
+          <p className="text-gray-600 mt-1">
+            {isAdmin
+              ? 'จัดการพนักงานขายในบริษัทของคุณ'
+              : 'จัดการผู้ใช้และสิทธิ์ในระบบของคุณ'
+            }
+          </p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -198,13 +220,13 @@ const UserManagementContent = () => {
             className="flex items-center gap-2"
           >
             <UserPlus className="w-4 h-4" />
-            เชิญผู้ใช้ใหม่
+            {isAdmin ? 'เพิ่มพนักงานขาย' : 'เชิญผู้ใช้ใหม่'}
           </Button>
         </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-2' : 'md:grid-cols-5'} gap-4`}>
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center">
@@ -212,7 +234,7 @@ const UserManagementContent = () => {
                 <User className="w-5 h-5 text-blue-600" />
               </div>
               <div className="ml-3">
-                <p className="text-sm text-gray-600">ทั้งหมด</p>
+                <p className="text-sm text-gray-600">{isAdmin ? 'พนักงานขายทั้งหมด' : 'ทั้งหมด'}</p>
                 <p className="text-xl font-semibold">{users.length}</p>
               </div>
             </div>
@@ -233,47 +255,52 @@ const UserManagementContent = () => {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <User className="w-5 h-5 text-purple-600" />
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-gray-600">เจ้าของ</p>
-                <p className="text-xl font-semibold">{users.filter(u => u.role === 'owner').length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Only show owner/admin stats for OWNER users */}
+        {!isAdmin && (
+          <>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <User className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-gray-600">เจ้าของ</p>
+                    <p className="text-xl font-semibold">{users.filter(u => u.role === 'owner').length}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <User className="w-5 h-5 text-blue-600" />
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-gray-600">แอดมิน</p>
-                <p className="text-xl font-semibold">{users.filter(u => u.role === 'admin').length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <User className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-gray-600">แอดมิน</p>
+                    <p className="text-xl font-semibold">{users.filter(u => u.role === 'admin').length}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <User className="w-5 h-5 text-green-600" />
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-gray-600">พนักงานขาย</p>
-                <p className="text-xl font-semibold">{users.filter(u => u.role === 'sales').length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <User className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-gray-600">พนักงานขาย</p>
+                    <p className="text-xl font-semibold">{users.filter(u => u.role === 'sales').length}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
       {/* Filters and Search */}
@@ -292,16 +319,19 @@ const UserManagementContent = () => {
               </div>
             </div>
 
-            <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value as UserRole | "all")}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="all">ทุกตำแหน่ง</option>
-              <option value="owner">👑 เจ้าของแพลตฟอร์ม</option>
-              <option value="admin">🔧 ผู้ดูแลบริษัท</option>
-              <option value="sales">💼 พนักงานขาย</option>
-            </select>
+            {/* Only show role filter for OWNER users */}
+            {!isAdmin && (
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value as UserRole | "all")}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="all">ทุกตำแหน่ง</option>
+                <option value="owner">👑 เจ้าของแพลตฟอร์ม</option>
+                <option value="admin">🔧 ผู้ดูแลบริษัท</option>
+                <option value="sales">💼 พนักงานขาย</option>
+              </select>
+            )}
 
             <select
               value={statusFilter}
@@ -397,7 +427,10 @@ const UserManagementContent = () => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => removeUser(user.id)}
+                          onClick={() => {
+                            setDeletingUser(user);
+                            setShowDeleteDialog(true);
+                          }}
                           disabled={user.role === 'owner'}
                           className="p-1"
                         >
@@ -431,6 +464,7 @@ const UserManagementContent = () => {
         isOpen={showInviteModal}
         onClose={() => setShowInviteModal(false)}
         onInviteSuccess={fetchUsers}
+        currentUserRole={userRole}
       />
 
       {/* Edit User Modal */}
@@ -439,7 +473,34 @@ const UserManagementContent = () => {
         onClose={() => setShowEditModal(false)}
         user={selectedUser}
         onUpdateSuccess={fetchUsers}
+        currentUserRole={userRole}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {isAdmin ? 'ยืนยันการลบพนักงานขาย' : 'ยืนยันการลบผู้ใช้'}
+            </DialogTitle>
+            <DialogDescription>
+              คุณต้องการลบ "{deletingUser?.full_name || deletingUser?.email}" ใช่หรือไม่?
+              <br /><br />
+              <span className="text-red-600 font-medium">
+                การกระทำนี้ไม่สามารถกู้คืนได้
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              ยกเลิก
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteUser}>
+              {isAdmin ? 'ลบพนักงานขาย' : 'ลบผู้ใช้'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
