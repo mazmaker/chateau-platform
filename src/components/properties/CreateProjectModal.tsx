@@ -460,18 +460,43 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
 
       let dbError;
       if (isEditing && editingProject) {
-        // Update existing project
+        // Update existing project in properties table
         const { error } = await supabase
           .from('properties')
           .update(projectData)
           .eq('id', editingProject.id);
         dbError = error;
+
+        // Also update in projects table for units foreign key
+        if (!error) {
+          await supabase
+            .from('projects')
+            .update({
+              name: projectData.name,
+              address: projectData.address,
+            })
+            .eq('id', editingProject.id);
+        }
       } else {
-        // Insert new project
-        const { error } = await supabase
+        // Insert new project into properties table
+        const { data: insertedProperty, error } = await supabase
           .from('properties')
-          .insert([projectData]);
+          .insert([projectData])
+          .select()
+          .single();
         dbError = error;
+
+        // Also insert into projects table for units foreign key
+        if (!error && insertedProperty) {
+          await supabase
+            .from('projects')
+            .insert([{
+              id: insertedProperty.id,
+              tenant_id: projectData.tenant_id,
+              name: projectData.name,
+              address: projectData.address,
+            }]);
+        }
       }
 
       if (dbError) throw dbError;

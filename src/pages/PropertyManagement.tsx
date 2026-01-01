@@ -138,8 +138,12 @@ const PropertyManagement = () => {
   const [showPropertyDialog, setShowPropertyDialog] = useState(false);
   const [showUnitDialog, setShowUnitDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showUnitDetailDialog, setShowUnitDetailDialog] = useState(false);
+  const [showDeleteUnitDialog, setShowDeleteUnitDialog] = useState(false);
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
+  const [viewingUnit, setViewingUnit] = useState<Unit | null>(null);
+  const [deletingUnit, setDeletingUnit] = useState<Unit | null>(null);
 
   // Form states
   const [propertyForm, setPropertyForm] = useState({
@@ -493,6 +497,61 @@ const PropertyManagement = () => {
       images: prev.images.filter((_, i) => i !== index),
       image_previews: prev.image_previews.filter((_, i) => i !== index)
     }));
+  };
+
+  // Handle edit unit - populate form with unit data
+  const handleEditUnit = (unit: Unit) => {
+    setEditingUnit(unit);
+    setUnitForm({
+      unit_number: unit.unit_number,
+      floor: unit.floor_number?.toString() || '',
+      size_sqm: unit.area_sqm?.toString() || '',
+      land_area_sqw: '',
+      bedrooms: unit.bedrooms?.toString() || '',
+      bathrooms: unit.bathrooms?.toString() || '',
+      floor_count: '',
+      price: unit.price?.toString() || '',
+      thumbnail: null,
+      thumbnail_preview: '',
+      images: [],
+      image_previews: unit.images || [],
+      description: unit.layout_description || '',
+      status: unit.status
+    });
+    setShowUnitDialog(true);
+  };
+
+  // Handle view unit details
+  const handleViewUnit = (unit: Unit) => {
+    setViewingUnit(unit);
+    setShowUnitDetailDialog(true);
+  };
+
+  // Handle delete unit confirmation
+  const handleDeleteUnitClick = (unit: Unit) => {
+    setDeletingUnit(unit);
+    setShowDeleteUnitDialog(true);
+  };
+
+  // Handle delete unit
+  const handleDeleteUnit = async () => {
+    if (!deletingUnit || !selectedProperty) return;
+
+    try {
+      const { error } = await supabase
+        .from('units')
+        .delete()
+        .eq('id', deletingUnit.id);
+
+      if (error) throw error;
+
+      setShowDeleteUnitDialog(false);
+      setDeletingUnit(null);
+      fetchUnits(selectedProperty.id);
+    } catch (error: any) {
+      console.error('Error deleting unit:', error);
+      alert(error.message || 'เกิดข้อผิดพลาดในการลบยูนิต');
+    }
   };
 
   // Upload image to Supabase Storage
@@ -982,13 +1041,20 @@ const PropertyManagement = () => {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => navigate(`/units/${unit.id}`)}>
+                                <DropdownMenuItem onClick={() => handleViewUnit(unit)}>
                                   <Eye className="w-4 h-4 mr-2" />
                                   ดูรายละเอียด
                                 </DropdownMenuItem>
-                                <DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleEditUnit(unit)}>
                                   <Edit className="w-4 h-4 mr-2" />
                                   แก้ไข
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => handleDeleteUnitClick(unit)}
+                                  className="text-red-600 focus:text-red-600"
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  ลบ
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -1069,70 +1135,72 @@ const PropertyManagement = () => {
               </div>
 
               {/* Row 3: Thumbnail Upload */}
-              <div className="space-y-2">
-                <Label>รูป Thumbnail</Label>
-                <p className="text-xs text-muted-foreground">รูปที่จะแสดงในหน้ารายการยูนิตทั้งหมด</p>
-                {unitForm.thumbnail_preview ? (
-                  <div className="relative w-40 h-28 rounded-lg overflow-hidden border">
-                    <img
-                      src={unitForm.thumbnail_preview}
-                      alt="Thumbnail preview"
-                      className="w-full h-full object-cover"
-                    />
-                    <button
-                      type="button"
-                      onClick={removeThumbnail}
-                      className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ) : (
-                  <label className="flex flex-col items-center justify-center w-40 h-28 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-primary transition-colors">
-                    <Upload className="w-6 h-6 text-gray-400" />
-                    <span className="text-xs text-gray-500 mt-1">อัปโหลดรูป</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleThumbnailChange}
-                      className="hidden"
-                    />
-                  </label>
-                )}
-              </div>
-
-              {/* Row 4: Image Gallery */}
-              <div className="space-y-2">
-                <Label>รูปยูนิต (Gallery)</Label>
-                <p className="text-xs text-muted-foreground">สามารถเพิ่มได้หลายรูป</p>
-                <div className="flex flex-wrap gap-3">
-                  {unitForm.image_previews.map((preview, index) => (
-                    <div key={index} className="relative w-24 h-24 rounded-lg overflow-hidden border">
+              <div>
+                <h3 className="text-base font-medium text-gray-900 mb-2">รูป Thumbnail</h3>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                  {unitForm.thumbnail_preview ? (
+                    <div className="relative inline-block">
                       <img
-                        src={preview}
-                        alt={`Image ${index + 1}`}
-                        className="w-full h-full object-cover"
+                        src={unitForm.thumbnail_preview}
+                        alt="Thumbnail preview"
+                        className="w-48 h-32 object-cover rounded-lg"
                       />
                       <button
                         type="button"
-                        onClick={() => removeImage(index)}
-                        className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                        onClick={removeThumbnail}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
                       >
-                        <X className="w-3 h-3" />
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
-                  ))}
-                  <label className="flex flex-col items-center justify-center w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-primary transition-colors">
-                    <ImagePlus className="w-5 h-5 text-gray-400" />
-                    <span className="text-xs text-gray-500 mt-1">เพิ่มรูป</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleImagesChange}
-                      className="hidden"
-                    />
-                  </label>
+                  ) : (
+                    <label className="flex flex-col items-center cursor-pointer py-4">
+                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                      <span className="text-sm text-gray-500">คลิกเพื่ออัปโหลดรูป Thumbnail</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleThumbnailChange}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              {/* Row 4: Image Gallery */}
+              <div>
+                <h3 className="text-base font-medium text-gray-900 mb-2">รูปยูนิต (Gallery)</h3>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                  <div className="grid grid-cols-4 gap-3 mb-3">
+                    {unitForm.image_previews.map((preview, index) => (
+                      <div key={index} className="relative">
+                        <img
+                          src={preview}
+                          alt={`Gallery ${index + 1}`}
+                          className="w-full h-24 object-cover rounded-lg"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeImage(index)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    <label className="flex flex-col items-center justify-center cursor-pointer border-2 border-dashed border-gray-300 rounded-lg h-24 hover:border-gray-400">
+                      <ImagePlus className="w-6 h-6 text-gray-400" />
+                      <span className="text-xs text-gray-500 mt-1">เพิ่มรูป</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleImagesChange}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
                 </div>
               </div>
 
@@ -1275,6 +1343,154 @@ const PropertyManagement = () => {
               </Button>
               <Button variant="destructive" onClick={handleDeleteProperty}>
                 ลบโครงการ
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Unit Detail Dialog */}
+        <Dialog open={showUnitDetailDialog} onOpenChange={setShowUnitDetailDialog}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle className="text-xl">
+                รายละเอียดยูนิต {viewingUnit?.unit_number}
+              </DialogTitle>
+              <DialogDescription>
+                {selectedProperty?.name}
+              </DialogDescription>
+            </DialogHeader>
+            {viewingUnit && (
+              <div className="space-y-6 py-4">
+                {/* Status Badge */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">สถานะ:</span>
+                  {getUnitStatusBadge(viewingUnit.status)}
+                </div>
+
+                {/* Images */}
+                {viewingUnit.images && viewingUnit.images.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">รูปภาพ</h4>
+                    <div className="grid grid-cols-3 gap-2">
+                      {viewingUnit.images.map((img, index) => (
+                        <img
+                          key={index}
+                          src={img}
+                          alt={`Unit image ${index + 1}`}
+                          className="w-full h-24 object-cover rounded-lg"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Basic Info */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground">เลขที่ยูนิต</h4>
+                    <p className="text-lg font-semibold">{viewingUnit.unit_number}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground">ชั้น</h4>
+                    <p className="text-lg font-semibold">{viewingUnit.floor_number || '-'}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground">พื้นที่ใช้สอย</h4>
+                    <p className="text-lg font-semibold">{viewingUnit.area_sqm ? `${viewingUnit.area_sqm} ตร.ม.` : '-'}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground">ราคา</h4>
+                    <p className="text-lg font-semibold text-green-600">{formatCurrency(viewingUnit.price)}</p>
+                  </div>
+                </div>
+
+                {/* Room Details */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                    <Bed className="w-5 h-5 text-gray-500" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">ห้องนอน</p>
+                      <p className="font-semibold">{viewingUnit.bedrooms}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                    <Bath className="w-5 h-5 text-gray-500" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">ห้องน้ำ</p>
+                      <p className="font-semibold">{viewingUnit.bathrooms}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                    <Square className="w-5 h-5 text-gray-500" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">ราคา/ตร.ม.</p>
+                      <p className="font-semibold">{viewingUnit.price_per_sqm ? formatCurrency(viewingUnit.price_per_sqm) : '-'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Info */}
+                {viewingUnit.layout_description && (
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground mb-1">รายละเอียดเพิ่มเติม</h4>
+                    <p className="text-sm bg-gray-50 p-3 rounded-lg">{viewingUnit.layout_description}</p>
+                  </div>
+                )}
+
+                {/* Features */}
+                <div className="flex flex-wrap gap-2">
+                  {viewingUnit.balcony && (
+                    <Badge variant="secondary">มีระเบียง</Badge>
+                  )}
+                  {viewingUnit.garden && (
+                    <Badge variant="secondary">มีสวน</Badge>
+                  )}
+                  {viewingUnit.pool && (
+                    <Badge variant="secondary">มีสระว่ายน้ำ</Badge>
+                  )}
+                  {viewingUnit.facing_direction && (
+                    <Badge variant="outline">ทิศ {viewingUnit.facing_direction}</Badge>
+                  )}
+                  {viewingUnit.building && (
+                    <Badge variant="outline">อาคาร {viewingUnit.building}</Badge>
+                  )}
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowUnitDetailDialog(false)}>
+                ปิด
+              </Button>
+              <Button onClick={() => {
+                setShowUnitDetailDialog(false);
+                if (viewingUnit) handleEditUnit(viewingUnit);
+              }}>
+                <Edit className="w-4 h-4 mr-2" />
+                แก้ไข
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Unit Confirmation Dialog */}
+        <Dialog open={showDeleteUnitDialog} onOpenChange={setShowDeleteUnitDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>ยืนยันการลบยูนิต</DialogTitle>
+              <DialogDescription>
+                คุณต้องการลบยูนิต "{deletingUnit?.unit_number}" ใช่หรือไม่?
+                <br /><br />
+                <span className="text-red-600 font-medium">
+                  การกระทำนี้ไม่สามารถกู้คืนได้
+                </span>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowDeleteUnitDialog(false)}>
+                ยกเลิก
+              </Button>
+              <Button variant="destructive" onClick={handleDeleteUnit}>
+                ลบยูนิต
               </Button>
             </DialogFooter>
           </DialogContent>

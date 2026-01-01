@@ -1,7 +1,7 @@
 import { useState } from "react";
 import Sidebar from "@/components/dashboard/Sidebar";
 import Header from "@/components/dashboard/Header";
-import { OwnerGuard } from "@/components/auth/PermissionGuard";
+import { AdminGuard } from "@/components/auth/PermissionGuard";
 import UserManagementContent from "@/components/users/UserManagementContent";
 
 const UserManagement = () => {
@@ -19,9 +19,9 @@ const UserManagement = () => {
 
         {/* User Management Content */}
         <main className="p-6">
-          <OwnerGuard>
+          <AdminGuard>
             <UserManagementContent />
-          </OwnerGuard>
+          </AdminGuard>
         </main>
       </div>
     </div>

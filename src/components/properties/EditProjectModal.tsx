@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { PropertyType } from "@/lib/database-types";
-import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 interface Project {
   id: string;
@@ -63,8 +63,7 @@ const EditProjectModal = ({ isOpen, onClose, project, onProjectUpdated }: EditPr
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const { supabase } = useAuth();
-
+  
   useEffect(() => {
     if (project) {
       setFormData({
