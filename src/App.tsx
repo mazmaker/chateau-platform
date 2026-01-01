@@ -13,6 +13,7 @@ import BillingManagement from "./pages/BillingManagement";
 import PropertyManagement from "./pages/PropertyManagement";
 import LeadManagement from "./pages/LeadManagement";
 import LeadCDP from "./pages/LeadCDP";
+import CampaignManagement from "./pages/CampaignManagement";
 import AdminCustomization from "./pages/AdminCustomization";
 import Settings from "./pages/Settings";
 import { ProtectedRouteSimple } from "@/components/auth/ProtectedRouteSimple";
@@ -160,6 +161,19 @@ const App = () => (
           >
             <ProtectedRouteSimple>
               <LeadCDP />
+            </ProtectedRouteSimple>
+          </ErrorBoundary>
+        } />
+
+        <Route path="/campaigns" element={
+          <ErrorBoundary
+            showRetry={true}
+            showHome={true}
+            errorMessage="ไม่สามารถโหลดหน้าแคมเปญได้"
+            context={{ page: 'campaigns' }}
+          >
+            <ProtectedRouteSimple>
+              <CampaignManagement />
             </ProtectedRouteSimple>
           </ErrorBoundary>
         } />

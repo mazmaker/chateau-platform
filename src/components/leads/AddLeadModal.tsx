@@ -1,5 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Save, Upload, User } from "lucide-react";
+import { X, Save, User, Plus, Trash2, Building2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  InterestStatus,
+  InterestLevel,
+  INTEREST_STATUS_OPTIONS,
+  INTEREST_LEVEL_OPTIONS,
+} from "@/types/lead-interest";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,6 +59,21 @@ interface Unit {
   unit_number: string;
   project_id: string;
   status: string;
+  price?: number;
+}
+
+// Interest item for multiple interests
+interface InterestItem {
+  id: string; // temporary id for UI
+  property_id: string;
+  unit_id: string;
+  status: InterestStatus;
+  interest_level: InterestLevel;
+  notes: string;
+  // Cached display data
+  property_name?: string;
+  unit_number?: string;
+  unit_price?: number;
 }
 
 interface SalesPerson {
@@ -150,14 +172,23 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated }: AddLeadModalProps) => 
 
   // Data from database
   const [properties, setProperties] = useState<Property[]>([]);
-  const [units, setUnits] = useState<Unit[]>([]);
   const [salesPeople, setSalesPeople] = useState<SalesPerson[]>([]);
+
+  // Multiple interests state
+  const [interests, setInterests] = useState<InterestItem[]>([]);
+  const [showAddInterest, setShowAddInterest] = useState(false);
+  const [newInterest, setNewInterest] = useState({
+    property_id: "",
+    unit_id: "",
+    status: "interested" as InterestStatus,
+    interest_level: "medium" as InterestLevel,
+    notes: "",
+  });
+  const [interestUnits, setInterestUnits] = useState<Unit[]>([]);
 
   // Form state
   const [formData, setFormData] = useState({
-    // Project & Unit
-    property_id: "",
-    unit_id: "",
+    // Sales person
     assigned_to: "",
     // Personal Info
     image: null as File | null,
@@ -231,13 +262,15 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated }: AddLeadModalProps) => 
     }
   }, [formData.sub_district_id]);
 
-  // Fetch units when property changes
+  // Fetch units when new interest property changes
   useEffect(() => {
-    if (formData.property_id) {
-      fetchUnits(formData.property_id);
-      setFormData(prev => ({ ...prev, unit_id: "" }));
+    if (newInterest.property_id) {
+      fetchInterestUnits(newInterest.property_id);
+      setNewInterest(prev => ({ ...prev, unit_id: "" }));
+    } else {
+      setInterestUnits([]);
     }
-  }, [formData.property_id]);
+  }, [newInterest.property_id]);
 
   // API Calls
   const fetchProvinces = async () => {
@@ -316,20 +349,66 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated }: AddLeadModalProps) => 
     }
   };
 
-  const fetchUnits = async (propertyId: string) => {
+  const fetchInterestUnits = async (propertyId: string) => {
     try {
+      // Filter out units that are already added to interests
+      const existingUnitIds = interests.map(i => i.unit_id);
       const { data, error } = await supabase
         .from('units')
-        .select('id, unit_number, project_id, status')
+        .select('id, unit_number, project_id, status, price')
         .eq('project_id', propertyId)
-        .eq('status', 'available')
         .order('unit_number');
       if (error) throw error;
-      setUnits(data || []);
+      // Filter out already added units
+      const availableUnits = (data || []).filter(u => !existingUnitIds.includes(u.id));
+      setInterestUnits(availableUnits);
     } catch (err) {
-      console.error('Error fetching units:', err);
-      setUnits([]);
+      console.error('Error fetching interest units:', err);
+      setInterestUnits([]);
     }
+  };
+
+  // Interest management functions
+  const handleAddInterest = () => {
+    if (!newInterest.property_id || !newInterest.unit_id) return;
+
+    const property = properties.find(p => p.id === newInterest.property_id);
+    const unit = interestUnits.find(u => u.id === newInterest.unit_id);
+
+    const newItem: InterestItem = {
+      id: `temp-${Date.now()}`,
+      property_id: newInterest.property_id,
+      unit_id: newInterest.unit_id,
+      status: newInterest.status,
+      interest_level: newInterest.interest_level,
+      notes: newInterest.notes,
+      property_name: property?.name,
+      unit_number: unit?.unit_number,
+      unit_price: unit?.price,
+    };
+
+    setInterests(prev => [...prev, newItem]);
+    setNewInterest({
+      property_id: "",
+      unit_id: "",
+      status: "interested",
+      interest_level: "medium",
+      notes: "",
+    });
+    setShowAddInterest(false);
+    setInterestUnits([]);
+  };
+
+  const handleRemoveInterest = (id: string) => {
+    setInterests(prev => prev.filter(i => i.id !== id));
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('th-TH', {
+      style: 'currency',
+      currency: 'THB',
+      minimumFractionDigits: 0,
+    }).format(amount);
   };
 
   const fetchSalesPeople = async () => {
@@ -417,8 +496,6 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated }: AddLeadModalProps) => 
 
   const resetForm = () => {
     setFormData({
-      property_id: "",
-      unit_id: "",
       assigned_to: "",
       image: null,
       imagePreview: "",
@@ -447,9 +524,18 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated }: AddLeadModalProps) => 
       consent: "",
       signature: "",
     });
+    setInterests([]);
+    setNewInterest({
+      property_id: "",
+      unit_id: "",
+      status: "interested",
+      interest_level: "medium",
+      notes: "",
+    });
+    setShowAddInterest(false);
+    setInterestUnits([]);
     setDistricts([]);
     setSubDistricts([]);
-    setUnits([]);
     setError("");
     setPolicyAccepted(false);
   };
@@ -484,13 +570,8 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated }: AddLeadModalProps) => 
 
     try {
       // Validate required fields
-      if (!formData.property_id) {
-        setError("กรุณาเลือกโครงการที่สนใจ");
-        setLoading(false);
-        return;
-      }
-      if (!formData.unit_id) {
-        setError("กรุณาเลือกยูนิตที่สนใจ");
+      if (interests.length === 0) {
+        setError("กรุณาเพิ่มยูนิตที่สนใจอย่างน้อย 1 รายการ");
         setLoading(false);
         return;
       }
@@ -662,23 +743,46 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated }: AddLeadModalProps) => 
         customer = newCustomer;
       }
 
-      // Create lead
+      // Create lead (use first interest for legacy property_id/unit_id fields)
+      const firstInterest = interests[0];
       const leadData = {
         tenant_id: currentTenant?.id,
         customer_id: customer.id,
-        property_id: formData.property_id,
-        unit_id: formData.unit_id,
+        property_id: firstInterest.property_id,
+        unit_id: firstInterest.unit_id,
         status: 'new',
         source: newsSource,
         assigned_to: formData.assigned_to || null,
         notes: `จุดประสงค์: ${purchasePurpose}`,
       };
 
-      const { error: leadError } = await supabase
+      const { data: newLead, error: leadError } = await supabase
         .from('leads')
-        .insert([leadData]);
+        .insert([leadData])
+        .select()
+        .single();
 
       if (leadError) throw leadError;
+
+      // Create lead_interests records for all interests
+      const interestsData = interests.map(interest => ({
+        tenant_id: currentTenant?.id,
+        lead_id: newLead.id,
+        property_id: interest.property_id,
+        unit_id: interest.unit_id,
+        status: interest.status,
+        interest_level: interest.interest_level,
+        notes: interest.notes || null,
+      }));
+
+      const { error: interestsError } = await supabase
+        .from('lead_interests')
+        .insert(interestsData);
+
+      if (interestsError) {
+        console.error('Error creating interests:', interestsError);
+        // Don't throw here - lead is already created
+      }
 
       onLeadCreated();
       resetForm();
@@ -724,50 +828,236 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated }: AddLeadModalProps) => 
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Section 1: Project & Unit Interest */}
+            {/* Section 1: Unit Interests */}
             <div className="space-y-4">
-              <h3 className="text-lg font-medium border-b pb-2">ข้อมูลโครงการที่สนใจ</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="property_id">โครงการที่สนใจ *</Label>
-                  <Select
-                    value={formData.property_id}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, property_id: value }))}
+              <div className="flex items-center justify-between border-b pb-2">
+                <h3 className="text-lg font-medium flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-cyan-600" />
+                  ยูนิตที่สนใจ *
+                  <Badge variant="secondary">{interests.length} รายการ</Badge>
+                </h3>
+                {!showAddInterest && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAddInterest(true)}
                     disabled={loading}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="เลือกโครงการ" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60">
-                      {properties.map((property) => (
-                        <SelectItem key={property.id} value={property.id}>
-                          {property.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                    <Plus className="w-4 h-4 mr-1" />
+                    เพิ่มยูนิต
+                  </Button>
+                )}
+              </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="unit_id">ยูนิตที่สนใจ *</Label>
-                  <Select
-                    value={formData.unit_id}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, unit_id: value }))}
-                    disabled={loading || !formData.property_id}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={formData.property_id ? "เลือกยูนิต" : "เลือกโครงการก่อน"} />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60">
-                      {units.map((unit) => (
-                        <SelectItem key={unit.id} value={unit.id}>
-                          {unit.unit_number}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              {/* Add Interest Form (Inline) */}
+              {showAddInterest && (
+                <div className="p-4 bg-cyan-50 border border-cyan-200 rounded-lg space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>โครงการ *</Label>
+                      <Select
+                        value={newInterest.property_id}
+                        onValueChange={(value) => setNewInterest(prev => ({ ...prev, property_id: value }))}
+                        disabled={loading}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="เลือกโครงการ" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          {properties.map((property) => (
+                            <SelectItem key={property.id} value={property.id}>
+                              {property.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
+                    <div className="space-y-2">
+                      <Label>ยูนิต *</Label>
+                      <Select
+                        value={newInterest.unit_id}
+                        onValueChange={(value) => setNewInterest(prev => ({ ...prev, unit_id: value }))}
+                        disabled={loading || !newInterest.property_id}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={newInterest.property_id ? "เลือกยูนิต" : "เลือกโครงการก่อน"} />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          {interestUnits.length === 0 && newInterest.property_id ? (
+                            <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                              ไม่มียูนิตที่พร้อมเพิ่ม
+                            </div>
+                          ) : (
+                            interestUnits.map((unit) => (
+                              <SelectItem key={unit.id} value={unit.id}>
+                                <div className="flex items-center justify-between w-full">
+                                  <span>{unit.unit_number}</span>
+                                  {unit.price && (
+                                    <span className="text-muted-foreground ml-2">
+                                      {formatCurrency(unit.price)}
+                                    </span>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>สถานะ</Label>
+                      <Select
+                        value={newInterest.status}
+                        onValueChange={(value: InterestStatus) => setNewInterest(prev => ({ ...prev, status: value }))}
+                        disabled={loading}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {INTEREST_STATUS_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.icon} {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>ระดับความสนใจ</Label>
+                      <Select
+                        value={newInterest.interest_level}
+                        onValueChange={(value: InterestLevel) => setNewInterest(prev => ({ ...prev, interest_level: value }))}
+                        disabled={loading}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {INTEREST_LEVEL_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.icon} {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>บันทึก</Label>
+                    <Textarea
+                      value={newInterest.notes}
+                      onChange={(e) => setNewInterest(prev => ({ ...prev, notes: e.target.value }))}
+                      placeholder="บันทึกเพิ่มเติม..."
+                      disabled={loading}
+                      rows={2}
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleAddInterest}
+                      disabled={loading || !newInterest.property_id || !newInterest.unit_id}
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      เพิ่ม
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowAddInterest(false);
+                        setNewInterest({
+                          property_id: "",
+                          unit_id: "",
+                          status: "interested",
+                          interest_level: "medium",
+                          notes: "",
+                        });
+                        setInterestUnits([]);
+                      }}
+                      disabled={loading}
+                    >
+                      ยกเลิก
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Interest List */}
+              {interests.length > 0 ? (
+                <div className="space-y-2 max-h-[250px] overflow-y-auto">
+                  {interests.map((interest) => {
+                    const statusOption = INTEREST_STATUS_OPTIONS.find(o => o.value === interest.status);
+                    const levelOption = INTEREST_LEVEL_OPTIONS.find(o => o.value === interest.interest_level);
+                    return (
+                      <div
+                        key={interest.id}
+                        className="p-3 border rounded-lg bg-gradient-to-r from-cyan-50 to-blue-50 flex items-start gap-3"
+                      >
+                        <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <Building2 className="w-5 h-5 text-cyan-700" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="font-semibold text-gray-800 truncate">
+                              {interest.property_name || 'โครงการ'}
+                            </p>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <Badge className={statusOption?.color || 'bg-gray-100'}>
+                                {statusOption?.icon} {statusOption?.label}
+                              </Badge>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => handleRemoveInterest(interest.id)}
+                                disabled={loading}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4 text-sm">
+                            <span className="text-gray-600">
+                              ยูนิต <strong className="text-gray-800">{interest.unit_number || '-'}</strong>
+                            </span>
+                            {interest.unit_price && (
+                              <span className="font-semibold text-cyan-600">
+                                {formatCurrency(interest.unit_price)}
+                              </span>
+                            )}
+                            <span className={levelOption?.color || 'text-gray-600'}>
+                              {levelOption?.icon} {levelOption?.label}
+                            </span>
+                          </div>
+                          {interest.notes && (
+                            <p className="text-xs text-gray-500 mt-1 truncate">📝 {interest.notes}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500 border-2 border-dashed rounded-lg">
+                  <Building2 className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                  <p>ยังไม่มียูนิตที่สนใจ</p>
+                  <p className="text-sm">กดปุ่ม "เพิ่มยูนิต" เพื่อเริ่มต้น</p>
+                </div>
+              )}
+
+              {/* Sales Person */}
+              <div className="pt-4 border-t">
                 <div className="space-y-2">
                   <Label htmlFor="assigned_to">พนักงานขายผู้รับผิดชอบ</Label>
                   <Select
@@ -775,7 +1065,7 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated }: AddLeadModalProps) => 
                     onValueChange={(value) => setFormData(prev => ({ ...prev, assigned_to: value }))}
                     disabled={loading}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="max-w-md">
                       <SelectValue placeholder="เลือกพนักงานขาย" />
                     </SelectTrigger>
                     <SelectContent className="max-h-60">

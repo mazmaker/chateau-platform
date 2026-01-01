@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
+import LeadInterestsList from "./LeadInterestsList";
 
 // Types
 interface Province {
@@ -378,13 +379,28 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
   };
 
   const fetchPostalCode = async (subDistrictId: number) => {
-    const { data } = await supabase
-      .from('th_zipcodes')
-      .select('zipcode')
-      .eq('sub_district_id', subDistrictId)
-      .single();
-    if (data) {
-      setFormData(prev => ({ ...prev, postal_code: data.zipcode }));
+    try {
+      // First get the sub_district code from th_sub_districts
+      const { data: subDistrict } = await supabase
+        .from('th_sub_districts')
+        .select('code')
+        .eq('id', subDistrictId)
+        .single();
+
+      if (subDistrict?.code) {
+        // Then get the zipcode using the sub_district_code
+        const { data: zipcodeData } = await supabase
+          .from('th_zipcodes')
+          .select('zipcode')
+          .eq('sub_district_code', subDistrict.code)
+          .single();
+
+        if (zipcodeData?.zipcode) {
+          setFormData(prev => ({ ...prev, postal_code: zipcodeData.zipcode }));
+        }
+      }
+    } catch {
+      // Silently ignore errors - postal code will remain empty if lookup fails
     }
   };
 
@@ -738,7 +754,19 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                 </div>
               </div>
 
-              {/* Section 2: Personal Info */}
+              {/* Section 2: Units of Interest */}
+              {lead && (
+                <div className="space-y-4 border rounded-lg p-4 bg-blue-50/30">
+                  <LeadInterestsList
+                    leadId={lead.id}
+                    onInterestsChange={() => {
+                      // Optionally refresh data
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Section 3: Personal Info */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium border-b pb-2">ข้อมูลส่วนตัว</h3>
 
@@ -1006,7 +1034,6 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                       onChange={(e) => setFormData(prev => ({ ...prev, postal_code: e.target.value }))}
                       placeholder="รหัสไปรษณีย์"
                       disabled={loading}
-                      readOnly
                     />
                   </div>
                 </div>
@@ -1255,6 +1282,7 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </>
   );
 };

@@ -72,6 +72,36 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/lib/supabase';
+import {
+  InterestStatus,
+  InterestLevel,
+  INTEREST_STATUS_OPTIONS,
+  INTEREST_LEVEL_OPTIONS,
+} from '@/types/lead-interest';
+
+// Lead Interest with details for display
+interface LeadInterestWithDetails {
+  id: string;
+  lead_id: string;
+  property_id: string;
+  unit_id: string;
+  status: InterestStatus;
+  interest_level: InterestLevel;
+  notes?: string;
+  viewing_date?: string;
+  created_at: string;
+  property?: {
+    id: string;
+    name: string;
+    type: string;
+  };
+  unit?: {
+    id: string;
+    unit_number: string;
+    price?: number;
+    status?: string;
+  };
+}
 
 // Lead Status for Real Estate Sales
 type LeadStatus = 'new' | 'contacted' | 'qualified' | 'proposal' | 'negotiation' | 'closed' | 'lost';
@@ -140,6 +170,11 @@ interface Unit {
   project_id: string;
 }
 
+interface LeadInterestCount {
+  lead_id: string;
+  count: number;
+}
+
 const LeadManagement = () => {
   const navigate = useNavigate();
   const { currentTenant, userRole, userProfile } = useSimpleAuth();
@@ -148,6 +183,7 @@ const LeadManagement = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
+  const [interestCounts, setInterestCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -160,6 +196,8 @@ const LeadManagement = () => {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [selectedLeadInterests, setSelectedLeadInterests] = useState<LeadInterestWithDetails[]>([]);
+  const [loadingInterests, setLoadingInterests] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -183,6 +221,7 @@ const LeadManagement = () => {
       fetchCustomers();
       fetchProperties();
       fetchUnits();
+      fetchInterestCounts();
     }
   }, [currentTenant, activeTab]);
 
@@ -315,6 +354,69 @@ const LeadManagement = () => {
       setUnits(data || []);
     } catch (error) {
       console.error('Error fetching units:', error);
+    }
+  };
+
+  const fetchInterestCounts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('lead_interests')
+        .select('lead_id')
+        .eq('tenant_id', currentTenant?.id);
+
+      if (error) throw error;
+
+      // Count interests per lead
+      const counts: Record<string, number> = {};
+      (data || []).forEach((item: { lead_id: string }) => {
+        counts[item.lead_id] = (counts[item.lead_id] || 0) + 1;
+      });
+      setInterestCounts(counts);
+    } catch (error) {
+      console.error('Error fetching interest counts:', error);
+    }
+  };
+
+  // Fetch lead interests with property and unit details for detail modal
+  const fetchLeadInterests = async (leadId: string) => {
+    setLoadingInterests(true);
+    try {
+      const { data: interestsData, error } = await supabase
+        .from('lead_interests')
+        .select('*')
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (interestsData && interestsData.length > 0) {
+        // Fetch all properties and units for the interests
+        const propertyIds = [...new Set(interestsData.map(i => i.property_id))];
+        const unitIds = [...new Set(interestsData.map(i => i.unit_id))];
+
+        const [{ data: propertiesData }, { data: unitsData }] = await Promise.all([
+          supabase.from('properties').select('id, name, type').in('id', propertyIds),
+          supabase.from('units').select('id, unit_number, price, status').in('id', unitIds)
+        ]);
+
+        const propertiesMap = new Map((propertiesData || []).map(p => [p.id, p]));
+        const unitsMap = new Map((unitsData || []).map(u => [u.id, u]));
+
+        const enrichedInterests: LeadInterestWithDetails[] = interestsData.map(interest => ({
+          ...interest,
+          property: propertiesMap.get(interest.property_id),
+          unit: unitsMap.get(interest.unit_id)
+        }));
+
+        setSelectedLeadInterests(enrichedInterests);
+      } else {
+        setSelectedLeadInterests([]);
+      }
+    } catch (error) {
+      console.error('Error fetching lead interests:', error);
+      setSelectedLeadInterests([]);
+    } finally {
+      setLoadingInterests(false);
     }
   };
 
@@ -735,6 +837,7 @@ const LeadManagement = () => {
                 <TableRow>
                   <TableHead>ชื่อลูกค้า</TableHead>
                   <TableHead>โครงการที่สนใจ</TableHead>
+                  <TableHead>ยูนิตสนใจ</TableHead>
                   <TableHead>สถานะ</TableHead>
                   <TableHead>Potential Score</TableHead>
                   <TableHead>วงเงินกู้ (฿)</TableHead>
@@ -746,13 +849,13 @@ const LeadManagement = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
+                    <TableCell colSpan={9} className="text-center py-8">
                       กำลังโหลด...
                     </TableCell>
                   </TableRow>
                 ) : filteredLeads.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
                       ไม่พบ Leads
                     </TableCell>
@@ -764,6 +867,7 @@ const LeadManagement = () => {
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => {
                         setSelectedLead(lead);
+                        fetchLeadInterests(lead.id);
                         setShowDetailDialog(true);
                       }}
                     >
@@ -771,6 +875,15 @@ const LeadManagement = () => {
                         {getCustomerName(lead.customer_id)}
                       </TableCell>
                       <TableCell>{getPropertyName(lead.property_id)}</TableCell>
+                      <TableCell>
+                        {interestCounts[lead.id] ? (
+                          <Badge variant="secondary" className="font-medium">
+                            {interestCounts[lead.id]} ยูนิต
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <Select
                           value={lead.status}
@@ -872,6 +985,7 @@ const LeadManagement = () => {
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => {
                               setSelectedLead(lead);
+                              fetchLeadInterests(lead.id);
                               setShowDetailDialog(true);
                             }}>
                               <Eye className="w-4 h-4 mr-2" />
@@ -970,18 +1084,85 @@ const LeadManagement = () => {
                   {/* Project Interest Section */}
                   <div className="bg-white border rounded-xl p-4">
                     <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                      <Building2 className="w-5 h-5 text-blue-600" />
-                      ข้อมูลโครงการที่สนใจ
+                      <Building2 className="w-5 h-5 text-cyan-600" />
+                      ยูนิตที่สนใจ
+                      <Badge variant="secondary" className="ml-2">
+                        {loadingInterests ? '...' : selectedLeadInterests.length > 0 ? selectedLeadInterests.length : 1} รายการ
+                      </Badge>
                     </h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-gray-500">โครงการ</p>
-                        <p className="font-medium">{getPropertyName(selectedLead.property_id)}</p>
+
+                    {loadingInterests ? (
+                      <div className="flex items-center justify-center py-6">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-600"></div>
                       </div>
-                      <div>
-                        <p className="text-sm text-gray-500">ยูนิตที่สนใจ</p>
-                        <p className="font-medium">{getUnitNumber(selectedLead.unit_id)}</p>
+                    ) : selectedLeadInterests.length > 0 ? (
+                      <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                        {selectedLeadInterests.map((interest) => {
+                          const statusOption = INTEREST_STATUS_OPTIONS.find(o => o.value === interest.status);
+                          const levelOption = INTEREST_LEVEL_OPTIONS.find(o => o.value === interest.interest_level);
+                          return (
+                            <div key={interest.id} className="p-3 border rounded-lg bg-gradient-to-r from-cyan-50 to-blue-50 hover:shadow-md transition-shadow">
+                              <div className="flex items-start gap-3">
+                                <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                  <Building2 className="w-5 h-5 text-cyan-700" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <p className="font-semibold text-gray-800 truncate">
+                                      {interest.property?.name || 'โครงการ'}
+                                    </p>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                      <Badge className={statusOption?.color || 'bg-gray-100'}>
+                                        {statusOption?.icon} {statusOption?.label || interest.status}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-4 text-sm">
+                                    <span className="text-gray-600">
+                                      ยูนิต <strong className="text-gray-800">{interest.unit?.unit_number || '-'}</strong>
+                                    </span>
+                                    {interest.unit?.price && (
+                                      <span className="font-semibold text-cyan-600">
+                                        {new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', minimumFractionDigits: 0 }).format(interest.unit.price)}
+                                      </span>
+                                    )}
+                                    <span className={levelOption?.color || 'text-gray-600'}>
+                                      {levelOption?.icon} {levelOption?.label}
+                                    </span>
+                                  </div>
+                                  {interest.viewing_date && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      📅 นัดดู: {new Date(interest.viewing_date).toLocaleString('th-TH')}
+                                    </p>
+                                  )}
+                                  {interest.notes && (
+                                    <p className="text-xs text-gray-500 mt-1 truncate">
+                                      📝 {interest.notes}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
+                    ) : (
+                      // Fallback to legacy single unit display
+                      <div className="p-3 border rounded-lg bg-gradient-to-r from-cyan-50 to-blue-50">
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <Building2 className="w-5 h-5 text-cyan-700" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-semibold text-gray-800">{getPropertyName(selectedLead.property_id)}</p>
+                            <p className="text-sm text-gray-600">ยูนิต {getUnitNumber(selectedLead.unit_id)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Lead Info - source, purpose, follow-up */}
+                    <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t">
                       <div>
                         <p className="text-sm text-gray-500">แหล่งที่มา</p>
                         <Badge variant="outline">{getSourceLabel(selectedLead.source)}</Badge>
@@ -1162,6 +1343,7 @@ const LeadManagement = () => {
             setEditingLead(null);
             fetchLeads();
             fetchCustomers();
+            fetchInterestCounts();
           }}
           lead={editingLead}
         />
