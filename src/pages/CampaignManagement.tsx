@@ -694,7 +694,7 @@ const CampaignManagement = () => {
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <BarChart3 className="w-5 h-5 text-green-600" />
+                      <BarChart3 className="w-5 h-5 text-violet-600" />
                       แผนภูมิเปอร์เซ็นต์ Click Through Rate (CTR) รายเดือน
                     </CardTitle>
                   </CardHeader>
@@ -705,8 +705,26 @@ const CampaignManagement = () => {
                         <XAxis dataKey="month" tick={{ fontSize: 10 }} />
                         <YAxis tick={{ fontSize: 10 }} />
                         <Tooltip />
-                        <Legend wrapperStyle={{ fontSize: 10 }} />
-                        <Bar dataKey="line" name="LINE" fill="#00C300" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="line" radius={[4, 4, 0, 0]}>
+                          {MOCK_MONTHLY_CTR.map((entry, index) => {
+                            // ไล่สีม่วงจากอ่อน (จาง) ไปเข้ม (12 เดือน)
+                            const colors = [
+                              '#f3e8ff', // ม.ค. - ม่วงอ่อนมากๆ
+                              '#e9d5ff', // ก.พ. - ม่วงอ่อนมาก
+                              '#d8b4fe', // มี.ค. - ม่วงอ่อน
+                              '#c4b5fd', // เม.ย. - ม่วงอ่อน
+                              '#c084fc', // พ.ค. - ม่วงอ่อน-กลาง
+                              '#a78bfa', // มิ.ย. - ม่วงกลาง
+                              '#a855f7', // ก.ค. - ม่วงกลาง-เข้ม
+                              '#9333ea', // ส.ค. - ม่วงเข้ม
+                              '#8b5cf6', // ก.ย. - violet
+                              '#7c3aed', // ต.ค. - violet เข้ม
+                              '#6d28d9', // พ.ย. - ม่วงเข้มมาก
+                              '#5b21b6', // ธ.ค. - ม่วงเข้มสุด
+                            ];
+                            return <Cell key={`cell-${index}`} fill={colors[index]} />;
+                          })}
+                        </Bar>
                       </BarChart>
                     </ResponsiveContainer>
                   </CardContent>
