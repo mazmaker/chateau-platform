@@ -328,21 +328,29 @@ const CampaignManagement = () => {
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `campaigns/${fileName}`;
+      const filePath = `${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
+      console.log('Attempting upload to bucket: campaigns, path:', filePath);
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('campaigns')
         .upload(filePath, file);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw uploadError;
+      }
+
+      console.log('Upload success:', uploadData);
 
       const { data } = supabase.storage
         .from('campaigns')
         .getPublicUrl(filePath);
 
+      console.log('Public URL:', data.publicUrl);
       return data.publicUrl;
-    } catch (err) {
-      console.error('Error uploading image:', err);
+    } catch (err: any) {
+      console.error('Error uploading image:', err?.message || err);
       return null;
     }
   };
@@ -372,9 +380,15 @@ const CampaignManagement = () => {
 
       let imageUrl = formData.image_url;
       if (imageFile) {
+        console.log('Uploading image...', imageFile.name);
         const uploadedUrl = await uploadImage(imageFile);
+        console.log('Upload result:', uploadedUrl);
         if (uploadedUrl) {
           imageUrl = uploadedUrl;
+        } else {
+          setFormError('ไม่สามารถอัปโหลดรูปได้ กรุณาตรวจสอบ Storage bucket');
+          setFormLoading(false);
+          return;
         }
       }
 
@@ -676,11 +690,11 @@ const CampaignManagement = () => {
 
               {/* Charts Row 2: Monthly CTR & Top Campaigns */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Monthly CTR Chart */}
+                {/* Monthly CTR Chart - LINE Only */}
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <BarChart3 className="w-5 h-5 text-pink-600" />
+                      <BarChart3 className="w-5 h-5 text-green-600" />
                       แผนภูมิเปอร์เซ็นต์ Click Through Rate (CTR) รายเดือน
                     </CardTitle>
                   </CardHeader>
@@ -692,11 +706,7 @@ const CampaignManagement = () => {
                         <YAxis tick={{ fontSize: 10 }} />
                         <Tooltip />
                         <Legend wrapperStyle={{ fontSize: 10 }} />
-                        <Bar dataKey="whatsapp" name="WhatsApp" stackId="a" fill="#25D366" />
-                        <Bar dataKey="messenger" name="Messenger" stackId="a" fill="#0084FF" />
-                        <Bar dataKey="line" name="Line" stackId="a" fill="#00C300" />
-                        <Bar dataKey="email" name="Email" stackId="a" fill="#EA4335" />
-                        <Bar dataKey="sms" name="SMS" stackId="a" fill="#6366f1" />
+                        <Bar dataKey="line" name="LINE" fill="#00C300" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </CardContent>
@@ -931,13 +941,13 @@ const CampaignManagement = () => {
               {/* Image Upload */}
               <div className="space-y-2">
                 <Label>รูปโปรโมชัน</Label>
-                <div className="flex items-start gap-4">
+                <div className="w-full">
                   {imagePreview ? (
-                    <div className="relative">
+                    <div className="relative w-full">
                       <img
                         src={imagePreview}
                         alt="Preview"
-                        className="w-32 h-32 object-cover rounded-lg border"
+                        className="w-full h-48 object-cover rounded-lg border"
                       />
                       <button
                         type="button"
@@ -946,15 +956,16 @@ const CampaignManagement = () => {
                           setImagePreview('');
                           setFormData(prev => ({ ...prev, image_url: '' }));
                         }}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                        className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
                       >
-                        <X className="w-3 h-3" />
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
                   ) : (
-                    <label className="flex flex-col items-center justify-center w-32 h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-violet-400 bg-gray-50">
-                      <ImageIcon className="w-8 h-8 text-gray-400" />
-                      <span className="text-xs text-gray-500 mt-1">อัปโหลดรูป</span>
+                    <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-violet-400 bg-gray-50">
+                      <ImageIcon className="w-10 h-10 text-gray-400" />
+                      <span className="text-sm text-gray-500 mt-2">คลิกเพื่ออัปโหลดรูปโปรโมชัน</span>
+                      <span className="text-xs text-gray-400 mt-1">รองรับไฟล์ PNG, JPG, GIF</span>
                       <input
                         type="file"
                         accept="image/*"
@@ -1172,7 +1183,7 @@ const CampaignManagement = () => {
 
         {/* View Campaign Modal */}
         <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Megaphone className="w-5 h-5 text-violet-600" />
@@ -1182,13 +1193,21 @@ const CampaignManagement = () => {
 
             {selectedCampaign && (
               <div className="space-y-4">
-                {selectedCampaign.image_url && (
-                  <img
-                    src={selectedCampaign.image_url}
-                    alt={selectedCampaign.campaign_name}
-                    className="w-full h-48 object-cover rounded-lg"
-                  />
-                )}
+                {/* Image Section */}
+                <div className="w-full">
+                  {selectedCampaign.image_url ? (
+                    <img
+                      src={selectedCampaign.image_url}
+                      alt={selectedCampaign.campaign_name}
+                      className="w-full h-48 object-cover rounded-lg border"
+                    />
+                  ) : (
+                    <div className="w-full h-48 bg-gray-100 rounded-lg border flex flex-col items-center justify-center">
+                      <ImageIcon className="w-12 h-12 text-gray-300" />
+                      <span className="text-sm text-gray-400 mt-2">ไม่มีรูปโปรโมชัน</span>
+                    </div>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
