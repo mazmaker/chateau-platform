@@ -116,7 +116,16 @@
       "Bash(node -e:*)",
       "Bash(node scripts/seed-forestias-units.cjs:*)",
       "Bash(git pull:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(git fetch:*)",
+      "Bash(git merge:*)",
+      "Bash(npx supabase db reset:*)",
+      "Bash(npm run dev)",
+      "Bash(timeout 30 npm run dev:*)",
+      "Bash(npx supabase db push:*)",
+      "Bash(PGPASSWORD=\"WJyIVdg39zCK8tYV\" psql:*)",
+      "Bash(docker run:*)",
+      "Bash(export PATH=\"/opt/homebrew/opt/postgresql@16/bin:$PATH\":*)"
     ]
   }
 }

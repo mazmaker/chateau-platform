@@ -15,6 +15,7 @@ import {
 import { usePermissions } from '@/components/auth/PermissionGuard';
 import { OwnerGuard, AdminGuard } from '@/components/auth/PermissionGuard';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
+import { supabase } from '@/lib/supabase';
 
 export function LogoSettings() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -52,6 +53,23 @@ export function LogoSettings() {
       if (result) {
         await updateCompanyLogoApi(currentTenant.id, result);
         setLogoUrl(result.url);
+
+        // Log activity for logo upload
+        try {
+          await supabase.rpc('log_activity', {
+            p_tenant_id: currentTenant.id,
+            p_user_id: null,
+            p_activity_type: 'company_logo_uploaded',
+            p_description: `อัปโหลดโลโก้บริษัท: ${companyName || currentTenant.id}`,
+            p_metadata: {
+              tenant_id: currentTenant.id,
+              company_name: companyName,
+              file_name: file.name
+            }
+          });
+        } catch {
+          // Ignore log_activity errors
+        }
       }
     } catch (error) {
       console.error('Error uploading logo:', error);
@@ -66,6 +84,22 @@ export function LogoSettings() {
     try {
       await deleteCompanyLogo(currentTenant.id);
       setLogoUrl(null);
+
+      // Log activity for logo deletion
+      try {
+        await supabase.rpc('log_activity', {
+          p_tenant_id: currentTenant.id,
+          p_user_id: null,
+          p_activity_type: 'company_logo_deleted',
+          p_description: `ลบโลโก้บริษัท: ${companyName || currentTenant.id}`,
+          p_metadata: {
+            tenant_id: currentTenant.id,
+            company_name: companyName
+          }
+        });
+      } catch {
+        // Ignore log_activity errors
+      }
     } catch (error) {
       console.error('Error deleting logo:', error);
     } finally {
@@ -81,6 +115,24 @@ export function LogoSettings() {
       // Apply colors to CSS variables
       document.documentElement.style.setProperty('--foreground', primaryColor);
       document.documentElement.style.setProperty('--muted-foreground', secondaryColor);
+
+      // Log activity for brand colors update
+      try {
+        await supabase.rpc('log_activity', {
+          p_tenant_id: currentTenant.id,
+          p_user_id: null,
+          p_activity_type: 'brand_colors_updated',
+          p_description: `อัปเดตสีแบรนด์: ${companyName || currentTenant.id}`,
+          p_metadata: {
+            tenant_id: currentTenant.id,
+            company_name: companyName,
+            primary_color: primaryColor,
+            secondary_color: secondaryColor
+          }
+        });
+      } catch {
+        // Ignore log_activity errors
+      }
     } catch (error) {
       console.error('Error saving colors:', error);
     } finally {

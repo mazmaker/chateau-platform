@@ -316,8 +316,42 @@ const PropertyManagement = () => {
 
       if (editingProperty) {
         await supabase.from('properties').update(propertyData).eq('id', editingProperty.id);
+
+        // Log activity for property update
+        try {
+          await supabase.rpc('log_activity', {
+            p_tenant_id: currentTenant?.id,
+            p_user_id: null,
+            p_activity_type: 'property_updated',
+            p_description: `แก้ไขโครงการ: ${propertyForm.name}`,
+            p_metadata: {
+              property_id: editingProperty.id,
+              property_name: propertyForm.name,
+              type: propertyForm.type
+            }
+          });
+        } catch {
+          // Ignore log_activity errors
+        }
       } else {
-        await supabase.from('properties').insert(propertyData);
+        const { data } = await supabase.from('properties').insert(propertyData).select();
+
+        // Log activity for property creation
+        try {
+          await supabase.rpc('log_activity', {
+            p_tenant_id: currentTenant?.id,
+            p_user_id: null,
+            p_activity_type: 'property_created',
+            p_description: `สร้างโครงการใหม่: ${propertyForm.name}`,
+            p_metadata: {
+              property_id: data?.[0]?.id,
+              property_name: propertyForm.name,
+              type: propertyForm.type
+            }
+          });
+        } catch {
+          // Ignore log_activity errors
+        }
       }
 
       setShowPropertyDialog(false);
@@ -368,6 +402,8 @@ const PropertyManagement = () => {
         status: unitForm.status
       };
 
+      let unitId: string | undefined;
+
       if (editingUnit) {
         const { error } = await supabase
           .from('units')
@@ -375,6 +411,26 @@ const PropertyManagement = () => {
           .eq('id', editingUnit.id);
 
         if (error) throw error;
+        unitId = editingUnit.id;
+
+        // Log activity for unit update
+        try {
+          await supabase.rpc('log_activity', {
+            p_tenant_id: currentTenant.id,
+            p_user_id: null,
+            p_activity_type: 'unit_updated',
+            p_description: `แก้ไขยูนิต: ${unitForm.unit_number} (${selectedProperty.name})`,
+            p_metadata: {
+              unit_id: editingUnit.id,
+              project_id: selectedProperty.id,
+              project_name: selectedProperty.name,
+              unit_number: unitForm.unit_number,
+              status: unitForm.status
+            }
+          });
+        } catch {
+          // Ignore log_activity errors
+        }
       } else {
         console.log('Inserting unit data:', unitData);
         const { data, error } = await supabase
@@ -384,6 +440,26 @@ const PropertyManagement = () => {
 
         console.log('Insert result:', { data, error });
         if (error) throw error;
+        unitId = data?.[0]?.id;
+
+        // Log activity for unit creation
+        try {
+          await supabase.rpc('log_activity', {
+            p_tenant_id: currentTenant.id,
+            p_user_id: null,
+            p_activity_type: 'unit_created',
+            p_description: `สร้างยูนิตใหม่: ${unitForm.unit_number} (${selectedProperty.name})`,
+            p_metadata: {
+              unit_id: unitId,
+              project_id: selectedProperty.id,
+              project_name: selectedProperty.name,
+              unit_number: unitForm.unit_number,
+              status: unitForm.status
+            }
+          });
+        } catch {
+          // Ignore log_activity errors
+        }
       }
 
       setShowUnitDialog(false);
@@ -402,6 +478,24 @@ const PropertyManagement = () => {
     if (!selectedProperty) return;
     try {
       await supabase.from('properties').delete().eq('id', selectedProperty.id);
+
+      // Log activity for property deletion
+      try {
+        await supabase.rpc('log_activity', {
+          p_tenant_id: currentTenant?.id,
+          p_user_id: null,
+          p_activity_type: 'property_deleted',
+          p_description: `ลบโครงการ: ${selectedProperty.name}`,
+          p_metadata: {
+            property_id: selectedProperty.id,
+            property_name: selectedProperty.name,
+            type: selectedProperty.type
+          }
+        });
+      } catch {
+        // Ignore log_activity errors
+      }
+
       setShowDeleteDialog(false);
       setSelectedProperty(null);
       fetchProperties();
@@ -545,6 +639,24 @@ const PropertyManagement = () => {
 
       if (error) throw error;
 
+      // Log activity for unit deletion
+      try {
+        await supabase.rpc('log_activity', {
+          p_tenant_id: currentTenant.id,
+          p_user_id: null,
+          p_activity_type: 'unit_deleted',
+          p_description: `ลบยูนิต: ${deletingUnit.unit_number} (${selectedProperty.name})`,
+          p_metadata: {
+            unit_id: deletingUnit.id,
+            project_id: selectedProperty.id,
+            project_name: selectedProperty.name,
+            unit_number: deletingUnit.unit_number
+          }
+        });
+      } catch {
+        // Ignore log_activity errors
+      }
+
       setShowDeleteUnitDialog(false);
       setDeletingUnit(null);
       fetchUnits(selectedProperty.id);
@@ -670,21 +782,33 @@ const PropertyManagement = () => {
           <AdminGuard>
             <div className="space-y-6">
               {/* Header */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-3xl font-bold tracking-tight">โครงการ</h1>
-                  <p className="text-muted-foreground">
-                    จัดการโครงการอสังหาและยูนิตทั้งหมดของบริษัท
-                  </p>
-                </div>
-                <Button onClick={() => {
-                  setEditingProperty(null);
-                  setShowPropertyDialog(true);
-                }}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  เพิ่มโครงการใหม่
-                </Button>
-              </div>
+              <Card className="bg-gradient-to-r from-violet-50 to-purple-50 border-violet-100">
+                <CardContent className="pt-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
+                        <Building2 className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h1 className="text-2xl font-bold text-gray-900">โครงการ</h1>
+                        <p className="text-gray-600 mt-1">
+                          จัดการโครงการอสังหาและยูนิตทั้งหมดของบริษัท
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => {
+                        setEditingProperty(null);
+                        setShowPropertyDialog(true);
+                      }}
+                      className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      เพิ่มโครงการใหม่
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
 
         {/* Property List or Units */}
         {!selectedProperty ? (

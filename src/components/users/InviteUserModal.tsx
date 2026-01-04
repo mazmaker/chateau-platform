@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { X, Mail, User, Shield, Crown, Send } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, Mail, User, Shield, Crown, Send, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,6 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { UserRole } from "@/lib/database-types";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
 import { supabase } from "@/lib/supabase";
+
+interface Tenant {
+  id: string;
+  name: string;
+}
 
 interface InviteUserModalProps {
   isOpen: boolean;
@@ -20,15 +25,49 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
   const [fullName, setFullName] = useState("");
   // ADMIN can only add SALES users
   const isAdmin = currentUserRole === 'admin';
+  const isOwner = currentUserRole === 'owner';
   const [role, setRole] = useState<UserRole>(isAdmin ? UserRole.SALES : UserRole.ADMIN);
+  const [selectedTenantId, setSelectedTenantId] = useState<string>("");
+  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingTenants, setLoadingTenants] = useState(false);
   const [error, setError] = useState("");
   const { currentTenant } = useSimpleAuth();
+
+  // Fetch tenants for Owner
+  useEffect(() => {
+    if (isOwner && isOpen) {
+      fetchTenants();
+    }
+  }, [isOwner, isOpen]);
+
+  const fetchTenants = async () => {
+    setLoadingTenants(true);
+    try {
+      const { data, error } = await supabase
+        .from('tenants')
+        .select('id, name')
+        .order('name');
+
+      if (error) throw error;
+      setTenants((data as Tenant[]) || []);
+
+      // Auto-select current tenant if available
+      if (currentTenant) {
+        setSelectedTenantId(currentTenant.id);
+      }
+    } catch (error) {
+      console.error('Error fetching tenants:', error);
+    } finally {
+      setLoadingTenants(false);
+    }
+  };
 
   const resetForm = () => {
     setEmail("");
     setFullName("");
     setRole(isAdmin ? UserRole.SALES : UserRole.ADMIN);
+    setSelectedTenantId(isOwner && currentTenant ? currentTenant.id : "");
     setError("");
   };
 
@@ -46,11 +85,19 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
         return;
       }
 
-      // Check if user already exists in this tenant (check in users table directly)
+      // For Owner, validate tenant selection
+      const tenantId = isOwner ? selectedTenantId : currentTenant?.id;
+      if (!tenantId) {
+        setError("กรุณาเลือกบริษัท");
+        setLoading(false);
+        return;
+      }
+
+      // Check if user already exists in selected tenant
       const { data: existingUsers, error: checkError } = await supabase
         .from('users')
         .select('id, email')
-        .eq('tenant_id', currentTenant?.id)
+        .eq('tenant_id', tenantId)
         .eq('email', email.toLowerCase());
 
       if (checkError) {
@@ -63,25 +110,76 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
         return;
       }
 
-      // Generate UUID for new user
-      const userId = crypto.randomUUID();
+      // Generate a temporary password
+      const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
 
-      // Create user record directly in users table
+      // Create user in Supabase Auth first
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: email.toLowerCase(),
+        password: tempPassword,
+        email_confirm: true,
+        user_metadata: {
+          full_name: fullName,
+          tenant_id: tenantId,
+          role: role.toLowerCase()
+        }
+      });
+
+      if (authError) {
+        // If user already exists in Auth, just get their ID
+        const { data: existingUser } = await supabase
+          .from('users')
+          .select('id')
+          .eq('email', email.toLowerCase())
+          .maybeSingle();
+
+        if (existingUser) {
+          throw new Error('ผู้ใช้นี้มีอยู่ในระบบแล้ว');
+        }
+        throw authError;
+      }
+
+      const userId = authData.user.id;
+
+      // Create user record in users table
       const { error: userError } = await supabase
         .from('users')
         .insert({
           id: userId,
           email: email.toLowerCase(),
           full_name: fullName,
-          tenant_id: currentTenant?.id,
+          tenant_id: tenantId,
           role: role.toLowerCase(),
           is_active: true,
           created_at: new Date().toISOString()
         });
 
-      if (userError) throw userError;
+      if (userError) {
+        // Rollback: delete auth user if database insert fails
+        await supabase.auth.admin.deleteUser(userId);
+        throw userError;
+      }
 
-      console.log(`User ${email} added successfully with ID: ${userId}`);
+      // Send magic link email for password setup
+      const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(email.toLowerCase(), {
+        data: {
+          full_name: fullName,
+          tenant_id: tenantId,
+          role: role.toLowerCase(),
+          redirect_to: `${window.location.origin}/auth/reset-password`
+        }
+      });
+
+      // Log activity
+      await supabase.rpc('log_activity', {
+        p_tenant_id: tenantId,
+        p_user_id: userId,
+        p_activity_type: 'user_added',
+        p_description: `เพิ่มผู้ใช้ใหม่: ${fullName} (${email.toLowerCase()})`,
+        p_metadata: { user_id: userId, email: email.toLowerCase(), role: role.toLowerCase() }
+      });
+
+      console.log(`User ${email} created successfully. Invite sent.`);
 
       onInviteSuccess();
       resetForm();
@@ -155,6 +253,32 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
               disabled={loading}
             />
           </div>
+
+          {/* Tenant - Only for Owner */}
+          {isOwner && (
+            <div className="mb-4">
+              <Label htmlFor="tenant" className="block text-sm font-medium text-gray-700 mb-2">
+                <Building2 className="w-4 h-4 inline mr-1" />
+                บริษัท
+              </Label>
+              <Select
+                value={selectedTenantId}
+                onValueChange={setSelectedTenantId}
+                disabled={loading || loadingTenants}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={loadingTenants ? "กำลังโหลด..." : "เลือกบริษัท"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {tenants.map((tenant) => (
+                    <SelectItem key={tenant.id} value={tenant.id}>
+                      {tenant.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Role */}
           <div className="mb-4">

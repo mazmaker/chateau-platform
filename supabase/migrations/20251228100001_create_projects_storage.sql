@@ -11,6 +11,12 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
+-- Drop policies if they exist (for safe re-run)
+DROP POLICY IF EXISTS "Public read access for projects bucket" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated users can upload to projects bucket" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated users can update their files in projects bucket" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated users can delete their files in projects bucket" ON storage.objects;
+
 -- Create policy for public read access
 CREATE POLICY "Public read access for projects bucket"
 ON storage.objects FOR SELECT

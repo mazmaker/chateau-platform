@@ -440,6 +440,26 @@ const LeadManagement = () => {
 
       if (error) throw error;
 
+      // Log activity for status update
+      try {
+        const customer = customers.find(c => c.id === lead.customer_id);
+        await supabase.rpc('log_activity', {
+          p_tenant_id: currentTenant?.id,
+          p_user_id: userProfile?.id,
+          p_activity_type: 'lead_status_updated',
+          p_description: `อัปเดตสถานะ Lead: ${customer?.name || lead.customer_id} (${lead.status} → ${newStatus})`,
+          p_metadata: {
+            lead_id: lead.id,
+            customer_id: lead.customer_id,
+            customer_name: customer?.name,
+            old_status: lead.status,
+            new_status: newStatus
+          }
+        });
+      } catch {
+        // Ignore log_activity errors
+      }
+
       setLeads(leads.map(l =>
         l.id === lead.id ? { ...l, status: newStatus } : l
       ));
@@ -459,6 +479,24 @@ const LeadManagement = () => {
         .eq('id', leadToDelete.id);
 
       if (error) throw error;
+
+      // Log activity for lead deletion
+      try {
+        const customer = customers.find(c => c.id === leadToDelete.customer_id);
+        await supabase.rpc('log_activity', {
+          p_tenant_id: currentTenant?.id,
+          p_user_id: userProfile?.id,
+          p_activity_type: 'lead_deleted',
+          p_description: `ลบ Lead: ${customer?.name || leadToDelete.customer_id}`,
+          p_metadata: {
+            lead_id: leadToDelete.id,
+            customer_id: leadToDelete.customer_id,
+            customer_name: customer?.name
+          }
+        });
+      } catch {
+        // Ignore log_activity errors
+      }
 
       setLeads(leads.filter(l => l.id !== leadToDelete.id));
       setShowDeleteDialog(false);
@@ -484,6 +522,26 @@ const LeadManagement = () => {
         .eq('id', editingLead.id);
 
       if (error) throw error;
+
+      // Log activity for lead update
+      try {
+        const customer = customers.find(c => c.id === editingLead.customer_id);
+        await supabase.rpc('log_activity', {
+          p_tenant_id: currentTenant?.id,
+          p_user_id: userProfile?.id,
+          p_activity_type: 'lead_updated',
+          p_description: `แก้ไข Lead: ${customer?.name || editingLead.customer_id}`,
+          p_metadata: {
+            lead_id: editingLead.id,
+            customer_id: editingLead.customer_id,
+            customer_name: customer?.name,
+            status: editingLead.status,
+            notes: editingLead.notes
+          }
+        });
+      } catch {
+        // Ignore log_activity errors
+      }
 
       setLeads(leads.map(l =>
         l.id === editingLead.id ? editingLead : l
@@ -695,21 +753,33 @@ const LeadManagement = () => {
           <SalesGuard>
             <div className="space-y-6">
               {/* Page Header */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-3xl font-bold tracking-tight">ระบบติดตามลูกค้า (Leads)</h1>
-                  <p className="text-muted-foreground">
-                    จัดการลูกค้าและติดตามสถานะการขายอสังหาริมทรัพย์
-                  </p>
-                </div>
-                <Button onClick={() => {
-                  resetLeadForm();
-                  setShowLeadDialog(true);
-                }}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  เพิ่ม Lead ใหม่
-                </Button>
-              </div>
+              <Card className="bg-gradient-to-r from-violet-50 to-purple-50 border-violet-100">
+                <CardContent className="pt-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
+                        <Users className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h1 className="text-2xl font-bold text-gray-900">ระบบติดตามลูกค้า (Leads)</h1>
+                        <p className="text-gray-600 mt-1">
+                          จัดการลูกค้าและติดตามสถานะการขายอสังหาริมทรัพย์
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => {
+                        resetLeadForm();
+                        setShowLeadDialog(true);
+                      }}
+                      className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      เพิ่ม Lead ใหม่
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
 
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-5">

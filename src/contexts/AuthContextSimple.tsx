@@ -55,6 +55,7 @@ interface AuthContextType {
   authChecked: boolean
   currentTenant: Tenant | null
   userRole: 'owner' | 'admin' | 'sales' | null
+  tenantSuspended: boolean  // true when tenant status is 'suspended'
   userTenants: UserTenant[]
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null; data?: any }>
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: AuthError | null; data?: any }>
@@ -85,6 +86,7 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
   const [loading, setLoading] = useState(false) // Start with false for faster initial load
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(null)
   const [userRole, setUserRole] = useState<'owner' | 'admin' | 'sales' | null>(null)
+  const [tenantSuspended, setTenantSuspended] = useState(false) // Track if tenant is suspended
   const [userTenants, setUserTenants] = useState<UserTenant[]>([])
   const [authChecked, setAuthChecked] = useState(false) // Track if we've checked auth at least once
   const navigate = useNavigate()
@@ -291,6 +293,14 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
           console.log('[Auth] Current tenant:', tenantToUse.tenants?.name, 'Role:', tenantToUse.role)
           setCurrentTenant(tenantToUse.tenants)
           setUserRole(tenantToUse.role)
+
+          // Check if tenant is suspended
+          const isSuspended = tenantToUse.tenants?.status === 'suspended'
+          setTenantSuspended(isSuspended)
+          if (isSuspended) {
+            console.log('[Auth] Tenant is suspended:', tenantToUse.tenants?.name)
+          }
+
           localStorage.setItem('current_tenant_id', tenantToUse.tenant_id)
           // Save to cache for next time
           saveRoleToCache(tenantToUse.tenant_id, tenantToUse.role)
@@ -325,6 +335,10 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
         if (tenantToUse) {
           setCurrentTenant(tenantToUse.tenants)
           setUserRole(tenantToUse.role)
+
+          // Check if tenant is suspended
+          const isSuspended = tenantToUse.tenants?.status === 'suspended'
+          setTenantSuspended(isSuspended)
         }
       }
     }
@@ -396,6 +410,7 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
     setSession(null)
     setCurrentTenant(null)
     setUserRole(null)
+    setTenantSuspended(false)
     setUserTenants([])
     localStorage.removeItem('current_tenant_id')
     // Clear cached role on sign out
@@ -428,6 +443,11 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
 
     setCurrentTenant(tenant.tenants)
     setUserRole(tenant.role)
+
+    // Check if tenant is suspended
+    const isSuspended = tenant.tenants?.status === 'suspended'
+    setTenantSuspended(isSuspended)
+
     localStorage.setItem('current_tenant_id', tenantId)
     // Save to cache for next time
     saveRoleToCache(tenantId, tenant.role)
@@ -484,6 +504,11 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
               if (tenantToUse) {
                 setCurrentTenant(tenantToUse.tenants)
                 setUserRole(tenantToUse.role)
+
+                // Check if tenant is suspended
+                const isSuspended = tenantToUse.tenants?.status === 'suspended'
+                setTenantSuspended(isSuspended)
+
                 localStorage.setItem('current_tenant_id', tenantToUse.tenant_id)
                 // Save to cache for next time
                 saveRoleToCache(tenantToUse.tenant_id, tenantToUse.role)
@@ -498,6 +523,7 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
           setUserProfile(null)
           setCurrentTenant(null)
           setUserRole(null)
+          setTenantSuspended(false)
           setUserTenants([])
           localStorage.removeItem('current_tenant_id')
           // Clear cached role on sign out
@@ -525,6 +551,7 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
     authChecked,
     currentTenant,
     userRole,
+    tenantSuspended,
     userTenants,
     signIn,
     signUp,

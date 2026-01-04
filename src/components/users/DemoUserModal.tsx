@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { UserRole } from "@/lib/database-types";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
 import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
 
 interface DemoUserModalProps {
   isOpen: boolean;
@@ -121,6 +122,31 @@ const DemoUserModal = ({ isOpen, onClose, onSuccess }: DemoUserModalProps) => {
 
       if (successCount > 0) {
         toast.success(`สร้างบัญชีทดสอบสำเร็จ ${successCount} บัญชี`);
+
+        // Log activity for demo user creation
+        try {
+          const createdUsers = results
+            .filter((r, i) => r.success)
+            .map((r, i) => {
+              const templateIndex = Array.from(selectedTemplates)[results.filter((rr, ii) => ii <= i && rr.success).length - 1];
+              return DEMO_USER_TEMPLATES[templateIndex];
+            });
+
+          await supabase.rpc('log_activity', {
+            p_tenant_id: currentTenant?.id,
+            p_user_id: null,
+            p_activity_type: 'demo_users_created',
+            p_description: `สร้างบัญชีทดสอบ ${successCount} บัญชี`,
+            p_metadata: {
+              tenant_id: currentTenant?.id,
+              users_created: successCount,
+              users_failed: failCount,
+              user_names: createdUsers.map(u => u.fullName)
+            }
+          });
+        } catch {
+          // Ignore log_activity errors
+        }
       }
 
       if (failCount > 0) {

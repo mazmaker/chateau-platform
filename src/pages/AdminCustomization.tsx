@@ -238,6 +238,23 @@ const AdminCustomization = () => {
         setLogoUrl(result.url);
         // Notify all CompanyLogo components to refresh
         notifyLogoUpdated();
+
+        // Log activity for logo upload
+        try {
+          await supabase.rpc('log_activity', {
+            p_tenant_id: selectedTenantId,
+            p_user_id: null,
+            p_activity_type: 'company_logo_uploaded',
+            p_description: `อัปโหลดโลโก้บริษัทใหม่: ${companyName || selectedTenantId}`,
+            p_metadata: {
+              tenant_id: selectedTenantId,
+              company_name: companyName,
+              file_name: file.name
+            }
+          });
+        } catch {
+          // Ignore log_activity errors
+        }
       }
     } catch (error) {
       console.error('Error uploading logo:', error);
@@ -255,6 +272,22 @@ const AdminCustomization = () => {
       setLogoUrl(null);
       // Notify all CompanyLogo components to refresh
       notifyLogoUpdated();
+
+      // Log activity for logo deletion
+      try {
+        await supabase.rpc('log_activity', {
+          p_tenant_id: selectedTenantId,
+          p_user_id: null,
+          p_activity_type: 'company_logo_deleted',
+          p_description: `ลบโลโก้บริษัท: ${companyName || selectedTenantId}`,
+          p_metadata: {
+            tenant_id: selectedTenantId,
+            company_name: companyName
+          }
+        });
+      } catch {
+        // Ignore log_activity errors
+      }
     } catch (error) {
       console.error('Error deleting logo:', error);
     } finally {
@@ -273,6 +306,25 @@ const AdminCustomization = () => {
       document.documentElement.style.setProperty('--foreground', brandPrimaryColor);
       document.documentElement.style.setProperty('--muted-foreground', brandSecondaryColor);
       setSaved(true);
+
+      // Log activity for brand colors update
+      try {
+        await supabase.rpc('log_activity', {
+          p_tenant_id: selectedTenantId,
+          p_user_id: null,
+          p_activity_type: 'brand_colors_updated',
+          p_description: `อัปเดตสีแบรนด์: ${companyName || selectedTenantId}`,
+          p_metadata: {
+            tenant_id: selectedTenantId,
+            company_name: companyName,
+            primary_color: brandPrimaryColor,
+            secondary_color: brandSecondaryColor
+          }
+        });
+      } catch {
+        // Ignore log_activity errors
+      }
+
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
       console.error('Error saving company colors:', error);

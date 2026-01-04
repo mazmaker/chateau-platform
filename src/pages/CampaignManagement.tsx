@@ -408,6 +408,8 @@ const CampaignManagement = () => {
         created_by: userProfile?.id,
       };
 
+      let campaignId: string | undefined;
+
       if (isEditing && selectedCampaign) {
         // Update existing campaign
         const { error } = await supabase
@@ -416,13 +418,52 @@ const CampaignManagement = () => {
           .eq('id', selectedCampaign.id);
 
         if (error) throw error;
+        campaignId = selectedCampaign.id;
+
+        // Log activity for update
+        try {
+          await supabase.rpc('log_activity', {
+            p_tenant_id: currentTenant?.id,
+            p_user_id: userProfile?.id,
+            p_activity_type: 'campaign_updated',
+            p_description: `แก้ไขแคมเปญ: ${formData.campaign_name}`,
+            p_metadata: {
+              campaign_id: selectedCampaign.id,
+              campaign_code: formData.campaign_code,
+              campaign_name: formData.campaign_name,
+              status: formData.status
+            }
+          });
+        } catch {
+          // Ignore log_activity errors
+        }
       } else {
         // Create new campaign
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('campaigns')
-          .insert([campaignData]);
+          .insert([campaignData])
+          .select();
 
         if (error) throw error;
+        campaignId = data?.[0]?.id;
+
+        // Log activity for creation
+        try {
+          await supabase.rpc('log_activity', {
+            p_tenant_id: currentTenant?.id,
+            p_user_id: userProfile?.id,
+            p_activity_type: 'campaign_created',
+            p_description: `สร้างแคมเปญใหม่: ${formData.campaign_name}`,
+            p_metadata: {
+              campaign_id: campaignId,
+              campaign_code: formData.campaign_code,
+              campaign_name: formData.campaign_name,
+              status: formData.status
+            }
+          });
+        } catch {
+          // Ignore log_activity errors
+        }
       }
 
       fetchCampaigns();
@@ -472,6 +513,23 @@ const CampaignManagement = () => {
         .eq('id', selectedCampaign.id);
 
       if (error) throw error;
+
+      // Log activity for deletion
+      try {
+        await supabase.rpc('log_activity', {
+          p_tenant_id: currentTenant?.id,
+          p_user_id: userProfile?.id,
+          p_activity_type: 'campaign_deleted',
+          p_description: `ลบแคมเปญ: ${selectedCampaign.campaign_name}`,
+          p_metadata: {
+            campaign_id: selectedCampaign.id,
+            campaign_code: selectedCampaign.campaign_code,
+            campaign_name: selectedCampaign.campaign_name
+          }
+        });
+      } catch {
+        // Ignore log_activity errors
+      }
 
       fetchCampaigns();
       setShowDeleteDialog(false);
@@ -534,15 +592,35 @@ const CampaignManagement = () => {
 
           <main className="p-6">
             {/* Page Title */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <Megaphone className="w-8 h-8 text-violet-600" />
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900">แคมเปญ</h1>
-                  <p className="text-sm text-gray-500">จัดการแคมเปญโปรโมชันผ่าน LINE</p>
+            <Card className="bg-gradient-to-r from-violet-50 to-purple-50 border-violet-100 mb-6">
+              <CardContent className="pt-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
+                      <Megaphone className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h1 className="text-2xl font-bold text-gray-900">แคมเปญ</h1>
+                      <p className="text-gray-600 mt-1">
+                        จัดการแคมเปญโปรโมชันผ่าน LINE
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      resetForm();
+                      setIsEditing(false);
+                      setSelectedCampaign(null);
+                      setShowAddModal(true);
+                    }}
+                    className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    สร้างแคมเปญใหม่
+                  </Button>
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
 
             {/* Section 1: Statistics Overview */}
             <div className="space-y-6 mb-8">
@@ -779,19 +857,6 @@ const CampaignManagement = () => {
                       </Badge>
                     </div>
                   </div>
-
-                  <Button
-                    onClick={() => {
-                      resetForm();
-                      setIsEditing(false);
-                      setSelectedCampaign(null);
-                      setShowAddModal(true);
-                    }}
-                    className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    สร้างแคมเปญใหม่
-                  </Button>
                 </div>
 
                 {/* Filters */}

@@ -784,6 +784,25 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated }: AddLeadModalProps) => 
         // Don't throw here - lead is already created
       }
 
+      // Log activity for lead creation
+      try {
+        await supabase.rpc('log_activity', {
+          p_tenant_id: currentTenant?.id,
+          p_user_id: formData.assigned_to || null,
+          p_activity_type: 'lead_created',
+          p_description: `สร้าง Lead ใหม่: ${customerData.full_name}`,
+          p_metadata: {
+            lead_id: newLead.id,
+            customer_id: customer.id,
+            customer_name: customerData.full_name,
+            interests_count: interests.length,
+            assigned_to: formData.assigned_to
+          }
+        });
+      } catch {
+        // Ignore log_activity errors
+      }
+
       onLeadCreated();
       resetForm();
       onClose();

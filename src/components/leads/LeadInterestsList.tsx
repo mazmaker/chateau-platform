@@ -207,6 +207,29 @@ const LeadInterestsList = forwardRef<LeadInterestsListRef, LeadInterestsListProp
 
       if (insertError) throw insertError;
 
+      // Log activity for interest creation
+      try {
+        const property = properties.find(p => p.id === addFormData.property_id);
+        const unit = units.find(u => u.id === addFormData.unit_id);
+        await supabase.rpc('log_activity', {
+          p_tenant_id: currentTenant?.id,
+          p_user_id: null,
+          p_activity_type: 'lead_interest_created',
+          p_description: `เพิ่มความสนใจยูนิต: ${unit?.unit_number || addFormData.unit_id} (${property?.name || addFormData.property_id})`,
+          p_metadata: {
+            lead_id: leadId,
+            property_id: addFormData.property_id,
+            property_name: property?.name,
+            unit_id: addFormData.unit_id,
+            unit_number: unit?.unit_number,
+            status: addFormData.status,
+            interest_level: addFormData.interest_level
+          }
+        });
+      } catch {
+        // Ignore log_activity errors
+      }
+
       await fetchInterests();
       setShowAddForm(false);
       onInterestsChange?.();
@@ -264,6 +287,31 @@ const LeadInterestsList = forwardRef<LeadInterestsListRef, LeadInterestsListProp
 
       if (error) throw error;
 
+      // Log activity for interest update
+      try {
+        const interest = interests.find(i => i.id === interestId);
+        if (interest) {
+          await supabase.rpc('log_activity', {
+            p_tenant_id: currentTenant?.id,
+            p_user_id: null,
+            p_activity_type: 'lead_interest_updated',
+            p_description: `แก้ไขความสนใจยูนิต: ${interest.unit?.unit_number || interest.unit_id} (${interest.property?.name || interest.property_id})`,
+            p_metadata: {
+              lead_id: leadId,
+              interest_id: interestId,
+              property_id: interest.property_id,
+              property_name: interest.property?.name,
+              unit_id: interest.unit_id,
+              unit_number: interest.unit?.unit_number,
+              status: editForm.status,
+              interest_level: editForm.interest_level
+            }
+          });
+        }
+      } catch {
+        // Ignore log_activity errors
+      }
+
       await fetchInterests();
       setEditingInterestId(null);
       onInterestsChange?.();
@@ -283,6 +331,29 @@ const LeadInterestsList = forwardRef<LeadInterestsListRef, LeadInterestsListProp
         .eq("id", interestId);
 
       if (error) throw error;
+
+      // Log activity for interest deletion
+      try {
+        const interest = interests.find(i => i.id === interestId);
+        if (interest) {
+          await supabase.rpc('log_activity', {
+            p_tenant_id: currentTenant?.id,
+            p_user_id: null,
+            p_activity_type: 'lead_interest_deleted',
+            p_description: `ลบความสนใจยูนิต: ${interest.unit?.unit_number || interest.unit_id} (${interest.property?.name || interest.property_id})`,
+            p_metadata: {
+              lead_id: leadId,
+              interest_id: interestId,
+              property_id: interest.property_id,
+              property_name: interest.property?.name,
+              unit_id: interest.unit_id,
+              unit_number: interest.unit?.unit_number
+            }
+          });
+        }
+      } catch {
+        // Ignore log_activity errors
+      }
 
       await fetchInterests();
       setShowDeleteConfirm(null);

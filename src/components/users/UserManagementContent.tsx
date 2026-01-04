@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Search, Plus, Filter, MoreHorizontal, Mail, User, Calendar, Shield, ToggleLeft, ToggleRight, Trash2, Edit, UserPlus, Sparkles } from "lucide-react";
+import { Search, Plus, User, Shield, ToggleLeft, ToggleRight, Trash2, Edit, UserPlus, Sparkles } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -22,17 +23,25 @@ interface UserData {
   avatar_url?: string;
   role: UserRole;
   tenant_id: string;
+  tenant_name?: string;
   is_active: boolean;
   created_at: string;
   last_sign_in_at?: string;
 }
 
+interface Tenant {
+  id: string;
+  name: string;
+}
+
 const UserManagementContent = () => {
   const [users, setUsers] = useState<UserData[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<UserData[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState<UserRole | "all">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [tenantFilter, setTenantFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -44,35 +53,62 @@ const UserManagementContent = () => {
 
   // ADMIN can only see SALES users in their tenant
   const isAdmin = userRole === 'admin';
+  const isOwner = userRole === 'owner';
 
   useEffect(() => {
     fetchUsers();
-  }, [currentTenant, isAdmin]);
+    if (isOwner) {
+      fetchTenants();
+    }
+  }, [currentTenant, isAdmin, isOwner]);
 
   useEffect(() => {
     filterUsers();
-  }, [users, searchTerm, roleFilter, statusFilter]);
+  }, [users, searchTerm, roleFilter, statusFilter, tenantFilter]);
+
+  const fetchTenants = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tenants')
+        .select('id, name')
+        .order('name');
+
+      if (error) throw error;
+      setTenants((data as Tenant[]) || []);
+    } catch (error) {
+      console.error('Error fetching tenants:', error);
+    }
+  };
 
   const fetchUsers = async () => {
-    if (!currentTenant) return;
+    if (!currentTenant && !isOwner) return;
 
     try {
       // Fetch from users table
       let query = supabase
         .from('users')
         .select('*')
-        .eq('tenant_id', currentTenant.id)
         .order('created_at', { ascending: false });
 
-      // ADMIN can only see SALES users
-      if (isAdmin) {
-        query = query.eq('role', 'sales');
+      // ADMIN can only see SALES users in their tenant
+      if (isAdmin && currentTenant) {
+        query = query.eq('tenant_id', currentTenant.id).eq('role', 'sales');
       }
 
       const { data, error } = await query;
 
       if (error) throw error;
-      setUsers(data || []);
+
+      // For Owner, enrich with tenant names
+      let enrichedData = (data as any[]) || [];
+      if (isOwner) {
+        enrichedData = enrichedData.map((user: any) => ({
+          ...user,
+          tenant_name: tenants.find(t => t.id === user.tenant_id)?.name || '-'
+        }));
+      }
+
+      setUsers(enrichedData as UserData[]);
     } catch (error) {
       console.error('Error fetching users:', error);
       toast.error('ไม่สามารถโหลดข้อมูลผู้ใช้ได้');
@@ -88,7 +124,8 @@ const UserManagementContent = () => {
     if (searchTerm) {
       filtered = filtered.filter(user =>
         user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.full_name?.toLowerCase().includes(searchTerm.toLowerCase())
+        user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (isOwner && user.tenant_name?.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
 
@@ -102,6 +139,11 @@ const UserManagementContent = () => {
       filtered = filtered.filter(user =>
         statusFilter === "active" ? user.is_active : !user.is_active
       );
+    }
+
+    // Tenant filter (only for Owner)
+    if (isOwner && tenantFilter !== "all") {
+      filtered = filtered.filter(user => user.tenant_id === tenantFilter);
     }
 
     setFilteredUsers(filtered);
@@ -132,6 +174,20 @@ const UserManagementContent = () => {
     if (!deletingUser) return;
 
     try {
+      // Log activity before deleting
+      await supabase.rpc('log_activity', {
+        p_tenant_id: deletingUser.tenant_id,
+        p_user_id: user?.id,
+        p_activity_type: 'user_deleted',
+        p_description: `ลบผู้ใช้: ${deletingUser.full_name || deletingUser.email} (${deletingUser.email})`,
+        p_metadata: {
+          user_id: deletingUser.id,
+          email: deletingUser.email,
+          role: deletingUser.role,
+          full_name: deletingUser.full_name
+        }
+      });
+
       const { error } = await supabase
         .from('users')
         .delete()
@@ -193,37 +249,46 @@ const UserManagementContent = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {isAdmin ? 'จัดการพนักงานขาย' : 'จัดการผู้ใช้'}
-          </h1>
-          <p className="text-gray-600 mt-1">
-            {isAdmin
-              ? 'จัดการพนักงานขายในบริษัทของคุณ'
-              : 'จัดการผู้ใช้และสิทธิ์ในระบบของคุณ'
-            }
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            onClick={() => setShowDemoModal(true)}
-            variant="outline"
-            className="flex items-center gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
-          >
-            <Sparkles className="w-4 h-4" />
-            ทดสอบ
-          </Button>
-          <Button
-            onClick={() => setShowInviteModal(true)}
-            className="flex items-center gap-2"
-          >
-            <UserPlus className="w-4 h-4" />
-            {isAdmin ? 'เพิ่มพนักงานขาย' : 'เชิญผู้ใช้ใหม่'}
-          </Button>
-        </div>
-      </div>
+      {/* Header Section */}
+      <Card className="bg-gradient-to-r from-violet-50 to-purple-50 border-violet-100">
+        <CardContent className="pt-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
+                <User className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {isAdmin ? 'จัดการพนักงานขาย' : 'จัดการผู้ใช้'}
+                </h1>
+                <p className="text-gray-600 mt-1">
+                  {isAdmin
+                    ? 'จัดการพนักงานขายในบริษัทของคุณ'
+                    : 'จัดการผู้ใช้และสิทธิ์ในระบบของคุณ'
+                  }
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setShowDemoModal(true)}
+                variant="outline"
+                className="flex items-center gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
+              >
+                <Sparkles className="w-4 h-4" />
+                ทดสอบ
+              </Button>
+              <Button
+                onClick={() => setShowInviteModal(true)}
+                className="flex items-center gap-2 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
+              >
+                <UserPlus className="w-4 h-4" />
+                {isAdmin ? 'เพิ่มพนักงานขาย' : 'เชิญผู้ใช้ใหม่'}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Stats Cards */}
       <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-2' : 'md:grid-cols-5'} gap-4`}>
@@ -306,42 +371,59 @@ const UserManagementContent = () => {
       {/* Filters and Search */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  placeholder="ค้นหาตามชื่อหรืออีเมล..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input
+                placeholder="ค้นหาตามชื่อหรืออีเมล..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
             </div>
+
+            {/* Tenant filter - Only for OWNER users */}
+            {isOwner && (
+              <Select value={tenantFilter} onValueChange={setTenantFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="🏢 ทุกบริษัท" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">🏢 ทุกบริษัท</SelectItem>
+                  {tenants.map((tenant) => (
+                    <SelectItem key={tenant.id} value={tenant.id}>
+                      {tenant.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
             {/* Only show role filter for OWNER users */}
             {!isAdmin && (
-              <select
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value as UserRole | "all")}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="all">ทุกตำแหน่ง</option>
-                <option value="owner">👑 เจ้าของแพลตฟอร์ม</option>
-                <option value="admin">🔧 ผู้ดูแลบริษัท</option>
-                <option value="sales">💼 พนักงานขาย</option>
-              </select>
+              <Select value={roleFilter} onValueChange={(value: UserRole | "all") => setRoleFilter(value)}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="ทุกตำแหน่ง" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">ทุกตำแหน่ง</SelectItem>
+                  <SelectItem value="owner">👑 เจ้าของแพลตฟอร์ม</SelectItem>
+                  <SelectItem value="admin">🔧 ผู้ดูแลบริษัท</SelectItem>
+                  <SelectItem value="sales">💼 พนักงานขาย</SelectItem>
+                </SelectContent>
+              </Select>
             )}
 
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="all">ทุกสถานะ</option>
-              <option value="active">ใช้งานอยู่</option>
-              <option value="inactive">ระงับ</option>
-            </select>
+            <Select value={statusFilter} onValueChange={(value: "all" | "active" | "inactive") => setStatusFilter(value)}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="สถานะ" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">ทุกสถานะ</SelectItem>
+                <SelectItem value="active">ใช้งานอยู่</SelectItem>
+                <SelectItem value="inactive">ระงับ</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -354,6 +436,7 @@ const UserManagementContent = () => {
               <thead>
                 <tr className="border-b bg-gray-50">
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">ผู้ใช้</th>
+                  {isOwner && <th className="text-left py-3 px-4 font-semibold text-gray-700">🏢 บริษัท</th>}
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">👤 ตำแหน่ง (Role)</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">สถานะ</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">เข้าร่วมเมื่อ</th>
@@ -383,6 +466,11 @@ const UserManagementContent = () => {
                         </div>
                       </div>
                     </td>
+                    {isOwner && (
+                      <td className="py-3 px-4 text-sm text-gray-600">
+                        {user.tenant_name || '-'}
+                      </td>
+                    )}
                     <td className="py-3 px-4">
                       {getRoleBadge(user.role)}
                     </td>

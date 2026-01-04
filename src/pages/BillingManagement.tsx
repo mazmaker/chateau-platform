@@ -239,18 +239,30 @@ const BillingManagement = () => {
           <main className="p-6">
             <div className="space-y-6">
               {/* Page Header */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-3xl font-bold tracking-tight">Billing & Invoices</h1>
-                  <p className="text-muted-foreground">
-                    จัดการการชำระเงินและใบแจ้งหนี้ของบริษัททั้งหมด
-                  </p>
-                </div>
-                <Button onClick={() => setShowInvoiceDialog(true)}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  สร้างใบแจ้งหนี้
-                </Button>
-              </div>
+              <Card className="bg-gradient-to-r from-violet-50 to-purple-50 border-violet-100">
+                <CardContent className="pt-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
+                        <CreditCard className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h1 className="text-2xl font-bold text-gray-900">Billing & Invoices</h1>
+                        <p className="text-gray-600 mt-1">
+                          จัดการการชำระเงินและใบแจ้งหนี้ของบริษัททั้งหมด
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => setShowInvoiceDialog(true)}
+                      className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      สร้างใบแจ้งหนี้
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
 
             {/* Summary Stats */}
             <div className="grid gap-4 md:grid-cols-4">

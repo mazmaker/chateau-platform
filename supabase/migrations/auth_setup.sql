@@ -19,7 +19,7 @@ CREATE TYPE user_role AS ENUM ('owner', 'admin', 'sales', 'viewer');
 CREATE TYPE tenant_status AS ENUM ('trial', 'active', 'suspended', 'cancelled');
 
 -- Subscription plans
-CREATE TYPE subscription_plan AS ENUM ('free', 'professional', 'enterprise');
+CREATE TYPE subscription_plan AS ENUM ('free', 'starter', 'professional', 'enterprise');
 
 -- ====================================================================
 -- CREATE TABLES
