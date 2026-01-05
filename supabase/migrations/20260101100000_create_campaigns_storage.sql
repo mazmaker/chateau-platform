@@ -12,30 +12,66 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- Create policy for public read access
-CREATE POLICY "Public read access for campaigns bucket"
-ON storage.objects FOR SELECT
-USING (bucket_id = 'campaigns');
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'objects'
+    AND policyname = 'Public read access for campaigns bucket'
+  ) THEN
+    CREATE POLICY "Public read access for campaigns bucket"
+    ON storage.objects FOR SELECT
+    USING (bucket_id = 'campaigns');
+  END IF;
+END $$;
 
 -- Create policy for authenticated users to upload
-CREATE POLICY "Authenticated users can upload to campaigns bucket"
-ON storage.objects FOR INSERT
-WITH CHECK (
-  bucket_id = 'campaigns'
-  AND auth.role() = 'authenticated'
-);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'objects'
+    AND policyname = 'Authenticated users can upload to campaigns bucket'
+  ) THEN
+    CREATE POLICY "Authenticated users can upload to campaigns bucket"
+    ON storage.objects FOR INSERT
+    WITH CHECK (
+      bucket_id = 'campaigns'
+      AND auth.role() = 'authenticated'
+    );
+  END IF;
+END $$;
 
 -- Create policy for authenticated users to update their files
-CREATE POLICY "Authenticated users can update their files in campaigns bucket"
-ON storage.objects FOR UPDATE
-USING (
-  bucket_id = 'campaigns'
-  AND auth.role() = 'authenticated'
-);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'objects'
+    AND policyname = 'Authenticated users can update their files in campaigns bucket'
+  ) THEN
+    CREATE POLICY "Authenticated users can update their files in campaigns bucket"
+    ON storage.objects FOR UPDATE
+    USING (
+      bucket_id = 'campaigns'
+      AND auth.role() = 'authenticated'
+    );
+  END IF;
+END $$;
 
 -- Create policy for authenticated users to delete their files
-CREATE POLICY "Authenticated users can delete their files in campaigns bucket"
-ON storage.objects FOR DELETE
-USING (
-  bucket_id = 'campaigns'
-  AND auth.role() = 'authenticated'
-);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'objects'
+    AND policyname = 'Authenticated users can delete their files in campaigns bucket'
+  ) THEN
+    CREATE POLICY "Authenticated users can delete their files in campaigns bucket"
+    ON storage.objects FOR DELETE
+    USING (
+      bucket_id = 'campaigns'
+      AND auth.role() = 'authenticated'
+    );
+  END IF;
+END $$;

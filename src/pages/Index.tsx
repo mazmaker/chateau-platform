@@ -56,13 +56,13 @@ const MOCK_PAYMENT_DATA = [
 ];
 
 const MOCK_CUSTOMER_STATUS_DATA = [
-  { status: 'SALES 001-01', value: 90, color: '#22d3ee' },
-  { status: 'SALES 002-02', value: 85, color: '#8b5cf6' },
-  { status: 'SALES 003-03', value: 75, color: '#ec4899' },
-  { status: 'SALES 004-04', value: 70, color: '#fb923c' },
-  { status: 'SALES 005-05', value: 65, color: '#14b8a6' },
-  { status: 'SALES 006-06', value: 60, color: '#06b6d4' },
-  { status: 'SALES 007-07', value: 50, color: '#a78bfa' },
+  { status: 'ใหม่', value: 85, color: '#22d3ee' },
+  { status: 'ติดต่อแล้ว', value: 75, color: '#8b5cf6' },
+  { status: 'มีคุณสมบัติ', value: 65, color: '#14b8a6' },
+  { status: 'เสนอขาย', value: 55, color: '#fb923c' },
+  { status: 'เจรจา', value: 45, color: '#ec4899' },
+  { status: 'ปิดการขาย', value: 35, color: '#10b981' },
+  { status: 'ยกเลิก', value: 20, color: '#ef4444' },
 ];
 
 const MOCK_MONTHLY_CUSTOMER_DATA = [
@@ -222,10 +222,10 @@ const Index = () => {
           {/* รายงานการขาย */}
           <div>
             <h2 className="text-lg font-semibold mb-4">รายงานการขาย</h2>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
               {/* Left Column - Donut Charts */}
-              <div className="space-y-6">
-                <Card>
+              <div className="flex flex-col gap-6">
+                <Card className="flex-1">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base">สัดส่วนยูนิต</CardTitle>
                   </CardHeader>
@@ -263,7 +263,7 @@ const Index = () => {
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="flex-1">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base">% ยอดชำระ</CardTitle>
                   </CardHeader>
@@ -303,7 +303,7 @@ const Index = () => {
               </div>
 
               {/* Middle Column - Horizontal Bar Chart */}
-              <Card>
+              <Card className="h-full">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">สถานะลูกค้า</CardTitle>
                 </CardHeader>
@@ -328,8 +328,8 @@ const Index = () => {
               </Card>
 
               {/* Right Column - Area Charts */}
-              <div className="space-y-6">
-                <Card>
+              <div className="flex flex-col gap-6">
+                <Card className="flex-1">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base">Customer / Lead</CardTitle>
                   </CardHeader>
@@ -347,7 +347,7 @@ const Index = () => {
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="flex-1">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base">การจอง / ยกเลิก</CardTitle>
                   </CardHeader>

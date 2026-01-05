@@ -1,5 +1,4 @@
-import { Search, Bell, Globe, Menu, Settings, LogOut, Crown, Shield, Briefcase, Eye } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Bell, Menu, Settings, LogOut, Sun, Sunrise, Sunset, Moon, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -7,13 +6,10 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
-import TenantSwitcher from "@/components/tenants/TenantSwitcher";
-import { usePermissions, ManageSettingsGuard, ManageUsersGuard } from "@/components/auth/PermissionGuard";
-import { CompanyLogo } from "@/components/company/CompanyLogo";
+import { useState, useEffect } from "react";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -21,8 +17,17 @@ interface HeaderProps {
 
 const Header = ({ onMenuClick }: HeaderProps) => {
   const navigate = useNavigate();
-  const { user, signOut, userRole, userProfile } = useSimpleAuth();
-  const { isOwner, isAdmin, isSales } = usePermissions();
+  const { user, signOut, userProfile } = useSimpleAuth();
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Update time every minute
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every 1 minute
+
+    return () => clearInterval(timer);
+  }, []);
 
   const handleSignOut = async () => {
     await signOut();
@@ -40,33 +45,61 @@ const Header = ({ onMenuClick }: HeaderProps) => {
     return userProfile?.full_name || user?.email || 'User';
   };
 
-  const getRoleIcon = () => {
-    switch (userRole) {
-      case 'owner':
-        return <Crown className="w-4 h-4 text-yellow-600" />;
-      case 'admin':
-        return <Shield className="w-4 h-4 text-blue-600" />;
-      case 'sales':
-        return <Briefcase className="w-4 h-4 text-green-600" />;
-      case 'viewer':
-        return <Eye className="w-4 h-4 text-gray-600" />;
-      default:
-        return null;
+  // Get greeting based on time of day
+  const getTimeBasedGreeting = () => {
+    const hour = currentTime.getHours();
+
+    if (hour >= 5 && hour < 12) {
+      return {
+        text: "สวัสดีตอนเช้า",
+        icon: Sunrise,
+        gradient: "from-amber-400 via-orange-400 to-yellow-500"
+      };
+    } else if (hour >= 12 && hour < 17) {
+      return {
+        text: "สวัสดีตอนบ่าย",
+        icon: Sun,
+        gradient: "from-orange-400 via-amber-500 to-yellow-600"
+      };
+    } else if (hour >= 17 && hour < 20) {
+      return {
+        text: "สวัสดีตอนเย็น",
+        icon: Sunset,
+        gradient: "from-purple-400 via-pink-500 to-red-500"
+      };
+    } else {
+      return {
+        text: "สวัสดีตอนดึก",
+        icon: Moon,
+        gradient: "from-indigo-500 via-purple-600 to-blue-700"
+      };
     }
   };
 
-  const getRoleLabel = () => {
-    switch (userRole) {
-      case 'owner': return 'เจ้าของ';
-      case 'admin': return 'ผู้ดูแล';
-      case 'sales': return 'พนักงานขาย';
-      case 'viewer': return 'ผู้ชม';
-      default: return 'ผู้ใช้';
-    }
+  // Format date in Thai
+  const getFormattedDate = () => {
+    const options: Intl.DateTimeFormatOptions = {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    };
+    return currentTime.toLocaleDateString('th-TH', options);
   };
+
+  // Format time
+  const getFormattedTime = () => {
+    return currentTime.toLocaleTimeString('th-TH', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const greeting = getTimeBasedGreeting();
+  const GreetingIcon = greeting.icon;
 
   return (
-    <header className="h-16 bg-[#F0F8FD] border-b border-border flex items-center justify-between px-6">
+    <header className="h-20 bg-gradient-to-r from-[#F0F8FD] via-[#E8F4FD] to-[#F0F8FD] border-b border-border flex items-center justify-between px-6 shadow-sm">
       {/* Left Side */}
       <div className="flex items-center gap-4">
         <Button
@@ -78,39 +111,31 @@ const Header = ({ onMenuClick }: HeaderProps) => {
           <Menu className="w-5 h-5" />
         </Button>
 
-        {/* Company Logo */}
-        <CompanyLogo size="2xl" className="hidden sm:block" />
-
-        <h1 className="text-2xl font-bold text-foreground hidden sm:block">Dashboard</h1>
-
-        {/* Tenant Switcher */}
-        <TenantSwitcher />
+        <div className="hidden sm:block">
+          {/* Greeting with animated gradient */}
+          <div className="flex items-center gap-3 mb-1">
+            <div className={`p-2 rounded-lg bg-gradient-to-br ${greeting.gradient} shadow-md animate-pulse`}>
+              <GreetingIcon className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-foreground">
+                {greeting.text}คุณ <span className="gradient-primary-text">{getUserName()}</span>
+              </h1>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                <div className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  <span>{getFormattedDate()}</span>
+                </div>
+                <span>•</span>
+                <span className="font-semibold text-[#676AF1]">{getFormattedTime()}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Right Side */}
       <div className="flex items-center gap-4">
-        {/* Search */}
-        <div className="relative hidden md:block">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search..."
-            className="pl-10 w-64 bg-secondary border-0"
-          />
-        </div>
-
-        {/* Language Switcher */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative">
-              <Globe className="w-5 h-5 text-muted-foreground" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem>🇺🇸 English</DropdownMenuItem>
-            <DropdownMenuItem>🇹🇭 ไทย</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
         {/* Notifications */}
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="w-5 h-5 text-muted-foreground" />
@@ -138,14 +163,14 @@ const Header = ({ onMenuClick }: HeaderProps) => {
 
             <DropdownMenuItem onClick={() => navigate('/settings')}>
               <Settings className="w-4 h-4 mr-2" />
-              แก้ไขโปรไฟล์
+              การตั้งค่า
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />
 
             <DropdownMenuItem onClick={handleSignOut} className="text-red-600 hover:text-red-700">
               <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
+              ออกจากระบบ
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

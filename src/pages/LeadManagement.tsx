@@ -6,6 +6,7 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import AddLeadModal from '@/components/leads/AddLeadModal';
 import EditLeadModal from '@/components/leads/EditLeadModal';
+import PaymentModal from '@/components/leads/PaymentModal';
 import {
   Card,
   CardContent,
@@ -63,7 +64,8 @@ import {
   XCircle,
   Trash2,
   AlertTriangle,
-  Target
+  Target,
+  CreditCard
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -201,6 +203,8 @@ const LeadManagement = () => {
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedLeadForPayment, setSelectedLeadForPayment] = useState<Lead | null>(null);
 
   // Form state
   const [leadForm, setLeadForm] = useState({
@@ -1054,6 +1058,13 @@ const LeadManagement = () => {
                               CDP
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => {
+                              setSelectedLeadForPayment(lead);
+                              setShowPaymentModal(true);
+                            }}>
+                              <CreditCard className="w-4 h-4 mr-2 text-green-600" />
+                              การโอนเงิน
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => {
                               setSelectedLead(lead);
                               fetchLeadInterests(lead.id);
                               setShowDetailDialog(true);
@@ -1417,6 +1428,19 @@ const LeadManagement = () => {
           }}
           lead={editingLead}
         />
+
+        {/* Payment Modal */}
+        {selectedLeadForPayment && (
+          <PaymentModal
+            isOpen={showPaymentModal}
+            onClose={() => {
+              setShowPaymentModal(false);
+              setSelectedLeadForPayment(null);
+            }}
+            leadId={selectedLeadForPayment.id}
+            leadName={getCustomerName(selectedLeadForPayment.customer_id)}
+          />
+        )}
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

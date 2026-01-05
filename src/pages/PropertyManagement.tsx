@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
-import { AdminGuard } from '@/components/auth/PermissionGuard';
+import { ViewPropertiesGuard, ManagePropertiesGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import {
@@ -63,9 +63,11 @@ import {
   Home,
   Layers,
   User,
+  Users,
   ImagePlus,
   X,
-  Upload
+  Upload,
+  UserPlus
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -75,6 +77,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/lib/supabase';
 import CreateProjectModal from '@/components/properties/CreateProjectModal';
+import AddLeadModal from '@/components/leads/AddLeadModal';
 
 interface Property {
   id: string;
@@ -140,10 +143,13 @@ const PropertyManagement = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showUnitDetailDialog, setShowUnitDetailDialog] = useState(false);
   const [showDeleteUnitDialog, setShowDeleteUnitDialog] = useState(false);
+  const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
   const [viewingUnit, setViewingUnit] = useState<Unit | null>(null);
   const [deletingUnit, setDeletingUnit] = useState<Unit | null>(null);
+  const [selectedUnitForLead, setSelectedUnitForLead] = useState<{ propertyId: string; propertyName: string; unitId: string; unitNumber: string } | null>(null);
+  const [unitLeads, setUnitLeads] = useState<any[]>([]);
 
   // Form states
   const [propertyForm, setPropertyForm] = useState({
@@ -615,10 +621,71 @@ const PropertyManagement = () => {
     setShowUnitDialog(true);
   };
 
+  // Fetch leads interested in a specific unit
+  const fetchUnitLeads = async (unitId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('lead_interests')
+        .select(`
+          *,
+          leads:lead_id (
+            id,
+            status,
+            source,
+            notes,
+            created_at,
+            customers:customer_id (
+              id,
+              full_name,
+              email,
+              phone
+            ),
+            users:assigned_to (
+              id,
+              full_name,
+              email
+            )
+          )
+        `)
+        .eq('unit_id', unitId)
+        .eq('tenant_id', currentTenant?.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setUnitLeads(data || []);
+    } catch (err) {
+      console.error('Error fetching unit leads:', err);
+      setUnitLeads([]);
+    }
+  };
+
   // Handle view unit details
-  const handleViewUnit = (unit: Unit) => {
+  const handleViewUnit = async (unit: Unit) => {
     setViewingUnit(unit);
     setShowUnitDetailDialog(true);
+    // Fetch leads for this unit
+    await fetchUnitLeads(unit.id);
+  };
+
+  // Handle add lead from unit
+  const handleAddLeadFromUnit = (unit: Unit) => {
+    if (!selectedProperty) return;
+
+    setSelectedUnitForLead({
+      propertyId: selectedProperty.id,
+      propertyName: selectedProperty.name,
+      unitId: unit.id,
+      unitNumber: unit.unit_number
+    });
+    setShowAddLeadModal(true);
+  };
+
+  // Handle lead created - navigate to leads page
+  const handleLeadCreated = () => {
+    setShowAddLeadModal(false);
+    setSelectedUnitForLead(null);
+    navigate('/leads');
   };
 
   // Handle delete unit confirmation
@@ -779,7 +846,7 @@ const PropertyManagement = () => {
       <div className="lg:ml-[260px] min-h-screen">
         <Header onMenuClick={() => setSidebarOpen(true)} />
         <main className="p-6">
-          <AdminGuard>
+          <ViewPropertiesGuard>
             <div className="space-y-6">
               {/* Header */}
               <Card className="bg-gradient-to-r from-violet-50 to-purple-50 border-violet-100">
@@ -796,16 +863,18 @@ const PropertyManagement = () => {
                         </p>
                       </div>
                     </div>
-                    <Button
-                      onClick={() => {
-                        setEditingProperty(null);
-                        setShowPropertyDialog(true);
-                      }}
-                      className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      เพิ่มโครงการใหม่
-                    </Button>
+                    <ManagePropertiesGuard fallback={null} showMessage={false}>
+                      <Button
+                        onClick={() => {
+                          setEditingProperty(null);
+                          setShowPropertyDialog(true);
+                        }}
+                        className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        เพิ่มโครงการใหม่
+                      </Button>
+                    </ManagePropertiesGuard>
                   </div>
                 </CardContent>
               </Card>
@@ -1016,19 +1085,21 @@ const PropertyManagement = () => {
                       {selectedProperty.address?.district || '-'} {selectedProperty.address?.province ? `, ${selectedProperty.address.province}` : ''}
                     </CardDescription>
                   </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => {
-                      setEditingProperty(selectedProperty);
-                      setShowPropertyDialog(true);
-                    }}>
-                      <Edit className="w-4 h-4 mr-2" />
-                      แก้ไข
-                    </Button>
-                    <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      ลบ
-                    </Button>
-                  </div>
+                  <ManagePropertiesGuard fallback={null} showMessage={false}>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => {
+                        setEditingProperty(selectedProperty);
+                        setShowPropertyDialog(true);
+                      }}>
+                        <Edit className="w-4 h-4 mr-2" />
+                        แก้ไข
+                      </Button>
+                      <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        ลบ
+                      </Button>
+                    </div>
+                  </ManagePropertiesGuard>
                 </div>
               </CardHeader>
               <CardContent>
@@ -1109,13 +1180,15 @@ const PropertyManagement = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <Button onClick={() => {
-                resetUnitForm();
-                setShowUnitDialog(true);
-              }}>
-                <Plus className="w-4 h-4 mr-2" />
-                เพิ่มยูนิตใหม่
-              </Button>
+              <ManagePropertiesGuard fallback={null} showMessage={false}>
+                <Button onClick={() => {
+                  resetUnitForm();
+                  setShowUnitDialog(true);
+                }}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  เพิ่มยูนิตใหม่
+                </Button>
+              </ManagePropertiesGuard>
             </div>
 
             {/* Units Table */}
@@ -1169,17 +1242,23 @@ const PropertyManagement = () => {
                                   <Eye className="w-4 h-4 mr-2" />
                                   ดูรายละเอียด
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleEditUnit(unit)}>
-                                  <Edit className="w-4 h-4 mr-2" />
-                                  แก้ไข
+                                <DropdownMenuItem onClick={() => handleAddLeadFromUnit(unit)}>
+                                  <UserPlus className="w-4 h-4 mr-2" />
+                                  เพิ่ม Lead ใหม่
                                 </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => handleDeleteUnitClick(unit)}
-                                  className="text-red-600 focus:text-red-600"
-                                >
-                                  <Trash2 className="w-4 h-4 mr-2" />
-                                  ลบ
-                                </DropdownMenuItem>
+                                <ManagePropertiesGuard fallback={null} showMessage={false}>
+                                  <DropdownMenuItem onClick={() => handleEditUnit(unit)}>
+                                    <Edit className="w-4 h-4 mr-2" />
+                                    แก้ไข
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => handleDeleteUnitClick(unit)}
+                                    className="text-red-600 focus:text-red-600"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    ลบ
+                                  </DropdownMenuItem>
+                                </ManagePropertiesGuard>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>
@@ -1474,111 +1553,275 @@ const PropertyManagement = () => {
 
         {/* Unit Detail Dialog */}
         <Dialog open={showUnitDetailDialog} onOpenChange={setShowUnitDetailDialog}>
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="sm:max-w-[950px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-xl">
-                รายละเอียดยูนิต {viewingUnit?.unit_number}
-              </DialogTitle>
-              <DialogDescription>
-                {selectedProperty?.name}
-              </DialogDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <DialogTitle className="text-2xl font-bold gradient-primary-text">
+                    ยูนิต {viewingUnit?.unit_number}
+                  </DialogTitle>
+                  <DialogDescription className="text-base mt-1">
+                    {selectedProperty?.name}
+                  </DialogDescription>
+                </div>
+                {viewingUnit && getUnitStatusBadge(viewingUnit.status)}
+              </div>
             </DialogHeader>
             {viewingUnit && (
-              <div className="space-y-6 py-4">
-                {/* Status Badge */}
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">สถานะ:</span>
-                  {getUnitStatusBadge(viewingUnit.status)}
-                </div>
-
+              <div className="space-y-5 py-2">
                 {/* Images */}
                 {viewingUnit.images && viewingUnit.images.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium mb-2">รูปภาพ</h4>
-                    <div className="grid grid-cols-3 gap-2">
-                      {viewingUnit.images.map((img, index) => (
-                        <img
-                          key={index}
-                          src={img}
-                          alt={`Unit image ${index + 1}`}
-                          className="w-full h-24 object-cover rounded-lg"
-                        />
-                      ))}
-                    </div>
-                  </div>
+                  <Card className="overflow-hidden border-2">
+                    <CardHeader className="bg-gradient-to-r from-blue-50 to-purple-50 pb-3">
+                      <CardTitle className="text-base font-semibold text-[#676AF1]">
+                        รูปภาพยูนิต
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <div className="grid grid-cols-3 gap-3">
+                        {viewingUnit.images.map((img, index) => (
+                          <img
+                            key={index}
+                            src={img}
+                            alt={`Unit image ${index + 1}`}
+                            className="w-full h-32 object-cover rounded-lg border-2 border-gray-100 hover:border-[#676AF1] transition-all cursor-pointer shadow-sm"
+                          />
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
                 )}
 
-                {/* Basic Info */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <h4 className="text-sm font-medium text-muted-foreground">เลขที่ยูนิต</h4>
-                    <p className="text-lg font-semibold">{viewingUnit.unit_number}</p>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-medium text-muted-foreground">ชั้น</h4>
-                    <p className="text-lg font-semibold">{viewingUnit.floor_number || '-'}</p>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-medium text-muted-foreground">พื้นที่ใช้สอย</h4>
-                    <p className="text-lg font-semibold">{viewingUnit.area_sqm ? `${viewingUnit.area_sqm} ตร.ม.` : '-'}</p>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-medium text-muted-foreground">ราคา</h4>
-                    <p className="text-lg font-semibold text-green-600">{formatCurrency(viewingUnit.price)}</p>
-                  </div>
-                </div>
+                {/* Basic Information */}
+                <Card className="border-2">
+                  <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 pb-3">
+                    <CardTitle className="text-base font-semibold text-green-700 flex items-center gap-2">
+                      <Building2 className="w-5 h-5" />
+                      ข้อมูลพื้นฐาน
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-3 bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-lg">
+                        <p className="text-xs font-medium text-blue-700 mb-1">เลขที่ยูนิต</p>
+                        <p className="text-xl font-bold text-blue-900">{viewingUnit.unit_number}</p>
+                      </div>
+                      <div className="p-3 bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-lg">
+                        <p className="text-xs font-medium text-purple-700 mb-1">ชั้น</p>
+                        <p className="text-xl font-bold text-purple-900">{viewingUnit.floor_number || '-'}</p>
+                      </div>
+                      <div className="p-3 bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-lg">
+                        <p className="text-xs font-medium text-orange-700 mb-1">พื้นที่ใช้สอย</p>
+                        <p className="text-xl font-bold text-orange-900">{viewingUnit.area_sqm ? `${viewingUnit.area_sqm} ตร.ม.` : '-'}</p>
+                      </div>
+                      <div className="p-3 bg-gradient-to-br from-green-50 to-green-100/50 rounded-lg">
+                        <p className="text-xs font-medium text-green-700 mb-1">ราคา</p>
+                        <p className="text-xl font-bold text-green-900">{formatCurrency(viewingUnit.price)}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
                 {/* Room Details */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                    <Bed className="w-5 h-5 text-gray-500" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">ห้องนอน</p>
-                      <p className="font-semibold">{viewingUnit.bedrooms}</p>
+                <Card className="border-2">
+                  <CardHeader className="bg-gradient-to-r from-indigo-50 to-blue-50 pb-3">
+                    <CardTitle className="text-base font-semibold text-indigo-700 flex items-center gap-2">
+                      <Home className="w-5 h-5" />
+                      รายละเอียดห้อง
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-pink-50 to-pink-100/50 rounded-lg border border-pink-200">
+                        <div className="p-2 bg-white rounded-lg">
+                          <Bed className="w-6 h-6 text-pink-600" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-pink-700">ห้องนอน</p>
+                          <p className="text-2xl font-bold text-pink-900">{viewingUnit.bedrooms}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-cyan-50 to-cyan-100/50 rounded-lg border border-cyan-200">
+                        <div className="p-2 bg-white rounded-lg">
+                          <Bath className="w-6 h-6 text-cyan-600" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-cyan-700">ห้องน้ำ</p>
+                          <p className="text-2xl font-bold text-cyan-900">{viewingUnit.bathrooms}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-amber-50 to-amber-100/50 rounded-lg border border-amber-200">
+                        <div className="p-2 bg-white rounded-lg">
+                          <Square className="w-6 h-6 text-amber-600" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-amber-700">ราคา/ตร.ม.</p>
+                          <p className="text-lg font-bold text-amber-900">{viewingUnit.price_per_sqm ? formatCurrency(viewingUnit.price_per_sqm) : '-'}</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                    <Bath className="w-5 h-5 text-gray-500" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">ห้องน้ำ</p>
-                      <p className="font-semibold">{viewingUnit.bathrooms}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                    <Square className="w-5 h-5 text-gray-500" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">ราคา/ตร.ม.</p>
-                      <p className="font-semibold">{viewingUnit.price_per_sqm ? formatCurrency(viewingUnit.price_per_sqm) : '-'}</p>
-                    </div>
-                  </div>
-                </div>
 
-                {/* Additional Info */}
-                {viewingUnit.layout_description && (
-                  <div>
-                    <h4 className="text-sm font-medium text-muted-foreground mb-1">รายละเอียดเพิ่มเติม</h4>
-                    <p className="text-sm bg-gray-50 p-3 rounded-lg">{viewingUnit.layout_description}</p>
-                  </div>
-                )}
+                    {/* Additional Info */}
+                    {viewingUnit.layout_description && (
+                      <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <p className="text-xs font-semibold text-slate-700 mb-2">รายละเอียดเพิ่มเติม</p>
+                        <p className="text-sm text-slate-600 leading-relaxed">{viewingUnit.layout_description}</p>
+                      </div>
+                    )}
 
-                {/* Features */}
-                <div className="flex flex-wrap gap-2">
-                  {viewingUnit.balcony && (
-                    <Badge variant="secondary">มีระเบียง</Badge>
-                  )}
-                  {viewingUnit.garden && (
-                    <Badge variant="secondary">มีสวน</Badge>
-                  )}
-                  {viewingUnit.pool && (
-                    <Badge variant="secondary">มีสระว่ายน้ำ</Badge>
-                  )}
-                  {viewingUnit.facing_direction && (
-                    <Badge variant="outline">ทิศ {viewingUnit.facing_direction}</Badge>
-                  )}
-                  {viewingUnit.building && (
-                    <Badge variant="outline">อาคาร {viewingUnit.building}</Badge>
-                  )}
-                </div>
+                    {/* Features */}
+                    {(viewingUnit.balcony || viewingUnit.garden || viewingUnit.pool || viewingUnit.facing_direction || viewingUnit.building) && (
+                      <div className="mt-4">
+                        <p className="text-xs font-semibold text-slate-700 mb-2">คุณสมบัติพิเศษ</p>
+                        <div className="flex flex-wrap gap-2">
+                          {viewingUnit.balcony && (
+                            <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-200">มีระเบียง</Badge>
+                          )}
+                          {viewingUnit.garden && (
+                            <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-200">มีสวน</Badge>
+                          )}
+                          {viewingUnit.pool && (
+                            <Badge variant="secondary" className="bg-cyan-100 text-cyan-800 hover:bg-cyan-200">มีสระว่ายน้ำ</Badge>
+                          )}
+                          {viewingUnit.facing_direction && (
+                            <Badge variant="outline" className="border-purple-300 text-purple-700">ทิศ {viewingUnit.facing_direction}</Badge>
+                          )}
+                          {viewingUnit.building && (
+                            <Badge variant="outline" className="border-orange-300 text-orange-700">อาคาร {viewingUnit.building}</Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Leads Interested in This Unit */}
+                <Card className="border-2">
+                  <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base font-semibold text-purple-700 flex items-center gap-2">
+                        <Users className="w-5 h-5" />
+                        Leads ที่สนใจยูนิตนี้
+                      </CardTitle>
+                      <Badge variant="secondary" className="bg-purple-100 text-purple-800">
+                        {unitLeads.length} รายการ
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    {unitLeads.length > 0 ? (
+                      <div className="border-2 rounded-lg overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] hover:from-[#676AF1] hover:to-[#8B5CF6]">
+                              <TableHead className="text-white font-semibold">ชื่อลูกค้า</TableHead>
+                              <TableHead className="text-white font-semibold">เบอร์โทร</TableHead>
+                              <TableHead className="text-white font-semibold">สถานะ</TableHead>
+                              <TableHead className="text-white font-semibold">ระดับความสนใจ</TableHead>
+                              <TableHead className="text-white font-semibold">พนักงานขาย</TableHead>
+                              <TableHead className="text-white font-semibold text-center">ดูข้อมูล</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {unitLeads.map((leadInterest: any) => {
+                              const lead = leadInterest.leads;
+                              const customer = lead?.customers;
+                              const assignedUser = lead?.users;
+
+                              return (
+                                <TableRow key={leadInterest.id} className="hover:bg-purple-50/50">
+                                  <TableCell className="font-medium">
+                                    <div>
+                                      <p className="font-semibold text-foreground">{customer?.full_name || '-'}</p>
+                                      {customer?.email && (
+                                        <p className="text-xs text-muted-foreground mt-0.5">{customer.email}</p>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-sm">
+                                    {customer?.phone || '-'}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge
+                                      variant={
+                                        leadInterest.status === 'interested' ? 'default' :
+                                        leadInterest.status === 'contacted' ? 'secondary' :
+                                        leadInterest.status === 'viewing_scheduled' ? 'outline' :
+                                        leadInterest.status === 'negotiating' ? 'outline' :
+                                        leadInterest.status === 'reserved' ? 'default' :
+                                        leadInterest.status === 'purchased' ? 'default' :
+                                        'secondary'
+                                      }
+                                      className={
+                                        leadInterest.status === 'interested' ? 'bg-blue-100 text-blue-800' :
+                                        leadInterest.status === 'contacted' ? 'bg-purple-100 text-purple-800' :
+                                        leadInterest.status === 'viewing_scheduled' ? 'bg-yellow-100 text-yellow-800' :
+                                        leadInterest.status === 'negotiating' ? 'bg-orange-100 text-orange-800' :
+                                        leadInterest.status === 'reserved' ? 'bg-indigo-100 text-indigo-800' :
+                                        leadInterest.status === 'purchased' ? 'bg-green-100 text-green-800' :
+                                        ''
+                                      }
+                                    >
+                                      {leadInterest.status === 'interested' && 'สนใจ'}
+                                      {leadInterest.status === 'contacted' && 'ติดต่อแล้ว'}
+                                      {leadInterest.status === 'viewing_scheduled' && 'นัดชม'}
+                                      {leadInterest.status === 'negotiating' && 'เจรจา'}
+                                      {leadInterest.status === 'reserved' && 'จอง'}
+                                      {leadInterest.status === 'purchased' && 'ซื้อแล้ว'}
+                                      {leadInterest.status === 'lost' && 'เสียโอกาส'}
+                                      {!['interested', 'contacted', 'viewing_scheduled', 'negotiating', 'reserved', 'purchased', 'lost'].includes(leadInterest.status) && leadInterest.status}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge
+                                      variant="outline"
+                                      className={
+                                        leadInterest.interest_level === 'high' ? 'bg-red-50 text-red-700 border-red-300 font-semibold' :
+                                        leadInterest.interest_level === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-300 font-semibold' :
+                                        leadInterest.interest_level === 'low' ? 'bg-gray-50 text-gray-700 border-gray-300' :
+                                        ''
+                                      }
+                                    >
+                                      {leadInterest.interest_level === 'high' && '⭐ สูง'}
+                                      {leadInterest.interest_level === 'medium' && '⭐ กลาง'}
+                                      {leadInterest.interest_level === 'low' && '⭐ ต่ำ'}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="text-sm font-medium text-foreground">
+                                      {assignedUser?.full_name || assignedUser?.email || '-'}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex justify-center">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-[#676AF1] hover:text-[#8B5CF6] hover:bg-purple-50"
+                                        onClick={() => {
+                                          navigate(`/leads/${lead?.id}/cdp`);
+                                        }}
+                                        title="ดูข้อมูล CDP"
+                                      >
+                                        <Eye className="w-4 h-4" />
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    ) : (
+                      <div className="text-center py-10 bg-gradient-to-br from-gray-50 to-slate-50 rounded-lg border-2 border-dashed border-gray-300">
+                        <User className="w-16 h-16 mx-auto mb-3 text-gray-300" />
+                        <p className="text-sm font-medium text-muted-foreground">ยังไม่มี Lead ที่สนใจยูนิตนี้</p>
+                        <p className="text-xs text-muted-foreground mt-1">เมื่อมีผู้สนใจจะแสดงที่นี่</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             )}
             <DialogFooter>
@@ -1619,8 +1862,20 @@ const PropertyManagement = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Add Lead Modal */}
+        <AddLeadModal
+          isOpen={showAddLeadModal}
+          onClose={() => {
+            setShowAddLeadModal(false);
+            setSelectedUnitForLead(null);
+          }}
+          onLeadCreated={handleLeadCreated}
+          initialPropertyId={selectedUnitForLead?.propertyId}
+          initialUnitId={selectedUnitForLead?.unitId}
+        />
             </div>
-          </AdminGuard>
+          </ViewPropertiesGuard>
         </main>
       </div>
     </div>

@@ -86,6 +86,8 @@ interface AddLeadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onLeadCreated: () => void;
+  initialPropertyId?: string;
+  initialUnitId?: string;
 }
 
 // Options
@@ -160,7 +162,7 @@ const CONSENT_OPTIONS = [
   { value: "no_consent", label: "ไม่ยินยอม" },
 ];
 
-const AddLeadModal = ({ isOpen, onClose, onLeadCreated }: AddLeadModalProps) => {
+const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initialUnitId }: AddLeadModalProps) => {
   const { currentTenant } = useSimpleAuth();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -238,6 +240,50 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated }: AddLeadModalProps) => 
       resetForm();
     }
   }, [isOpen]);
+
+  // Auto-populate interest when initialPropertyId and initialUnitId are provided
+  useEffect(() => {
+    if (isOpen && initialPropertyId && initialUnitId && properties.length > 0) {
+      // Find property and unit details
+      const property = properties.find(p => p.id === initialPropertyId);
+
+      if (property) {
+        // Fetch units for this property
+        const fetchInitialUnit = async () => {
+          try {
+            const { data, error } = await supabase
+              .from('units')
+              .select('id, unit_number, project_id, status, price')
+              .eq('id', initialUnitId)
+              .single();
+
+            if (error) throw error;
+
+            if (data) {
+              // Add the interest automatically
+              const newItem: InterestItem = {
+                id: `temp-${Date.now()}`,
+                property_id: initialPropertyId,
+                unit_id: initialUnitId,
+                status: "interested",
+                interest_level: "medium",
+                notes: "",
+                property_name: property.name,
+                unit_number: data.unit_number,
+                unit_price: data.price,
+              };
+
+              setInterests([newItem]);
+            }
+          } catch (err) {
+            console.error('Error fetching initial unit:', err);
+          }
+        };
+
+        fetchInitialUnit();
+      }
+    }
+  }, [isOpen, initialPropertyId, initialUnitId, properties]);
 
   // Fetch districts when province changes
   useEffect(() => {

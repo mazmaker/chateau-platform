@@ -13,7 +13,8 @@ export type Permission =
   | 'manage_customers'
   | 'manage_properties'
   | 'manage_leads'
-  | 'view_all_tenants';
+  | 'view_all_tenants'
+  | 'view_properties';
 
 interface PermissionGuardProps {
   children: React.ReactNode;
@@ -41,7 +42,8 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'manage_billing',
     'manage_properties',
     'manage_leads',
-    'view_all_tenants' // Platform Owner can see all tenants
+    'view_all_tenants', // Platform Owner can see all tenants
+    'view_properties'
   ],
   [UserRole.ADMIN]: [
     'read',
@@ -51,14 +53,16 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'manage_settings',
     'manage_properties',
     'manage_leads',
-    'manage_customers'
+    'manage_customers',
+    'view_properties'
     // Admins CANNOT: manage_billing, view_all_tenants
   ],
   [UserRole.SALES]: [
     'read',
     'write',
     'manage_customers',
-    'manage_leads'
+    'manage_leads',
+    'view_properties' // Sales can VIEW properties (read-only)
     // Sales CANNOT: delete, manage_users, manage_settings, manage_properties, manage_billing
   ]
 };
@@ -167,8 +171,14 @@ export const ManageBillingGuard: React.FC<{ children: React.ReactNode; fallback?
   </PermissionGuard>
 );
 
-export const ManagePropertiesGuard: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> = ({ children, fallback }) => (
-  <PermissionGuard requiredPermission="manage_properties" fallback={fallback}>
+export const ManagePropertiesGuard: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode; showMessage?: boolean }> = ({ children, fallback, showMessage }) => (
+  <PermissionGuard requiredPermission="manage_properties" fallback={fallback} showMessage={showMessage}>
+    {children}
+  </PermissionGuard>
+);
+
+export const ViewPropertiesGuard: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode; showMessage?: boolean }> = ({ children, fallback, showMessage }) => (
+  <PermissionGuard requiredPermission="view_properties" fallback={fallback} showMessage={showMessage}>
     {children}
   </PermissionGuard>
 );
@@ -233,6 +243,7 @@ export const usePermissions = () => {
     canManageLeads: checkPermission('manage_leads'),
     canManageCustomers: checkPermission('manage_customers'),
     canViewAllTenants: checkPermission('view_all_tenants'),
+    canViewProperties: checkPermission('view_properties'),
 
     // Role checks
     isOwner: userRole === UserRole.OWNER,

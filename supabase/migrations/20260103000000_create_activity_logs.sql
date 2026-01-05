@@ -72,6 +72,9 @@ $$;
 GRANT SELECT ON public.activity_logs TO authenticated;
 GRANT EXECUTE ON FUNCTION public.log_activity TO service_role;
 
+-- Drop existing function if signature is different
+DROP FUNCTION IF EXISTS public.get_recent_activities(INT);
+
 -- Function to get activity logs with tenant names (for owner dashboard)
 CREATE OR REPLACE FUNCTION public.get_recent_activities(limit_count INT DEFAULT 10)
 RETURNS TABLE (

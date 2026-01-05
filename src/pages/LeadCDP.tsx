@@ -660,8 +660,8 @@ const LeadCDP = () => {
               <CardContent className="p-6 flex-1 flex flex-col justify-center">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Chart */}
-                  <div className="h-48">
-                    <ResponsiveContainer width="100%" height="100%">
+                  <div className="h-48 min-h-[192px]">
+                    <ResponsiveContainer width="100%" height="100%" minHeight={192}>
                       <BarChart data={loanComparisonData} layout="vertical">
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis type="number" tickFormatter={(v) => `${(v/1000000).toFixed(1)}M`} />
@@ -732,8 +732,8 @@ const LeadCDP = () => {
               <CardContent className="p-6 flex-1 flex flex-col justify-center">
                 {/* Gauge Chart */}
                 <div className="flex flex-col items-center mb-4">
-                  <div className="h-36 w-full relative">
-                    <ResponsiveContainer width="100%" height="100%">
+                  <div className="h-36 min-h-[144px] w-full relative">
+                    <ResponsiveContainer width="100%" height="100%" minHeight={144}>
                       <RadialBarChart
                         cx="50%"
                         cy="100%"
