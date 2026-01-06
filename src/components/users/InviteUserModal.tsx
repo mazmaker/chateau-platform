@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { X, Mail, User, Shield, Crown, Send, Building2 } from "lucide-react";
+import { X, Mail, User, Shield, Crown, Send, Building2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent } from "@/components/ui/card";
 import { UserRole } from "@/lib/database-types";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
 import { supabase } from "@/lib/supabase";
@@ -203,170 +204,223 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-semibold text-gray-900">
-            {isAdmin ? 'เพิ่มพนักงานขายใหม่' : 'เชิญผู้ใช้ใหม่'}
-          </h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-[#676AF1]/10 via-[#8B5CF6]/10 to-[#676AF1]/10 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-br from-[#676AF1] to-[#8B5CF6] rounded-xl shadow-md">
+              <UserPlus className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">
+                {isAdmin ? 'เพิ่มพนักงานขายใหม่' : 'เชิญผู้ใช้ใหม่'}
+              </h2>
+              <p className="text-xs text-gray-500">กรอกข้อมูลเพื่อเพิ่มผู้ใช้เข้าสู่ระบบ</p>
+            </div>
+          </div>
           <button
             onClick={handleClose}
             disabled={loading}
-            className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6">
-          {/* Email */}
-          <div className="mb-4">
-            <Label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-              <Mail className="w-4 h-4 inline mr-1" />
-              อีเมล
-            </Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="user@example.com"
-              required
-              disabled={loading}
-            />
-          </div>
+        {/* Form Content - Scrollable */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
+          <div className="p-6 space-y-5">
 
-          {/* Full Name */}
-          <div className="mb-4">
-            <Label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-2">
-              <User className="w-4 h-4 inline mr-1" />
-              ชื่อ-นามสกุล
-            </Label>
-            <Input
-              id="fullName"
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="สมชาย ใจดี"
-              required
-              disabled={loading}
-            />
-          </div>
-
-          {/* Tenant - Only for Owner */}
-          {isOwner && (
-            <div className="mb-4">
-              <Label htmlFor="tenant" className="block text-sm font-medium text-gray-700 mb-2">
-                <Building2 className="w-4 h-4 inline mr-1" />
-                บริษัท
-              </Label>
-              <Select
-                value={selectedTenantId}
-                onValueChange={setSelectedTenantId}
-                disabled={loading || loadingTenants}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={loadingTenants ? "กำลังโหลด..." : "เลือกบริษัท"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {tenants.map((tenant) => (
-                    <SelectItem key={tenant.id} value={tenant.id}>
-                      {tenant.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Role */}
-          <div className="mb-4">
-            <Label className="block text-sm font-medium text-gray-700 mb-2">
-              <Shield className="w-4 h-4 inline mr-1" />
-              ตำแหน่ง
-            </Label>
-            <Select value={role} onValueChange={(value: UserRole) => setRole(value)} disabled={loading || isAdmin}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {/* ADMIN can only add SALES users, OWNER can add all roles */}
-                {!isAdmin && (
-                  <>
-                    <SelectItem value={UserRole.OWNER}>
-                      <div className="flex items-center gap-2">
-                        <Crown className="w-4 h-4 text-yellow-600" />
-                        เจ้าของบริษัท - สิทธิ์สูงสุด
-                      </div>
-                    </SelectItem>
-                    <SelectItem value={UserRole.ADMIN}>
-                      <div className="flex items-center gap-2">
-                        <Shield className="w-4 h-4" />
-                        แอดมิน - จัดการผู้ใช้และระบบ
-                      </div>
-                    </SelectItem>
-                  </>
-                )}
-                <SelectItem value={UserRole.SALES}>
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4" />
-                    พนักงานขาย - จัดการลูกค้าและโครงการ
+            {/* Section 1: ข้อมูลพื้นฐาน - Blue */}
+            <Card className="border-2 border-blue-100 shadow-sm">
+              <CardContent className="p-0">
+                <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-blue-100/50 border-b border-blue-100">
+                  <div className="p-1.5 bg-blue-500 rounded-lg">
+                    <User className="w-3.5 h-3.5 text-white" />
                   </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            {isAdmin && (
-              <p className="text-xs text-gray-500 mt-1">
-                * แอดมินสามารถเพิ่มได้เฉพาะตำแหน่งพนักงานขาย
-              </p>
+                  <div>
+                    <h3 className="font-semibold text-blue-900 text-sm">ข้อมูลพื้นฐาน</h3>
+                    <p className="text-xs text-blue-600">อีเมลและชื่อผู้ใช้</p>
+                  </div>
+                </div>
+                <div className="p-4 space-y-4">
+                  <div>
+                    <Label htmlFor="email" className="text-sm font-medium flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5 text-blue-500" />
+                      อีเมล <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="user@example.com"
+                      required
+                      disabled={loading}
+                      className="mt-1.5"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="fullName" className="text-sm font-medium flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-blue-500" />
+                      ชื่อ-นามสกุล <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="fullName"
+                      type="text"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="สมชาย ใจดี"
+                      required
+                      disabled={loading}
+                      className="mt-1.5"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Section 2: บริษัท (สำหรับ Owner) - Green */}
+            {isOwner && (
+              <Card className="border-2 border-green-100 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-green-50 to-green-100/50 border-b border-green-100">
+                    <div className="p-1.5 bg-green-500 rounded-lg">
+                      <Building2 className="w-3.5 h-3.5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-green-900 text-sm">บริษัท</h3>
+                      <p className="text-xs text-green-600">เลือกบริษัทที่ผู้ใช้สังกัด</p>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <Label htmlFor="tenant" className="text-sm font-medium">
+                      บริษัท <span className="text-red-500">*</span>
+                    </Label>
+                    <Select
+                      value={selectedTenantId}
+                      onValueChange={setSelectedTenantId}
+                      disabled={loading || loadingTenants}
+                    >
+                      <SelectTrigger className="mt-1.5">
+                        <SelectValue placeholder={loadingTenants ? "กำลังโหลด..." : "เลือกบริษัท"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tenants.map((tenant) => (
+                          <SelectItem key={tenant.id} value={tenant.id}>
+                            {tenant.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
             )}
-          </div>
 
-          {/* Error Message */}
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-600">{error}</p>
+            {/* Section 3: ตำแหน่ง - Purple */}
+            <Card className="border-2 border-purple-100 shadow-sm">
+              <CardContent className="p-0">
+                <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-purple-50 to-purple-100/50 border-b border-purple-100">
+                  <div className="p-1.5 bg-purple-500 rounded-lg">
+                    <Shield className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-purple-900 text-sm">ตำแหน่ง</h3>
+                    <p className="text-xs text-purple-600">กำหนดสิทธิ์การใช้งาน</p>
+                  </div>
+                </div>
+                <div className="p-4">
+                  <Label className="text-sm font-medium">
+                    ตำแหน่ง <span className="text-red-500">*</span>
+                  </Label>
+                  <Select value={role} onValueChange={(value: UserRole) => setRole(value)} disabled={loading || isAdmin}>
+                    <SelectTrigger className="mt-1.5">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {/* ADMIN can only add SALES users, OWNER can add all roles */}
+                      {!isAdmin && (
+                        <>
+                          <SelectItem value={UserRole.OWNER}>
+                            <div className="flex items-center gap-2">
+                              <Crown className="w-4 h-4 text-yellow-600" />
+                              เจ้าของบริษัท - สิทธิ์สูงสุด
+                            </div>
+                          </SelectItem>
+                          <SelectItem value={UserRole.ADMIN}>
+                            <div className="flex items-center gap-2">
+                              <Shield className="w-4 h-4 text-blue-600" />
+                              แอดมิน - จัดการผู้ใช้และระบบ
+                            </div>
+                          </SelectItem>
+                        </>
+                      )}
+                      <SelectItem value={UserRole.SALES}>
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-green-600" />
+                          พนักงานขาย - จัดการลูกค้าและโครงการ
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {isAdmin && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      * แอดมินสามารถเพิ่มได้เฉพาะตำแหน่งพนักงานขาย
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Error Message */}
+            {error && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+                <p className="text-sm text-red-600 font-medium">{error}</p>
+              </div>
+            )}
+
+            {/* Info Box */}
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+              <p className="text-sm text-blue-800">
+                <strong>ข้อมูล:</strong> ผู้ใช้จะได้รับอีเมลเชิญพร้อมคำแนะนำในการเข้าใช้งาน
+              </p>
             </div>
-          )}
-
-          {/* Info Box */}
-          <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-800">
-              <strong>ข้อมูล:</strong> ผู้ใช้จะได้รับอีเมลเชิญพร้อมคำแนะนำในการเข้าใช้งาน
-            </p>
-          </div>
-
-          {/* Buttons */}
-          <div className="flex gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleClose}
-              disabled={loading}
-              className="flex-1"
-            >
-              ยกเลิก
-            </Button>
-            <Button
-              type="submit"
-              disabled={loading}
-              className="flex-1"
-            >
-              {loading ? (
-                <div className="flex items-center justify-center">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                  กำลังส่ง...
-                </div>
-              ) : (
-                <div className="flex items-center justify-center">
-                  <Send className="w-4 h-4 mr-2" />
-                  ส่งคำเชิญ
-                </div>
-              )}
-            </Button>
           </div>
         </form>
+
+        {/* Footer - Fixed at bottom */}
+        <div className="flex gap-3 px-6 py-4 border-t bg-gray-50 flex-shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleClose}
+            disabled={loading}
+            className="flex-1"
+          >
+            ยกเลิก
+          </Button>
+          <Button
+            type="submit"
+            onClick={handleSubmit}
+            disabled={loading}
+            className="flex-1 bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] hover:opacity-90"
+          >
+            {loading ? (
+              <div className="flex items-center justify-center">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                กำลังส่ง...
+              </div>
+            ) : (
+              <div className="flex items-center justify-center">
+                <Send className="w-4 h-4 mr-2" />
+                ส่งคำเชิญ
+              </div>
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );

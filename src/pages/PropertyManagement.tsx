@@ -67,7 +67,14 @@ import {
   ImagePlus,
   X,
   Upload,
-  UserPlus
+  UserPlus,
+  DollarSign,
+  ImageIcon,
+  Ruler,
+  FileText,
+  Settings,
+  Save,
+  AlertTriangle
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -1290,264 +1297,445 @@ const PropertyManagement = () => {
 
         {/* Unit Dialog */}
         <Dialog open={showUnitDialog} onOpenChange={setShowUnitDialog}>
-          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {editingUnit ? 'แก้ไขยูนิต' : 'เพิ่มยูนิตใหม่'}
-              </DialogTitle>
-              <DialogDescription>
-                {selectedProperty?.name} - กรอกข้อมูลยูนิต
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-6 py-4">
-              {/* Row 1: Unit Number and Floor */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="unit_number">เลขที่ยูนิต *</Label>
-                  <Input
-                    id="unit_number"
-                    value={unitForm.unit_number}
-                    onChange={(e) => setUnitForm({ ...unitForm, unit_number: e.target.value })}
-                    placeholder="เช่น A101"
-                    required
-                  />
+          <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-hidden p-0 flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-[#676AF1]/10 via-[#8B5CF6]/10 to-[#676AF1]/10 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gradient-to-br from-[#676AF1] to-[#8B5CF6] rounded-xl shadow-md">
+                  <Home className="w-5 h-5 text-white" />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="floor">เลขที่ชั้น (คอนโด)</Label>
-                  <Input
-                    id="floor"
-                    type="number"
-                    value={unitForm.floor}
-                    onChange={(e) => setUnitForm({ ...unitForm, floor: e.target.value })}
-                    placeholder="เช่น 15"
-                  />
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">
+                    {editingUnit ? 'แก้ไขยูนิต' : 'เพิ่มยูนิตใหม่'}
+                  </h2>
+                  <p className="text-xs text-gray-500">{selectedProperty?.name}</p>
                 </div>
-              </div>
-
-              {/* Row 2: Price */}
-              <div className="space-y-2">
-                <Label htmlFor="unit_price">ราคา (฿) *</Label>
-                <Input
-                  id="unit_price"
-                  type="number"
-                  value={unitForm.price}
-                  onChange={(e) => setUnitForm({ ...unitForm, price: e.target.value })}
-                  placeholder="2500000"
-                  required
-                />
-              </div>
-
-              {/* Row 3: Thumbnail Upload */}
-              <div>
-                <h3 className="text-base font-medium text-gray-900 mb-2">รูป Thumbnail</h3>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                  {unitForm.thumbnail_preview ? (
-                    <div className="relative inline-block">
-                      <img
-                        src={unitForm.thumbnail_preview}
-                        alt="Thumbnail preview"
-                        className="w-48 h-32 object-cover rounded-lg"
-                      />
-                      <button
-                        type="button"
-                        onClick={removeThumbnail}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="flex flex-col items-center cursor-pointer py-4">
-                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
-                      <span className="text-sm text-gray-500">คลิกเพื่ออัปโหลดรูป Thumbnail</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleThumbnailChange}
-                        className="hidden"
-                      />
-                    </label>
-                  )}
-                </div>
-              </div>
-
-              {/* Row 4: Image Gallery */}
-              <div>
-                <h3 className="text-base font-medium text-gray-900 mb-2">รูปยูนิต (Gallery)</h3>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                  <div className="grid grid-cols-4 gap-3 mb-3">
-                    {unitForm.image_previews.map((preview, index) => (
-                      <div key={index} className="relative">
-                        <img
-                          src={preview}
-                          alt={`Gallery ${index + 1}`}
-                          className="w-full h-24 object-cover rounded-lg"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeImage(index)}
-                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                    <label className="flex flex-col items-center justify-center cursor-pointer border-2 border-dashed border-gray-300 rounded-lg h-24 hover:border-gray-400">
-                      <ImagePlus className="w-6 h-6 text-gray-400" />
-                      <span className="text-xs text-gray-500 mt-1">เพิ่มรูป</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={handleImagesChange}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 5: Areas */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="size_sqm">พื้นที่ใช้สอย (ตร.ม.)</Label>
-                  <Input
-                    id="size_sqm"
-                    type="number"
-                    step="0.01"
-                    value={unitForm.size_sqm}
-                    onChange={(e) => setUnitForm({ ...unitForm, size_sqm: e.target.value })}
-                    placeholder="เช่น 45.5"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="land_area_sqw">พื้นที่ดิน (ตร.ว.)</Label>
-                  <Input
-                    id="land_area_sqw"
-                    type="number"
-                    step="0.01"
-                    value={unitForm.land_area_sqw}
-                    onChange={(e) => setUnitForm({ ...unitForm, land_area_sqw: e.target.value })}
-                    placeholder="เช่น 50"
-                  />
-                </div>
-              </div>
-
-              {/* Row 6: Rooms */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="unit_bedrooms">จำนวนห้องนอน</Label>
-                  <Input
-                    id="unit_bedrooms"
-                    type="number"
-                    min="0"
-                    value={unitForm.bedrooms}
-                    onChange={(e) => setUnitForm({ ...unitForm, bedrooms: e.target.value })}
-                    placeholder="เช่น 2"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="unit_bathrooms">จำนวนห้องน้ำ</Label>
-                  <Input
-                    id="unit_bathrooms"
-                    type="number"
-                    min="0"
-                    value={unitForm.bathrooms}
-                    onChange={(e) => setUnitForm({ ...unitForm, bathrooms: e.target.value })}
-                    placeholder="เช่น 2"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="floor_count">จำนวนชั้น</Label>
-                  <Input
-                    id="floor_count"
-                    type="number"
-                    min="1"
-                    value={unitForm.floor_count}
-                    onChange={(e) => setUnitForm({ ...unitForm, floor_count: e.target.value })}
-                    placeholder="เช่น 2"
-                  />
-                </div>
-              </div>
-
-              {/* Row 7: Description */}
-              <div className="space-y-2">
-                <Label htmlFor="description">ข้อมูลเพิ่มเติม</Label>
-                <Textarea
-                  id="description"
-                  value={unitForm.description}
-                  onChange={(e) => setUnitForm({ ...unitForm, description: e.target.value })}
-                  placeholder="รายละเอียดเพิ่มเติมของยูนิต..."
-                  rows={3}
-                />
-              </div>
-
-              {/* Row 8: Status */}
-              <div className="space-y-2">
-                <Label htmlFor="unit_status">สถานะ</Label>
-                <Select
-                  value={unitForm.status}
-                  onValueChange={(value: any) => setUnitForm({ ...unitForm, status: value })}
-                >
-                  <SelectTrigger id="unit_status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="available">ว่าง</SelectItem>
-                    <SelectItem value="reserved">จอง</SelectItem>
-                    <SelectItem value="sold">ขายแล้ว</SelectItem>
-                    <SelectItem value="unavailable">ไม่ว่าง</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
-            <DialogFooter>
+
+            {/* Form Content - Scrollable */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+
+              {/* Section 1: ข้อมูลพื้นฐาน */}
+              <Card className="border-2 border-blue-100 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-blue-100/50 border-b border-blue-100">
+                    <div className="p-1.5 bg-blue-500 rounded-lg">
+                      <Home className="w-3.5 h-3.5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-blue-900 text-sm">ข้อมูลพื้นฐาน</h3>
+                      <p className="text-xs text-blue-600">เลขที่ยูนิต ชั้น และราคา</p>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <Label htmlFor="unit_number" className="text-sm font-medium">เลขที่ยูนิต <span className="text-red-500">*</span></Label>
+                        <Input
+                          id="unit_number"
+                          value={unitForm.unit_number}
+                          onChange={(e) => setUnitForm({ ...unitForm, unit_number: e.target.value })}
+                          placeholder="เช่น A101"
+                          required
+                          className="mt-1.5"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="floor" className="text-sm font-medium">เลขที่ชั้น</Label>
+                        <Input
+                          id="floor"
+                          type="number"
+                          value={unitForm.floor}
+                          onChange={(e) => setUnitForm({ ...unitForm, floor: e.target.value })}
+                          placeholder="เช่น 15"
+                          className="mt-1.5"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="unit_price" className="text-sm font-medium">ราคา (฿) <span className="text-red-500">*</span></Label>
+                        <Input
+                          id="unit_price"
+                          type="number"
+                          value={unitForm.price}
+                          onChange={(e) => setUnitForm({ ...unitForm, price: e.target.value })}
+                          placeholder="เช่น 2,500,000"
+                          required
+                          className="mt-1.5"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Section 2: รูปภาพ */}
+              <Card className="border-2 border-purple-100 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-purple-50 to-purple-100/50 border-b border-purple-100">
+                    <div className="p-1.5 bg-purple-500 rounded-lg">
+                      <ImageIcon className="w-3.5 h-3.5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-purple-900 text-sm">รูปภาพยูนิต</h3>
+                      <p className="text-xs text-purple-600">รูป Thumbnail และ Gallery</p>
+                    </div>
+                  </div>
+                  <div className="p-4 space-y-4">
+                    {/* Thumbnail */}
+                    <div>
+                      <Label className="text-sm font-medium mb-2 block">รูป Thumbnail (รูปหลัก)</Label>
+                      <div className="border-2 border-dashed border-purple-200 rounded-xl p-3 bg-purple-50/30 hover:bg-purple-50/50 transition-colors">
+                        {unitForm.thumbnail_preview ? (
+                          <div className="flex items-center gap-4">
+                            <div className="relative">
+                              <img
+                                src={unitForm.thumbnail_preview}
+                                alt="Thumbnail preview"
+                                className="w-32 h-24 object-cover rounded-lg shadow-md"
+                              />
+                              <button
+                                type="button"
+                                onClick={removeThumbnail}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-md"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              <p className="font-medium text-green-600">อัปโหลดสำเร็จ</p>
+                              <p className="text-xs text-gray-500">คลิกที่ปุ่ม X เพื่อลบ</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <label className="flex flex-col items-center cursor-pointer py-4">
+                            <div className="p-2 bg-purple-100 rounded-full mb-2">
+                              <Upload className="w-5 h-5 text-purple-500" />
+                            </div>
+                            <span className="text-sm font-medium text-purple-700">คลิกเพื่ออัปโหลดรูป Thumbnail</span>
+                            <span className="text-xs text-gray-500 mt-1">PNG, JPG ขนาดแนะนำ 800x600 px</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleThumbnailChange}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Gallery */}
+                    <div>
+                      <Label className="text-sm font-medium mb-2 block">รูป Gallery (รูปเพิ่มเติม)</Label>
+                      <div className="border-2 border-dashed border-purple-200 rounded-xl p-3 bg-purple-50/30">
+                        <div className="grid grid-cols-5 gap-2">
+                          {unitForm.image_previews.map((preview, index) => (
+                            <div key={index} className="relative group">
+                              <img
+                                src={preview}
+                                alt={`Gallery ${index + 1}`}
+                                className="w-full h-20 object-cover rounded-lg shadow-sm"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeImage(index)}
+                                className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                          <label className="flex flex-col items-center justify-center cursor-pointer border-2 border-dashed border-purple-300 rounded-lg h-20 hover:border-purple-400 hover:bg-purple-50 transition-colors">
+                            <Plus className="w-4 h-4 text-purple-400" />
+                            <span className="text-xs text-purple-500 mt-0.5">เพิ่มรูป</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              onChange={handleImagesChange}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Section 3: พื้นที่ */}
+              <Card className="border-2 border-green-100 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-green-50 to-green-100/50 border-b border-green-100">
+                    <div className="p-1.5 bg-green-500 rounded-lg">
+                      <Ruler className="w-3.5 h-3.5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-green-900 text-sm">ขนาดพื้นที่</h3>
+                      <p className="text-xs text-green-600">พื้นที่ใช้สอยและพื้นที่ดิน</p>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="size_sqm" className="text-sm font-medium">พื้นที่ใช้สอย (ตร.ม.)</Label>
+                        <Input
+                          id="size_sqm"
+                          type="number"
+                          step="0.01"
+                          value={unitForm.size_sqm}
+                          onChange={(e) => setUnitForm({ ...unitForm, size_sqm: e.target.value })}
+                          placeholder="เช่น 45.5"
+                          className="mt-1.5"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="land_area_sqw" className="text-sm font-medium">พื้นที่ดิน (ตร.ว.)</Label>
+                        <Input
+                          id="land_area_sqw"
+                          type="number"
+                          step="0.01"
+                          value={unitForm.land_area_sqw}
+                          onChange={(e) => setUnitForm({ ...unitForm, land_area_sqw: e.target.value })}
+                          placeholder="เช่น 50"
+                          className="mt-1.5"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Section 4: ห้อง */}
+              <Card className="border-2 border-orange-100 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-orange-50 to-orange-100/50 border-b border-orange-100">
+                    <div className="p-1.5 bg-orange-500 rounded-lg">
+                      <Bed className="w-3.5 h-3.5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-orange-900 text-sm">จำนวนห้อง</h3>
+                      <p className="text-xs text-orange-600">ห้องนอน ห้องน้ำ และชั้น</p>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <Label htmlFor="unit_bedrooms" className="text-sm font-medium flex items-center gap-1.5">
+                          <Bed className="w-3.5 h-3.5 text-orange-500" />
+                          ห้องนอน
+                        </Label>
+                        <Input
+                          id="unit_bedrooms"
+                          type="number"
+                          min="0"
+                          value={unitForm.bedrooms}
+                          onChange={(e) => setUnitForm({ ...unitForm, bedrooms: e.target.value })}
+                          placeholder="เช่น 2"
+                          className="mt-1.5"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="unit_bathrooms" className="text-sm font-medium flex items-center gap-1.5">
+                          <Bath className="w-3.5 h-3.5 text-orange-500" />
+                          ห้องน้ำ
+                        </Label>
+                        <Input
+                          id="unit_bathrooms"
+                          type="number"
+                          min="0"
+                          value={unitForm.bathrooms}
+                          onChange={(e) => setUnitForm({ ...unitForm, bathrooms: e.target.value })}
+                          placeholder="เช่น 2"
+                          className="mt-1.5"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="floor_count" className="text-sm font-medium flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-orange-500" />
+                          จำนวนชั้น
+                        </Label>
+                        <Input
+                          id="floor_count"
+                          type="number"
+                          min="1"
+                          value={unitForm.floor_count}
+                          onChange={(e) => setUnitForm({ ...unitForm, floor_count: e.target.value })}
+                          placeholder="เช่น 2"
+                          className="mt-1.5"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Section 5: รายละเอียดและสถานะ */}
+              <Card className="border-2 border-gray-200 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-gray-50 to-gray-100/50 border-b border-gray-200">
+                    <div className="p-1.5 bg-gray-600 rounded-lg">
+                      <FileText className="w-3.5 h-3.5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 text-sm">รายละเอียดและสถานะ</h3>
+                      <p className="text-xs text-gray-600">ข้อมูลเพิ่มเติมและสถานะยูนิต</p>
+                    </div>
+                  </div>
+                  <div className="p-4 space-y-4">
+                    <div>
+                      <Label htmlFor="description" className="text-sm font-medium">ข้อมูลเพิ่มเติม</Label>
+                      <Textarea
+                        id="description"
+                        value={unitForm.description}
+                        onChange={(e) => setUnitForm({ ...unitForm, description: e.target.value })}
+                        placeholder="รายละเอียดเพิ่มเติมของยูนิต เช่น วิวสวย ห้องมุม ฯลฯ"
+                        rows={2}
+                        className="mt-1.5"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="unit_status" className="text-sm font-medium">สถานะยูนิต</Label>
+                      <Select
+                        value={unitForm.status}
+                        onValueChange={(value: any) => setUnitForm({ ...unitForm, status: value })}
+                      >
+                        <SelectTrigger id="unit_status" className="mt-1.5">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="available">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                              ว่าง
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="reserved">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                              จอง
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="sold">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                              ขายแล้ว
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="unavailable">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-gray-500"></span>
+                              ไม่ว่าง
+                            </span>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Footer - Fixed at bottom */}
+            <div className="flex gap-3 px-6 py-4 border-t bg-gray-50 flex-shrink-0">
               <Button
                 variant="outline"
                 onClick={() => setShowUnitDialog(false)}
                 disabled={savingUnit}
+                className="flex-1"
               >
                 ยกเลิก
               </Button>
               <Button
                 onClick={handleSaveUnit}
                 disabled={!unitForm.unit_number || !unitForm.price || savingUnit}
+                className="flex-1 bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] hover:opacity-90"
               >
                 {savingUnit ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="flex items-center justify-center">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
                     กำลังบันทึก...
                   </div>
                 ) : (
-                  editingUnit ? 'บันทึก' : 'เพิ่มยูนิต'
+                  <div className="flex items-center justify-center">
+                    <Save className="w-4 h-4 mr-2" />
+                    {editingUnit ? 'บันทึกการแก้ไข' : 'เพิ่มยูนิต'}
+                  </div>
                 )}
               </Button>
-            </DialogFooter>
+            </div>
           </DialogContent>
         </Dialog>
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>ยืนยันการลบโครงการ</DialogTitle>
-              <DialogDescription>
-                คุณต้องการลบโครงการ "{selectedProperty?.name}" ใช่หรือไม่?
-                <br /><br />
-                <span className="text-red-600 font-medium">
-                  การกระทำนี้จะลบข้อมูลยูนิตและข้อมูลอื่นๆ ทั้งหมดของโครงการนี้
-                  และไม่สามารถกู้คืนได้
-                </span>
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+          <DialogContent className="sm:max-w-[450px] p-0 overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
+                  <AlertTriangle className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-bold text-white">
+                    ยืนยันการลบโครงการ
+                  </DialogTitle>
+                  <DialogDescription className="text-purple-100 text-sm mt-0.5">
+                    การดำเนินการนี้ไม่สามารถย้อนกลับได้
+                  </DialogDescription>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <Card className="border-2 border-purple-100 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100">
+                    <div className="p-1.5 bg-purple-500 rounded-lg">
+                      <Building2 className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-purple-900 text-sm">โครงการที่จะลบ</h3>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <p className="text-lg font-medium text-gray-800">
+                      {selectedProperty?.name}
+                    </p>
+                    <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                        <p className="text-sm text-red-700">
+                          การลบโครงการนี้จะลบข้อมูลยูนิตและข้อมูลที่เกี่ยวข้องทั้งหมด
+                          <strong> ไม่สามารถกู้คืนได้</strong>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 px-6 py-4 border-t bg-gray-50">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteDialog(false)}
+                className="flex-1"
+              >
                 ยกเลิก
               </Button>
-              <Button variant="destructive" onClick={handleDeleteProperty}>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteProperty}
+                className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
                 ลบโครงการ
               </Button>
-            </DialogFooter>
+            </div>
           </DialogContent>
         </Dialog>
 
@@ -1841,25 +2029,72 @@ const PropertyManagement = () => {
 
         {/* Delete Unit Confirmation Dialog */}
         <Dialog open={showDeleteUnitDialog} onOpenChange={setShowDeleteUnitDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>ยืนยันการลบยูนิต</DialogTitle>
-              <DialogDescription>
-                คุณต้องการลบยูนิต "{deletingUnit?.unit_number}" ใช่หรือไม่?
-                <br /><br />
-                <span className="text-red-600 font-medium">
-                  การกระทำนี้ไม่สามารถกู้คืนได้
-                </span>
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowDeleteUnitDialog(false)}>
+          <DialogContent className="sm:max-w-[450px] p-0 overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
+                  <AlertTriangle className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-bold text-white">
+                    ยืนยันการลบยูนิต
+                  </DialogTitle>
+                  <DialogDescription className="text-purple-100 text-sm mt-0.5">
+                    การดำเนินการนี้ไม่สามารถย้อนกลับได้
+                  </DialogDescription>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <Card className="border-2 border-purple-100 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100">
+                    <div className="p-1.5 bg-purple-500 rounded-lg">
+                      <Home className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-purple-900 text-sm">ยูนิตที่จะลบ</h3>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <p className="text-lg font-medium text-gray-800">
+                      ยูนิต {deletingUnit?.unit_number}
+                    </p>
+                    <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                        <p className="text-sm text-red-700">
+                          การลบยูนิตนี้จะลบข้อมูลที่เกี่ยวข้องทั้งหมด
+                          <strong> ไม่สามารถกู้คืนได้</strong>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 px-6 py-4 border-t bg-gray-50">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteUnitDialog(false)}
+                className="flex-1"
+              >
                 ยกเลิก
               </Button>
-              <Button variant="destructive" onClick={handleDeleteUnit}>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteUnit}
+                className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
                 ลบยูนิต
               </Button>
-            </DialogFooter>
+            </div>
           </DialogContent>
         </Dialog>
 

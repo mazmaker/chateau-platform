@@ -1444,24 +1444,129 @@ const LeadManagement = () => {
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>ยืนยันการลบ Lead</DialogTitle>
-              <DialogDescription>
-                คุณต้องการลบ Lead "{leadToDelete ? getCustomerName(leadToDelete.customer_id) : ''}" ใช่หรือไม่?
-                <br /><br />
-                <span className="text-red-600 font-medium">
-                  การกระทำนี้ไม่สามารถกู้คืนได้
-                </span>
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={deleteLoading}>
-                ยกเลิก
-              </Button>
-              <Button variant="destructive" onClick={handleDeleteLead} disabled={deleteLoading}>
-                {deleteLoading ? 'กำลังลบ...' : 'ลบ Lead'}
-              </Button>
+          <DialogContent className="p-0 overflow-hidden max-w-md">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
+                  <AlertTriangle className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-bold text-white">
+                    ยืนยันการลบ Lead
+                  </DialogTitle>
+                  <DialogDescription className="text-purple-100 text-sm mt-0.5">
+                    การดำเนินการนี้ไม่สามารถย้อนกลับได้
+                  </DialogDescription>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              {/* Lead Info Card */}
+              <Card className="border-2 border-purple-100 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100">
+                    <div className="p-1.5 bg-purple-500 rounded-lg">
+                      <Users className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-purple-900">ข้อมูล Lead ที่จะลบ</h3>
+                      <p className="text-xs text-purple-600">ตรวจสอบข้อมูลก่อนดำเนินการ</p>
+                    </div>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    {/* Customer Name */}
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-gray-100 rounded-lg">
+                        <Users className="w-4 h-4 text-gray-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">ชื่อลูกค้า</p>
+                        <p className="font-medium text-gray-900">{leadToDelete ? getCustomerName(leadToDelete.customer_id) : '-'}</p>
+                      </div>
+                    </div>
+                    {/* Phone */}
+                    {leadToDelete && (
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-gray-100 rounded-lg">
+                          <Phone className="w-4 h-4 text-gray-600" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">เบอร์โทร</p>
+                          <p className="font-medium text-gray-900">
+                            {customers.find(c => c.id === leadToDelete.customer_id)?.phone || '-'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {/* Status */}
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-gray-100 rounded-lg">
+                        <Target className="w-4 h-4 text-gray-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">สถานะ</p>
+                        <p className="font-medium text-gray-900">
+                          {leadToDelete?.status === 'new' ? 'ใหม่' :
+                           leadToDelete?.status === 'contacted' ? 'ติดต่อแล้ว' :
+                           leadToDelete?.status === 'qualified' ? 'มีคุณสมบัติ' :
+                           leadToDelete?.status === 'proposal' ? 'เสนอขาย' :
+                           leadToDelete?.status === 'negotiation' ? 'เจรจา' :
+                           leadToDelete?.status === 'closed' ? 'ปิดการขาย' :
+                           leadToDelete?.status === 'lost' ? 'สูญเสีย' : '-'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Warning Box */}
+              <div className="p-4 bg-red-50 border-2 border-red-200 rounded-xl">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-red-800">คำเตือน</p>
+                    <p className="text-sm text-red-700 mt-1">
+                      การลบ Lead จะทำให้ข้อมูลลูกค้าและประวัติการติดตามหายไปทั้งหมด
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <DialogFooter className="px-6 py-4 border-t bg-gray-50">
+              <div className="flex gap-3 w-full">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDeleteDialog(false)}
+                  disabled={deleteLoading}
+                  className="flex-1 border-gray-300 hover:bg-gray-100"
+                >
+                  ยกเลิก
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteLead}
+                  disabled={deleteLoading}
+                  className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700"
+                >
+                  {deleteLoading ? (
+                    <div className="flex items-center justify-center">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                      กำลังลบ...
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center">
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      ลบ Lead
+                    </div>
+                  )}
+                </Button>
+              </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>

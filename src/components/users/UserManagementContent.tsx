@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Plus, User, Shield, ToggleLeft, ToggleRight, Trash2, Edit, UserPlus, Sparkles } from "lucide-react";
+import { Search, Plus, User, Shield, ToggleLeft, ToggleRight, Trash2, Edit, UserPlus, Sparkles, AlertTriangle, Mail } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -566,26 +566,110 @@ const UserManagementContent = () => {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {isAdmin ? 'ยืนยันการลบพนักงานขาย' : 'ยืนยันการลบผู้ใช้'}
-            </DialogTitle>
-            <DialogDescription>
-              คุณต้องการลบ "{deletingUser?.full_name || deletingUser?.email}" ใช่หรือไม่?
-              <br /><br />
-              <span className="text-red-600 font-medium">
-                การกระทำนี้ไม่สามารถกู้คืนได้
-              </span>
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
-              ยกเลิก
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteUser}>
-              {isAdmin ? 'ลบพนักงานขาย' : 'ลบผู้ใช้'}
-            </Button>
+        <DialogContent className="p-0 overflow-hidden max-w-md">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
+                <AlertTriangle className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl font-bold text-white">
+                  {isAdmin ? 'ยืนยันการลบพนักงานขาย' : 'ยืนยันการลบผู้ใช้'}
+                </DialogTitle>
+                <DialogDescription className="text-purple-100 text-sm mt-0.5">
+                  การดำเนินการนี้ไม่สามารถย้อนกลับได้
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="p-6 space-y-4">
+            {/* User Info Card */}
+            <Card className="border-2 border-purple-100 shadow-sm">
+              <CardContent className="p-0">
+                <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100">
+                  <div className="p-1.5 bg-purple-500 rounded-lg">
+                    <User className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-purple-900">ข้อมูลผู้ใช้ที่จะลบ</h3>
+                    <p className="text-xs text-purple-600">ตรวจสอบข้อมูลก่อนดำเนินการ</p>
+                  </div>
+                </div>
+                <div className="p-4 space-y-3">
+                  {/* User Name */}
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-gray-100 rounded-lg">
+                      <User className="w-4 h-4 text-gray-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">ชื่อ-นามสกุล</p>
+                      <p className="font-medium text-gray-900">{deletingUser?.full_name || '-'}</p>
+                    </div>
+                  </div>
+                  {/* Email */}
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-gray-100 rounded-lg">
+                      <Mail className="w-4 h-4 text-gray-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">อีเมล</p>
+                      <p className="font-medium text-gray-900">{deletingUser?.email}</p>
+                    </div>
+                  </div>
+                  {/* Role */}
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-gray-100 rounded-lg">
+                      <Shield className="w-4 h-4 text-gray-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">ตำแหน่ง</p>
+                      <p className="font-medium text-gray-900">
+                        {deletingUser?.role === 'admin' ? 'แอดมิน' :
+                         deletingUser?.role === 'sales' ? 'พนักงานขาย' :
+                         deletingUser?.role === 'owner' ? 'เจ้าของ' : '-'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Warning Box */}
+            <div className="p-4 bg-red-50 border-2 border-red-200 rounded-xl">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-red-800">คำเตือน</p>
+                  <p className="text-sm text-red-700 mt-1">
+                    การลบผู้ใช้จะทำให้ไม่สามารถเข้าถึงข้อมูลและกู้คืนได้อีก
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <DialogFooter className="px-6 py-4 border-t bg-gray-50">
+            <div className="flex gap-3 w-full">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteDialog(false)}
+                className="flex-1 border-gray-300 hover:bg-gray-100"
+              >
+                ยกเลิก
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteUser}
+                className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                {isAdmin ? 'ลบพนักงานขาย' : 'ลบผู้ใช้'}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
