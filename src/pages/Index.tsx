@@ -149,7 +149,7 @@ const Index = () => {
   const [selectedMonth, setSelectedMonth] = useState('มกราคม');
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="min-h-screen bg-background">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="lg:pl-[260px]">
@@ -157,12 +157,21 @@ const Index = () => {
 
         <main className="p-6 space-y-6">
           {/* Page Title */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">ภาพรวม</h1>
-              <p className="text-sm text-gray-500">Overview Dashboard</p>
-            </div>
-          </div>
+          <Card className="bg-gradient-to-r from-violet-50 to-purple-50 border-violet-100">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
+                    <TrendingUp className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-900">Overview Dashboard</h1>
+                    <p className="text-sm text-gray-500">ภาพรวมระบบ</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Filters */}
           <Card>
@@ -593,26 +602,46 @@ interface StatCardProps {
 }
 
 const StatCard = ({ icon: Icon, label, value, color }: StatCardProps) => {
-  const colorClasses = {
-    cyan: 'from-cyan-500 to-cyan-600',
-    purple: 'from-purple-500 to-purple-600',
-    pink: 'from-pink-500 to-pink-600',
-    orange: 'from-orange-500 to-orange-600',
-    teal: 'from-teal-500 to-teal-600',
-    blue: 'from-blue-500 to-blue-600',
-    gray: 'from-gray-500 to-gray-600',
+  const borderColors = {
+    cyan: 'border-l-cyan-500',
+    purple: 'border-l-purple-500',
+    pink: 'border-l-pink-500',
+    orange: 'border-l-orange-500',
+    teal: 'border-l-teal-500',
+    blue: 'border-l-blue-500',
+    gray: 'border-l-gray-500',
+  };
+
+  const bgColors = {
+    cyan: 'bg-cyan-100 text-cyan-600',
+    purple: 'bg-purple-100 text-purple-600',
+    pink: 'bg-pink-100 text-pink-600',
+    orange: 'bg-orange-100 text-orange-600',
+    teal: 'bg-teal-100 text-teal-600',
+    blue: 'bg-blue-100 text-blue-600',
+    gray: 'bg-gray-100 text-gray-600',
+  };
+
+  const textColors = {
+    cyan: 'text-cyan-600',
+    purple: 'text-purple-600',
+    pink: 'text-pink-600',
+    orange: 'text-orange-600',
+    teal: 'text-teal-600',
+    blue: 'text-blue-600',
+    gray: 'text-gray-600',
   };
 
   return (
-    <Card className={`bg-gradient-to-br ${colorClasses[color as keyof typeof colorClasses]} text-white`}>
+    <Card className={`border-l-4 ${borderColors[color as keyof typeof borderColors]}`}>
       <CardContent className="p-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+          <div className={`w-12 h-12 ${bgColors[color as keyof typeof bgColors]} rounded-xl flex items-center justify-center`}>
             <Icon className="w-6 h-6" />
           </div>
           <div>
             <p className="text-2xl font-bold">{value}</p>
-            <p className="text-xs text-white/80">{label}</p>
+            <p className="text-xs text-muted-foreground">{label}</p>
           </div>
         </div>
       </CardContent>

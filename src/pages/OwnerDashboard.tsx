@@ -376,15 +376,17 @@ const OwnerDashboard = () => {
               {/* Page Header */}
               <Card className="bg-gradient-to-r from-violet-50 to-purple-50 border-violet-100">
                 <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
-                      <TrendingUp className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <h1 className="text-2xl font-bold text-gray-900">Owner Dashboard</h1>
-                      <p className="text-gray-600 mt-1">
-                        ภาพรวมระบบ SaaS Platform - จัดการทั้งหมดจากที่เดียว
-                      </p>
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
+                        <TrendingUp className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h1 className="text-2xl font-bold text-gray-900">Owner Dashboard</h1>
+                        <p className="text-gray-600 mt-1">
+                          ภาพรวมระบบ SaaS Platform - จัดการทั้งหมดจากที่เดียว
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -393,18 +395,18 @@ const OwnerDashboard = () => {
         {/* Key Metrics */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {/* Monthly Recurring Revenue */}
-          <Card className="bg-gradient-to-br from-cyan-500 to-cyan-600 text-white border-0">
+          <Card className="border-l-4 border-l-cyan-500">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                  <DollarSign className="w-6 h-6" />
+                <div className="w-12 h-12 bg-cyan-100 rounded-xl flex items-center justify-center">
+                  <DollarSign className="w-6 h-6 text-cyan-600" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{formatCurrency(stats.monthlyRevenue)}</p>
-                  <p className="text-xs text-white/80">รายได้ต่อเดือน (MRR)</p>
+                  <p className="text-xs text-muted-foreground">รายได้ต่อเดือน (MRR)</p>
                 </div>
               </div>
-              <div className="mt-3 flex items-center gap-1 text-xs text-white/90">
+              <div className="mt-3 flex items-center gap-1 text-xs text-cyan-600">
                 <ArrowUpRight className="w-3 h-3" />
                 {stats.mrrGrowth}% จากเดือนที่แล้ว
               </div>
@@ -412,36 +414,36 @@ const OwnerDashboard = () => {
           </Card>
 
           {/* Annual Run Rate */}
-          <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0">
+          <Card className="border-l-4 border-l-purple-500">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6" />
+                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                  <TrendingUp className="w-6 h-6 text-purple-600" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{formatCurrency(stats.annualRunRate)}</p>
-                  <p className="text-xs text-white/80">รายได้ต่อปี (ARR)</p>
+                  <p className="text-xs text-muted-foreground">รายได้ต่อปี (ARR)</p>
                 </div>
               </div>
-              <div className="mt-3 text-xs text-white/90">
+              <div className="mt-3 text-xs text-muted-foreground">
                 คำนวณจาก MRR x 12
               </div>
             </CardContent>
           </Card>
 
           {/* Total Tenants */}
-          <Card className="bg-gradient-to-br from-pink-500 to-pink-600 text-white border-0">
+          <Card className="border-l-4 border-l-pink-500">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                  <Building2 className="w-6 h-6" />
+                <div className="w-12 h-12 bg-pink-100 rounded-xl flex items-center justify-center">
+                  <Building2 className="w-6 h-6 text-pink-600" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{stats.totalTenants}</p>
-                  <p className="text-xs text-white/80">บริษัททั้งหมด</p>
+                  <p className="text-xs text-muted-foreground">บริษัททั้งหมด</p>
                 </div>
               </div>
-              <div className="mt-3 flex items-center gap-2 text-xs text-white/90">
+              <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
                 <span>{stats.activeTenants} Active</span>
                 <span>•</span>
                 <span>{stats.trialTenants} Trial</span>
@@ -450,18 +452,18 @@ const OwnerDashboard = () => {
           </Card>
 
           {/* Total Users */}
-          <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white border-0">
+          <Card className="border-l-4 border-l-orange-500">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                  <Users className="w-6 h-6" />
+                <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+                  <Users className="w-6 h-6 text-orange-600" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{stats.totalUsers}</p>
-                  <p className="text-xs text-white/80">ผู้ใช้ทั้งหมด</p>
+                  <p className="text-xs text-muted-foreground">ผู้ใช้ทั้งหมด</p>
                 </div>
               </div>
-              <div className="mt-3 text-xs text-white/90">
+              <div className="mt-3 text-xs text-muted-foreground">
                 เฉลี่ย {stats.totalTenants > 0 ? Math.round(stats.totalUsers / stats.totalTenants) : 0} คน/บริษัท
               </div>
             </CardContent>

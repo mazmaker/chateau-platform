@@ -1,6 +1,8 @@
 -- Migration: Update user_role enum to match application requirements
 -- Date: 2025-01-22
--- Description: Change user roles from (owner, admin, manager, staff) to (owner, admin, sales, viewer)
+-- Description: Change user roles from (owner, admin, manager, staff) to (owner, admin, sales)
+-- NOTE: This migration is superseded by 20250122010000_update_to_3_roles.sql
+-- which removed the 'viewer' role entirely
 
 -- =====================================================
 -- STEP 1: Drop all RLS policies that depend on user_role
@@ -28,7 +30,7 @@ DROP POLICY IF EXISTS "Admins can delete bookings" ON bookings;
 -- STEP 2: Create new user_role type with desired values
 -- =====================================================
 
-CREATE TYPE user_role_new AS ENUM ('owner', 'admin', 'sales', 'viewer');
+CREATE TYPE user_role_new AS ENUM ('owner', 'admin', 'sales', 'viewer'); -- Note: viewer removed in next migration
 
 -- =====================================================
 -- STEP 3: Update the users table to use new roles
@@ -156,8 +158,8 @@ BEGIN
     IF existing_owner_count = 0 THEN
         NEW.role := 'owner';
     ELSE
-        -- Default new users to 'viewer' role
-        NEW.role := 'viewer';
+        -- Default new users to 'sales' role
+        NEW.role := 'sales';
     END IF;
 
     RETURN NEW;
