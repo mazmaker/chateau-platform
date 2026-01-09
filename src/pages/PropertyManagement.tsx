@@ -157,6 +157,7 @@ const PropertyManagement = () => {
   const [deletingUnit, setDeletingUnit] = useState<Unit | null>(null);
   const [selectedUnitForLead, setSelectedUnitForLead] = useState<{ propertyId: string; propertyName: string; unitId: string; unitNumber: string } | null>(null);
   const [unitLeads, setUnitLeads] = useState<any[]>([]);
+  const [minPrices, setMinPrices] = useState<Record<string, number>>({});
 
   // Form states
   const [propertyForm, setPropertyForm] = useState({
@@ -201,6 +202,14 @@ const PropertyManagement = () => {
       fetchUnits(selectedProperty.id);
     }
   }, [selectedProperty]);
+
+  // Fetch min prices when properties are loaded
+  useEffect(() => {
+    if (properties.length > 0) {
+      const propertyIds = properties.map(p => p.id);
+      fetchMinPrices(propertyIds);
+    }
+  }, [properties]);
 
   const fetchProperties = async () => {
     setLoading(true);
@@ -303,6 +312,50 @@ const PropertyManagement = () => {
       console.error('Error fetching units:', error);
       setUnits([]);
     }
+  };
+
+  // Fetch minimum prices from units for all properties
+  const fetchMinPrices = async (propertyIds: string[]) => {
+    if (!currentTenant || propertyIds.length === 0) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('units')
+        .select('project_id, price')
+        .eq('tenant_id', currentTenant.id)
+        .in('project_id', propertyIds)
+        .gt('price', 0);
+
+      if (error) {
+        console.error('Error fetching min prices:', error);
+        return;
+      }
+
+      // Group by project_id and find minimum price
+      const priceMap: Record<string, number> = {};
+      (data || []).forEach((unit: { project_id: string; price: number }) => {
+        if (!priceMap[unit.project_id] || unit.price < priceMap[unit.project_id]) {
+          priceMap[unit.project_id] = unit.price;
+        }
+      });
+
+      setMinPrices(priceMap);
+    } catch (error) {
+      console.error('Error fetching min prices:', error);
+    }
+  };
+
+  // Format price as abbreviated Thai Baht (e.g., 2.5 ล้านบาท)
+  const formatPriceShort = (amount?: number) => {
+    if (!amount) return "-";
+    if (amount >= 1000000) {
+      const millions = amount / 1000000;
+      return `${millions.toFixed(1)} ล้านบาท`;
+    } else if (amount >= 1000) {
+      const thousands = amount / 1000;
+      return `${thousands.toFixed(0)} พันบาท`;
+    }
+    return `${amount.toFixed(0)} บาท`;
   };
 
   const handleSaveProperty = async () => {
@@ -1062,7 +1115,7 @@ const PropertyManagement = () => {
                           <div className="flex items-center justify-between">
                             <span className="text-sm text-muted-foreground">ราคาเริ่มต้น</span>
                             <span className="text-lg font-bold text-green-600">
-                              {formatCurrency(property.base_price)}
+                              {formatPriceShort(minPrices[property.id] || property.base_price)}
                             </span>
                           </div>
                         </div>

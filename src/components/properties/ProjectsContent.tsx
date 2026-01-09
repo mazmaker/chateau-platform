@@ -10,13 +10,13 @@ import { useSimpleAuth } from "@/contexts/AuthContextSimple";
 import { supabase } from "@/lib/supabase";
 import { PropertyType } from "@/lib/database-types";
 import CreateProjectModal from "./CreateProjectModal";
-import EditProjectModal from "./EditProjectModal";
 
 interface Project {
   id: string;
   name: string;
   code?: string;
   description?: string;
+  type?: string;
   property_type: PropertyType;
   address: any;
   latitude?: number;
@@ -30,6 +30,17 @@ interface Project {
   price_max?: number;
   price_avg_per_sqm?: number;
   images: any[];
+  thumbnail_url?: string;
+  floor_count?: number;
+  has_facilities?: boolean;
+  province_id?: number;
+  district_id?: number;
+  sub_district_id?: number;
+  information_links?: {
+    sale_kit?: string;
+    fact_sheet?: string;
+    roi_calculator?: string;
+  };
   is_active: boolean;
   is_featured: boolean;
   created_at: string;
@@ -47,12 +58,15 @@ const ProjectsContent = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [minPrices, setMinPrices] = useState<Record<string, number>>({});
   const { currentTenant } = useSimpleAuth();
 
   useEffect(() => {
-    fetchProjects();
+    console.log('[ProjectsContent] useEffect triggered, currentTenant:', currentTenant?.id, currentTenant?.name);
+    if (currentTenant) {
+      fetchProjects();
+    }
   }, [currentTenant]);
 
   useEffect(() => {
@@ -62,15 +76,52 @@ const ProjectsContent = () => {
   const fetchProjects = async () => {
     if (!currentTenant) return;
 
+    console.log('[ProjectsContent] Fetching with tenant:', currentTenant.id, currentTenant.name);
+
     try {
+      // Fetch from properties table which has all the dropdown fields
       const { data, error } = await supabase
-        .from('projects')
+        .from('properties')
         .select('*')
         .eq('tenant_id', currentTenant.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+      console.log('[ProjectsContent] Properties count:', data?.length);
       setProjects(data || []);
+
+      // Fetch minimum prices for all projects from units table
+      if (data && data.length > 0) {
+        const projectIds = data.map(p => p.id);
+        console.log('[ProjectsContent] Fetching units for', projectIds.length, 'projects');
+
+        // Add tenant_id filter to comply with RLS policy
+        const { data: unitsData, error: unitsError } = await supabase
+          .from('units')
+          .select('project_id, price')
+          .eq('tenant_id', currentTenant.id)
+          .in('project_id', projectIds)
+          .order('price', { ascending: true });
+
+        console.log('[ProjectsContent] Units data:', unitsData?.length, 'items');
+        console.log('[ProjectsContent] Units error:', unitsError);
+
+        if (unitsError) {
+          console.error('Error fetching units:', unitsError);
+        }
+
+        if (unitsData && unitsData.length > 0) {
+          // Group by project_id and get minimum price
+          const priceMap: Record<string, number> = {};
+          unitsData.forEach(unit => {
+            if (!priceMap[unit.project_id] || unit.price < priceMap[unit.project_id]) {
+              priceMap[unit.project_id] = unit.price;
+            }
+          });
+          console.log('[ProjectsContent] Price map:', Object.keys(priceMap).length, 'projects with prices');
+          setMinPrices(priceMap);
+        }
+      }
     } catch (error) {
       console.error('Error fetching projects:', error);
     } finally {
@@ -90,9 +141,9 @@ const ProjectsContent = () => {
       );
     }
 
-    // Type filter
+    // Type filter (properties table uses 'type' column)
     if (typeFilter !== "all") {
-      filtered = filtered.filter(project => project.property_type === typeFilter);
+      filtered = filtered.filter(project => project.type === typeFilter || project.property_type === typeFilter);
     }
 
     // Status filter
@@ -107,12 +158,19 @@ const ProjectsContent = () => {
 
   const toggleProjectStatus = async (projectId: string, currentStatus: boolean) => {
     try {
+      // Update in properties table
       const { error } = await supabase
-        .from('projects')
+        .from('properties')
         .update({ is_active: !currentStatus })
         .eq('id', projectId);
 
       if (error) throw error;
+
+      // Also update in projects table
+      await supabase
+        .from('projects')
+        .update({ is_active: !currentStatus })
+        .eq('id', projectId);
 
       // Update local state
       setProjects(prev => prev.map(project =>
@@ -127,8 +185,15 @@ const ProjectsContent = () => {
     if (!confirm("คุณแน่ใจหรือไม่ว่าต้องการลบโครงการนี้?")) return;
 
     try {
-      const { error } = await supabase
+      // Delete from projects table first (due to foreign key constraint)
+      await supabase
         .from('projects')
+        .delete()
+        .eq('id', projectId);
+
+      // Delete from properties table
+      const { error } = await supabase
+        .from('properties')
         .delete()
         .eq('id', projectId);
 
@@ -141,16 +206,22 @@ const ProjectsContent = () => {
     }
   };
 
-  const getPropertyTypeLabel = (type: PropertyType) => {
-    const labels = {
+  const getPropertyTypeLabel = (type: string | PropertyType | undefined) => {
+    const labels: Record<string, string> = {
+      // From PropertyType enum
       [PropertyType.APARTMENT]: "คอนโด",
       [PropertyType.HOUSE]: "บ้านเดี่ยว",
       [PropertyType.VILLA]: "วิลล่า",
       [PropertyType.CONDO]: "คอนโดมิเนียม",
       [PropertyType.COMMERCIAL]: "พาณิชย์",
-      [PropertyType.TOWNHOUSE]: "ทาวน์เฮาส์"
+      [PropertyType.TOWNHOUSE]: "ทาวน์เฮาส์",
+      // From properties table type column
+      'single_house': "บ้านเดี่ยว",
+      'twin_house': "บ้านแฝด",
+      'townhome': "ทาวน์โฮม",
+      'condo': "คอนโด",
     };
-    return labels[type] || type;
+    return type ? (labels[type] || type) : "-";
   };
 
   const formatCurrency = (amount?: number) => {
@@ -161,6 +232,19 @@ const ProjectsContent = () => {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(amount);
+  };
+
+  // Format price as abbreviated Thai Baht (e.g., 2,500,000 -> 2.5 ล้านบาท)
+  const formatPriceShort = (amount?: number) => {
+    if (!amount) return "-";
+    if (amount >= 1000000) {
+      const millions = amount / 1000000;
+      return `${millions.toFixed(1)} ล้านบาท`;
+    } else if (amount >= 1000) {
+      const thousands = amount / 1000;
+      return `${thousands.toFixed(0)} พันบาท`;
+    }
+    return `${amount.toFixed(0)} บาท`;
   };
 
   if (loading) {
@@ -275,12 +359,10 @@ const ProjectsContent = () => {
               className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <option value="all">ทุกประเภท</option>
-              <option value={PropertyType.APARTMENT}>คอนโด</option>
-              <option value={PropertyType.HOUSE}>บ้านเดี่ยว</option>
-              <option value={PropertyType.VILLA}>วิลล่า</option>
-              <option value={PropertyType.CONDO}>คอนโดมิเนียม</option>
-              <option value={PropertyType.COMMERCIAL}>พาณิชย์</option>
-              <option value={PropertyType.TOWNHOUSE}>ทาวน์เฮาส์</option>
+              <option value="single_house">บ้านเดี่ยว</option>
+              <option value="twin_house">บ้านแฝด</option>
+              <option value="townhome">ทาวน์โฮม</option>
+              <option value="condo">คอนโด</option>
             </select>
 
             <select
@@ -341,7 +423,7 @@ const ProjectsContent = () => {
               <div className="space-y-2 mb-4">
                 <div className="flex items-center gap-2 text-sm">
                   <Home className="w-4 h-4 text-gray-400" />
-                  <span>{getPropertyTypeLabel(project.property_type)}</span>
+                  <span>{getPropertyTypeLabel(project.type || project.property_type)}</span>
                 </div>
                 {project.developer && (
                   <div className="flex items-center gap-2 text-sm">
@@ -363,8 +445,8 @@ const ProjectsContent = () => {
                   <p className="font-semibold">{project.total_units || "-"}</p>
                 </div>
                 <div>
-                  <p className="text-gray-600">ราคาเฉลี่ย/ตร.ม.</p>
-                  <p className="font-semibold">{formatCurrency(project.price_avg_per_sqm)}</p>
+                  <p className="text-gray-600">ราคาเริ่มต้น</p>
+                  <p className="font-semibold text-primary">{formatPriceShort(minPrices[project.id])}</p>
                 </div>
               </div>
 
@@ -383,8 +465,7 @@ const ProjectsContent = () => {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    setSelectedProject(project);
-                    setShowEditModal(true);
+                    setEditingProject(project);
                   }}
                   className="flex-1"
                 >
@@ -413,19 +494,15 @@ const ProjectsContent = () => {
         </div>
       )}
 
-      {/* Create Project Modal */}
+      {/* Create/Edit Project Modal */}
       <CreateProjectModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
+        isOpen={showCreateModal || !!editingProject}
+        onClose={() => {
+          setShowCreateModal(false);
+          setEditingProject(null);
+        }}
         onProjectCreated={fetchProjects}
-      />
-
-      {/* Edit Project Modal */}
-      <EditProjectModal
-        isOpen={showEditModal}
-        onClose={() => setShowEditModal(false)}
-        project={selectedProject}
-        onProjectUpdated={fetchProjects}
+        editingProject={editingProject}
       />
     </div>
   );

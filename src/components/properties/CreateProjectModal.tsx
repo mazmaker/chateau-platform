@@ -135,6 +135,11 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isInitialLoad, setIsInitialLoad] = useState(false);
+
+  // Track previous province/district to detect user changes vs initial load
+  const [prevProvinceId, setPrevProvinceId] = useState<string>("");
+  const [prevDistrictId, setPrevDistrictId] = useState<string>("");
 
   // Fetch provinces on mount
   useEffect(() => {
@@ -145,58 +150,115 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
 
   // Pre-fill form when editing
   useEffect(() => {
-    if (isOpen && editingProject) {
-      // Load districts and sub-districts for editing
-      if (editingProject.province_id) {
-        fetchDistricts(editingProject.province_id);
-      }
-      if (editingProject.district_id) {
-        fetchSubDistricts(editingProject.district_id);
-      }
+    const loadEditingData = async () => {
+      if (isOpen && editingProject) {
+        // Debug: log editingProject data
+        console.log('EditingProject data:', {
+          type: editingProject.type,
+          has_facilities: editingProject.has_facilities,
+          province_id: editingProject.province_id,
+          district_id: editingProject.district_id,
+          sub_district_id: editingProject.sub_district_id,
+        });
 
-      setFormData({
-        name: editingProject.name || "",
-        project_type: editingProject.type || "",
-        thumbnail: null,
-        thumbnailPreview: editingProject.thumbnail_url || "",
-        gallery: [],
-        galleryPreviews: editingProject.images || [],
-        total_units: editingProject.total_units?.toString() || "",
-        floor_count: editingProject.floor_count?.toString() || "",
-        has_facilities: editingProject.has_facilities ? "yes" : "no",
-        address: editingProject.address?.street || "",
-        province_id: editingProject.province_id?.toString() || "",
-        district_id: editingProject.district_id?.toString() || "",
-        sub_district_id: editingProject.sub_district_id?.toString() || "",
-        postal_code: editingProject.address?.postal_code || "",
-        owner_name: editingProject.developer || "",
-        attachments: [],
-        sale_kit_url: editingProject.information_links?.sale_kit || "",
-        fact_sheet_url: editingProject.information_links?.fact_sheet || "",
-        roi_calculator_url: editingProject.information_links?.roi_calculator || "",
-        is_active: editingProject.is_active ?? true,
-        is_featured: editingProject.is_featured ?? false
-      });
-    } else if (isOpen && !editingProject) {
-      resetForm();
-    }
+        // Set flag to prevent cascading resets during initial load
+        setIsInitialLoad(true);
+
+        const provinceIdStr = editingProject.province_id?.toString() || "";
+        const districtIdStr = editingProject.district_id?.toString() || "";
+        const subDistrictIdStr = editingProject.sub_district_id?.toString() || "";
+
+        // Set previous values to match current so useEffect won't reset
+        setPrevProvinceId(provinceIdStr);
+        setPrevDistrictId(districtIdStr);
+
+        // Load provinces first, then districts and sub-districts for editing
+        await fetchProvinces();
+
+        const loadPromises: Promise<any>[] = [];
+        if (editingProject.province_id) {
+          loadPromises.push(fetchDistricts(editingProject.province_id));
+        }
+        if (editingProject.district_id) {
+          loadPromises.push(fetchSubDistricts(editingProject.district_id));
+        }
+
+        // Wait for all location data to load before setting form data
+        await Promise.all(loadPromises);
+
+        // Determine has_facilities value
+        let hasFacilitiesValue = "";
+        if (editingProject.has_facilities === true) {
+          hasFacilitiesValue = "yes";
+        } else if (editingProject.has_facilities === false) {
+          hasFacilitiesValue = "no";
+        }
+
+        console.log('Location data loaded, setting form data:', {
+          project_type: editingProject.type,
+          has_facilities: hasFacilitiesValue,
+          province_id: provinceIdStr,
+          district_id: districtIdStr,
+          sub_district_id: subDistrictIdStr,
+        });
+
+        setFormData({
+          name: editingProject.name || "",
+          project_type: editingProject.type || "",
+          thumbnail: null,
+          thumbnailPreview: editingProject.thumbnail_url || "",
+          gallery: [],
+          galleryPreviews: editingProject.images || [],
+          total_units: editingProject.total_units?.toString() || "",
+          floor_count: editingProject.floor_count?.toString() || "",
+          has_facilities: hasFacilitiesValue,
+          address: editingProject.address?.street || "",
+          province_id: provinceIdStr,
+          district_id: districtIdStr,
+          sub_district_id: subDistrictIdStr,
+          postal_code: editingProject.address?.postal_code || "",
+          owner_name: editingProject.developer || "",
+          attachments: [],
+          sale_kit_url: editingProject.information_links?.sale_kit || "",
+          fact_sheet_url: editingProject.information_links?.fact_sheet || "",
+          roi_calculator_url: editingProject.information_links?.roi_calculator || "",
+          is_active: editingProject.is_active ?? true,
+          is_featured: editingProject.is_featured ?? false
+        });
+
+        // Reset flag after form has been populated
+        setTimeout(() => setIsInitialLoad(false), 200);
+      } else if (isOpen && !editingProject) {
+        setIsInitialLoad(false);
+        setPrevProvinceId("");
+        setPrevDistrictId("");
+        resetForm();
+      }
+    };
+
+    loadEditingData();
   }, [isOpen, editingProject]);
 
-  // Fetch districts when province changes
+  // Fetch districts when province changes (only reset if user is changing, not during initial load)
   useEffect(() => {
-    if (formData.province_id) {
+    // Only trigger if province actually changed by user (not initial load)
+    if (formData.province_id && !isInitialLoad && formData.province_id !== prevProvinceId) {
       fetchDistricts(parseInt(formData.province_id));
       setFormData(prev => ({ ...prev, district_id: "", sub_district_id: "", postal_code: "" }));
+      setPrevProvinceId(formData.province_id);
+      setPrevDistrictId("");
     }
-  }, [formData.province_id]);
+  }, [formData.province_id, isInitialLoad, prevProvinceId]);
 
-  // Fetch sub-districts when district changes
+  // Fetch sub-districts when district changes (only reset if user is changing, not during initial load)
   useEffect(() => {
-    if (formData.district_id) {
+    // Only trigger if district actually changed by user (not initial load)
+    if (formData.district_id && !isInitialLoad && formData.district_id !== prevDistrictId) {
       fetchSubDistricts(parseInt(formData.district_id));
       setFormData(prev => ({ ...prev, sub_district_id: "", postal_code: "" }));
+      setPrevDistrictId(formData.district_id);
     }
-  }, [formData.district_id]);
+  }, [formData.district_id, isInitialLoad, prevDistrictId]);
 
   // Fetch zipcode when sub-district changes
   useEffect(() => {
@@ -219,8 +281,9 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
     }
   };
 
-  const fetchDistricts = async (provinceId: number) => {
+  const fetchDistricts = async (provinceId: number): Promise<District[]> => {
     try {
+      console.log('Fetching districts for province:', provinceId);
       const { data, error } = await supabase
         .from('th_districts')
         .select('*')
@@ -228,13 +291,17 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
         .order('name_th');
 
       if (error) throw error;
-      setDistricts(data || []);
+      const districtsList = data || [];
+      setDistricts(districtsList);
+      console.log('Loaded districts:', districtsList.length, 'items', districtsList.slice(0, 3).map(d => ({ id: d.id, name: d.name_th })));
+      return districtsList;
     } catch (err) {
       console.error('Error fetching districts:', err);
+      return [];
     }
   };
 
-  const fetchSubDistricts = async (districtId: number) => {
+  const fetchSubDistricts = async (districtId: number): Promise<SubDistrict[]> => {
     try {
       const { data, error } = await supabase
         .from('th_sub_districts')
@@ -243,9 +310,13 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
         .order('name_th');
 
       if (error) throw error;
-      setSubDistricts(data || []);
+      const subDistrictsList = data || [];
+      setSubDistricts(subDistrictsList);
+      console.log('Loaded subDistricts:', subDistrictsList.length, 'items', subDistrictsList.map(sd => ({ id: sd.id, idStr: sd.id.toString(), name: sd.name_th })));
+      return subDistrictsList;
     } catch (err) {
       console.error('Error fetching sub-districts:', err);
+      return [];
     }
   };
 
@@ -342,6 +413,9 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
     setDistricts([]);
     setSubDistricts([]);
     setError("");
+    setIsInitialLoad(false);
+    setPrevProvinceId("");
+    setPrevDistrictId("");
   };
 
   const uploadFile = async (file: File, folder: string): Promise<string | null> => {
@@ -597,6 +671,7 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
                     <div>
                       <Label htmlFor="project_type" className="text-sm font-medium">ประเภทโครงการ <span className="text-red-500">*</span></Label>
                       <Select
+                        key={`project_type_${formData.project_type}`}
                         value={formData.project_type}
                         onValueChange={(value) => setFormData(prev => ({ ...prev, project_type: value }))}
                         disabled={loading}
@@ -656,6 +731,7 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
                     <div>
                       <Label htmlFor="has_facilities" className="text-sm font-medium">สิ่งอำนวยความสะดวก</Label>
                       <Select
+                        key={`has_facilities_${formData.has_facilities}`}
                         value={formData.has_facilities}
                         onValueChange={(value) => setFormData(prev => ({ ...prev, has_facilities: value }))}
                         disabled={loading}
@@ -802,6 +878,7 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
                     <div>
                       <Label htmlFor="province" className="text-sm font-medium">จังหวัด <span className="text-red-500">*</span></Label>
                       <Select
+                        key={`province_${provinces.length}_${formData.province_id}`}
                         value={formData.province_id}
                         onValueChange={(value) => setFormData(prev => ({ ...prev, province_id: value }))}
                         disabled={loading}
@@ -822,6 +899,7 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
                     <div>
                       <Label htmlFor="district" className="text-sm font-medium">อำเภอ/เขต <span className="text-red-500">*</span></Label>
                       <Select
+                        key={`district_${districts.length}_${formData.district_id}`}
                         value={formData.district_id}
                         onValueChange={(value) => setFormData(prev => ({ ...prev, district_id: value }))}
                         disabled={loading || !formData.province_id}
@@ -842,6 +920,7 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
                     <div>
                       <Label htmlFor="sub_district" className="text-sm font-medium">ตำบล/แขวง <span className="text-red-500">*</span></Label>
                       <Select
+                        key={`sub_district_${subDistricts.length}_${formData.sub_district_id}`}
                         value={formData.sub_district_id}
                         onValueChange={(value) => setFormData(prev => ({ ...prev, sub_district_id: value }))}
                         disabled={loading || !formData.district_id}
