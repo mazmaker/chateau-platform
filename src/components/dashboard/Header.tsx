@@ -1,4 +1,4 @@
-import { Bell, Menu, Settings, LogOut, Sun, Sunrise, Sunset, Moon, Calendar } from "lucide-react";
+import { Bell, Globe, Menu, Settings, LogOut, Sun, Sunrise, Sunset, Moon, Calendar, Crown, Shield, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -10,6 +10,8 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
 import { useState, useEffect } from "react";
+import { usePermissions } from "@/components/auth/PermissionGuard";
+import { CompanyLogo } from "@/components/company/CompanyLogo";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -18,6 +20,7 @@ interface HeaderProps {
 const Header = ({ onMenuClick }: HeaderProps) => {
   const navigate = useNavigate();
   const { user, signOut, userProfile } = useSimpleAuth();
+  const { userRole } = usePermissions();
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // Update time every minute
@@ -87,6 +90,28 @@ const Header = ({ onMenuClick }: HeaderProps) => {
     return currentTime.toLocaleDateString('th-TH', options);
   };
 
+  const getRoleIcon = () => {
+    switch (userRole) {
+      case 'owner':
+        return <Crown className="w-4 h-4 text-yellow-600" />;
+      case 'admin':
+        return <Shield className="w-4 h-4 text-blue-600" />;
+      case 'sales':
+        return <Briefcase className="w-4 h-4 text-green-600" />;
+      default:
+        return null;
+    }
+  };
+
+  const getRoleLabel = () => {
+    switch (userRole) {
+      case 'owner': return 'เจ้าของ';
+      case 'admin': return 'ผู้ดูแล';
+      case 'sales': return 'พนักงานขาย';
+      default: return 'ผู้ใช้';
+    }
+  };
+
   // Format time
   const getFormattedTime = () => {
     return currentTime.toLocaleTimeString('th-TH', {
@@ -111,9 +136,12 @@ const Header = ({ onMenuClick }: HeaderProps) => {
           <Menu className="w-5 h-5" />
         </Button>
 
+        {/* Company Logo */}
+        <CompanyLogo size="2xl" className="hidden sm:block" />
+
         <div className="hidden sm:block">
           {/* Greeting with animated gradient */}
-          <div className="flex items-center gap-3 mb-1">
+          <div className="flex items-center gap-3">
             <div className={`p-2 rounded-lg bg-gradient-to-br ${greeting.gradient} shadow-md animate-pulse`}>
               <GreetingIcon className="w-5 h-5 text-white" />
             </div>
@@ -136,6 +164,19 @@ const Header = ({ onMenuClick }: HeaderProps) => {
 
       {/* Right Side */}
       <div className="flex items-center gap-4">
+        {/* Language Switcher */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="relative">
+              <Globe className="w-5 h-5 text-muted-foreground" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem>🇺🇸 English</DropdownMenuItem>
+            <DropdownMenuItem>🇹🇭 ไทย</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         {/* Notifications */}
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="w-5 h-5 text-muted-foreground" />

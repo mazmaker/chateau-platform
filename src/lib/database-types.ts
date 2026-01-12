@@ -593,14 +593,12 @@ export type RolePermissions = {
   owner: Permission[];
   admin: Permission[];
   sales: Permission[];
-  viewer: Permission[];
 };
 
 export const ROLE_PERMISSIONS: RolePermissions = {
   owner: ['read', 'write', 'delete', 'manage_users', 'manage_settings', 'manage_billing'],
   admin: ['read', 'write', 'delete', 'manage_users'],
-  sales: ['read', 'write', 'manage_customers', 'manage_bookings'],
-  viewer: ['read']
+  sales: ['read', 'write', 'manage_customers', 'manage_bookings']
 };
 
 // ====================================================================
