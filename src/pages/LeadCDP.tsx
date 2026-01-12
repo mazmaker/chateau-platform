@@ -7,6 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { PotentialScoreCard } from '@/components/leads/PotentialScoreCard';
+import { LoanEstimationCard } from '@/components/leads/LoanEstimationCard';
+import { calculateLeadScore } from '@/lib/leadScoring';
+import { estimateLoan } from '@/lib/loanEstimation';
+import type { LeadScoringData, PotentialScore, LoanEstimation } from '@/types/leadScoring';
 import {
   ArrowLeft,
   User,
@@ -42,18 +47,6 @@ import {
   INTEREST_STATUS_OPTIONS,
   INTEREST_LEVEL_OPTIONS,
 } from '@/types/lead-interest';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  RadialBarChart,
-  RadialBar
-} from 'recharts';
 import { supabase } from '@/lib/supabase';
 
 interface Lead {
@@ -141,11 +134,25 @@ const LeadCDP = () => {
   const [property, setProperty] = useState<Property | null>(null);
   const [unit, setUnit] = useState<Unit | null>(null);
 
+  // Real Lead Scoring & Loan Estimation
+  const [leadScore, setLeadScore] = useState<PotentialScore | null>(null);
+  const [loanEstimation, setLoanEstimation] = useState<LoanEstimation | null>(null);
+
+  // Get currently selected interest
+  const selectedInterest = interests.find(i => i.id === selectedInterestId);
+
   useEffect(() => {
     if (leadId && currentTenant) {
       fetchLeadData();
     }
   }, [leadId, currentTenant]);
+
+  // Calculate lead score and loan estimation whenever customer or selected interest changes
+  useEffect(() => {
+    if (customer && selectedInterest) {
+      calculateScoresAndEstimation();
+    }
+  }, [customer, selectedInterest]);
 
   const fetchLeadData = async () => {
     setLoading(true);
@@ -233,95 +240,79 @@ const LeadCDP = () => {
     }).format(amount);
   };
 
-  // Get currently selected interest
-  const selectedInterest = interests.find(i => i.id === selectedInterestId);
+  // Calculate lead score and loan estimation with real data
+  const calculateScoresAndEstimation = () => {
+    if (!customer || !lead) return;
 
-  // Helper function to generate mock data per interest
-  const getInterestAnalysis = (interest: LeadInterestWithDetails | undefined) => {
-    // Use interest ID for consistent random data per unit
-    const baseNum = interest ? parseInt(interest.id.replace(/\D/g, '').slice(0, 8) || '0') : 0;
-    const interestLevelBonus = interest?.interest_level === 'high' ? 15 : interest?.interest_level === 'medium' ? 5 : 0;
+    const prefs = customer.preferences || {};
+    const currentInterest = selectedInterest;
 
-    const potentialScore = Math.min(95, Math.floor((baseNum % 30) + 55 + interestLevelBonus));
-    const buyChance = potentialScore;
-    const notBuyChance = 100 - potentialScore;
+    // Prepare lead scoring data - now using lead table columns directly
+    const scoringData: LeadScoringData = {
+      // From lead table (new columns from migration)
+      credit_score: lead.credit_score,
+      monthly_income: lead.monthly_income,
+      monthly_debt: lead.monthly_debt,
+      employment_type: lead.employment_type,
+      years_employed: lead.years_employed,
 
-    const prefs = customer?.preferences || {};
-    const monthlyIncome = prefs.monthly_income || 50000 + (baseNum % 10) * 10000;
-    const monthlyDebt = prefs.monthly_debt || 5000 + (baseNum % 5) * 2000;
-    const unitPrice = interest?.unit?.price || 3000000 + (baseNum % 5) * 500000;
-    const loanAmount = Math.round(unitPrice * (0.7 + ((baseNum % 20) / 100)));
+      // Demographics (from lead table)
+      age: lead.age,
+      gender: lead.gender,
+      marital_status: lead.marital_status,
+      education: lead.education,
+      household_size: lead.household_size,
 
-    const loanComparisonData = [
-      { name: 'ราคาบ้าน', value: unitPrice, fill: '#6366f1' },
-      { name: 'วงเงินกู้', value: loanAmount, fill: '#22c55e' }
-    ];
+      // Financial (from lead table)
+      down_payment_ready: lead.down_payment_ready,
+      savings: lead.savings,
 
-    const potentialGaugeData = [
-      { name: 'score', value: potentialScore, fill: potentialScore >= 70 ? '#22c55e' : potentialScore >= 50 ? '#eab308' : '#ef4444' }
-    ];
+      // Behavioral (mock data for now - would come from tracking)
+      website_visits: 5,
+      pages_viewed: 15,
+      time_on_site: 30,
 
-    const positiveFactors = {
-      financial: [
-        { name: 'ภาระหนี้สินรวม', value: Math.min(95, 75 + (baseNum % 20)), icon: CreditCard },
-        { name: 'รายได้ต่อเดือน', value: Math.min(95, 68 + (baseNum % 25)), icon: Wallet }
-      ],
-      property: [
-        { name: 'จำนวนยูนิตในโครงการ', value: Math.min(95, 82 + (baseNum % 15)), icon: Building },
-        { name: 'ราคาขาย', value: Math.min(95, 71 + (baseNum % 20)), icon: DollarSign },
-        { name: 'ขนาดพื้นที่ใช้สอย', value: Math.min(95, 65 + (baseNum % 30)), icon: Ruler },
-        { name: 'ขนาดที่ดิน', value: Math.min(95, 58 + (baseNum % 35)), icon: Layers },
-        { name: 'จำนวนห้องน้ำ', value: Math.min(95, 72 + (baseNum % 20)), icon: Bath },
-        { name: 'จำนวนชั้นของยูนิต', value: Math.min(95, 61 + (baseNum % 30)), icon: Building2 },
-        { name: 'จำนวนห้องนอน', value: Math.min(95, 77 + (baseNum % 18)), icon: BedDouble }
-      ],
-      demographic: [
-        { name: 'จำนวนสมาชิกในครอบครัว', value: Math.min(95, 69 + (baseNum % 25)), icon: Users },
-        { name: 'อายุ', value: Math.min(95, 74 + (baseNum % 20)), icon: Calendar },
-        { name: 'ระดับการศึกษา', value: Math.min(95, 66 + (baseNum % 28)), icon: GraduationCap },
-        { name: 'อาชีพ', value: Math.min(95, 78 + (baseNum % 17)), icon: Briefcase }
-      ],
-      geographic: [
-        { name: 'อำเภอสถานที่ทำงาน', value: Math.min(95, 63 + (baseNum % 30)), icon: MapPin },
-        { name: 'อำเภอที่ตั้งโครงการ', value: Math.min(95, 71 + (baseNum % 22)), icon: Building2 },
-        { name: 'ตำบลสถานที่ทำงาน', value: Math.min(95, 55 + (baseNum % 38)), icon: Globe },
-        { name: 'จังหวัดสถานที่ทำงาน', value: Math.min(95, 68 + (baseNum % 25)), icon: MapPin },
-        { name: 'ตำบลที่ตั้งโครงการ', value: Math.min(95, 59 + (baseNum % 33)), icon: Globe }
-      ]
+      // Interest signals
+      urgency_level: currentInterest?.interest_level === 'high' ? 'high' :
+                     currentInterest?.interest_level === 'low' ? 'low' : 'medium',
+      interest_level: currentInterest?.interest_level || 'medium',
+
+      // Budget (from property/unit price)
+      budget_max: currentInterest?.unit?.price || property?.price || 0,
+      purchase_timeline: '3_months',
     };
 
-    const negativeFactors = {
-      property: [
-        { name: 'สิ่งอำนวยความสะดวก', value: 35 + (baseNum % 25), icon: Home },
-        { name: 'ประเภทโครงการ', value: 28 + (baseNum % 30), icon: Building }
-      ],
-      demographic: [
-        { name: 'สถานภาพการสมรส', value: 22 + (baseNum % 35), icon: Heart },
-        { name: 'เพศ', value: 18 + (baseNum % 28), icon: User }
-      ],
-      geographic: [
-        { name: 'จังหวัดที่ตั้งโครงการ', value: 31 + (baseNum % 30), icon: MapPin }
-      ]
-    };
+    // Calculate potential score
+    try {
+      const score = calculateLeadScore(scoringData);
+      setLeadScore(score);
+    } catch (error) {
+      console.error('Error calculating lead score:', error);
+      setLeadScore(null);
+    }
 
-    return {
-      potentialScore,
-      buyChance,
-      notBuyChance,
-      monthlyIncome,
-      monthlyDebt,
-      unitPrice,
-      loanAmount,
-      loanComparisonData,
-      potentialGaugeData,
-      positiveFactors,
-      negativeFactors
-    };
+    // Calculate loan estimation if we have enough financial data
+    if (lead.monthly_income && currentInterest?.unit?.price) {
+      try {
+        const estimation = estimateLoan({
+          monthly_income: lead.monthly_income,
+          monthly_debt: lead.monthly_debt || 0,
+          property_value: currentInterest.unit.price,
+          down_payment: lead.down_payment_ready || 0,
+          credit_score: lead.credit_score || 700,
+          age: lead.age,
+          employment_type: lead.employment_type,
+          years_employed: lead.years_employed,
+        });
+        setLoanEstimation(estimation);
+      } catch (error) {
+        console.error('Error calculating loan estimation:', error);
+        setLoanEstimation(null);
+      }
+    } else {
+      setLoanEstimation(null);
+    }
   };
-
-  // Get analysis for selected interest or fallback to legacy data
-  const currentAnalysis = getInterestAnalysis(selectedInterest);
-  const { potentialScore, buyChance, notBuyChance, monthlyIncome, monthlyDebt, unitPrice, loanAmount, loanComparisonData, potentialGaugeData, positiveFactors, negativeFactors } = currentAnalysis;
 
   const prefs = customer?.preferences || {};
 
@@ -370,18 +361,6 @@ const LeadCDP = () => {
     return labels[source || ''] || source || '-';
   };
 
-  const FactorBar = ({ name, value, icon: Icon, isPositive = true }: { name: string; value: number; icon: any; isPositive?: boolean }) => (
-    <div className="flex items-center gap-3 py-2">
-      <Icon className={`w-4 h-4 ${isPositive ? 'text-cyan-600' : 'text-pink-600'}`} />
-      <div className="flex-1">
-        <div className="flex justify-between text-sm mb-1">
-          <span className="text-gray-700">{name}</span>
-          <span className={`font-semibold ${isPositive ? 'text-cyan-600' : 'text-pink-600'}`}>{value}%</span>
-        </div>
-        <Progress value={value} className={`h-2 ${isPositive ? '[&>div]:bg-cyan-500' : '[&>div]:bg-pink-500'}`} />
-      </div>
-    </div>
-  );
 
   if (loading) {
     return (
@@ -642,268 +621,30 @@ const LeadCDP = () => {
             </div>
           )}
 
-          {/* Row 3: Loan Potential + Potential Score (Equal Height) */}
+          {/* Row 3: Lead Scoring & Loan Estimation - Real Components */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            {/* Loan Potential */}
-            <Card className="shadow-lg border-0 overflow-hidden flex flex-col">
-              <CardHeader className="bg-gradient-to-r from-blue-500 to-cyan-600 text-white">
-                <CardTitle className="flex items-center gap-2">
-                  <CreditCard className="w-5 h-5" />
-                  ศักยภาพในการขอสินเชื่อ
-                  {selectedInterest && (
-                    <span className="text-xs font-normal opacity-80 ml-2">
-                      (ยูนิต {selectedInterest.unit?.unit_number})
-                    </span>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-6 flex-1 flex flex-col justify-center">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Chart */}
-                  <div className="h-48 min-h-[192px]">
-                    <ResponsiveContainer width="100%" height="100%" minHeight={192}>
-                      <BarChart data={loanComparisonData} layout="vertical">
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis type="number" tickFormatter={(v) => `${(v/1000000).toFixed(1)}M`} />
-                        <YAxis type="category" dataKey="name" width={80} />
-                        <Tooltip formatter={(v: number) => formatCurrency(v)} />
-                        <Bar dataKey="value" radius={[0, 8, 8, 0]}>
-                          {loanComparisonData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.fill} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
+            {/* Lead Potential Score Card */}
+            {leadScore && <PotentialScoreCard score={leadScore} />}
 
-                  {/* Stats */}
-                  <div className="space-y-3">
-                    <div className="p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-100">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                          <Wallet className="w-5 h-5 text-green-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">รายได้ต่อเดือน</p>
-                          <p className="text-lg font-bold text-green-600">{formatCurrency(monthlyIncome)}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="p-3 bg-gradient-to-r from-red-50 to-orange-50 rounded-xl border border-red-100">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                          <CreditCard className="w-5 h-5 text-red-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">ภาระหนี้ต่อเดือน</p>
-                          <p className="text-lg font-bold text-red-600">{formatCurrency(monthlyDebt)}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                          <DollarSign className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">ประมาณการวงเงินกู้</p>
-                          <p className="text-lg font-bold text-blue-600">{formatCurrency(loanAmount)}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            {/* Loan Estimation Card */}
+            {loanEstimation && <LoanEstimationCard estimation={loanEstimation} />}
 
-            {/* Potential Score */}
-            <Card className="shadow-lg border-0 overflow-hidden flex flex-col">
-              <CardHeader className="bg-gradient-to-r from-amber-500 to-orange-600 text-white">
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5" />
-                  Potential Score
-                  {selectedInterest && (
-                    <span className="text-xs font-normal opacity-80 ml-2">
-                      (ยูนิต {selectedInterest.unit?.unit_number})
-                    </span>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-6 flex-1 flex flex-col justify-center">
-                {/* Gauge Chart */}
-                <div className="flex flex-col items-center mb-4">
-                  <div className="h-36 min-h-[144px] w-full relative">
-                    <ResponsiveContainer width="100%" height="100%" minHeight={144}>
-                      <RadialBarChart
-                        cx="50%"
-                        cy="100%"
-                        innerRadius="75%"
-                        outerRadius="95%"
-                        startAngle={180}
-                        endAngle={0}
-                        data={potentialGaugeData}
-                      >
-                        <RadialBar
-                          background
-                          dataKey="value"
-                          cornerRadius={5}
-                        />
-                      </RadialBarChart>
-                    </ResponsiveContainer>
-                    {/* Score text positioned inside the gauge */}
-                    <div className="absolute inset-0 flex items-end justify-center pb-2">
-                      <div className="text-center">
-                        <p className={`text-4xl font-bold ${potentialScore >= 70 ? 'text-green-600' : potentialScore >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
-                          {potentialScore}%
-                        </p>
-                      </div>
-                    </div>
+            {/* Show message if no data available */}
+            {!leadScore && !loanEstimation && (
+              <Card className="shadow-lg border-0 lg:col-span-2">
+                <CardContent className="p-8 text-center">
+                  <div className="text-gray-400 mb-3">
+                    <BarChart3 className="w-16 h-16 mx-auto" />
                   </div>
-                  <p className="text-gray-500 text-sm mt-2">Potential Score</p>
-                </div>
-
-                {/* Buy/Not Buy Chance */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-green-50 rounded-xl text-center border border-green-100">
-                    <CheckCircle className="w-8 h-8 text-green-600 mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-green-600">{buyChance}%</p>
-                    <p className="text-xs text-gray-600">โอกาสซื้อ</p>
-                  </div>
-                  <div className="p-4 bg-red-50 rounded-xl text-center border border-red-100">
-                    <XCircle className="w-8 h-8 text-red-500 mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-red-500">{notBuyChance}%</p>
-                    <p className="text-xs text-gray-600">โอกาสไม่ซื้อ</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                  <p className="text-lg font-medium text-gray-600">ไม่สามารถคำนวณคะแนนได้</p>
+                  <p className="text-sm text-gray-500 mt-2">
+                    กรุณาเพิ่มข้อมูลการเงินและอาชีพของลูกค้าเพื่อดูการวิเคราะห์
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
-          {/* Row 4: Factors (Positive + Negative Side by Side) */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Positive Factors */}
-            <Card className="shadow-lg border-0 overflow-hidden">
-              <CardHeader className="bg-gradient-to-r from-cyan-500 to-teal-600 text-white py-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <TrendingUp className="w-5 h-5" />
-                  ปัจจัยที่ส่งผลให้ขายได้
-                  {selectedInterest && (
-                    <span className="text-xs font-normal opacity-80 ml-1">
-                      (ยูนิต {selectedInterest.unit?.unit_number})
-                    </span>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 max-h-[400px] overflow-y-auto">
-                {/* Financial */}
-                <div className="mb-4">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-cyan-600" />
-                    สถานะทางการเงิน
-                  </h4>
-                  <div className="space-y-1">
-                    {positiveFactors.financial.map((f, i) => (
-                      <FactorBar key={i} name={f.name} value={f.value} icon={f.icon} isPositive />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Property */}
-                <div className="mb-4">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                    <Building2 className="w-4 h-4 text-cyan-600" />
-                    โครงสร้างอสังหาริมทรัพย์
-                  </h4>
-                  <div className="space-y-1">
-                    {positiveFactors.property.map((f, i) => (
-                      <FactorBar key={i} name={f.name} value={f.value} icon={f.icon} isPositive />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Demographic */}
-                <div className="mb-4">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                    <Users className="w-4 h-4 text-cyan-600" />
-                    ข้อมูลประชากร
-                  </h4>
-                  <div className="space-y-1">
-                    {positiveFactors.demographic.map((f, i) => (
-                      <FactorBar key={i} name={f.name} value={f.value} icon={f.icon} isPositive />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Geographic */}
-                <div>
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-cyan-600" />
-                    ข้อมูลภูมิศาสตร์
-                  </h4>
-                  <div className="space-y-1">
-                    {positiveFactors.geographic.map((f, i) => (
-                      <FactorBar key={i} name={f.name} value={f.value} icon={f.icon} isPositive />
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Negative Factors */}
-            <Card className="shadow-lg border-0 overflow-hidden">
-              <CardHeader className="bg-gradient-to-r from-pink-500 to-rose-600 text-white py-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <TrendingDown className="w-5 h-5" />
-                  ปัจจัยที่ส่งผลให้ขายไม่ได้
-                  {selectedInterest && (
-                    <span className="text-xs font-normal opacity-80 ml-1">
-                      (ยูนิต {selectedInterest.unit?.unit_number})
-                    </span>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 max-h-[400px] overflow-y-auto">
-                {/* Property */}
-                <div className="mb-4">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                    <Building2 className="w-4 h-4 text-pink-600" />
-                    โครงสร้างอสังหาริมทรัพย์
-                  </h4>
-                  <div className="space-y-1">
-                    {negativeFactors.property.map((f, i) => (
-                      <FactorBar key={i} name={f.name} value={f.value} icon={f.icon} isPositive={false} />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Demographic */}
-                <div className="mb-4">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                    <Users className="w-4 h-4 text-pink-600" />
-                    ข้อมูลประชากร
-                  </h4>
-                  <div className="space-y-1">
-                    {negativeFactors.demographic.map((f, i) => (
-                      <FactorBar key={i} name={f.name} value={f.value} icon={f.icon} isPositive={false} />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Geographic */}
-                <div>
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-pink-600" />
-                    ข้อมูลภูมิศาสตร์
-                  </h4>
-                  <div className="space-y-1">
-                    {negativeFactors.geographic.map((f, i) => (
-                      <FactorBar key={i} name={f.name} value={f.value} icon={f.icon} isPositive={false} />
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
         </main>
       </div>
     </div>

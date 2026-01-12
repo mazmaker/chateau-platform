@@ -234,7 +234,12 @@ const LeadManagement = () => {
     try {
       let query = supabase
         .from('leads')
-        .select('*')
+        .select(`
+          *,
+          customer:customers(id, full_name, email, phone, preferences),
+          property:properties(id, name),
+          unit:units(id, unit_number, price)
+        `)
         .eq('tenant_id', currentTenant?.id)
         .order('created_at', { ascending: false });
 
@@ -263,7 +268,19 @@ const LeadManagement = () => {
         assigned_to: item.assigned_to,
         next_follow_up: item.next_follow_up,
         created_at: item.created_at,
-        updated_at: item.updated_at
+        updated_at: item.updated_at,
+        // Include scoring fields
+        potential_score: item.potential_score,
+        max_loan_amount: item.max_loan_amount,
+        financial_score: item.financial_score,
+        engagement_score: item.engagement_score,
+        urgency_score: item.urgency_score,
+        fit_score: item.fit_score,
+        conversion_probability: item.conversion_probability,
+        // Include joined data
+        customer: item.customer,
+        property: item.property,
+        unit: item.unit
       }));
 
       setLeads(mappedLeads);
@@ -446,16 +463,16 @@ const LeadManagement = () => {
 
       // Log activity for status update
       try {
-        const customer = customers.find(c => c.id === lead.customer_id);
+        const customerName = getCustomerName(lead);
         await supabase.rpc('log_activity', {
           p_tenant_id: currentTenant?.id,
           p_user_id: userProfile?.id,
           p_activity_type: 'lead_status_updated',
-          p_description: `อัปเดตสถานะ Lead: ${customer?.name || lead.customer_id} (${lead.status} → ${newStatus})`,
+          p_description: `อัปเดตสถานะ Lead: ${customerName} (${lead.status} → ${newStatus})`,
           p_metadata: {
             lead_id: lead.id,
             customer_id: lead.customer_id,
-            customer_name: customer?.name,
+            customer_name: customerName,
             old_status: lead.status,
             new_status: newStatus
           }
@@ -486,16 +503,16 @@ const LeadManagement = () => {
 
       // Log activity for lead deletion
       try {
-        const customer = customers.find(c => c.id === leadToDelete.customer_id);
+        const customerName = getCustomerName(leadToDelete);
         await supabase.rpc('log_activity', {
           p_tenant_id: currentTenant?.id,
           p_user_id: userProfile?.id,
           p_activity_type: 'lead_deleted',
-          p_description: `ลบ Lead: ${customer?.name || leadToDelete.customer_id}`,
+          p_description: `ลบ Lead: ${customerName}`,
           p_metadata: {
             lead_id: leadToDelete.id,
             customer_id: leadToDelete.customer_id,
-            customer_name: customer?.name
+            customer_name: customerName
           }
         });
       } catch {
@@ -529,16 +546,16 @@ const LeadManagement = () => {
 
       // Log activity for lead update
       try {
-        const customer = customers.find(c => c.id === editingLead.customer_id);
+        const customerName = getCustomerName(editingLead);
         await supabase.rpc('log_activity', {
           p_tenant_id: currentTenant?.id,
           p_user_id: userProfile?.id,
           p_activity_type: 'lead_updated',
-          p_description: `แก้ไข Lead: ${customer?.name || editingLead.customer_id}`,
+          p_description: `แก้ไข Lead: ${customerName}`,
           p_metadata: {
             lead_id: editingLead.id,
             customer_id: editingLead.customer_id,
-            customer_name: customer?.name,
+            customer_name: customerName,
             status: editingLead.status,
             notes: editingLead.notes
           }
@@ -700,13 +717,23 @@ const LeadManagement = () => {
     return customers.find(c => c.id === customerId);
   };
 
-  const getCustomerName = (customerId: string) => {
-    const customer = customers.find(c => c.id === customerId);
+  const getCustomerName = (lead: Lead) => {
+    // Try to get from joined data first
+    if ((lead as any).customer?.full_name) {
+      return (lead as any).customer.full_name;
+    }
+    // Fallback to customers state
+    const customer = customers.find(c => c.id === lead.customer_id);
     return customer?.name || '-';
   };
 
-  const getPropertyName = (propertyId: string) => {
-    const property = properties.find(p => p.id === propertyId);
+  const getPropertyName = (lead: Lead) => {
+    // Try to get from joined data first
+    if ((lead as any).property?.name) {
+      return (lead as any).property.name;
+    }
+    // Fallback to properties state
+    const property = properties.find(p => p.id === lead.property_id);
     return property?.name || '-';
   };
 
@@ -725,8 +752,8 @@ const LeadManagement = () => {
   };
 
   const filteredLeads = leads.filter(lead => {
-    const customerName = getCustomerName(lead.customer_id).toLowerCase();
-    const propertyName = getPropertyName(lead.property_id).toLowerCase();
+    const customerName = getCustomerName(lead).toLowerCase();
+    const propertyName = getPropertyName(lead).toLowerCase();
     const matchesSearch = customerName.includes(searchQuery.toLowerCase()) ||
                          propertyName.includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
@@ -787,57 +814,69 @@ const LeadManagement = () => {
 
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-5">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Lead ทั้งหมด
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalLeads}</div>
+          <Card className="border-l-4 border-l-cyan-500">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-cyan-100 text-cyan-600 rounded-xl flex items-center justify-center">
+                  <Users className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{totalLeads}</p>
+                  <p className="text-xs text-muted-foreground">Lead ทั้งหมด</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Lead ใหม่
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{newLeads}</div>
-              <p className="text-xs text-muted-foreground">ต้องติดต่อ</p>
+          <Card className="border-l-4 border-l-blue-500">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center">
+                  <Target className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{newLeads}</p>
+                  <p className="text-xs text-muted-foreground">Lead ใหม่</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                กำลังดำเนินการ
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-orange-600">{qualifiedLeads}</div>
-              <p className="text-xs text-muted-foreground">Qualified + Proposal + Negotiation</p>
+          <Card className="border-l-4 border-l-orange-500">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center">
+                  <Clock className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{qualifiedLeads}</p>
+                  <p className="text-xs text-muted-foreground">กำลังดำเนินการ</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                ปิดการขาย
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{closedLeads}</div>
-              <p className="text-xs text-muted-foreground">อัตราแปลง {conversionRate}%</p>
+          <Card className="border-l-4 border-l-green-500">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-green-100 text-green-600 rounded-xl flex items-center justify-center">
+                  <CheckCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{closedLeads}</p>
+                  <p className="text-xs text-muted-foreground">ปิดการขาย ({conversionRate}%)</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                สูญเสีย
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-600">{lostLeads}</div>
+          <Card className="border-l-4 border-l-red-500">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-red-100 text-red-600 rounded-xl flex items-center justify-center">
+                  <XCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{lostLeads}</p>
+                  <p className="text-xs text-muted-foreground">สูญเสีย</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -946,9 +985,9 @@ const LeadManagement = () => {
                       }}
                     >
                       <TableCell className="font-medium">
-                        {getCustomerName(lead.customer_id)}
+                        {getCustomerName(lead)}
                       </TableCell>
-                      <TableCell>{getPropertyName(lead.property_id)}</TableCell>
+                      <TableCell>{getPropertyName(lead)}</TableCell>
                       <TableCell>
                         {interestCounts[lead.id] ? (
                           <Badge variant="secondary" className="font-medium">
@@ -1015,9 +1054,12 @@ const LeadManagement = () => {
                         </Select>
                       </TableCell>
                       <TableCell>
-                        {/* Mock Potential Score based on lead id */}
+                        {/* Real Potential Score from database */}
                         {(() => {
-                          const score = Math.floor((parseInt(lead.id.replace(/\D/g, '') || '0') % 40) + 60);
+                          const score = (lead as any).potential_score;
+                          if (score == null) {
+                            return <span className="text-gray-400 text-sm">-</span>;
+                          }
                           const colorClass = score >= 80 ? 'text-green-600' : score >= 60 ? 'text-yellow-600' : 'text-red-600';
                           return (
                             <span className={`font-semibold ${colorClass}`}>
@@ -1027,11 +1069,12 @@ const LeadManagement = () => {
                         })()}
                       </TableCell>
                       <TableCell>
-                        {/* Mock Loan Amount - roughly 70-90% of budget based on lead id */}
+                        {/* Real Max Loan Amount from database */}
                         {(() => {
-                          const idNum = parseInt(lead.id.replace(/\D/g, '') || '0');
-                          const mockBudget = lead.budget_min || (2000000 + (idNum % 8) * 500000);
-                          const loanAmount = Math.round(mockBudget * (0.7 + ((idNum % 20) / 100)));
+                          const loanAmount = (lead as any).max_loan_amount;
+                          if (loanAmount == null) {
+                            return <span className="text-gray-400 text-sm">-</span>;
+                          }
                           return (
                             <span className="text-sm font-medium text-blue-600">
                               {formatCurrency(loanAmount)}
@@ -1235,7 +1278,7 @@ const LeadManagement = () => {
                             <Building2 className="w-5 h-5 text-cyan-700" />
                           </div>
                           <div className="flex-1">
-                            <p className="font-semibold text-gray-800">{getPropertyName(selectedLead.property_id)}</p>
+                            <p className="font-semibold text-gray-800">{getPropertyName(selectedLead)}</p>
                             <p className="text-sm text-gray-600">ยูนิต {getUnitNumber(selectedLead.unit_id)}</p>
                           </div>
                         </div>
@@ -1438,7 +1481,7 @@ const LeadManagement = () => {
               setSelectedLeadForPayment(null);
             }}
             leadId={selectedLeadForPayment.id}
-            leadName={getCustomerName(selectedLeadForPayment.customer_id)}
+            leadName={getCustomerName(selectedLeadForPayment)}
           />
         )}
 
@@ -1484,7 +1527,7 @@ const LeadManagement = () => {
                       </div>
                       <div>
                         <p className="text-xs text-gray-500">ชื่อลูกค้า</p>
-                        <p className="font-medium text-gray-900">{leadToDelete ? getCustomerName(leadToDelete.customer_id) : '-'}</p>
+                        <p className="font-medium text-gray-900">{leadToDelete ? getCustomerName(leadToDelete) : '-'}</p>
                       </div>
                     </div>
                     {/* Phone */}

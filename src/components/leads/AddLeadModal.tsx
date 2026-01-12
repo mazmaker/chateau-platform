@@ -26,6 +26,9 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
+import { calculateLeadScore } from "@/lib/leadScoring";
+import { estimateLoan } from "@/lib/loanEstimation";
+import type { LeadScoringData } from "@/types/leadScoring";
 
 // Types
 interface Province {
@@ -212,7 +215,14 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
     monthly_debt: "",
     family_members: "",
     education: "",
-    // Work Address
+    // Lead Scoring - Financial
+    credit_score: "",
+    down_payment_ready: "",
+    savings: "",
+    // Lead Scoring - Employment
+    employment_type: "",
+    years_employed: "",
+    // Work Address (includes company name)
     workplace: "",
     province_id: "",
     district_id: "",
@@ -576,6 +586,11 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
       monthly_debt: "",
       family_members: "",
       education: "",
+      credit_score: "",
+      down_payment_ready: "",
+      savings: "",
+      employment_type: "",
+      years_employed: "",
       workplace: "",
       province_id: "",
       district_id: "",
@@ -771,12 +786,17 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
       // Check if customer with same email/phone already exists in this tenant
       let customer;
       if (formData.email) {
-        const { data: existingCustomer } = await supabase
+        const { data: existingCustomer, error: existingError } = await supabase
           .from('customers')
           .select('*')
           .eq('tenant_id', currentTenant?.id)
           .eq('email', formData.email)
-          .single();
+          .maybeSingle();
+
+        // Only throw if it's a real error (not "not found")
+        if (existingError && existingError.code !== 'PGRST116') {
+          throw existingError;
+        }
 
         if (existingCustomer) {
           // Update existing customer with new data
@@ -819,6 +839,23 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
         source: newsSource,
         assigned_to: formData.assigned_to || null,
         notes: `จุดประสงค์: ${purchasePurpose}`,
+        // Lead Scoring - Financial fields
+        credit_score: formData.credit_score ? parseInt(formData.credit_score) : null,
+        monthly_income: formData.monthly_income ? parseFloat(formData.monthly_income) : null,
+        monthly_debt: formData.monthly_debt ? parseFloat(formData.monthly_debt) : null,
+        down_payment_ready: formData.down_payment_ready ? parseFloat(formData.down_payment_ready) : null,
+        savings: formData.savings ? parseFloat(formData.savings) : null,
+        // Lead Scoring - Employment fields
+        employment_type: formData.employment_type || null,
+        years_employed: formData.years_employed ? parseFloat(formData.years_employed) : null,
+        // Lead Scoring - Demographics (from customer preferences)
+        age: formData.age ? parseInt(formData.age) : null,
+        gender: formData.gender || null,
+        marital_status: formData.marital_status || null,
+        education: formData.education || null,
+        household_size: formData.family_members ? parseInt(formData.family_members) : null,
+        // Work location
+        workplace: formData.workplace || null,
       };
 
       const { data: newLead, error: leadError } = await supabase
@@ -847,6 +884,110 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
       if (interestsError) {
         console.error('Error creating interests:', interestsError);
         // Don't throw here - lead is already created
+      }
+
+      // Calculate Lead Score and Loan Estimation if we have enough data
+      console.log('[Lead Scoring] Checking conditions:', {
+        monthly_income: leadData.monthly_income,
+        unit_id: firstInterest.unit_id,
+        canCalculate: !!(leadData.monthly_income && firstInterest.unit_id)
+      });
+
+      if (leadData.monthly_income && firstInterest.unit_id) {
+        try {
+          // Get unit price for loan calculation
+          const { data: unitData } = await supabase
+            .from('units')
+            .select('price')
+            .eq('id', firstInterest.unit_id)
+            .single();
+
+          const propertyPrice = unitData?.price || 0;
+          console.log('[Lead Scoring] Unit price:', propertyPrice);
+
+          // Prepare scoring data
+          const scoringData: LeadScoringData = {
+            credit_score: leadData.credit_score,
+            monthly_income: leadData.monthly_income,
+            monthly_debt: leadData.monthly_debt || 0,
+            employment_type: leadData.employment_type,
+            years_employed: leadData.years_employed,
+            age: leadData.age,
+            gender: leadData.gender,
+            marital_status: leadData.marital_status,
+            education: leadData.education,
+            household_size: leadData.household_size,
+            down_payment_ready: leadData.down_payment_ready || 0,
+            savings: leadData.savings || 0,
+            // Mock behavioral data (would come from tracking in production)
+            website_visits: 1,
+            pages_viewed: 1,
+            time_on_site: 5,
+            urgency_level: firstInterest.interest_level === 'high' ? 'high' :
+                           firstInterest.interest_level === 'low' ? 'low' : 'medium',
+            interest_level: firstInterest.interest_level || 'medium',
+            budget_max: propertyPrice,
+            purchase_timeline: '3_months',
+          };
+
+          // Calculate scores
+          const potentialScore = calculateLeadScore(scoringData);
+          console.log('[Lead Scoring] Calculated score:', {
+            overall_score: potentialScore.overall_score,
+            breakdown: potentialScore.score_breakdown
+          });
+
+          const loanEstimation = propertyPrice > 0 ? estimateLoan({
+            monthly_income: leadData.monthly_income,
+            monthly_debt: leadData.monthly_debt || 0,
+            property_value: propertyPrice,
+            down_payment: leadData.down_payment_ready || 0,
+            credit_score: leadData.credit_score || 700,
+            age: leadData.age,
+            employment_type: leadData.employment_type,
+            years_employed: leadData.years_employed,
+          }) : null;
+
+          console.log('[Lead Scoring] Loan estimation:', loanEstimation ? {
+            max_loan: loanEstimation.max_loan_amount,
+            monthly_payment: loanEstimation.monthly_payment
+          } : 'No estimation');
+
+          // Update lead with calculated scores (using snake_case from API)
+          const { error: updateError } = await supabase
+            .from('leads')
+            .update({
+              potential_score: potentialScore.overall_score,
+              financial_score: potentialScore.score_breakdown.financial_score,
+              engagement_score: potentialScore.score_breakdown.engagement_score,
+              urgency_score: potentialScore.score_breakdown.urgency_score,
+              fit_score: potentialScore.score_breakdown.fit_score,
+              conversion_probability: potentialScore.conversion_probability,
+              max_loan_amount: loanEstimation?.max_loan_amount || null,
+              estimated_monthly_payment: loanEstimation?.monthly_payment || null,
+              estimated_interest_rate: loanEstimation?.interest_rate || null,
+              dti_ratio: loanEstimation?.dti_ratio || null,
+              ltv_ratio: loanEstimation?.ltv_ratio || null,
+              loan_approval_probability: loanEstimation?.approval_probability || null,
+              score_last_updated: new Date().toISOString(),
+              loan_last_updated: loanEstimation ? new Date().toISOString() : null,
+            })
+            .eq('id', newLead.id);
+
+          if (updateError) {
+            console.error('[Lead Scoring] Update error:', updateError);
+          } else {
+            console.log('[Lead Scoring] Successfully updated lead with scores');
+            console.log('[Lead Scoring] Lead ID:', newLead.id);
+            console.log('[Lead Scoring] Updated values:', {
+              potential_score: potentialScore.overall_score,
+              max_loan_amount: loanEstimation?.max_loan_amount
+            });
+          }
+        } catch (error) {
+          console.error('Error calculating lead scores:', error);
+          // Don't throw - lead is already created
+        }
       }
 
       // Log activity for lead creation
@@ -904,7 +1045,15 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
     <>
       <Dialog open={isOpen} onOpenChange={handleClose}>
         <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-hidden p-0 flex flex-col">
-          {/* Header */}
+          {/* Hidden Accessibility Elements */}
+          <DialogHeader className="sr-only">
+            <DialogTitle>เพิ่ม Lead ใหม่</DialogTitle>
+            <DialogDescription>
+              กรอกข้อมูลลูกค้าและโครงการที่สนใจเพื่อสร้าง Lead ใหม่
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Visual Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-[#676AF1]/10 via-[#8B5CF6]/10 to-[#676AF1]/10 flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-gradient-to-br from-[#676AF1] to-[#8B5CF6] rounded-xl shadow-md">
@@ -1346,108 +1495,193 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
                       <p className="text-xs text-green-600">อาชีพ รายได้ และภาระทางการเงิน</p>
                     </div>
                   </div>
-                  <div className="p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <Label htmlFor="occupation" className="text-sm font-medium">อาชีพ</Label>
-                        <Select
-                          value={formData.occupation}
-                          onValueChange={(value) => setFormData(prev => ({ ...prev, occupation: value }))}
-                          disabled={loading}
-                        >
-                          <SelectTrigger className="mt-1.5">
-                            <SelectValue placeholder="โปรดเลือกอาชีพ" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {OCCUPATION_OPTIONS.filter(o => o.value).map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                  <div className="p-4 space-y-6">
+                    {/* Basic Financial Info */}
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-700 mb-3">ข้อมูลพื้นฐาน</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <Label htmlFor="marital_status" className="text-sm font-medium">สถานภาพ</Label>
+                          <Select
+                            value={formData.marital_status}
+                            onValueChange={(value) => setFormData(prev => ({ ...prev, marital_status: value }))}
+                            disabled={loading}
+                          >
+                            <SelectTrigger className="mt-1.5">
+                              <SelectValue placeholder="โปรดเลือกสถานภาพ" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {MARITAL_STATUS_OPTIONS.filter(o => o.value).map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
 
-                      <div>
-                        <Label htmlFor="marital_status" className="text-sm font-medium">สถานภาพ</Label>
-                        <Select
-                          value={formData.marital_status}
-                          onValueChange={(value) => setFormData(prev => ({ ...prev, marital_status: value }))}
-                          disabled={loading}
-                        >
-                          <SelectTrigger className="mt-1.5">
-                            <SelectValue placeholder="โปรดเลือกสถานภาพ" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {MARITAL_STATUS_OPTIONS.filter(o => o.value).map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                        <div>
+                          <Label htmlFor="education" className="text-sm font-medium">การศึกษา</Label>
+                          <Select
+                            value={formData.education}
+                            onValueChange={(value) => setFormData(prev => ({ ...prev, education: value }))}
+                            disabled={loading}
+                          >
+                            <SelectTrigger className="mt-1.5">
+                              <SelectValue placeholder="โปรดเลือกการศึกษา" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {EDUCATION_OPTIONS.filter(o => o.value).map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
 
-                      <div>
-                        <Label htmlFor="monthly_income" className="text-sm font-medium">รายได้ต่อเดือน (บาท)</Label>
-                        <Input
-                          id="monthly_income"
-                          type="number"
-                          value={formData.monthly_income}
-                          onChange={(e) => setFormData(prev => ({ ...prev, monthly_income: e.target.value }))}
-                          placeholder="0"
-                          min="0"
-                          disabled={loading}
-                          className="mt-1.5"
-                        />
+                        <div>
+                          <Label htmlFor="family_members" className="text-sm font-medium">สมาชิกในครอบครัว (คน)</Label>
+                          <Input
+                            id="family_members"
+                            type="number"
+                            value={formData.family_members}
+                            onChange={(e) => setFormData(prev => ({ ...prev, family_members: e.target.value }))}
+                            placeholder="0"
+                            min="0"
+                            disabled={loading}
+                            className="mt-1.5"
+                          />
+                        </div>
                       </div>
+                    </div>
 
-                      <div>
-                        <Label htmlFor="monthly_debt" className="text-sm font-medium">ภาระทางการเงินต่อเดือน (บาท)</Label>
-                        <Input
-                          id="monthly_debt"
-                          type="number"
-                          value={formData.monthly_debt}
-                          onChange={(e) => setFormData(prev => ({ ...prev, monthly_debt: e.target.value }))}
-                          placeholder="0"
-                          min="0"
-                          disabled={loading}
-                          className="mt-1.5"
-                        />
+                    {/* Financial Details for Lead Scoring */}
+                    <div className="pt-4 border-t border-green-100">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-3">ข้อมูลการเงินสำหรับประเมินสินเชื่อ</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <Label htmlFor="monthly_income" className="text-sm font-medium">รายได้ต่อเดือน (บาท)</Label>
+                          <Input
+                            id="monthly_income"
+                            type="number"
+                            value={formData.monthly_income}
+                            onChange={(e) => setFormData(prev => ({ ...prev, monthly_income: e.target.value }))}
+                            placeholder="0"
+                            min="0"
+                            disabled={loading}
+                            className="mt-1.5"
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="monthly_debt" className="text-sm font-medium">ภาระหนี้สินต่อเดือน (บาท)</Label>
+                          <Input
+                            id="monthly_debt"
+                            type="number"
+                            value={formData.monthly_debt}
+                            onChange={(e) => setFormData(prev => ({ ...prev, monthly_debt: e.target.value }))}
+                            placeholder="0"
+                            min="0"
+                            disabled={loading}
+                            className="mt-1.5"
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="credit_score" className="text-sm font-medium">คะแนนเครดิต (300-850)</Label>
+                          <Input
+                            id="credit_score"
+                            type="number"
+                            value={formData.credit_score}
+                            onChange={(e) => setFormData(prev => ({ ...prev, credit_score: e.target.value }))}
+                            placeholder="750"
+                            min="300"
+                            max="850"
+                            disabled={loading}
+                            className="mt-1.5"
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="down_payment_ready" className="text-sm font-medium">เงินดาวน์ที่พร้อม (บาท)</Label>
+                          <Input
+                            id="down_payment_ready"
+                            type="number"
+                            value={formData.down_payment_ready}
+                            onChange={(e) => setFormData(prev => ({ ...prev, down_payment_ready: e.target.value }))}
+                            placeholder="0"
+                            min="0"
+                            disabled={loading}
+                            className="mt-1.5"
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="savings" className="text-sm font-medium">เงินออม (บาท)</Label>
+                          <Input
+                            id="savings"
+                            type="number"
+                            value={formData.savings}
+                            onChange={(e) => setFormData(prev => ({ ...prev, savings: e.target.value }))}
+                            placeholder="0"
+                            min="0"
+                            disabled={loading}
+                            className="mt-1.5"
+                          />
+                        </div>
                       </div>
+                    </div>
 
-                      <div>
-                        <Label htmlFor="family_members" className="text-sm font-medium">สมาชิกในครอบครัว (คน)</Label>
-                        <Input
-                          id="family_members"
-                          type="number"
-                          value={formData.family_members}
-                          onChange={(e) => setFormData(prev => ({ ...prev, family_members: e.target.value }))}
-                          placeholder="0"
-                          min="0"
-                          disabled={loading}
-                          className="mt-1.5"
-                        />
-                      </div>
+                    {/* Employment Details */}
+                    <div className="pt-4 border-t border-green-100">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-3">ข้อมูลการทำงาน</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <Label htmlFor="employment_type" className="text-sm font-medium">ประเภทการจ้างงาน</Label>
+                          <Select
+                            value={formData.employment_type}
+                            onValueChange={(value) => setFormData(prev => ({ ...prev, employment_type: value }))}
+                            disabled={loading}
+                          >
+                            <SelectTrigger className="mt-1.5">
+                              <SelectValue placeholder="เลือกประเภท" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="government">รับราชการ</SelectItem>
+                              <SelectItem value="private">พนักงานเอกชน</SelectItem>
+                              <SelectItem value="business">ธุรกิจส่วนตัว</SelectItem>
+                              <SelectItem value="freelance">ฟรีแลนซ์</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
 
-                      <div>
-                        <Label htmlFor="education" className="text-sm font-medium">การศึกษา</Label>
-                        <Select
-                          value={formData.education}
-                          onValueChange={(value) => setFormData(prev => ({ ...prev, education: value }))}
-                          disabled={loading}
-                        >
-                          <SelectTrigger className="mt-1.5">
-                            <SelectValue placeholder="โปรดเลือกการศึกษา" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {EDUCATION_OPTIONS.filter(o => o.value).map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div>
+                          <Label htmlFor="years_employed" className="text-sm font-medium">อายุงาน (ปี)</Label>
+                          <Input
+                            id="years_employed"
+                            type="number"
+                            value={formData.years_employed}
+                            onChange={(e) => setFormData(prev => ({ ...prev, years_employed: e.target.value }))}
+                            placeholder="0"
+                            min="0"
+                            step="0.5"
+                            disabled={loading}
+                            className="mt-1.5"
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="workplace" className="text-sm font-medium">ชื่อบริษัท/สถานที่ทำงาน</Label>
+                          <Input
+                            id="workplace"
+                            value={formData.workplace}
+                            onChange={(e) => setFormData(prev => ({ ...prev, workplace: e.target.value }))}
+                            placeholder="ระบุชื่อบริษัทหรือสถานที่ทำงาน"
+                            disabled={loading}
+                            className="mt-1.5"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1463,21 +1697,10 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
                     </div>
                     <div>
                       <h3 className="font-semibold text-orange-900 text-sm">ที่อยู่ที่ทำงาน</h3>
-                      <p className="text-xs text-orange-600">สถานที่ทำงานและที่อยู่ติดต่อ</p>
+                      <p className="text-xs text-orange-600">จังหวัด อำเภอ ตำบล</p>
                     </div>
                   </div>
                   <div className="p-4 space-y-4">
-                    <div>
-                      <Label htmlFor="workplace" className="text-sm font-medium">สถานที่ทำงาน <span className="text-red-500">*</span></Label>
-                      <Input
-                        id="workplace"
-                        value={formData.workplace}
-                        onChange={(e) => setFormData(prev => ({ ...prev, workplace: e.target.value }))}
-                        placeholder="ชื่อบริษัท / สถานที่ทำงาน"
-                        disabled={loading}
-                        className="mt-1.5"
-                      />
-                    </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
