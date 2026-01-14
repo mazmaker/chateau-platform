@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useSimpleAuth } from '@/contexts/AuthContextSimple'
-import { Eye, EyeOff, Lock, Mail, Building2, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Lock, Mail, Loader2 } from 'lucide-react'
 
 export function LoginFormSimple() {
   const [formData, setFormData] = useState({
@@ -51,9 +51,13 @@ export function LoginFormSimple() {
     <div className="w-full max-w-md mx-auto">
       <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-8">
         {/* Logo and Title */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center w-20 h-20 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-2xl mb-6 shadow-lg">
-            <Building2 className="w-10 h-10 text-white" />
+        <div className="flex flex-col items-center justify-center mb-8">
+          <div className="flex items-center justify-center w-40 h-40 bg-white rounded-2xl mb-4 overflow-hidden">
+            <img
+              src="https://pqnjvcbmnatrtvpqnrdx.supabase.co/storage/v1/object/public/company-logos/00000000-0000-0000-0000-000000000001/1766926562152.png"
+              alt="CHATEAU Logo"
+              className="w-full h-full object-cover"
+            />
           </div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
             CHATEAU Platform
@@ -154,7 +158,7 @@ export function LoginFormSimple() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-lg text-base font-semibold text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-700 hover:via-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
+            className="w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-lg text-base font-semibold text-white bg-gradient-to-r from-purple-700 via-purple-400 to-purple-600 hover:from-purple-800 hover:via-purple-500 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
           >
             {loading ? (
               <>

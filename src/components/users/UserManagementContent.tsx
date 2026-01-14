@@ -49,7 +49,7 @@ const UserManagementContent = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [deletingUser, setDeletingUser] = useState<UserData | null>(null);
-  const { currentTenant, userRole } = useSimpleAuth();
+  const { currentTenant, userRole, user } = useSimpleAuth();
 
   // ADMIN can only see SALES users in their tenant
   const isAdmin = userRole === 'admin';
@@ -174,6 +174,13 @@ const UserManagementContent = () => {
     if (!deletingUser) return;
 
     try {
+      // Get session for Edge Function authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('กรุณาเข้าสู่ระบบใหม่');
+        return;
+      }
+
       // Log activity before deleting
       await supabase.rpc('log_activity', {
         p_tenant_id: deletingUser.tenant_id,
@@ -188,12 +195,26 @@ const UserManagementContent = () => {
         }
       });
 
-      const { error } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', deletingUser.id);
+      // Call Edge Function to delete user from both auth.users and public.users
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const edgeFunctionUrl = `${supabaseUrl}/functions/v1/delete-user`;
 
-      if (error) throw error;
+      const response = await fetch(edgeFunctionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          userId: deletingUser.id
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to delete user');
+      }
 
       // Update local state
       setUsers(prev => prev.filter(user => user.id !== deletingUser.id));
@@ -283,7 +304,7 @@ const UserManagementContent = () => {
                 className="flex items-center gap-2 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
               >
                 <UserPlus className="w-4 h-4" />
-                {isAdmin ? 'เพิ่มพนักงานขาย' : 'เชิญผู้ใช้ใหม่'}
+                {isAdmin ? 'เพิ่มพนักงานขาย' : 'เพิ่มผู้ใช้ใหม่'}
               </Button>
             </div>
           </div>
@@ -493,6 +514,7 @@ const UserManagementContent = () => {
                           onClick={() => toggleUserStatus(user.id, user.is_active)}
                           disabled={user.role === 'owner'}
                           className="p-1"
+                          title={user.is_active ? 'ระงับบัญชี' : 'เปิดใช้งานบัญชี'}
                         >
                           {user.is_active ? (
                             <ToggleRight className="w-5 h-5 text-green-600" />
@@ -509,6 +531,7 @@ const UserManagementContent = () => {
                           }}
                           disabled={user.role === 'owner'}
                           className="p-1"
+                          title="แก้ไขข้อมูล"
                         >
                           <Edit className="w-4 h-4 text-blue-600" />
                         </Button>
@@ -521,6 +544,7 @@ const UserManagementContent = () => {
                           }}
                           disabled={user.role === 'owner'}
                           className="p-1"
+                          title="ลบผู้ใช้"
                         >
                           <Trash2 className="w-4 h-4 text-red-600" />
                         </Button>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Shield, User, Mail } from "lucide-react";
+import { X, Shield, User, Mail, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,19 +37,45 @@ const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess, currentUserRole
   const [isActive, setIsActive] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [tenantName, setTenantName] = useState<string>("");
+
+  // Get display name for role
+  const getRoleDisplayName = (r: UserRole | string): string => {
+    const lowerRole = typeof r === 'string' ? r.toLowerCase() : r;
+    if (lowerRole === 'owner') return 'เจ้าของบริษัท (Owner)';
+    if (lowerRole === 'admin') return 'ผู้ดูแลบริษัท (Admin)';
+    if (lowerRole === 'sales') return 'พนักงานขาย (Sales)';
+    return 'ตำแหน่งปัจจุบัน';
+  };
 
   useEffect(() => {
-    if (user) {
-      setEmail(user.email || "");
-      setFullName(user.full_name || "");
-      // Normalize role to UserRole enum
-      const normalizedRole = typeof user.role === 'string'
-        ? user.role.toUpperCase() as UserRole
-        : user.role;
-      setRole(normalizedRole);
-      setIsActive(user.is_active);
-      setError("");
-    }
+    const fetchUserData = async () => {
+      if (user) {
+        setEmail(user.email || "");
+        setFullName(user.full_name || "");
+        // Normalize role to UserRole enum (lowercase)
+        const normalizedRole = typeof user.role === 'string'
+          ? user.role.toLowerCase() as UserRole
+          : user.role;
+        setRole(normalizedRole);
+        setIsActive(user.is_active);
+        setError("");
+
+        // Fetch tenant name
+        if (user.tenant_id) {
+          const { data } = await supabase
+            .from('tenants')
+            .select('name')
+            .eq('id', user.tenant_id)
+            .single();
+          if (data) {
+            setTenantName(data.name);
+          }
+        }
+      }
+    };
+
+    fetchUserData();
   }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -169,36 +195,34 @@ const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess, currentUserRole
                 disabled={loading}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="เลือกตำแหน่ง..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={UserRole.ADMIN}>
-                    <div className="flex items-center gap-2">
-                      <Shield className="w-4 h-4" />
-                      <div>
-                        <div className="font-medium">แอดมิน</div>
-                        <div className="text-xs text-gray-600">จัดการผู้ใช้และระบบ</div>
-                      </div>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value={UserRole.SALES}>
-                    <div className="flex items-center gap-2">
-                      <User className="w-4 h-4" />
-                      <div>
-                        <div className="font-medium">พนักงานขาย</div>
-                        <div className="text-xs text-gray-600">จัดการลูกค้าและโครงการ</div>
-                      </div>
-                    </div>
-                  </SelectItem>
+                  <SelectItem value={UserRole.ADMIN}>ผู้ดูแลบริษัท (Admin)</SelectItem>
+                  <SelectItem value={UserRole.SALES}>พนักงานขาย (Sales)</SelectItem>
                 </SelectContent>
               </Select>
             )}
+            <p className="text-xs text-gray-500 mt-1">
+              ตำแหน่งปัจจุบัน: <span className="font-medium text-gray-700">{getRoleDisplayName(role)}</span>
+            </p>
             {isAdmin && (
               <p className="text-xs text-gray-500 mt-1">
                 * แอดมินสามารถจัดการได้เฉพาะตำแหน่งพนักงานขาย
               </p>
             )}
           </div>
+
+          {/* Company Info */}
+          {tenantName && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center gap-2 text-sm text-blue-800">
+                <Building2 className="w-4 h-4" />
+                <span className="font-medium">บริษัทปัจจุบัน:</span>
+                <span>{tenantName}</span>
+              </div>
+            </div>
+          )}
 
           {/* Status */}
           <div className="mb-6">

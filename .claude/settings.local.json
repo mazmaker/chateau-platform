@@ -125,7 +125,22 @@
       "Bash(npx supabase db push:*)",
       "Bash(PGPASSWORD=\"WJyIVdg39zCK8tYV\" psql:*)",
       "Bash(docker run:*)",
-      "Bash(export PATH=\"/opt/homebrew/opt/postgresql@16/bin:$PATH\":*)"
+      "Bash(export PATH=\"/opt/homebrew/opt/postgresql@16/bin:$PATH\":*)",
+      "Bash(npx supabase status:*)",
+      "Bash(npx supabase projects list:*)",
+      "Bash(ls:*)",
+      "Bash(PGPASSWORD=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBxbmp2Y2JtbmF0cnR2cHFucmR4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTk4MzY1MSwiZXhwIjoyMDgxNTU5NjUxfQ.goFYNJymVWd-XO3c-RL-PhfJUPXfCEXs3dA5Y5cP0o\" psql:*)",
+      "Bash(PGPASSWORD=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1taW5pb24iLCJyZWYiOiJwcW5qdmNibW5hdHJ0dnBxbnJkeCIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJpYXQiOjE3NjU5ODM2NTEsImV4cCI6MjA4MTU1OTY1MX0.goFYNJymVWd-XO3c-RL-PhfJUPXfCEXs3dA5Y5cP0o\" psql:*)",
+      "Bash(npx supabase login:*)",
+      "Bash(npx supabase db pull:*)",
+      "Bash(npx supabase migration repair:*)",
+      "Bash(npx supabase migration list:*)",
+      "Bash(npx supabase db remote commit:*)",
+      "Bash(npx supabase functions deploy:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "Bash(PGPASSWORD=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1taW5pb24iLCJyZWYiOiJwcW5qdmNibW5hdHJ0dnBxbnJkeCIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJpYXQiOjE3NjU5ODM2NTEsImV4cCI6MjA4MTU1OTY1MX0.goFYNJymVWd-XO3c-RL-PhfJUPXfCEXs3dA5Y5cP0o\" psql -h db.pqnjvcbmnatrtvpqnrdx.supabase.co -U postgres -d postgres -c \"DROP FUNCTION IF EXISTS public.delete_user_completely CASCADE;\")",
+      "Bash(xargs:*)"
     ]
   }
 }

@@ -16,6 +16,8 @@ import LeadCDP from "./pages/LeadCDP";
 import CampaignManagement from "./pages/CampaignManagement";
 import AdminCustomization from "./pages/AdminCustomization";
 import Settings from "./pages/Settings";
+import SetupPassword from "./pages/SetupPassword";
+import AcceptInvite from "./pages/AcceptInvite";
 import { ProtectedRouteSimple } from "@/components/auth/ProtectedRouteSimple";
 import { TenantStatusGuard } from "@/components/auth/TenantStatusGuard";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -34,6 +36,44 @@ const App = () => (
         <Routes>
           {/* Authentication Routes - Only accessible when not logged in */}
           <Route path="/auth/login" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้าเข้าสู่ระบบได้"
+              context={{ page: 'login' }}
+            >
+              <ProtectedRouteSimple onlyGuests={true}>
+                <SimpleLogin />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          {/* Setup Password Route - For email invite flow */}
+          <Route path="/auth/setup-password" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้าตั้งรหัสผ่านได้"
+              context={{ page: 'setup-password' }}
+            >
+              <SetupPassword />
+            </ErrorBoundary>
+          } />
+
+          {/* Accept Invite Route - For user to accept invite and set password */}
+          <Route path="/auth/accept-invite" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้ารับคำเชิญได้"
+              context={{ page: 'accept-invite' }}
+            >
+              <AcceptInvite />
+            </ErrorBoundary>
+          } />
+
+          {/* Alias for login */}
+          <Route path="/login" element={
             <ErrorBoundary
               showRetry={true}
               showHome={true}

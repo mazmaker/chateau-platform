@@ -1,0 +1,33 @@
+-- Fix: Since public.users.id is synced with auth.users.id, query by id not auth_user_id
+CREATE OR REPLACE FUNCTION get_user_by_auth_id(p_auth_id uuid)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_record users%ROWTYPE;
+BEGIN
+    -- Get user by id (since id = auth.users.id after sync)
+    SELECT * INTO v_user_record
+    FROM users
+    WHERE id = p_auth_id  -- Changed from auth_user_id to id
+    LIMIT 1;
+
+    IF v_user_record IS NULL THEN
+        RETURN json_build_object('success', false, 'message', 'User not found');
+    END IF;
+
+    RETURN json_build_object(
+        'success', true,
+        'id', v_user_record.id,
+        'email', v_user_record.email,
+        'full_name', v_user_record.full_name,
+        'role', v_user_record.role,
+        'tenant_id', v_user_record.tenant_id,
+        'auth_user_id', v_user_record.auth_user_id
+    );
+END;
+$$;
+
+-- Grant execute to authenticated users
+GRANT EXECUTE ON FUNCTION get_user_by_auth_id(uuid) TO authenticated;
