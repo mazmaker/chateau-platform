@@ -18,7 +18,7 @@ DO $$ BEGIN
 END $$;
 
 CREATE TYPE tenant_status AS ENUM ('trial', 'active', 'suspended', 'cancelled');
-CREATE TYPE subscription_plan AS ENUM ('starter', 'professional', 'enterprise');
+CREATE TYPE subscription_plan AS ENUM ('free', 'starter', 'professional', 'enterprise');
 CREATE TYPE user_role AS ENUM ('owner', 'admin', 'sales');
 CREATE TYPE booking_status AS ENUM ('pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled');
 CREATE TYPE property_type AS ENUM ('apartment', 'house', 'villa', 'condo', 'commercial');

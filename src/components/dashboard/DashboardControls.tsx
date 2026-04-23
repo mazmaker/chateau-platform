@@ -105,7 +105,7 @@ export const DashboardControls: React.FC<DashboardControlsProps> = ({
             <ManageSettingsGuard>
               <Button variant="outline" size="sm">
                 <SettingsIcon className="w-4 h-4 mr-2" />
-                ตั้งค่า
+                แก้ไขโปรไฟล์
               </Button>
             </ManageSettingsGuard>
           </div>
@@ -131,7 +131,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ isDataReady = true }
 
   const ownerActions = [
     { icon: Users, label: 'จัดการผู้ใช้', href: '/users', color: 'text-blue-600' },
-    { icon: Building2, label: 'ตั้งค่าองค์กร', href: '/settings', color: 'text-green-600' },
+    { icon: Building2, label: 'แก้ไขโปรไฟล์', href: '/settings', color: 'text-green-600' },
     { icon: FileText, label: 'รายงาน', href: '/reports', color: 'text-purple-600' },
   ];
 
@@ -186,9 +186,9 @@ export const DataProtectionNotice: React.FC<DataProtectionNoticeProps> = ({ isDa
   // Don't show until data is ready to prevent showing incorrect/empty state
   if (!isDataReady) {
     return (
-      <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-        <Lock className="w-5 h-5 text-blue-600 flex-shrink-0" />
-        <div className="text-sm text-blue-800 flex items-center gap-2">
+      <div className="flex items-center gap-2 p-3 bg-white border border-gray-300 rounded-lg shadow-sm">
+        <Lock className="w-5 h-5 text-gray-600 flex-shrink-0" />
+        <div className="text-sm text-gray-700 flex items-center gap-2">
           <span className="font-medium">ความปลอดภัยข้อมูล:</span>
           <Loader2 className="w-4 h-4 animate-spin" />
           <span>กำลังตรวจสอบสิทธิ์...</span>
@@ -198,9 +198,9 @@ export const DataProtectionNotice: React.FC<DataProtectionNoticeProps> = ({ isDa
   }
 
   return (
-    <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-      <Lock className="w-5 h-5 text-blue-600 flex-shrink-0" />
-      <div className="text-sm text-blue-800">
+    <div className="flex items-center gap-2 p-3 bg-white border border-gray-300 rounded-lg shadow-sm">
+      <Lock className="w-5 h-5 text-gray-600 flex-shrink-0" />
+      <div className="text-sm text-gray-700">
         <span className="font-medium">ความปลอดภัยข้อมูล:</span>
         <span className="ml-1">
           {isSales && 'คุณสามารถดูและแก้ไขข้อมูลได้'}

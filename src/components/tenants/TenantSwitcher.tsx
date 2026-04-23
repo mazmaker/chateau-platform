@@ -63,7 +63,7 @@ const TenantSwitcher = () => {
                     "border-b border-gray-100 last:border-b-0"
                   )}
                 >
-                  <div className="w-8 h-8 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                  <div className="w-8 h-8 bg-gray-900 text-white shadow-lg rounded-lg flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
                     {userTenant.tenants.name.charAt(0)}
                   </div>
 

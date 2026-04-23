@@ -185,6 +185,7 @@ Each tenant has:
 ## 📚 Documentation
 
 - [SETUP_GUIDE.md](./SETUP_GUIDE.md) - Detailed setup instructions
+- [docs/SMTP_EMAIL_CONFIGURATION.md](./docs/SMTP_EMAIL_CONFIGURATION.md) - Configure email sending for production
 - [supabase/migrations/](./supabase/migrations/) - Database schema
 - [src/types/database.ts](./src/types/database.ts) - Type definitions
 

@@ -13,13 +13,13 @@ CREATE EXTENSION IF NOT EXISTS "citext";
 -- ====================================================================
 
 -- User roles for multi-tenant access control
-CREATE TYPE user_role AS ENUM ('owner', 'admin', 'sales', 'viewer');
+CREATE TYPE user_role AS ENUM ('owner', 'admin', 'sales');
 
 -- Tenant status
 CREATE TYPE tenant_status AS ENUM ('trial', 'active', 'suspended', 'cancelled');
 
 -- Subscription plans
-CREATE TYPE subscription_plan AS ENUM ('free', 'professional', 'enterprise');
+CREATE TYPE subscription_plan AS ENUM ('free', 'starter', 'professional', 'enterprise');
 
 -- ====================================================================
 -- CREATE TABLES
@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS user_tenants (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    role user_role DEFAULT 'viewer',
+    role user_role DEFAULT 'sales',
 
     -- Status
     is_active boolean DEFAULT true,

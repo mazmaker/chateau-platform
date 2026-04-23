@@ -26,7 +26,7 @@ const navItems: NavItem[] = [
   { icon: Users, label: "ลูกค้า", href: "/customers" },
   { icon: UserCog, label: "พนักงานขาย", href: "/sales-team" },
   { icon: Megaphone, label: "แคมเปญ", href: "/marketing" },
-  { icon: Settings, label: "ตั้งค่า", href: "/settings" },
+  { icon: Settings, label: "แก้ไขโปรไฟล์", href: "/settings" },
   { icon: Settings, label: "ออกจากระบบ", href: "/logout" },
 ];
 

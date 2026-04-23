@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { User, Mail, Phone, Lock, Bell, Globe, Camera, Shield, Loader2, ArrowLeft, Eye, EyeOff, Check, X } from 'lucide-react';
+import { User, Mail, Phone, Lock, Bell, Globe, Camera, Shield, Loader2, ArrowLeft, Eye, EyeOff, Check, X, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { supabase } from '@/lib/supabase';
@@ -8,8 +8,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
-
-type TabType = 'profile' | 'security' | 'preferences';
+import { PageTabs } from '@/components/ui/PageTabs';
 
 // Password strength levels
 type PasswordStrength = 'weak' | 'medium' | 'strong' | 'very-strong';
@@ -30,7 +29,7 @@ const Settings = () => {
   const navigate = useNavigate();
   const { user, userProfile, refreshUser, currentTenant } = useSimpleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabType>('profile');
+  const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(false);
   const [avatarLoading, setAvatarLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -179,9 +178,9 @@ const Settings = () => {
   }, [passwordData.newPassword]);
 
   const tabs = [
-    { id: 'profile' as TabType, label: 'โปรไฟล์', icon: User },
-    { id: 'security' as TabType, label: 'ความปลอดภัย', icon: Shield },
-    { id: 'preferences' as TabType, label: 'การตั้งค่า', icon: Bell },
+    { id: 'profile', label: 'โปรไฟล์', icon: User },
+    { id: 'security', label: 'ความปลอดภัย', icon: Shield },
+    { id: 'preferences', label: 'การแจ้งเตือน', icon: Bell },
   ];
 
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -414,10 +413,10 @@ const Settings = () => {
 
       if (error) throw error;
 
-      toast.success('บันทึกการตั้งค่าสำเร็จ');
+      toast.success('บันทึกการแจ้งเตือนสำเร็จ');
     } catch (error) {
       console.error('Error saving preferences:', error);
-      toast.error('ไม่สามารถบันทึกการตั้งค่าได้');
+      toast.error('ไม่สามารถบันทึกการแจ้งเตือนได้');
     } finally {
       setLoading(false);
     }
@@ -437,7 +436,7 @@ const Settings = () => {
         <h3 className="text-lg font-semibold text-foreground mb-4">รูปโปรไฟล์</h3>
         <div className="flex items-center gap-6">
           <div className="relative">
-            <div className="w-24 h-24 rounded-full overflow-hidden bg-gradient-to-br from-[#676AF1] to-[#38B6FFCC] flex items-center justify-center">
+            <div className="w-24 h-24 rounded-full overflow-hidden bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
               {userProfile?.avatar_url ? (
                 <img src={userProfile.avatar_url} alt={profileData.full_name || 'Profile'} className="w-full h-full object-cover" />
               ) : (
@@ -486,7 +485,7 @@ const Settings = () => {
                 type="text"
                 value={profileData.full_name}
                 onChange={(e) => setProfileData({ ...profileData, full_name: e.target.value })}
-                className="w-full pl-10 pr-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#676AF1]/20 focus:border-[#676AF1]"
+                className="w-full pl-10 pr-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-400"
                 placeholder="กรอกชื่อ-นามสกุล"
               />
             </div>
@@ -514,7 +513,7 @@ const Settings = () => {
                 type="tel"
                 value={profileData.phone}
                 onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                className="w-full pl-10 pr-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#676AF1]/20 focus:border-[#676AF1]"
+                className="w-full pl-10 pr-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-400"
                 placeholder="08x-xxx-xxxx"
               />
             </div>
@@ -576,7 +575,7 @@ const Settings = () => {
                 type={showCurrentPassword ? 'text' : 'password'}
                 value={passwordData.currentPassword}
                 onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                className="w-full pl-10 pr-12 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#676AF1]/20 focus:border-[#676AF1]"
+                className="w-full pl-10 pr-12 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-400"
                 placeholder="กรอกรหัสผ่านเดิม"
               />
               <button
@@ -598,7 +597,7 @@ const Settings = () => {
                 type={showNewPassword ? 'text' : 'password'}
                 value={passwordData.newPassword}
                 onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                className="w-full pl-10 pr-12 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#676AF1]/20 focus:border-[#676AF1]"
+                className="w-full pl-10 pr-12 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-400"
                 placeholder="กรอกรหัสผ่านใหม่"
               />
               <button
@@ -669,7 +668,7 @@ const Settings = () => {
                 type={showConfirmPassword ? 'text' : 'password'}
                 value={passwordData.confirmPassword}
                 onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                className="w-full pl-10 pr-12 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#676AF1]/20 focus:border-[#676AF1]"
+                className="w-full pl-10 pr-12 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-400"
                 placeholder="กรอกรหัสผ่านใหม่อีกครั้ง"
               />
               <button
@@ -716,9 +715,9 @@ const Settings = () => {
       </div>
 
       {/* Security Tips */}
-      <div className="bg-[#E4DAF4]/30 rounded-2xl p-6 border border-[#E4DAF4]">
+      <div className="bg-gray-50 border-gray-200">
         <div className="flex gap-3">
-          <Shield className="w-5 h-5 text-[#676AF1] flex-shrink-0 mt-0.5" />
+          <Shield className="w-5 h-5 text-gray-700 flex-shrink-0 mt-0.5" />
           <div>
             <h4 className="font-medium text-foreground">คำแนะนำความปลอดภัย</h4>
             <ul className="text-sm text-muted-foreground mt-2 space-y-1">
@@ -743,7 +742,7 @@ const Settings = () => {
           <select
             value={preferences.language}
             onChange={(e) => setPreferences({ ...preferences, language: e.target.value })}
-            className="flex-1 px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#676AF1]/20 focus:border-[#676AF1]"
+            className="flex-1 px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-400"
           >
             <option value="th">ไทย (Thai)</option>
             <option value="en">English</option>
@@ -766,7 +765,7 @@ const Settings = () => {
             <button
               onClick={() => setPreferences({ ...preferences, emailNotifications: !preferences.emailNotifications })}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                preferences.emailNotifications ? 'bg-[#676AF1]' : 'bg-gray-300'
+                preferences.emailNotifications ? 'bg-gray-700' : 'bg-gray-300'
               }`}
             >
               <span
@@ -794,7 +793,7 @@ const Settings = () => {
               onClick={requestNotificationPermission}
               disabled={notificationPermission === 'not-supported'}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                notificationPermission === 'granted' ? 'bg-[#676AF1]' : 'bg-gray-300'
+                notificationPermission === 'granted' ? 'bg-gray-700' : 'bg-gray-300'
               }`}
             >
               <span
@@ -812,7 +811,7 @@ const Settings = () => {
             disabled={loading}
             className="gradient-primary text-primary-foreground px-6 rounded-xl"
           >
-            {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> กำลังบันทึก</> : 'บันทึกการตั้งค่า'}
+            {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> กำลังบันทึก</> : 'บันทึกการแจ้งเตือน'}
           </Button>
         </div>
       </div>
@@ -825,40 +824,21 @@ const Settings = () => {
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Main Content */}
-      <div className="lg:ml-[260px] min-h-screen">
-        {/* Header */}
+      <div className="lg:ml-[260px]">
         <Header onMenuClick={() => setSidebarOpen(true)} />
 
-        {/* Settings Content */}
         <main className="p-6">
           {/* Page Header */}
           <div className="mb-6">
-            <h1 className="text-[30px] font-bold text-foreground">Settings Profile</h1>
-            <p className="text-sm text-muted-foreground">จัดการข้อมูลโปรไฟล์และการตั้งค่าของคุณ</p>
+            <h1 className="text-2xl font-bold text-foreground">Profile Settings</h1>
+            <p className="text-muted-foreground mt-1">จัดการข้อมูลโปรไฟล์และการตั้งค่าของคุณ</p>
           </div>
 
+          {/* Settings Content */}
           <div className="flex flex-col md:flex-row gap-6">
             {/* Sidebar Navigation */}
             <div className="w-full md:w-56">
-              <nav className="bg-white rounded-2xl p-3 shadow-sm border border-border">
-                {tabs.map((tab) => {
-                  const Icon = tab.icon;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
-                        activeTab === tab.id
-                          ? 'bg-[#E4DAF4] text-[#676AF1] font-semibold'
-                          : 'text-muted-foreground hover:bg-secondary/50'
-                      }`}
-                    >
-                      <Icon className="w-5 h-5" />
-                      {tab.label}
-                    </button>
-                  );
-                })}
-              </nav>
+              <PageTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
             </div>
 
             {/* Content */}

@@ -14,7 +14,7 @@ export const ProtectedRouteSimple = ({
   onlyGuests = false,
   requireRole
 }: SimpleProtectedRouteProps) => {
-  const { user, loading, userRole, authChecked } = useSimpleAuth()
+  const { user, loading, userRole, authChecked, passwordResetRequired } = useSimpleAuth()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -28,11 +28,16 @@ export const ProtectedRouteSimple = ({
       navigate('/auth/login', { replace: true })
     }
 
+    // Check if user needs to change password (but not on change-password page itself)
+    if (authChecked && user && passwordResetRequired && !window.location.pathname.includes('/auth/change-password')) {
+      navigate('/auth/change-password', { replace: true })
+    }
+
     // Check role requirements
     if (authChecked && user && requireRole && userRole !== requireRole) {
       navigate('/', { replace: true })
     }
-  }, [user, onlyGuests, requireRole, userRole, navigate, authChecked])
+  }, [user, onlyGuests, requireRole, userRole, navigate, authChecked, passwordResetRequired])
 
   // ===== Guest Routes (Login, Register) =====
   if (onlyGuests) {
@@ -44,10 +49,36 @@ export const ProtectedRouteSimple = ({
   // ===== Protected Routes =====
   // If we have a user (just logged in), show content immediately
   if (user) {
+    // Check if password reset is required (except on change-password page)
+    if (passwordResetRequired && !window.location.pathname.includes('/auth/change-password')) {
+      return (
+        <div className="min-h-screen bg-white flex items-center justify-center px-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-amber-200 p-8 max-w-md">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0-4h.01m-4.938 9h9.876c.54 0 .98-.48.98-1.07a.816.816 0 0 0-.054-.288L13.618 4.15a.81.81 0 0 0-1.317-.054c-.03.03-.06.064-.081.1L7.984 15.85a.816.816 0 0 0 .747 1.15Z" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                ต้องเปลี่ยนรหัสผ่าน
+              </h2>
+              <p className="text-gray-600 mb-6">
+                คุณต้องเปลี่ยนรหัสผ่านชั่วคราวก่อนเข้าใช้งานระบบ
+              </p>
+              <p className="text-sm text-gray-500">
+                กำลังเปลี่ยนเส้นทางไปหน้าเปลี่ยนรหัสผ่าน...
+              </p>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     // Check role requirements
     if (requireRole && userRole !== requireRole) {
       return (
-        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex items-center justify-center px-4">
+        <div className="min-h-screen bg-white flex items-center justify-center px-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-red-200 p-8 max-w-md">
             <div className="text-center">
               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -75,9 +106,9 @@ export const ProtectedRouteSimple = ({
   // Show loading only for initial auth check or explicit loading state
   if (!authChecked || loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex flex-col items-center justify-center">
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center">
         <div className="text-center">
-          <div className="flex items-center justify-center w-20 h-20 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl mb-6 shadow-lg">
+          <div className="flex items-center justify-center w-20 h-20 bg-gray-900 text-white shadow-lg rounded-2xl mb-6 shadow-lg">
             <Building2 className="w-10 h-10 text-white" />
           </div>
           <Loader2 className="w-8 h-8 text-indigo-600 mx-auto animate-spin mb-4" />

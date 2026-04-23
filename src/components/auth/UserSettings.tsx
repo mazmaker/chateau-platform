@@ -99,7 +99,7 @@ const UserSettings = () => {
       {/* Avatar Section */}
       <div className="flex items-center space-x-6">
         <div className="relative">
-          <div className="w-24 h-24 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full flex items-center justify-center text-white text-2xl font-semibold">
+          <div className="w-24 h-24 bg-gray-900 text-white shadow-lg rounded-full flex items-center justify-center text-white text-2xl font-semibold">
             {profileData.fullName ? profileData.fullName.split(' ').map((n: string) => n[0]).join('').toUpperCase() : 'U'}
           </div>
           <button className="absolute bottom-0 right-0 w-8 h-8 bg-white rounded-full shadow-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50">
@@ -159,7 +159,7 @@ const UserSettings = () => {
         <button
           type="submit"
           disabled={loading}
-          className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+          className="px-6 py-3 bg-gray-900 text-white shadow-lg rounded-lg hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
         >
           {loading ? 'Saving...' : 'Save Changes'}
         </button>
@@ -208,7 +208,7 @@ const UserSettings = () => {
           <button
             type="submit"
             disabled={loading}
-            className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+            className="px-6 py-3 bg-gray-900 text-white shadow-lg rounded-lg hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
           >
             {loading ? 'Updating...' : 'Update Password'}
           </button>
@@ -271,7 +271,7 @@ const UserSettings = () => {
       {currentTenant && (
         <div className="border border-gray-200 rounded-lg p-6">
           <div className="flex items-center space-x-4 mb-6">
-            <div className="w-16 h-16 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center text-white text-xl font-bold">
+            <div className="w-16 h-16 bg-gray-900 text-white shadow-lg rounded-xl flex items-center justify-center text-white text-xl font-bold">
               {currentTenant.name.charAt(0)}
             </div>
             <div>
@@ -310,7 +310,7 @@ const UserSettings = () => {
             </div>
           </div>
 
-          <button className="mt-6 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all duration-200">
+          <button className="mt-6 px-6 py-3 bg-gray-900 text-white shadow-lg rounded-lg hover:bg-black transition-all duration-200">
             Update Company Info
           </button>
         </div>

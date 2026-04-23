@@ -1,5 +1,4 @@
-import { Search, Bell, Globe, Menu, Settings, LogOut, Crown, Shield, Briefcase, Eye } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Bell, Globe, Menu, Settings, LogOut, Crown, Shield, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,7 +10,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
-import TenantSwitcher from "@/components/tenants/TenantSwitcher";
 import { usePermissions, ManageSettingsGuard, ManageUsersGuard } from "@/components/auth/PermissionGuard";
 import { CompanyLogo } from "@/components/company/CompanyLogo";
 
@@ -48,8 +46,6 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         return <Shield className="w-4 h-4 text-blue-600" />;
       case 'sales':
         return <Briefcase className="w-4 h-4 text-green-600" />;
-      case 'viewer':
-        return <Eye className="w-4 h-4 text-gray-600" />;
       default:
         return null;
     }
@@ -60,13 +56,12 @@ const Header = ({ onMenuClick }: HeaderProps) => {
       case 'owner': return 'เจ้าของ';
       case 'admin': return 'ผู้ดูแล';
       case 'sales': return 'พนักงานขาย';
-      case 'viewer': return 'ผู้ชม';
       default: return 'ผู้ใช้';
     }
   };
 
   return (
-    <header className="h-16 bg-[#F0F8FD] border-b border-border flex items-center justify-between px-6">
+    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shadow-sm">
       {/* Left Side */}
       <div className="flex items-center gap-4">
         <Button
@@ -82,22 +77,10 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         <CompanyLogo size="2xl" className="hidden sm:block" />
 
         <h1 className="text-2xl font-bold text-foreground hidden sm:block">Dashboard</h1>
-
-        {/* Tenant Switcher */}
-        <TenantSwitcher />
       </div>
 
       {/* Right Side */}
       <div className="flex items-center gap-4">
-        {/* Search */}
-        <div className="relative hidden md:block">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search..."
-            className="pl-10 w-64 bg-secondary border-0"
-          />
-        </div>
-
         {/* Language Switcher */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -120,7 +103,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <div className="w-9 h-9 cursor-pointer rounded-full overflow-hidden bg-gradient-to-br from-[#676AF1] to-[#38B6FFCC] flex items-center justify-center ring-2 ring-border hover:ring-primary transition-all">
+            <div className="w-9 h-9 cursor-pointer rounded-full overflow-hidden bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center ring-2 ring-border hover:ring-primary transition-all">
               {userProfile?.avatar_url ? (
                 <img src={userProfile.avatar_url} alt={getUserName()} className="w-full h-full object-cover" />
               ) : (
@@ -138,7 +121,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
 
             <DropdownMenuItem onClick={() => navigate('/settings')}>
               <Settings className="w-4 h-4 mr-2" />
-              ตั้งค่า
+              แก้ไขโปรไฟล์
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />

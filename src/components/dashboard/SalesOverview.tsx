@@ -1,26 +1,118 @@
+import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { TrendingUp, TrendingDown, DollarSign, Home, Users, Target } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 
-// Mock real-time data
-const salesData = [
-  { date: '1 ธ.ค.', revenue: 4500000, units: 12, leads: 45, bookings: 8 },
-  { date: '5 ธ.ค.', revenue: 5200000, units: 15, leads: 52, bookings: 10 },
-  { date: '10 ธ.ค.', revenue: 4800000, units: 13, leads: 48, bookings: 9 },
-  { date: '15 ธ.ค.', revenue: 6100000, units: 18, leads: 61, bookings: 14 },
-  { date: '20 ธ.ค.', revenue: 5800000, units: 16, leads: 58, bookings: 12 },
-  { date: '25 ธ.ค.', revenue: 7200000, units: 22, leads: 72, bookings: 18 },
-  { date: '30 ธ.ค.', revenue: 6900000, units: 20, leads: 68, bookings: 17 },
-];
+interface SalesData {
+  date: string;
+  revenue: number;
+  units: number;
+  leads: number;
+  bookings: number;
+}
 
 const SalesOverview = () => {
+  const [salesData, setSalesData] = useState<SalesData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [revenueGrowth, setRevenueGrowth] = useState(0);
+  const [unitsGrowth, setUnitsGrowth] = useState(0);
+
+  useEffect(() => {
+    fetchSalesData();
+  }, []);
+
+  const fetchSalesData = async () => {
+    setLoading(true);
+    try {
+      // Fetch actual sales/revenue data from database
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('amount, created_at, status')
+        .eq('status', 'paid')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      // Process data if available
+      if (data && data.length > 0) {
+        // Group data by date and calculate metrics
+        const processedData = processInvoiceData(data);
+        setSalesData(processedData);
+        calculateGrowthRates(processedData);
+      } else {
+        setSalesData([]);
+        setRevenueGrowth(0);
+        setUnitsGrowth(0);
+      }
+    } catch (error) {
+      console.error('Error fetching sales data:', error);
+      setSalesData([]);
+      setRevenueGrowth(0);
+      setUnitsGrowth(0);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const processInvoiceData = (invoices: any[]): SalesData[] => {
+    // Group invoices by date and calculate daily metrics
+    const grouped = invoices.reduce((acc, invoice) => {
+      const date = new Date(invoice.created_at).toLocaleDateString('th-TH', {
+        day: 'numeric',
+        month: 'short'
+      });
+
+      if (!acc[date]) {
+        acc[date] = { revenue: 0, units: 0, leads: 0, bookings: 0 };
+      }
+
+      acc[date].revenue += invoice.amount;
+      acc[date].units += 1;
+      acc[date].bookings += 1;
+      // Estimate leads (assuming 1:3 booking to lead ratio)
+      acc[date].leads += 3;
+
+      return acc;
+    }, {});
+
+    return Object.entries(grouped).map(([date, data]: [string, any]) => ({
+      date,
+      ...data
+    }));
+  };
+
+  const calculateGrowthRates = (data: SalesData[]) => {
+    if (data.length >= 2) {
+      const latest = data[data.length - 1];
+      const previous = data[data.length - 2];
+
+      const revGrowth = previous.revenue > 0
+        ? ((latest.revenue - previous.revenue) / previous.revenue) * 100
+        : 0;
+      const unitGrowth = previous.units > 0
+        ? ((latest.units - previous.units) / previous.units) * 100
+        : 0;
+
+      setRevenueGrowth(revGrowth);
+      setUnitsGrowth(unitGrowth);
+    }
+  };
+
   const totalRevenue = salesData.reduce((sum, day) => sum + day.revenue, 0);
   const totalUnits = salesData.reduce((sum, day) => sum + day.units, 0);
   const totalLeads = salesData.reduce((sum, day) => sum + day.leads, 0);
   const totalBookings = salesData.reduce((sum, day) => sum + day.bookings, 0);
 
-  const avgConversionRate = ((totalBookings / totalLeads) * 100).toFixed(1);
-  const revenueGrowth = 15.3; // Mock growth percentage
-  const unitsGrowth = 12.7; // Mock growth percentage
+  const avgConversionRate = totalLeads > 0 ? ((totalBookings / totalLeads) * 100).toFixed(1) : '0.0';
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -37,8 +129,8 @@ const SalesOverview = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {/* Total Revenue */}
           <div className="text-center">
-            <div className="flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-lg mx-auto mb-3">
-              <DollarSign className="w-6 h-6 text-indigo-600" />
+            <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-amber-600 to-amber-700 rounded-xl mx-auto mb-3 shadow-xl">
+              <DollarSign className="w-6 h-6 text-white" strokeWidth={2} />
             </div>
             <p className="text-2xl font-bold text-gray-900">
               ฿{(totalRevenue / 1000000).toFixed(1)}M
@@ -52,8 +144,8 @@ const SalesOverview = () => {
 
           {/* Total Units */}
           <div className="text-center">
-            <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-lg mx-auto mb-3">
-              <Home className="w-6 h-6 text-blue-600" />
+            <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-gray-600 to-gray-700 rounded-xl mx-auto mb-3 shadow-xl">
+              <Home className="w-6 h-6 text-white" strokeWidth={2} />
             </div>
             <p className="text-2xl font-bold text-gray-900">{totalUnits}</p>
             <div className="flex items-center justify-center gap-1 mt-2">
@@ -65,8 +157,8 @@ const SalesOverview = () => {
 
           {/* Total Bookings */}
           <div className="text-center">
-            <div className="flex items-center justify-center w-12 h-12 bg-green-100 rounded-lg mx-auto mb-3">
-              <Target className="w-6 h-6 text-green-600" />
+            <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl mx-auto mb-3 shadow-xl">
+              <Target className="w-6 h-6 text-white" strokeWidth={2} />
             </div>
             <p className="text-2xl font-bold text-gray-900">{totalBookings}</p>
             <div className="flex items-center justify-center gap-1 mt-2">
@@ -77,8 +169,8 @@ const SalesOverview = () => {
 
           {/* Conversion Rate */}
           <div className="text-center">
-            <div className="flex items-center justify-center w-12 h-12 bg-purple-100 rounded-lg mx-auto mb-3">
-              <Users className="w-6 h-6 text-purple-600" />
+            <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-amber-800 to-amber-900 rounded-xl mx-auto mb-3 shadow-xl">
+              <Users className="w-6 h-6 text-white" strokeWidth={2} />
             </div>
             <p className="text-2xl font-bold text-gray-900">{avgConversionRate}%</p>
             <div className="flex items-center justify-center gap-1 mt-2">

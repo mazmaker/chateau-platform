@@ -15,7 +15,6 @@ import { Button } from '@/components/ui/button';
 import {
   Building2,
   Users,
-  CreditCard,
   TrendingUp,
   TrendingDown,
   Activity,
@@ -24,9 +23,18 @@ import {
   CheckCircle,
   ArrowUpRight,
   ArrowDownRight,
-  Settings,
   Plus,
-  MoreHorizontal
+  MoreHorizontal,
+  Calendar,
+  Clock,
+  Star,
+  UserPlus as UserPlusIcon,
+  UserMinus,
+  Edit,
+  Trash2,
+  Ban,
+  Building,
+  RefreshCw
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -44,6 +52,19 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/lib/supabase';
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  Cell,
+} from 'recharts';
 
 interface Tenant {
   id: string;
@@ -67,6 +88,25 @@ interface DashboardStats {
   mrrGrowth: number;
 }
 
+interface RevenueData {
+  month: string;
+  revenue: number;
+  tenants: number;
+}
+
+interface ActivityItem {
+  id: string;
+  type: 'user_added' | 'user_updated' | 'user_deleted' | 'tenant_created' | 'tenant_updated' | 'tenant_deleted' | 'tenant_suspended' | 'subscription_renewed' | 'plan_upgraded';
+  description: string;
+  tenantName?: string;
+  timestamp: string;
+}
+
+interface TenantWithStats extends Tenant {
+  userCount: number;
+  revenue: number;
+}
+
 const OwnerDashboard = () => {
   const navigate = useNavigate();
   const { user } = useSimpleAuth();
@@ -85,6 +125,15 @@ const OwnerDashboard = () => {
   });
   const [recentTenants, setRecentTenants] = useState<Tenant[]>([]);
   const [atRiskTenants, setAtRiskTenants] = useState<Tenant[]>([]);
+  const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
+  const [recentActivities, setRecentActivities] = useState<ActivityItem[]>([]);
+  const [topTenants, setTopTenants] = useState<TenantWithStats[]>([]);
+  const [upcomingRenewals, setUpcomingRenewals] = useState<Tenant[]>([]);
+  const [revenueByPlan, setRevenueByPlan] = useState<{
+    enterprise: number;
+    professional: number;
+    starter: number;
+  }>({ enterprise: 0, professional: 0, starter: 0 });
 
   useEffect(() => {
     if (!isOwner) {
@@ -110,25 +159,56 @@ const OwnerDashboard = () => {
         const activeCount = tenantList.filter(t => t.status === 'active').length;
         const trialCount = tenantList.filter(t => t.status === 'trial').length;
 
-        // Calculate revenue (simplified - should come from billing table)
-        const revenue = tenantList.reduce((sum, t) => {
-          const planPrices = {
-            starter: 2900,
-            professional: 5900,
-            enterprise: 15900
-          };
-          return sum + (planPrices[t.subscription_plan] || 0);
-        }, 0);
+        // Calculate actual revenue from paid invoices
+        const { data: paidInvoices } = await supabase
+          .from('invoices')
+          .select('amount, paid_at')
+          .eq('status', 'paid');
+
+        const currentRevenue = paidInvoices?.reduce((sum, inv) => {
+          const paidDate = new Date(inv.paid_at || inv.created_at);
+          const currentMonth = new Date();
+          currentMonth.setDate(1); // First day of current month
+
+          if (paidDate >= currentMonth) {
+            return sum + inv.amount;
+          }
+          return sum;
+        }, 0) || 0;
+
+        // Calculate churn rate from actual data (last 30 days)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        const churnedTenants = tenantList.filter(t =>
+          t.status === 'cancelled' && new Date(t.updated_at || t.created_at) >= thirtyDaysAgo
+        ).length;
+        const realChurnRate = tenantList.length > 0 ? (churnedTenants / tenantList.length) * 100 : 0;
+
+        // Calculate MRR growth from previous month
+        const previousMonth = new Date();
+        previousMonth.setMonth(previousMonth.getMonth() - 1);
+        previousMonth.setDate(1);
+
+        const { data: previousMonthInvoices } = await supabase
+          .from('invoices')
+          .select('amount, paid_at')
+          .eq('status', 'paid')
+          .gte('paid_at', previousMonth.toISOString())
+          .lt('paid_at', new Date(previousMonth.getFullYear(), previousMonth.getMonth() + 1, 1).toISOString());
+
+        const previousRevenue = previousMonthInvoices?.reduce((sum, inv) => sum + inv.amount, 0) || 1;
+        const realMrrGrowth = previousRevenue > 0 ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 : 0;
 
         setStats({
           totalTenants: tenantList.length,
           activeTenants: activeCount,
           trialTenants: trialCount,
           totalUsers: 0, // Will fetch from users table
-          monthlyRevenue: revenue,
-          annualRunRate: revenue * 12,
-          churnRate: 2.5, // Placeholder
-          mrrGrowth: 12.3 // Placeholder
+          monthlyRevenue: currentRevenue,
+          annualRunRate: currentRevenue * 12,
+          churnRate: Math.round(realChurnRate * 100) / 100,
+          mrrGrowth: Math.round(realMrrGrowth * 100) / 100
         });
 
         // Recent tenants (last 7 days)
@@ -154,6 +234,136 @@ const OwnerDashboard = () => {
         }).slice(0, 5);
 
         setAtRiskTenants(atRisk);
+
+        // Generate real revenue trend data from invoices (last 6 months)
+        const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+        const revenueTrend: RevenueData[] = [];
+
+        // Get all paid invoices for the last 6 months
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+        const { data: historicalInvoices } = await supabase
+          .from('invoices')
+          .select('amount, paid_at, tenant_id')
+          .eq('status', 'paid')
+          .gte('paid_at', sixMonthsAgo.toISOString());
+
+        for (let i = 5; i >= 0; i--) {
+          const monthIndex = (currentMonth - i + 12) % 12;
+          const year = currentMonth - i < 0 ? currentYear - 1 : currentYear;
+          const monthName = months[monthIndex];
+
+          // Get start and end of this month
+          const monthStart = new Date(year, monthIndex, 1);
+          const monthEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59);
+
+          // Calculate actual revenue for this month
+          const monthInvoices = historicalInvoices?.filter(inv => {
+            const paidDate = new Date(inv.paid_at || inv.created_at);
+            return paidDate >= monthStart && paidDate <= monthEnd;
+          }) || [];
+
+          const monthRevenue = monthInvoices.reduce((sum, inv) => sum + inv.amount, 0);
+
+          // Calculate unique tenants who paid in this month
+          const uniqueTenants = new Set(monthInvoices.map(inv => inv.tenant_id)).size;
+
+          revenueTrend.push({
+            month: monthName,
+            revenue: monthRevenue,
+            tenants: uniqueTenants
+          });
+        }
+        setRevenueData(revenueTrend);
+
+        // Fetch recent activities from database
+        const { data: activityData, error: activityError } = await supabase
+          .rpc('get_recent_activities', { limit_count: 10 });
+
+        if (activityError) {
+          console.error('Error fetching activities:', activityError);
+        } else if (activityData) {
+          const activities: ActivityItem[] = activityData.map((item: any) => ({
+            id: item.id,
+            type: item.activity_type as ActivityItem['type'],
+            description: item.description,
+            tenantName: item.tenant_name,
+            timestamp: item.created_at
+          }));
+          setRecentActivities(activities);
+        } else {
+          setRecentActivities([]);
+        }
+
+        // Generate top performing tenants with real revenue and user counts
+        const { data: tenantUserCounts } = await supabase
+          .from('users')
+          .select('tenant_id')
+          .not('tenant_id', 'is', null);
+
+        // Count users per tenant
+        const userCountMap = new Map<string, number>();
+        tenantUserCounts?.forEach(user => {
+          const count = userCountMap.get(user.tenant_id) || 0;
+          userCountMap.set(user.tenant_id, count + 1);
+        });
+
+        // Get actual revenue per tenant from paid invoices
+        const { data: tenantRevenues } = await supabase
+          .from('invoices')
+          .select('tenant_id, amount')
+          .eq('status', 'paid');
+
+        const revenueMap = new Map<string, number>();
+        tenantRevenues?.forEach(invoice => {
+          const current = revenueMap.get(invoice.tenant_id) || 0;
+          revenueMap.set(invoice.tenant_id, current + invoice.amount);
+        });
+
+        const tenantsWithRealData = tenantList
+          .map(t => ({
+            ...t,
+            revenue: revenueMap.get(t.id) || 0,
+            userCount: userCountMap.get(t.id) || 0
+          }))
+          .sort((a, b) => b.revenue - a.revenue)
+          .slice(0, 5) as TenantWithStats[];
+        setTopTenants(tenantsWithRealData);
+
+        // Calculate revenue by plan from real data
+        const planRevenue = {
+          enterprise: tenantList
+            .filter(t => t.subscription_plan === 'enterprise' && t.status === 'active')
+            .reduce((sum, t) => sum + (revenueMap.get(t.id) || 0), 0),
+          professional: tenantList
+            .filter(t => t.subscription_plan === 'professional' && t.status === 'active')
+            .reduce((sum, t) => sum + (revenueMap.get(t.id) || 0), 0),
+          starter: tenantList
+            .filter(t => t.subscription_plan === 'starter' && t.status === 'active')
+            .reduce((sum, t) => sum + (revenueMap.get(t.id) || 0), 0)
+        };
+        setRevenueByPlan(planRevenue);
+
+        // Upcoming renewals (trial ending or subscriptions ending in 30 days)
+        const thirtyDaysFromNow = new Date();
+        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+
+        const renewals = tenantList.filter(t => {
+          if (t.status === 'trial' && t.trial_ends_at) {
+            const endDate = new Date(t.trial_ends_at);
+            return endDate <= thirtyDaysFromNow && endDate > new Date();
+          }
+          return false;
+        }).sort((a, b) => {
+          const dateA = new Date(a.trial_ends_at || 0);
+          const dateB = new Date(b.trial_ends_at || 0);
+          return dateA.getTime() - dateB.getTime();
+        }).slice(0, 5);
+
+        setUpcomingRenewals(renewals);
       }
 
       // Fetch total users count
@@ -198,6 +408,40 @@ const OwnerDashboard = () => {
     }).format(amount);
   };
 
+  const getActivityIcon = (type: ActivityItem['type']) => {
+    const icons: Record<string, React.ReactElement> = {
+      user_added: <UserPlusIcon className="w-4 h-4 text-blue-600" />,
+      user_updated: <Edit className="w-4 h-4 text-blue-500" />,
+      user_deleted: <UserMinus className="w-4 h-4 text-red-600" />,
+      tenant_created: <Building className="w-4 h-4 text-green-600" />,
+      tenant_updated: <Edit className="w-4 h-4 text-green-500" />,
+      tenant_deleted: <Trash2 className="w-4 h-4 text-red-600" />,
+      tenant_suspended: <Ban className="w-4 h-4 text-orange-600" />,
+      subscription_renewed: <RefreshCw className="w-4 h-4 text-purple-600" />,
+      plan_upgraded: <Star className="w-4 h-4 text-amber-600" />
+    };
+    return icons[type] || <Activity className="w-4 h-4 text-gray-600" />;
+  };
+
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 60) return `${diffMins} นาทีที่แล้ว`;
+    if (diffHours < 24) return `${diffHours} ชั่วโมงที่แล้ว`;
+    return `${diffDays} วันที่แล้ว`;
+  };
+
+  const getDaysUntilEnd = (endDate?: string) => {
+    if (!endDate) return null;
+    const days = Math.floor((new Date(endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return days;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -224,84 +468,98 @@ const OwnerDashboard = () => {
           <main className="p-6">
             <div className="space-y-6">
               {/* Page Header */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-3xl font-bold tracking-tight">Owner Dashboard</h1>
-                  <p className="text-muted-foreground">
-                    ภาพรวมระบบ SaaS Platform - จัดการทั้งหมดจากที่เดียว
-                  </p>
-                </div>
-              </div>
+              <Card className="bg-white border-gray-200 shadow-lg">
+                <CardContent className="pt-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl flex items-center justify-center shadow-xl">
+                        <TrendingUp className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h1 className="text-2xl font-bold text-gray-900">Owner Dashboard</h1>
+                        <p className="text-gray-600 mt-1">
+                          ภาพรวมระบบ SaaS Platform - จัดการทั้งหมดจากที่เดียว
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
         {/* Key Metrics */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {/* Monthly Recurring Revenue */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                รายได้ต่อเดือน (MRR)
-              </CardTitle>
-              <DollarSign className="w-4 h-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{formatCurrency(stats.monthlyRevenue)}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                <span className="flex items-center text-green-600">
-                  <ArrowUpRight className="w-3 h-3 mr-1" />
-                  {stats.mrrGrowth}%
-                </span>
-                <span className="ml-1">จากเดือนที่แล้ว</span>
-              </p>
+          <Card className="border-l-4 border-l-cyan-500">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-amber-600 to-amber-700 rounded-xl flex items-center justify-center shadow-xl">
+                  <DollarSign className="w-6 h-6 text-white" strokeWidth={2} />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{formatCurrency(stats.monthlyRevenue)}</p>
+                  <p className="text-xs text-muted-foreground">รายได้ต่อเดือน (MRR)</p>
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1 text-xs text-cyan-600">
+                <ArrowUpRight className="w-3 h-3" />
+                {stats.mrrGrowth}% จากเดือนที่แล้ว
+              </div>
             </CardContent>
           </Card>
 
           {/* Annual Run Rate */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                รายได้ต่อปี (ARR)
-              </CardTitle>
-              <TrendingUp className="w-4 h-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{formatCurrency(stats.annualRunRate)}</div>
-              <p className="text-xs text-muted-foreground mt-1">
+          <Card className="border-l-4 border-l-purple-500">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-gray-600 to-gray-700 rounded-xl flex items-center justify-center shadow-xl">
+                  <TrendingUp className="w-6 h-6 text-white" strokeWidth={2} />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{formatCurrency(stats.annualRunRate)}</p>
+                  <p className="text-xs text-muted-foreground">รายได้ต่อปี (ARR)</p>
+                </div>
+              </div>
+              <div className="mt-3 text-xs text-muted-foreground">
                 คำนวณจาก MRR x 12
-              </p>
+              </div>
             </CardContent>
           </Card>
 
           {/* Total Tenants */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                บริษัททั้งหมด
-              </CardTitle>
-              <Building2 className="w-4 h-4 text-purple-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{stats.totalTenants}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                <span className="text-green-600">{stats.activeTenants} Active</span>
-                <span className="mx-1">•</span>
-                <span className="text-orange-600">{stats.trialTenants} Trial</span>
-              </p>
+          <Card className="border-l-4 border-l-pink-500">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl flex items-center justify-center shadow-xl">
+                  <Building2 className="w-6 h-6 text-white" strokeWidth={2} />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.totalTenants}</p>
+                  <p className="text-xs text-muted-foreground">บริษัททั้งหมด</p>
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{stats.activeTenants} Active</span>
+                <span>•</span>
+                <span>{stats.trialTenants} Trial</span>
+              </div>
             </CardContent>
           </Card>
 
           {/* Total Users */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                ผู้ใช้ทั้งหมด
-              </CardTitle>
-              <Users className="w-4 h-4 text-cyan-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{stats.totalUsers}</div>
-              <p className="text-xs text-muted-foreground mt-1">
+          <Card className="border-l-4 border-l-orange-500">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-amber-800 to-amber-900 rounded-xl flex items-center justify-center shadow-xl">
+                  <Users className="w-6 h-6 text-white" strokeWidth={2} />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.totalUsers}</p>
+                  <p className="text-xs text-muted-foreground">ผู้ใช้ทั้งหมด</p>
+                </div>
+              </div>
+              <div className="mt-3 text-xs text-muted-foreground">
                 เฉลี่ย {stats.totalTenants > 0 ? Math.round(stats.totalUsers / stats.totalTenants) : 0} คน/บริษัท
-              </p>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -388,20 +646,20 @@ const OwnerDashboard = () => {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-purple-500" />
+                    <div className="w-3 h-3 rounded-full bg-white shadow-sm0" />
                     <span>Enterprise</span>
                   </div>
                   <span className="font-medium">
-                    {formatCurrency(15900 * recentTenants.filter(t => t.subscription_plan === 'enterprise').length)}
+                    {formatCurrency(revenueByPlan.enterprise)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-blue-500" />
+                    <div className="w-3 h-3 rounded-full bg-white shadow-sm0" />
                     <span>Professional</span>
                   </div>
                   <span className="font-medium">
-                    {formatCurrency(5900 * recentTenants.filter(t => t.subscription_plan === 'professional').length)}
+                    {formatCurrency(revenueByPlan.professional)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
@@ -410,10 +668,220 @@ const OwnerDashboard = () => {
                     <span>Starter</span>
                   </div>
                   <span className="font-medium">
-                    {formatCurrency(2900 * recentTenants.filter(t => t.subscription_plan === 'starter').length)}
+                    {formatCurrency(revenueByPlan.starter)}
                   </span>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Revenue Trend Chart */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-gray-600" />
+                  แนวโน้มรายได้ (Revenue Trend)
+                </CardTitle>
+                <CardDescription>6 เดือนที่ผ่านมา</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={revenueData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="month" stroke="#6b7280" />
+                <YAxis stroke="#6b7280" />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'white',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                  }}
+                  formatter={(value: number) => formatCurrency(value)}
+                />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke="#4b5563"
+                  strokeWidth={3}
+                  name="รายได้ (บาท)"
+                  dot={{ fill: '#4b5563', r: 5 }}
+                  activeDot={{ r: 7 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Recent Activities */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-blue-600" />
+                  กิจกรรมล่าสุด
+                </CardTitle>
+                <CardDescription>ติดตามการเปลี่ยนแปลงในระบบ</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {recentActivities.map((activity) => (
+                <div key={activity.id} className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+                  <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                    {getActivityIcon(activity.type)}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">{activity.description}</p>
+                    {activity.tenantName && (
+                      <p className="text-xs text-gray-500 mt-1">{activity.tenantName}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-gray-500">
+                    <Clock className="w-3 h-3" />
+                    {formatTimestamp(activity.timestamp)}
+                  </div>
+                </div>
+              ))}
+              {recentActivities.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Activity className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>ไม่มีกิจกรรมล่าสุด</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Top Performing Tenants & Upcoming Renewals */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Top Performing Tenants */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Star className="w-5 h-5 text-amber-500" />
+                    บริษัทยอดนิยม
+                  </CardTitle>
+                  <CardDescription>เรียงตามรายได้สูงสุด</CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => navigate('/tenants')}>
+                  ดูทั้งหมด
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {topTenants.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Star className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>ไม่มีข้อมูล</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {topTenants.map((tenant, index) => (
+                    <div
+                      key={tenant.id}
+                      className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                      onClick={() => navigate(`/tenants/${tenant.id}`)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                          index === 0 ? 'bg-amber-100 text-amber-700' :
+                          index === 1 ? 'bg-gray-100 text-gray-700' :
+                          index === 2 ? 'bg-orange-100 text-orange-700' :
+                          'bg-gray-50 text-gray-600'
+                        }`}>
+                          {index + 1}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{tenant.name}</p>
+                          <p className="text-xs text-gray-500">{tenant.userCount} ผู้ใช้</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-gray-600">{formatCurrency(tenant.revenue)}</p>
+                        <p className="text-xs text-gray-500">/เดือน</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Upcoming Renewals */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-green-600" />
+                    ต่ออายุเร็วๆ นี้
+                  </CardTitle>
+                  <CardDescription>30 วันข้างหน้า</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {upcomingRenewals.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>ไม่มีการต่ออายุใน 30 วันข้างหน้า</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {upcomingRenewals.map((tenant) => {
+                    const daysUntilEnd = getDaysUntilEnd(tenant.trial_ends_at);
+                    const isUrgent = daysUntilEnd !== null && daysUntilEnd <= 7;
+
+                    return (
+                      <div
+                        key={tenant.id}
+                        className={`flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors ${
+                          isUrgent ? 'bg-orange-50 border border-orange-200' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Building2 className={`w-5 h-5 ${isUrgent ? 'text-orange-600' : 'text-gray-400'}`} />
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{tenant.name}</p>
+                            <p className="text-xs text-gray-500">
+                              <Badge variant="outline" className="capitalize">
+                                {tenant.subscription_plan}
+                              </Badge>
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-sm font-semibold ${isUrgent ? 'text-orange-600' : 'text-gray-700'}`}>
+                            {daysUntilEnd !== null && daysUntilEnd === 0
+                              ? 'วันนี้'
+                              : daysUntilEnd !== null && daysUntilEnd === 1
+                              ? 'พรุ่งนี้'
+                              : `อีก ${daysUntilEnd} วัน`}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {tenant.trial_ends_at && new Date(tenant.trial_ends_at).toLocaleDateString('th-TH', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: '2-digit'
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -554,49 +1022,6 @@ const OwnerDashboard = () => {
           </Card>
         </div>
 
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle>ดำเนินการด่วน</CardTitle>
-            <CardDescription>จัดการระบบได้รวดเร็ว</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <Button
-                variant="outline"
-                className="h-24 flex-col gap-2"
-                onClick={() => navigate('/tenants/new')}
-              >
-                <Building2 className="w-6 h-6" />
-                <span>เพิ่มบริษัทใหม่</span>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-24 flex-col gap-2"
-                onClick={() => navigate('/billing')}
-              >
-                <CreditCard className="w-6 h-6" />
-                <span>จัดการ Billing</span>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-24 flex-col gap-2"
-                onClick={() => navigate('/users')}
-              >
-                <Users className="w-6 h-6" />
-                <span>จัดการผู้ใช้</span>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-24 flex-col gap-2"
-                onClick={() => navigate('/settings')}
-              >
-                <Settings className="w-6 h-6" />
-                <span>ตั้งค่าระบบ</span>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
             </div>
           </main>
         </div>

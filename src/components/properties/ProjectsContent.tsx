@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useAuth } from "@/contexts/AuthContext";
+import { useSimpleAuth } from "@/contexts/AuthContextSimple";
+import { supabase } from "@/lib/supabase";
 import { PropertyType } from "@/lib/database-types";
 import CreateProjectModal from "./CreateProjectModal";
 import EditProjectModal from "./EditProjectModal";
@@ -48,7 +49,7 @@ const ProjectsContent = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const { currentTenant, supabase } = useAuth();
+  const { currentTenant } = useSimpleAuth();
 
   useEffect(() => {
     fetchProjects();
@@ -192,7 +193,7 @@ const ProjectsContent = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center">
-              <div className="p-2 bg-blue-100 rounded-lg">
+              <div className="p-2 bg-gray-100 rounded-lg">
                 <Building2 className="w-5 h-5 text-blue-600" />
               </div>
               <div className="ml-3">
@@ -220,7 +221,7 @@ const ProjectsContent = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center">
-              <div className="p-2 bg-purple-100 rounded-lg">
+              <div className="p-2 bg-gray-100 rounded-lg">
                 <Users className="w-5 h-5 text-purple-600" />
               </div>
               <div className="ml-3">

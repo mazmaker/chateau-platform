@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import {
   BarChart,
   Bar,
@@ -7,13 +8,72 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
+import { supabase } from '@/lib/supabase';
 
-const data = [
-  { name: "Online", value: 45000, color: "hsl(276, 42%, 53%)" },
-  { name: "Offline", value: 32000, color: "hsl(256, 37%, 48%)" },
-];
+interface RevenueData {
+  name: string;
+  value: number;
+  color: string;
+}
 
 export const TotalRevenueChart = () => {
+  const [data, setData] = useState<RevenueData[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchRevenueData();
+  }, []);
+
+  const fetchRevenueData = async () => {
+    setLoading(true);
+    try {
+      // Fetch revenue data from invoices table
+      const { data: invoices, error } = await supabase
+        .from('invoices')
+        .select('amount, subscription_plan, status')
+        .eq('status', 'paid');
+
+      if (error) throw error;
+
+      if (invoices && invoices.length > 0) {
+        // Calculate revenue by channel (assuming subscription plans represent channels)
+        const revenueByChannel = invoices.reduce((acc, invoice) => {
+          const channel = invoice.subscription_plan === 'starter' ? 'Online' : 'Offline';
+          acc[channel] = (acc[channel] || 0) + invoice.amount;
+          return acc;
+        }, {} as Record<string, number>);
+
+        const chartData = [
+          { name: "Online", value: revenueByChannel.Online || 0, color: "hsl(276, 42%, 53%)" },
+          { name: "Offline", value: revenueByChannel.Offline || 0, color: "hsl(256, 37%, 48%)" },
+        ];
+
+        setData(chartData);
+      } else {
+        setData([
+          { name: "Online", value: 0, color: "hsl(276, 42%, 53%)" },
+          { name: "Offline", value: 0, color: "hsl(256, 37%, 48%)" },
+        ]);
+      }
+    } catch (error) {
+      console.error('Error fetching revenue data:', error);
+      setData([
+        { name: "Online", value: 0, color: "hsl(276, 42%, 53%)" },
+        { name: "Offline", value: 0, color: "hsl(256, 37%, 48%)" },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="bg-card rounded-xl p-6 card-shadow h-full flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-card rounded-xl p-6 card-shadow h-full">
       <div className="mb-6">
@@ -54,7 +114,7 @@ export const TotalRevenueChart = () => {
                 borderRadius: '8px',
                 boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
               }}
-              formatter={(value: any) => [`$${value.toLocaleString()}`, 'Revenue']}
+              formatter={(value: any) => [`฿${value.toLocaleString('th-TH')}`, 'Revenue']}
             />
             <Bar dataKey="value" radius={[0, 4, 4, 0]}>
               {data.map((entry, index) => (
