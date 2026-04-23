@@ -14,10 +14,10 @@ interface KPICardProps {
 }
 
 const variantStyles = {
-  pink: "bg-kpi-pink/10 text-kpi-pink",
-  orange: "bg-kpi-orange/10 text-kpi-orange",
-  green: "bg-kpi-green/10 text-kpi-green",
-  purple: "bg-kpi-purple/10 text-kpi-purple",
+  pink: "bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl",
+  orange: "bg-gradient-to-br from-amber-600 to-amber-700 shadow-xl",
+  green: "bg-gradient-to-br from-gray-600 to-gray-700 shadow-xl",
+  purple: "bg-gradient-to-br from-amber-800 to-amber-900 shadow-xl",
 };
 
 export const KPICard = ({ title, value, icon: Icon, trend, variant }: KPICardProps) => {
@@ -46,7 +46,7 @@ export const KPICard = ({ title, value, icon: Icon, trend, variant }: KPICardPro
           "w-12 h-12 rounded-xl flex items-center justify-center",
           variantStyles[variant]
         )}>
-          <Icon className="w-6 h-6" />
+          <Icon className="w-6 h-6 text-white" strokeWidth={2} />
         </div>
       </div>
     </div>
