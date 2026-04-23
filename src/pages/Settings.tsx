@@ -436,7 +436,7 @@ const Settings = () => {
         <h3 className="text-lg font-semibold text-foreground mb-4">รูปโปรไฟล์</h3>
         <div className="flex items-center gap-6">
           <div className="relative">
-            <div className="w-24 h-24 rounded-full overflow-hidden bg-gradient-to-br from-[#676AF1] to-[#38B6FFCC] flex items-center justify-center">
+            <div className="w-24 h-24 rounded-full overflow-hidden bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
               {userProfile?.avatar_url ? (
                 <img src={userProfile.avatar_url} alt={profileData.full_name || 'Profile'} className="w-full h-full object-cover" />
               ) : (
@@ -485,7 +485,7 @@ const Settings = () => {
                 type="text"
                 value={profileData.full_name}
                 onChange={(e) => setProfileData({ ...profileData, full_name: e.target.value })}
-                className="w-full pl-10 pr-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#676AF1]/20 focus:border-[#676AF1]"
+                className="w-full pl-10 pr-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-400"
                 placeholder="กรอกชื่อ-นามสกุล"
               />
             </div>
@@ -513,7 +513,7 @@ const Settings = () => {
                 type="tel"
                 value={profileData.phone}
                 onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                className="w-full pl-10 pr-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#676AF1]/20 focus:border-[#676AF1]"
+                className="w-full pl-10 pr-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-400"
                 placeholder="08x-xxx-xxxx"
               />
             </div>
@@ -575,7 +575,7 @@ const Settings = () => {
                 type={showCurrentPassword ? 'text' : 'password'}
                 value={passwordData.currentPassword}
                 onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                className="w-full pl-10 pr-12 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#676AF1]/20 focus:border-[#676AF1]"
+                className="w-full pl-10 pr-12 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-400"
                 placeholder="กรอกรหัสผ่านเดิม"
               />
               <button
@@ -597,7 +597,7 @@ const Settings = () => {
                 type={showNewPassword ? 'text' : 'password'}
                 value={passwordData.newPassword}
                 onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                className="w-full pl-10 pr-12 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#676AF1]/20 focus:border-[#676AF1]"
+                className="w-full pl-10 pr-12 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-400"
                 placeholder="กรอกรหัสผ่านใหม่"
               />
               <button
@@ -668,7 +668,7 @@ const Settings = () => {
                 type={showConfirmPassword ? 'text' : 'password'}
                 value={passwordData.confirmPassword}
                 onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                className="w-full pl-10 pr-12 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#676AF1]/20 focus:border-[#676AF1]"
+                className="w-full pl-10 pr-12 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-400"
                 placeholder="กรอกรหัสผ่านใหม่อีกครั้ง"
               />
               <button
@@ -715,9 +715,9 @@ const Settings = () => {
       </div>
 
       {/* Security Tips */}
-      <div className="bg-[#E4DAF4]/30 rounded-2xl p-6 border border-[#E4DAF4]">
+      <div className="bg-gray-50 border-gray-200">
         <div className="flex gap-3">
-          <Shield className="w-5 h-5 text-[#676AF1] flex-shrink-0 mt-0.5" />
+          <Shield className="w-5 h-5 text-gray-700 flex-shrink-0 mt-0.5" />
           <div>
             <h4 className="font-medium text-foreground">คำแนะนำความปลอดภัย</h4>
             <ul className="text-sm text-muted-foreground mt-2 space-y-1">
@@ -742,7 +742,7 @@ const Settings = () => {
           <select
             value={preferences.language}
             onChange={(e) => setPreferences({ ...preferences, language: e.target.value })}
-            className="flex-1 px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#676AF1]/20 focus:border-[#676AF1]"
+            className="flex-1 px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-400"
           >
             <option value="th">ไทย (Thai)</option>
             <option value="en">English</option>
@@ -765,7 +765,7 @@ const Settings = () => {
             <button
               onClick={() => setPreferences({ ...preferences, emailNotifications: !preferences.emailNotifications })}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                preferences.emailNotifications ? 'bg-[#676AF1]' : 'bg-gray-300'
+                preferences.emailNotifications ? 'bg-gray-700' : 'bg-gray-300'
               }`}
             >
               <span
@@ -793,7 +793,7 @@ const Settings = () => {
               onClick={requestNotificationPermission}
               disabled={notificationPermission === 'not-supported'}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                notificationPermission === 'granted' ? 'bg-[#676AF1]' : 'bg-gray-300'
+                notificationPermission === 'granted' ? 'bg-gray-700' : 'bg-gray-300'
               }`}
             >
               <span

@@ -140,7 +140,13 @@
       "mcp__context7__resolve-library-id",
       "mcp__context7__query-docs",
       "Bash(PGPASSWORD=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1taW5pb24iLCJyZWYiOiJwcW5qdmNibW5hdHJ0dnBxbnJkeCIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJpYXQiOjE3NjU5ODM2NTEsImV4cCI6MjA4MTU1OTY1MX0.goFYNJymVWd-XO3c-RL-PhfJUPXfCEXs3dA5Y5cP0o\" psql -h db.pqnjvcbmnatrtvpqnrdx.supabase.co -U postgres -d postgres -c \"DROP FUNCTION IF EXISTS public.delete_user_completely CASCADE;\")",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(code ~/.vscode/settings.json)",
+      "Bash(code --list-extensions --show-versions)",
+      "Bash(npm start *)",
+      "Bash(npm run *)",
+      "Bash(grep -E \"\\\\.sql$\")",
+      "Bash(npm uninstall *)"
     ]
   }
 }
