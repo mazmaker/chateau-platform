@@ -93,28 +93,47 @@ const BillingManagement = () => {
   const fetchInvoices = async () => {
     setLoading(true);
     try {
-      // Fetch invoices with tenant info
-      const { data, error } = await supabase
+      // Fetch real invoice data from database
+      const { data: invoicesData, error } = await supabase
         .from('invoices')
         .select(`
           *,
-          tenants(id, name)
+          tenants (
+            name,
+            slug,
+            billing_address,
+            billing_email,
+            billing_phone,
+            tax_id
+          )
         `)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        // If invoices table doesn't exist, create mock data
-        const { data: tenantData } = await supabase.from('tenants').select('*');
-        const mockInvoices = generateMockInvoices(tenantData || []);
-        setInvoices(mockInvoices);
+      if (error) throw error;
+
+      if (invoicesData) {
+        const formattedInvoices: Invoice[] = invoicesData.map(invoice => ({
+          id: invoice.id,
+          tenant_id: invoice.tenant_id,
+          tenant_name: invoice.tenants?.name || 'Unknown',
+          invoice_number: invoice.invoice_number,
+          amount: invoice.amount,
+          currency: invoice.currency || 'THB',
+          status: invoice.status,
+          due_date: invoice.due_date,
+          paid_at: invoice.paid_at,
+          created_at: invoice.created_at,
+          subscription_plan: invoice.subscription_plan,
+          billing_period: new Date(invoice.created_at).toISOString().slice(0, 7)
+        }));
+
+        setInvoices(formattedInvoices);
       } else {
-        setInvoices(data || []);
+        setInvoices([]);
       }
     } catch (error) {
-      console.error('Error fetching invoices:', error);
-      // Generate mock data on error
-      const mockInvoices = generateMockInvoices([]);
-      setInvoices(mockInvoices);
+      console.error('Error loading invoice data:', error);
+      setInvoices([]);
     } finally {
       setLoading(false);
     }
@@ -129,47 +148,6 @@ const BillingManagement = () => {
     }
   };
 
-  const generateMockInvoices = (tenantList: any[]): Invoice[] => {
-    const mockInvoices: Invoice[] = [];
-    const statuses: Array<'pending' | 'paid' | 'overdue' | 'cancelled'> = ['pending', 'paid', 'overdue'];
-    const plans = ['starter', 'professional', 'enterprise'];
-    const prices = { starter: 2900, professional: 5900, enterprise: 15900 };
-
-    // Use provided tenants or create mock ones
-    const tenants = tenantList.length > 0 ? tenantList : [
-      { id: '1', name: 'ABC Property', subscription_plan: 'professional' },
-      { id: '2', name: 'Real Estate Pro', subscription_plan: 'enterprise' },
-      { id: '3', name: 'Home Finder', subscription_plan: 'starter' },
-    ];
-
-    tenants.forEach((tenant, i) => {
-      const plan = tenant.subscription_plan || plans[i % plans.length];
-      const amount = prices[plan as keyof typeof prices] || 2900;
-
-      // Generate 3 invoices per tenant
-      for (let j = 0; j < 3; j++) {
-        const dueDate = new Date();
-        dueDate.setMonth(dueDate.getMonth() - j);
-
-        mockInvoices.push({
-          id: `inv-${tenant.id}-${j}`,
-          tenant_id: tenant.id,
-          tenant_name: tenant.name,
-          invoice_number: `INV-${new Date().getFullYear()}${String(tenants.length - i).padStart(3, '0')}${String(j + 1).padStart(3, '0')}`,
-          amount,
-          currency: 'THB',
-          status: j === 0 ? 'paid' : (j === 1 ? 'pending' : 'overdue'),
-          due_date: dueDate.toISOString(),
-          paid_at: j === 0 ? dueDate.toISOString() : undefined,
-          created_at: dueDate.toISOString(),
-          subscription_plan: plan,
-          billing_period: `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`
-        });
-      }
-    });
-
-    return mockInvoices;
-  };
 
   const handleSendReminder = async (invoice: Invoice) => {
     // TODO: Implement email reminder
@@ -188,16 +166,32 @@ const BillingManagement = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    const badges: Record<string, { label: string; variant: any; icon: any }> = {
-      paid: { label: 'จ่ายแล้ว', variant: 'default', icon: CheckCircle },
-      pending: { label: 'รอชำระ', variant: 'secondary', icon: Clock },
-      overdue: { label: 'เกินกำหนด', variant: 'destructive', icon: AlertCircle },
-      cancelled: { label: 'ยกเลิก', variant: 'outline', icon: XCircle }
+    const badges: Record<string, { label: string; className: string; icon: any }> = {
+      paid: {
+        label: 'จ่ายแล้ว',
+        className: 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200',
+        icon: CheckCircle
+      },
+      pending: {
+        label: 'รอชำระ',
+        className: 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200',
+        icon: Clock
+      },
+      overdue: {
+        label: 'เกินกำหนด',
+        className: 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200 animate-pulse',
+        icon: AlertCircle
+      },
+      cancelled: {
+        label: 'ยกเลิก',
+        className: 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200',
+        icon: XCircle
+      }
     };
     const badge = badges[status] || badges.pending;
     const Icon = badge.icon;
     return (
-      <Badge variant={badge.variant} className="flex items-center gap-1">
+      <Badge className={`flex items-center gap-1 font-medium ${badge.className}`}>
         <Icon className="w-3 h-3" />
         {badge.label}
       </Badge>
@@ -239,11 +233,11 @@ const BillingManagement = () => {
           <main className="p-6">
             <div className="space-y-6">
               {/* Page Header */}
-              <Card className="bg-gradient-to-r from-violet-50 to-purple-50 border-violet-100">
+              <Card className="bg-white border-gray-200 shadow-lg">
                 <CardContent className="pt-6">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
+                      <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl rounded-xl flex items-center justify-center">
                         <CreditCard className="w-6 h-6 text-white" />
                       </div>
                       <div>
@@ -255,7 +249,7 @@ const BillingManagement = () => {
                     </div>
                     <Button
                       onClick={() => setShowInvoiceDialog(true)}
-                      className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
+                      className="bg-gray-900 hover:bg-black text-white shadow-lg"
                     >
                       <Plus className="w-4 h-4 mr-2" />
                       สร้างใบแจ้งหนี้
