@@ -215,8 +215,8 @@ const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess, currentUserRole
 
           {/* Company Info */}
           {tenantName && (
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-center gap-2 text-sm text-blue-800">
+            <div className="mb-4 p-3 bg-white shadow-sm border border-gray-200 rounded-lg">
+              <div className="flex items-center gap-2 text-sm text-gray-700">
                 <Building2 className="w-4 h-4" />
                 <span className="font-medium">บริษัทปัจจุบัน:</span>
                 <span>{tenantName}</span>

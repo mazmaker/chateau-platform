@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -30,6 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { FeatureSelector } from '@/components/admin/FeatureSelector';
 import {
   Select,
   SelectContent,
@@ -53,7 +54,9 @@ import {
   Settings as SettingsIcon,
   Package,
   Info,
-  Ban
+  Ban,
+  Clock,
+  CheckCircle
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -103,6 +106,19 @@ interface Invoice {
   paid_at?: string;
   created_at: string;
   subscription_plan: string;
+}
+
+interface PaymentHistory {
+  id: string;
+  tenant_id: string;
+  invoice_id: string;
+  invoice_number: string;
+  amount: number;
+  currency: string;
+  payment_method: 'credit_card' | 'bank_transfer' | 'paypal' | 'cash';
+  payment_status: 'completed' | 'pending' | 'failed' | 'refunded';
+  paid_at: string;
+  transaction_id?: string;
   billing_period: string;
 }
 
@@ -119,6 +135,7 @@ interface PackageConfig {
 
 const TenantManagement = () => {
   const navigate = useNavigate();
+  const { id: tenantId } = useParams();
   const { user } = useSimpleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('tenants');
@@ -134,8 +151,139 @@ const TenantManagement = () => {
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showBillDialog, setShowBillDialog] = useState(false);
   const [showSuspendDialog, setShowSuspendDialog] = useState(false);
+  const [showActivateDialog, setShowActivateDialog] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
   const [tenantBills, setTenantBills] = useState<Invoice[]>([]);
+  const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
+  const [billingHistory, setBillingHistory] = useState<Invoice[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+  const [loadingBilling, setLoadingBilling] = useState(false);
+
+  // Compute selectedTenant based on URL parameter instead of state
+  const selectedTenantFromUrl = tenants.find(tenant => tenant.id === tenantId) || null;
+
+  // Handle invalid tenant ID in URL
+  useEffect(() => {
+    // Check if tenantId is a valid UUID format
+    const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId || '');
+
+    if (tenantId && !isValidUUID) {
+      console.warn(`Invalid tenant ID format: ${tenantId}, redirecting to tenants list`);
+      navigate('/tenants', { replace: true });
+      return;
+    }
+
+    if (tenantId && tenants.length > 0 && !selectedTenantFromUrl) {
+      console.warn(`Tenant with ID ${tenantId} not found, redirecting to tenants list`);
+      navigate('/tenants', { replace: true });
+    }
+  }, [tenantId, tenants, selectedTenantFromUrl, navigate]);
+
+  // Fetch payment history for current tenant
+  const fetchPaymentHistory = async (currentTenantId: string) => {
+    if (!currentTenantId) return;
+
+    setLoadingPayments(true);
+    try {
+      // First, try to fetch from payments table if exists
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from('payments')
+        .select(`
+          *,
+          invoices (
+            invoice_number
+          )
+        `)
+        .eq('tenant_id', currentTenantId)
+        .order('paid_at', { ascending: false });
+
+      if (paymentsError && paymentsError.code !== 'PGRST116') {
+        throw paymentsError;
+      }
+
+      if (paymentsData && paymentsData.length > 0) {
+        // Format payments data
+        const formattedPayments: PaymentHistory[] = paymentsData.map(payment => ({
+          id: payment.id,
+          tenant_id: payment.tenant_id,
+          invoice_id: payment.invoice_id,
+          invoice_number: payment.invoices?.invoice_number || payment.invoice_number || '',
+          amount: payment.amount,
+          currency: payment.currency || 'THB',
+          payment_method: payment.payment_method,
+          payment_status: payment.payment_status,
+          paid_at: payment.paid_at,
+          transaction_id: payment.transaction_id
+        }));
+        setPaymentHistory(formattedPayments);
+      } else {
+        // Fallback: Use paid invoices as payment history
+        const { data: invoicesData, error: invoicesError } = await supabase
+          .from('invoices')
+          .select('*')
+          .eq('tenant_id', currentTenantId)
+          .eq('status', 'paid')
+          .order('paid_at', { ascending: false });
+
+        if (invoicesError) throw invoicesError;
+
+        if (invoicesData) {
+          const paymentFromInvoices: PaymentHistory[] = invoicesData.map(invoice => ({
+            id: invoice.id + '_payment',
+            tenant_id: invoice.tenant_id,
+            invoice_id: invoice.id,
+            invoice_number: invoice.invoice_number,
+            amount: invoice.amount,
+            currency: invoice.currency || 'THB',
+            payment_method: 'bank_transfer', // Default since we don't have payment method in invoices
+            payment_status: 'completed',
+            paid_at: invoice.paid_at || invoice.created_at,
+            transaction_id: undefined
+          }));
+          setPaymentHistory(paymentFromInvoices);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching payment history:', error);
+      setPaymentHistory([]);
+    } finally {
+      setLoadingPayments(false);
+    }
+  };
+
+  // Fetch billing history for current tenant
+  const fetchBillingHistory = async (currentTenantId: string) => {
+    if (!currentTenantId) return;
+
+    setLoadingBilling(true);
+    try {
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('*')
+        .eq('tenant_id', currentTenantId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setBillingHistory(data || []);
+    } catch (error) {
+      console.error('Error fetching billing history:', error);
+      setBillingHistory([]);
+    } finally {
+      setLoadingBilling(false);
+    }
+  };
+
+  // Fetch payment and billing history when tenantId changes
+  useEffect(() => {
+    if (tenantId) {
+      fetchPaymentHistory(tenantId);
+      fetchBillingHistory(tenantId);
+    } else {
+      setPaymentHistory([]);
+      setBillingHistory([]);
+    }
+  }, [tenantId]);
 
   // Package management states
   const [packageConfig, setPackageConfig] = useState<PackageConfig[]>([
@@ -147,7 +295,7 @@ const TenantManagement = () => {
       users: 3,
       adminCount: 1,
       salesCount: 2,
-      features: ['โครงการสูงสุด 5 แห่ง', 'Admin 1 คน + Sales 2 คน', 'ระบบจัดการลูกค้า', 'ระบบ Leads']
+      features: ['ระบบจัดการลูกค้า', 'ระบบ Leads']
     },
     {
       id: 'starter',
@@ -157,7 +305,7 @@ const TenantManagement = () => {
       users: 5,
       adminCount: 1,
       salesCount: 4,
-      features: ['โครงการสูงสุด 10 แห่ง', 'Admin 1 คน + Sales 4 คน', 'ระบบจัดการลูกค้า', 'ระบบ Leads']
+      features: ['ระบบจัดการลูกค้า', 'ระบบ Leads', 'ระบบแคมเปญ']
     },
     {
       id: 'professional',
@@ -167,7 +315,7 @@ const TenantManagement = () => {
       users: 10,
       adminCount: 2,
       salesCount: 8,
-      features: ['โครงการสูงสุด 50 แห่ง', 'Admin 2 คน + Sales 8 คน', 'ระบบจัดการลูกค้า', 'ระบบ Leads', 'รายงานวิเคราะห์', 'API Access']
+      features: ['ระบบจัดการลูกค้า', 'ระบบ Leads', 'ระบบแคมเปญ', 'รายงานวิเคราะห์', 'API Access']
     },
     {
       id: 'enterprise',
@@ -177,7 +325,7 @@ const TenantManagement = () => {
       users: 20,
       adminCount: 4,
       salesCount: 16,
-      features: ['โครงการไม่จำกัด', 'Admin 4 คน + Sales 16 คน', 'ระบบทั้งหมด', 'รายงานวิเคราะห์ขั้นสู้', 'API Access', 'Support 24/7', 'Custom Development']
+      features: ['ระบบจัดการลูกค้า', 'ระบบ Leads', 'ระบบแคมเปญ', 'รายงานวิเคราะห์', 'API Access', 'รายงานวิเคราะห์ขั้นสูง', 'Custom Development', 'Support 24/7']
     },
   ]);
   const [editingPackage, setEditingPackage] = useState<PackageConfig | null>(null);
@@ -190,7 +338,7 @@ const TenantManagement = () => {
     users: 5,
     adminCount: 1,
     salesCount: 4,
-    features: []
+    features: ['ระบบจัดการลูกค้า', 'ระบบ Leads']
   });
 
   // Form state for create/edit
@@ -677,30 +825,79 @@ const TenantManagement = () => {
     }
   };
 
+  const handleActivateTenant = async () => {
+    if (!selectedTenant) return;
+
+    try {
+      const { error } = await supabase
+        .from('tenants')
+        .update({ status: 'active' })
+        .eq('id', selectedTenant.id);
+
+      if (error) throw error;
+
+      // Log activity
+      await supabase.rpc('log_activity', {
+        p_tenant_id: selectedTenant.id,
+        p_user_id: user?.id,
+        p_activity_type: 'tenant_activated',
+        p_description: `เปิดใช้งานบริษัท: ${selectedTenant.name}`,
+        p_metadata: { tenant_id: selectedTenant.id, name: selectedTenant.name }
+      });
+
+      setShowActivateDialog(false);
+      setSelectedTenant(null);
+      fetchTenants();
+
+      toast.success('เปิดใช้งานบริษัทสำเร็จ', {
+        description: `เปิดใช้งาน ${selectedTenant.name} เรียบร้อยแล้ว`
+      });
+    } catch (error) {
+      console.error('Error activating tenant:', error);
+      toast.error('ไม่สามารถเปิดใช้งานบริษัทได้', {
+        description: error instanceof Error ? error.message : 'กรุณาลองอีกครั้ง'
+      });
+    }
+  };
+
   const openDetailDialog = (tenant: Tenant) => {
-    setSelectedTenant(tenant);
-    setShowDetailDialog(true);
+    navigate(`/tenants/${tenant.id}`);
   };
 
   const openBillDialog = async (tenant: Tenant) => {
     setSelectedTenant(tenant);
 
-    // Fetch bills for this tenant
+    // For now, use mock data since invoices table doesn't exist yet
     try {
-      const { data, error } = await supabase
-        .from('invoices')
-        .select('*')
-        .eq('tenant_id', tenant.id)
-        .order('created_at', { ascending: false });
+      console.log('📊 Loading mock bill data for tenant:', tenant.name);
 
-      if (error) {
-        console.error('Error fetching bills:', error);
-        setTenantBills([]);
-      } else {
-        setTenantBills(data || []);
-      }
+      // Generate mock bills for this tenant
+      const mockBills = [
+        {
+          id: `bill-${tenant.id}-1`,
+          tenant_id: tenant.id,
+          invoice_number: `INV-${tenant.slug?.toUpperCase() || 'TENANT'}-001`,
+          amount: 2900,
+          status: 'paid',
+          due_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+          created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+          paid_at: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString()
+        },
+        {
+          id: `bill-${tenant.id}-2`,
+          tenant_id: tenant.id,
+          invoice_number: `INV-${tenant.slug?.toUpperCase() || 'TENANT'}-002`,
+          amount: 2900,
+          status: 'pending',
+          due_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+          created_at: new Date().toISOString(),
+          paid_at: null
+        }
+      ];
+
+      setTenantBills(mockBills);
     } catch (error) {
-      console.error('Error fetching bills:', error);
+      console.error('Error loading bill data:', error);
       setTenantBills([]);
     }
 
@@ -710,6 +907,11 @@ const TenantManagement = () => {
   const openSuspendDialog = (tenant: Tenant) => {
     setSelectedTenant(tenant);
     setShowSuspendDialog(true);
+  };
+
+  const openActivateDialog = (tenant: Tenant) => {
+    setSelectedTenant(tenant);
+    setShowActivateDialog(true);
   };
 
   const formatCurrency = (amount: number) => {
@@ -767,22 +969,6 @@ const TenantManagement = () => {
     setEditingPackage(null);
   };
 
-  const handleAddFeature = () => {
-    const newFeature = prompt('เพิ่มคุณสมบัติใหม่:');
-    if (newFeature && newFeature.trim()) {
-      setPackageFormData({
-        ...packageFormData,
-        features: [...packageFormData.features, newFeature.trim()]
-      });
-    }
-  };
-
-  const handleRemoveFeature = (index: number) => {
-    setPackageFormData({
-      ...packageFormData,
-      features: packageFormData.features.filter((_, i) => i !== index)
-    });
-  };
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { label: string; variant: any }> = {
@@ -796,32 +982,77 @@ const TenantManagement = () => {
   };
 
   const getPlanBadge = (plan: string) => {
+    // Find package config for this plan
+    const pkg = packageConfig.find(p => p.id === plan);
+
     const colors: Record<string, string> = {
-      starter: 'bg-gray-100 text-gray-800',
-      professional: 'bg-blue-100 text-blue-800',
-      enterprise: 'bg-purple-100 text-purple-800'
+      free: 'bg-gray-100 text-gray-700 border border-gray-300',
+      starter: 'bg-blue-100 text-blue-800 border border-blue-300',
+      professional: 'bg-purple-100 text-purple-800 border border-purple-300',
+      enterprise: 'bg-amber-100 text-amber-800 border border-amber-300'
     };
+
     const labels: Record<string, string> = {
+      free: 'Free',
       starter: 'Starter',
       professional: 'Professional',
       enterprise: 'Enterprise'
     };
+
+    const planColor = colors[plan] || 'bg-gray-100 text-gray-700';
+    const planLabel = pkg?.name || labels[plan] || plan;
+    const planPrice = pkg?.price || '0';
+
     return (
-      <Badge className={colors[plan] || 'bg-gray-100'}>
-        {labels[plan] || plan}
-      </Badge>
+      <div className="flex flex-col gap-1">
+        <Badge className={planColor}>
+          {planLabel}
+        </Badge>
+        <span className="text-xs text-gray-500">฿{planPrice}/เดือน</span>
+      </div>
     );
   };
 
   const getBillStatusBadge = (status: string) => {
     const badges: Record<string, { label: string; className: string }> = {
       paid: { label: 'จ่ายแล้ว', className: 'bg-green-100 text-green-800' },
-      pending: { label: 'รอชำระ', className: 'bg-amber-100 text-amber-800' },
+      pending: { label: 'รอชำระ', className: 'bg-red-100 text-red-800' },
       overdue: { label: 'เกินกำหนด', className: 'bg-red-100 text-red-800' },
       cancelled: { label: 'ยกเลิก', className: 'bg-gray-100 text-gray-800' }
     };
     const badge = badges[status] || badges.pending;
     return <Badge className={badge.className}>{badge.label}</Badge>;
+  };
+
+  const getPaymentMethodLabel = (method: string) => {
+    const labels: Record<string, string> = {
+      credit_card: 'บัตรเครดิต',
+      bank_transfer: 'โอนผ่านธนาคาร',
+      paypal: 'PayPal',
+      cash: 'เงินสด'
+    };
+    return labels[method] || method;
+  };
+
+  const getPaymentStatusBadge = (status: string) => {
+    const badges: Record<string, { label: string; className: string }> = {
+      completed: { label: 'สำเร็จ', className: 'bg-green-100 text-green-800' },
+      pending: { label: 'รอดำเนินการ', className: 'bg-red-100 text-red-800' },
+      failed: { label: 'ล้มเหลว', className: 'bg-red-100 text-red-800' },
+      refunded: { label: 'คืนเงินแล้ว', className: 'bg-gray-100 text-gray-700' }
+    };
+    const badge = badges[status] || badges.pending;
+    return <Badge className={badge.className}>{badge.label}</Badge>;
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('th-TH', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const filteredTenants = tenants.filter(tenant => {
@@ -892,8 +1123,9 @@ const TenantManagement = () => {
           <CardContent>
             <div className="text-2xl font-bold">
               ฿{tenants.reduce((sum, t) => {
-                const prices = { starter: 2900, professional: 5900, enterprise: 15900 };
-                return sum + (prices[t.subscription_plan] || 0);
+                const pkg = packageConfig.find(p => p.id === t.subscription_plan);
+                const price = pkg ? parseInt(pkg.price.replace(/,/g, ''), 10) : 0;
+                return sum + price;
               }, 0).toLocaleString()}
             </div>
           </CardContent>
@@ -908,32 +1140,22 @@ const TenantManagement = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {['starter', 'professional', 'enterprise'].map(plan => {
-              const count = tenants.filter(t => t.subscription_plan === plan).length;
+            {packageConfig.filter(pkg => pkg.id !== 'free').map(pkg => {
+              const count = tenants.filter(t => t.subscription_plan === pkg.id).length;
               const percentage = tenants.length > 0 ? (count / tenants.length) * 100 : 0;
-              const colors = {
-                starter: 'bg-gray-500',
-                professional: 'bg-blue-500',
-                enterprise: 'bg-purple-500'
-              };
-              const labels: Record<string, string> = {
-                starter: 'Starter',
-                professional: 'Professional',
-                enterprise: 'Enterprise'
-              };
-              const prices: Record<string, string> = {
-                starter: '฿2,900',
-                professional: '฿5,900',
-                enterprise: '฿15,900'
+              const colors: Record<string, string> = {
+                starter: 'bg-blue-500',
+                professional: 'bg-purple-500',
+                enterprise: 'bg-amber-500'
               };
               return (
-                <div key={plan} className="space-y-2">
+                <div key={pkg.id} className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="font-medium">{labels[plan]} ({prices[plan]})</span>
+                    <span className="font-medium">{pkg.name} (฿{pkg.price})</span>
                     <span className="text-muted-foreground">{count} บริษัท ({percentage.toFixed(1)}%)</span>
                   </div>
                   <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div className={`h-full ${colors[plan]}`} style={{ width: `${percentage}%` }} />
+                    <div className={`h-full ${colors[pkg.id]}`} style={{ width: `${percentage}%` }} />
                   </div>
                 </div>
               );
@@ -1026,7 +1248,7 @@ const TenantManagement = () => {
                       </div>
 
                       <div className="grid grid-cols-3 gap-4 mb-4">
-                        <div className="bg-blue-50 p-3 rounded-lg">
+                        <div className="bg-white shadow-sm p-3 rounded-lg">
                           <div className="text-sm text-muted-foreground">Admin</div>
                           <div className="font-bold text-blue-700">{pkg.adminCount} คน</div>
                         </div>
@@ -1092,9 +1314,9 @@ const TenantManagement = () => {
   const renderSettingsTab = () => (
     <div className="space-y-6">
       {/* Info Box */}
-      <Card className="bg-blue-50 border-blue-200">
+      <Card className="bg-white shadow-sm border-gray-200">
         <CardContent className="pt-6">
-          <p className="text-sm text-blue-800">
+          <p className="text-sm text-gray-700">
             <strong>หมายเหตุ:</strong> แต่ละบริษัทมี <strong>Owner 1 คน</strong> (ไม่นับรวมในแพ็กเกจ)
             จำนวนผู้ใช้ในแพ็กเกจคือ <strong>Admin + Sales</strong> เท่านั้น
           </p>
@@ -1130,13 +1352,13 @@ const TenantManagement = () => {
                       <div className="text-sm font-medium mb-2">สิทธิ์การใช้งาน</div>
                       <div className="flex gap-4">
                         <div className="flex items-center gap-2">
-                          <Badge className="bg-purple-100 text-purple-800">
+                          <Badge className="bg-gray-100 text-gray-700">
                             Owner 1 คน
                           </Badge>
                           <span className="text-xs text-muted-foreground">(ไม่นับรวม)</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Badge className="bg-blue-100 text-blue-800">
+                          <Badge className="bg-gray-100 text-gray-700">
                             Admin {plan.adminCount} คน
                           </Badge>
                         </div>
@@ -1217,8 +1439,8 @@ const TenantManagement = () => {
         </CardContent>
       </Card>
 
-      {/* Tenants Table */}
-      <Card>
+      {/* Desktop Tenants Table */}
+      <Card className="hidden md:block">
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -1293,14 +1515,23 @@ const TenantManagement = () => {
                               <Edit className="w-4 h-4 mr-2" />
                               แก้ไข
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => openSuspendDialog(tenant)}
-                              className="text-amber-600"
-                              disabled={tenant.status === 'suspended'}
-                            >
-                              <Ban className="w-4 h-4 mr-2" />
-                              {tenant.status === 'suspended' ? 'ระงับอยู่' : 'ระงับ'}
-                            </DropdownMenuItem>
+                            {tenant.status === 'suspended' ? (
+                              <DropdownMenuItem
+                                onClick={() => openActivateDialog(tenant)}
+                                className="text-green-600"
+                              >
+                                <CheckCircle className="w-4 h-4 mr-2" />
+                                เปิดใช้งาน
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                onClick={() => openSuspendDialog(tenant)}
+                                className="text-amber-600"
+                              >
+                                <Ban className="w-4 h-4 mr-2" />
+                                ระงับ
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
                               onClick={() => {
                                 setSelectedTenant(tenant);
@@ -1322,6 +1553,120 @@ const TenantManagement = () => {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Mobile Tenants Cards */}
+      <div className="md:hidden space-y-4">
+        {loading ? (
+          <Card>
+            <CardContent className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 mr-2"></div>
+              <span>กำลังโหลด...</span>
+            </CardContent>
+          </Card>
+        ) : filteredTenants.length === 0 ? (
+          <Card>
+            <CardContent className="text-center py-8">
+              <Building2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p className="text-muted-foreground">ไม่พบบริษัท</p>
+            </CardContent>
+          </Card>
+        ) : (
+          filteredTenants.map((tenant) => {
+            const stats = tenantStats[tenant.id];
+            return (
+              <Card key={tenant.id} className="border-l-4 border-l-blue-500">
+                <CardContent className="p-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h3 className="font-semibold text-lg">{tenant.name}</h3>
+                      <p className="text-sm text-muted-foreground">/{tenant.slug}</p>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm">
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openDetailDialog(tenant)}>
+                          <Eye className="w-4 h-4 mr-2" />
+                          ดูรายละเอียด
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openBillDialog(tenant)}>
+                          <CreditCard className="w-4 h-4 mr-2" />
+                          ดูบิล
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openEditDialog(tenant)}>
+                          <Edit className="w-4 h-4 mr-2" />
+                          แก้ไข
+                        </DropdownMenuItem>
+                        {tenant.status === 'suspended' ? (
+                          <DropdownMenuItem
+                            onClick={() => openActivateDialog(tenant)}
+                            className="text-green-600"
+                          >
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            เปิดใช้งาน
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem
+                            onClick={() => openSuspendDialog(tenant)}
+                            className="text-amber-600"
+                          >
+                            <Ban className="w-4 h-4 mr-2" />
+                            ระงับ
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setSelectedTenant(tenant);
+                            setShowDeleteDialog(true);
+                          }}
+                          className="text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          ลบ
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground">สถานะ</p>
+                      {getStatusBadge(tenant.status)}
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">แพ็คเกจ</p>
+                      {getPlanBadge(tenant.subscription_plan)}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">ผู้ใช้</p>
+                      <p>Admin {stats?.adminCount || 0} + Sales {stats?.salesCount || 0}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">โครงการ</p>
+                      <div className="flex items-center gap-1">
+                        <Building2 className="w-3 h-3 text-muted-foreground" />
+                        <span>{stats?.propertyCount || 0} / {tenant.max_properties === -1 ? '∞' : tenant.max_properties}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t">
+                    <p className="text-xs text-muted-foreground">
+                      สร้างเมื่อ: {new Date(tenant.created_at).toLocaleDateString('th-TH')}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 
@@ -1337,18 +1682,18 @@ const TenantManagement = () => {
           <Header onMenuClick={() => setSidebarOpen(true)} />
 
           {/* Page Content */}
-          <main className="p-6">
+          <main className="p-3 sm:p-6">
             {/* Page Header */}
-            <Card className="bg-gradient-to-r from-violet-50 to-purple-50 border-violet-100 mb-6">
+            <Card className="bg-white border-gray-200 shadow-lg mb-6">
               <CardContent className="pt-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl rounded-xl flex items-center justify-center flex-shrink-0">
                       <Building2 className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <h1 className="text-2xl font-bold text-gray-900">จัดการบริษัท (Tenants)</h1>
-                      <p className="text-gray-600 mt-1">
+                      <h1 className="text-xl sm:text-2xl font-bold text-gray-900">จัดการบริษัท (Tenants)</h1>
+                      <p className="text-sm sm:text-base text-gray-600 mt-1">
                         จัดการบริษัททั้งหมดในระบบ SaaS
                       </p>
                     </div>
@@ -1358,30 +1703,351 @@ const TenantManagement = () => {
                       resetForm();
                       setShowCreateDialog(true);
                     }}
-                    className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
+                    className="bg-gray-900 hover:bg-black text-white shadow-lg w-full sm:w-auto"
                   >
                     <Plus className="w-4 h-4 mr-2" />
-                    เพิ่มบริษัทใหม่
+                    <span className="hidden sm:inline">เพิ่มบริษัทใหม่</span>
+                    <span className="sm:hidden">เพิ่มบริษัท</span>
                   </Button>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Tabs Layout */}
-            <div className="flex flex-col md:flex-row gap-6">
-              {/* Left Sidebar - Tabs */}
-              <div className="w-full md:w-56">
-                <PageTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
-              </div>
+            {/* Conditional Content: List View or Detail View */}
+            {!tenantId ? (
+              /* Tenants List - Tabs Layout */
+              <div className="flex flex-col md:flex-row gap-6">
+                {/* Left Sidebar - Tabs */}
+                <div className="w-full md:w-56">
+                  <PageTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
+                </div>
 
-              {/* Right Content */}
-              <div className="flex-1">
-                {activeTab === 'tenants' && renderTenantsTab()}
-                {activeTab === 'overview' && renderOverviewTab()}
-                {activeTab === 'packages' && renderPackageManagementTab()}
-                {activeTab === 'settings' && renderSettingsTab()}
+                {/* Right Content */}
+                <div className="flex-1">
+                  {activeTab === 'tenants' && renderTenantsTab()}
+                  {activeTab === 'overview' && renderOverviewTab()}
+                  {activeTab === 'packages' && renderPackageManagementTab()}
+                  {activeTab === 'settings' && renderSettingsTab()}
+                </div>
               </div>
-            </div>
+            ) : (
+              /* Tenant Detail View */
+              selectedTenantFromUrl && (
+                <div className="space-y-6">
+                  {/* Back Button */}
+                  <Button variant="outline" onClick={() => navigate('/tenants')}>
+                    ← กลับไปรายการบริษัท
+                  </Button>
+
+                  {/* Tenant Header */}
+                  <Card>
+                    <CardHeader className="pb-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <CardTitle className="text-3xl font-bold">{selectedTenantFromUrl.name}</CardTitle>
+                            {getStatusBadge(selectedTenantFromUrl.status)}
+                            {getPlanBadge(selectedTenantFromUrl.subscription_plan)}
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-muted-foreground">Slug</p>
+                              <div className="flex items-center gap-1">
+                                <span className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">/{selectedTenantFromUrl.slug}</span>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-muted-foreground">ผู้ใช้</p>
+                              <span className="text-xl font-bold text-blue-600">
+                                {tenantStats[selectedTenantFromUrl.id]?.userCount || 0} / {selectedTenantFromUrl.max_users}
+                              </span>
+                            </div>
+
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-muted-foreground">โครงการ</p>
+                              <span className="text-xl font-semibold">
+                                {tenantStats[selectedTenantFromUrl.id]?.propertyCount || 0} / {selectedTenantFromUrl.max_properties === -1 ? 'ไม่จำกัด' : selectedTenantFromUrl.max_properties}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 ml-6">
+                          <Button variant="outline" size="sm" onClick={() => {
+                            setSelectedTenant(selectedTenantFromUrl);
+                            setFormData({
+                              name: selectedTenantFromUrl.name,
+                              status: selectedTenantFromUrl.status,
+                              subscription_plan: selectedTenantFromUrl.subscription_plan,
+                              max_properties: selectedTenantFromUrl.max_properties?.toString() || '',
+                              max_users: selectedTenantFromUrl.max_users?.toString() || '',
+                              billing_address: selectedTenantFromUrl.billing_address || '',
+                              billing_email: selectedTenantFromUrl.billing_email || '',
+                              billing_phone: selectedTenantFromUrl.billing_phone || '',
+                              tax_id: selectedTenantFromUrl.tax_id || ''
+                            });
+                            setShowEditDialog(true);
+                          }}>
+                            <Edit className="w-4 h-4 mr-2" />
+                            แก้ไข
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => {
+                            setSelectedTenant(selectedTenantFromUrl);
+                            setShowDetailDialog(true);
+                          }}>
+                            <Eye className="w-4 h-4 mr-2" />
+                            รายละเอียดเต็ม
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                  </Card>
+
+                  {/* Tenant Information */}
+                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    {/* Company Information */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Building2 className="w-5 h-5" />
+                          ข้อมูลบริษัท
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-muted-foreground">ชื่อบริษัท</p>
+                          <p className="font-medium">{selectedTenantFromUrl.name}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-muted-foreground">สร้างเมื่อ</p>
+                          <p className="font-medium">{new Date(selectedTenantFromUrl.created_at).toLocaleDateString('th-TH')}</p>
+                        </div>
+                        {selectedTenantFromUrl.trial_ends_at && (
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-muted-foreground">Trial สิ้นสุด</p>
+                            <p className="font-medium text-amber-600">
+                              {new Date(selectedTenantFromUrl.trial_ends_at).toLocaleDateString('th-TH')}
+                            </p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Usage Statistics */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <BarChart3 className="w-5 h-5" />
+                          สถิติการใช้งาน
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span>ผู้ใช้</span>
+                            <span>{tenantStats[selectedTenantFromUrl.id]?.userCount || 0} / {selectedTenantFromUrl.max_users}</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className="bg-white shadow-sm0 h-2 rounded-full"
+                              style={{
+                                width: `${Math.min(100, ((tenantStats[selectedTenantFromUrl.id]?.userCount || 0) / selectedTenantFromUrl.max_users) * 100)}%`
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span>โครงการ</span>
+                            <span>{tenantStats[selectedTenantFromUrl.id]?.propertyCount || 0} / {selectedTenantFromUrl.max_properties === -1 ? '∞' : selectedTenantFromUrl.max_properties}</span>
+                          </div>
+                          {selectedTenantFromUrl.max_properties !== -1 && (
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div
+                                className="bg-white shadow-sm0 h-2 rounded-full"
+                                style={{
+                                  width: `${Math.min(100, ((tenantStats[selectedTenantFromUrl.id]?.propertyCount || 0) / selectedTenantFromUrl.max_properties) * 100)}%`
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <div className="pt-3 border-t space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span>Admin</span>
+                            <span>{tenantStats[selectedTenantFromUrl.id]?.adminCount || 0}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span>Sales</span>
+                            <span>{tenantStats[selectedTenantFromUrl.id]?.salesCount || 0}</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Billing Information */}
+                    {(selectedTenantFromUrl.billing_email || selectedTenantFromUrl.billing_address) ? (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <CreditCard className="w-5 h-5" />
+                            ข้อมูลการเรียกเก็บเงิน
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          {selectedTenantFromUrl.billing_email && (
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-muted-foreground">อีเมลสำหรับเรียกเก็บเงิน</p>
+                              <p className="font-medium">{selectedTenantFromUrl.billing_email}</p>
+                            </div>
+                          )}
+                          {selectedTenantFromUrl.billing_address && (
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-muted-foreground">ที่อยู่สำหรับเรียกเก็บเงิน</p>
+                              <p className="font-medium">{selectedTenantFromUrl.billing_address}</p>
+                            </div>
+                          )}
+                          {selectedTenantFromUrl.billing_phone && (
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-muted-foreground">เบอร์โทร</p>
+                              <p className="font-medium">{selectedTenantFromUrl.billing_phone}</p>
+                            </div>
+                          )}
+                          {selectedTenantFromUrl.tax_id && (
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-muted-foreground">เลขประจำตัวผู้เสียภาษี</p>
+                              <p className="font-medium">{selectedTenantFromUrl.tax_id}</p>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <Clock className="w-5 h-5" />
+                            กิจกรรมล่าสุด
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-muted-foreground">ไม่มีกิจกรรมบันทึกไว้</p>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+
+                  {/* Payment History */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <CreditCard className="w-5 h-5" />
+                        ประวัติการชำระเงิน
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {loadingPayments ? (
+                          <div className="flex justify-center items-center py-8">
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-violet-600"></div>
+                          </div>
+                        ) : paymentHistory.length > 0 ? (
+                          <div className="space-y-3">
+                            {paymentHistory.map((payment) => (
+                              <div key={payment.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                                    <CreditCard className="w-5 h-5 text-green-600" />
+                                  </div>
+                                  <div>
+                                    <p className="font-medium">{payment.invoice_number}</p>
+                                    <p className="text-sm text-gray-500">
+                                      {getPaymentMethodLabel(payment.payment_method)} • {formatDate(payment.paid_at)}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="font-semibold text-green-600">{formatCurrency(payment.amount)}</p>
+                                  {getPaymentStatusBadge(payment.payment_status)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8">
+                            <CreditCard className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                            <p className="text-gray-500">ไม่มีประวัติการชำระเงิน</p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Billing History */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Package className="w-5 h-5" />
+                        ประวัติบิล
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {loadingBilling ? (
+                        <div className="flex justify-center items-center py-8">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-violet-600"></div>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b">
+                                <th className="text-left py-3 px-2">เลขที่บิล</th>
+                                <th className="text-left py-3 px-2">วันที่ออกบิล</th>
+                                <th className="text-left py-3 px-2">วันครบกำหนด</th>
+                                <th className="text-right py-3 px-2">จำนวนเงิน</th>
+                                <th className="text-center py-3 px-2">สถานะ</th>
+                                <th className="text-left py-3 px-2">แพ็คเกจ</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {billingHistory.map((invoice) => (
+                              <tr key={invoice.id} className="border-b hover:bg-gray-50">
+                                <td className="py-3 px-2 font-medium">{invoice.invoice_number}</td>
+                                <td className="py-3 px-2 text-gray-600">
+                                  {new Date(invoice.created_at).toLocaleDateString('th-TH')}
+                                </td>
+                                <td className="py-3 px-2 text-gray-600">
+                                  {new Date(invoice.due_date).toLocaleDateString('th-TH')}
+                                </td>
+                                <td className="py-3 px-2 text-right font-semibold">
+                                  {formatCurrency(invoice.amount)}
+                                </td>
+                                <td className="py-3 px-2 text-center">
+                                  {getBillStatusBadge(invoice.status)}
+                                </td>
+                                <td className="py-3 px-2">
+                                  <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                                    {invoice.subscription_plan}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                          {billingHistory.length === 0 && (
+                            <div className="text-center py-8">
+                              <Package className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                              <p className="text-gray-500">ไม่มีประวัติบิล</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )
+            )}
 
             {/* Dialogs */}
             {/* Create Dialog */}
@@ -1453,7 +2119,7 @@ const TenantManagement = () => {
                   {/* Billing Information Section */}
                   <div className="pt-4 border-t">
                     <div className="flex items-center gap-2 mb-4">
-                      <CreditCard className="w-5 h-5 text-violet-600" />
+                      <CreditCard className="w-5 h-5 text-gray-600" />
                       <h3 className="font-semibold text-gray-900">ข้อมูลสำหรับออกใบเสร็จ</h3>
                     </div>
 
@@ -1590,7 +2256,7 @@ const TenantManagement = () => {
                   {/* Billing Information Section */}
                   <div className="pt-4 border-t">
                     <div className="flex items-center gap-2 mb-4">
-                      <CreditCard className="w-5 h-5 text-violet-600" />
+                      <CreditCard className="w-5 h-5 text-gray-600" />
                       <h3 className="font-semibold text-gray-900">ข้อมูลสำหรับออกใบเสร็จ</h3>
                     </div>
 
@@ -1790,54 +2456,19 @@ const TenantManagement = () => {
                       />
                     </div>
                   </div>
-                  <div className="bg-blue-50 p-3 rounded-lg">
-                    <p className="text-sm text-blue-800">
+                  <div className="bg-white shadow-sm p-3 rounded-lg">
+                    <p className="text-sm text-gray-700">
                       <strong>สรุป:</strong> Admin {packageFormData.adminCount} คน + Sales {packageFormData.salesCount} คน = ทั้งหมด {packageFormData.adminCount + packageFormData.salesCount} คน (Owner 1 คน ไม่นับรวม)
                     </p>
                   </div>
 
                   {/* Features */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label>คุณสมบัติ (Features)</Label>
-                      <Button type="button" variant="outline" size="sm" onClick={handleAddFeature}>
-                        <Plus className="w-4 h-4 mr-1" />
-                        เพิ่ม
-                      </Button>
-                    </div>
-                    <div className="space-y-2">
-                      {packageFormData.features.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                          ยังไม่มีคุณสมบัติ คลิก "เพิ่ม" เพื่อเพิ่มคุณสมบัติ
-                        </p>
-                      ) : (
-                        packageFormData.features.map((feature, idx) => (
-                          <div key={idx} className="flex items-center gap-2">
-                            <Input
-                              value={feature}
-                              onChange={(e) => {
-                                const newFeatures = [...packageFormData.features];
-                                newFeatures[idx] = e.target.value;
-                                setPackageFormData({
-                                  ...packageFormData,
-                                  features: newFeatures
-                                });
-                              }}
-                              placeholder="ระบุคุณสมบัติ"
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleRemoveFeature(idx)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
+                  <FeatureSelector
+                    selectedFeatures={packageFormData.features}
+                    onFeatureChange={(features) =>
+                      setPackageFormData({ ...packageFormData, features })
+                    }
+                  />
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setShowPackageDialog(false)}>
@@ -1867,7 +2498,7 @@ const TenantManagement = () => {
                     {/* Company Info */}
                     <div className="space-y-3">
                       <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                        <Building2 className="w-5 h-5 text-violet-600" />
+                        <Building2 className="w-5 h-5 text-gray-600" />
                         ข้อมูลบริษัท
                       </h3>
                       <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1903,7 +2534,7 @@ const TenantManagement = () => {
                     {/* Usage */}
                     <div className="space-y-3">
                       <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                        <BarChart3 className="w-5 h-5 text-violet-600" />
+                        <BarChart3 className="w-5 h-5 text-gray-600" />
                         การใช้งาน
                       </h3>
                       <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1925,7 +2556,7 @@ const TenantManagement = () => {
                     {/* Billing Info */}
                     <div className="space-y-3">
                       <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                        <CreditCard className="w-5 h-5 text-violet-600" />
+                        <CreditCard className="w-5 h-5 text-gray-600" />
                         ข้อมูลสำหรับออกใบเสร็จ
                       </h3>
                       <div className="space-y-2 text-sm">
@@ -1982,7 +2613,7 @@ const TenantManagement = () => {
                 {selectedTenant && (
                   <div className="space-y-4 py-4">
                     {/* Current Plan Info */}
-                    <div className="bg-gradient-to-r from-violet-50 to-purple-50 p-4 rounded-lg">
+                    <div className="bg-white border border-gray-200 shadow-sm p-4 rounded-lg">
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm text-gray-600">แพ็คเกจปัจจุบัน</p>
@@ -1990,7 +2621,7 @@ const TenantManagement = () => {
                         </div>
                         <div className="text-right">
                           <p className="text-sm text-gray-600">ค่าบริการต่อเดือน</p>
-                          <p className="font-semibold text-lg text-violet-600">
+                          <p className="font-semibold text-lg text-gray-600">
                             {formatCurrency(getPlanPrice(selectedTenant.subscription_plan))}
                           </p>
                         </div>
@@ -2106,6 +2737,42 @@ const TenantManagement = () => {
                   </Button>
                   <Button variant="destructive" onClick={handleSuspendTenant}>
                     ยืนยันการระงับ
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Activate Confirmation Dialog */}
+            <Dialog open={showActivateDialog} onOpenChange={setShowActivateDialog}>
+              <DialogContent className="sm:max-w-[400px]">
+                <DialogHeader>
+                  <DialogTitle>เปิดใช้งานบริษัท</DialogTitle>
+                  <DialogDescription>
+                    ยืนยันการเปิดใช้งานบริษัทนี้
+                  </DialogDescription>
+                </DialogHeader>
+                {selectedTenant && (
+                  <div className="space-y-4 py-4">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <p className="text-sm text-green-800">
+                        <strong>การเปิดใช้งาน:</strong> บริษัทนี้จะสามารถเข้าใช้งานระบบได้ตามปกติ
+                        และผู้ใช้ทั้งหมดในบริษัทจะสามารถเข้าสู่ระบบได้
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm text-gray-600">บริษัทที่จะเปิดใช้งาน:</p>
+                      <p className="font-semibold">{selectedTenant.name}</p>
+                      <p className="text-sm text-gray-500">แพ็คเกจ: {selectedTenant.subscription_plan}</p>
+                    </div>
+                  </div>
+                )}
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setShowActivateDialog(false)}>
+                    ยกเลิก
+                  </Button>
+                  <Button variant="default" className="bg-green-600 hover:bg-green-700" onClick={handleActivateTenant}>
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    ยืนยันการเปิดใช้งาน
                   </Button>
                 </DialogFooter>
               </DialogContent>

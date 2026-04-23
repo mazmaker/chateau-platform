@@ -162,9 +162,9 @@ const SetupPassword = () => {
 
   if (!tokenChecked) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="flex items-center gap-3">
-          <Loader2 className="w-6 h-6 animate-spin text-violet-600" />
+          <Loader2 className="w-6 h-6 animate-spin text-gray-600" />
           <span className="text-gray-600">กำลังตรวจสอบลิงก์เชิญ...</span>
         </div>
       </div>
@@ -172,11 +172,11 @@ const SetupPassword = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo/Brand */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl shadow-lg mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl rounded-2xl shadow-lg mb-4">
             <UserPlus className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">ตั้งรหัสผ่าน</h1>
@@ -332,7 +332,7 @@ const SetupPassword = () => {
         <div className="text-center mt-6">
           <button
             onClick={() => navigate("/login")}
-            className="text-sm text-violet-600 hover:text-violet-700 font-medium"
+            className="text-sm text-gray-600 hover:text-gray-700 font-medium"
           >
             กลับไปหน้าเข้าสู่ระบบ
           </button>

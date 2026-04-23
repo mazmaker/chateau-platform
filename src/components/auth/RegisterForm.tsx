@@ -76,7 +76,7 @@ const RegisterForm = () => {
 
   if (step === 3) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
         <div className="w-full max-w-md">
           <div className="bg-white rounded-xl shadow-xl border border-gray-200 p-8 text-center">
             <div className="flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4 mx-auto">
@@ -96,7 +96,7 @@ const RegisterForm = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-white flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="bg-white rounded-xl shadow-xl border border-gray-200 p-8">
           {/* Progress Indicator */}
@@ -118,7 +118,7 @@ const RegisterForm = () => {
 
           {/* Logo and Title */}
           <div className="text-center mb-8">
-            <div className="flex items-center justify-center w-16 h-16 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl mb-4">
+            <div className="flex items-center justify-center w-16 h-16 bg-gray-900 text-white shadow-lg rounded-xl mb-4">
               <Building2 className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900">Create your account</h1>
@@ -347,7 +347,7 @@ const RegisterForm = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                className="flex-1 flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gray-900 hover:bg-black text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
               >
                 {loading ? (
                   <div className="flex items-center">

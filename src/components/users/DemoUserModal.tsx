@@ -183,9 +183,9 @@ const DemoUserModal = ({ isOpen, onClose, onSuccess }: DemoUserModalProps) => {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-purple-50 to-blue-50">
+        <div className="flex items-center justify-between p-6 border-b bg-white border border-gray-200 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg">
+            <div className="p-2 bg-gray-900 rounded-lg">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -222,8 +222,8 @@ const DemoUserModal = ({ isOpen, onClose, onSuccess }: DemoUserModalProps) => {
 
             {DEMO_USER_TEMPLATES.map((template, index) => {
               const roleColors = {
-                [UserRole.OWNER]: "bg-purple-100 text-purple-800 border-purple-300",
-                [UserRole.ADMIN]: "bg-blue-100 text-blue-800 border-blue-300",
+                [UserRole.OWNER]: "bg-gray-100 text-gray-700 border-gray-300",
+                [UserRole.ADMIN]: "bg-gray-100 text-gray-700 border-blue-300",
                 [UserRole.SALES]: "bg-green-100 text-green-800 border-green-300"
               };
 
@@ -240,7 +240,7 @@ const DemoUserModal = ({ isOpen, onClose, onSuccess }: DemoUserModalProps) => {
                   className={`
                     flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all
                     ${selectedTemplates.has(index)
-                      ? 'border-purple-500 bg-purple-50'
+                      ? 'border-purple-500 bg-white shadow-sm'
                       : 'border-gray-200 hover:border-gray-300 bg-white'
                     }
                   `}
@@ -249,7 +249,7 @@ const DemoUserModal = ({ isOpen, onClose, onSuccess }: DemoUserModalProps) => {
                   <div className={`
                     w-5 h-5 rounded border-2 flex items-center justify-center transition-colors
                     ${selectedTemplates.has(index)
-                      ? 'bg-purple-500 border-purple-500'
+                      ? 'bg-white shadow-sm0 border-purple-500'
                       : 'border-gray-300'
                     }
                   `}>
@@ -261,7 +261,7 @@ const DemoUserModal = ({ isOpen, onClose, onSuccess }: DemoUserModalProps) => {
                   </div>
 
                   {/* Avatar */}
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-400 to-blue-400 flex items-center justify-center text-white font-semibold">
+                  <div className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center text-white font-semibold">
                     {template.avatar}
                   </div>
 
@@ -296,7 +296,7 @@ const DemoUserModal = ({ isOpen, onClose, onSuccess }: DemoUserModalProps) => {
             type="button"
             onClick={handleCreateDemoUsers}
             disabled={creating || selectedTemplates.size === 0}
-            className="flex-1 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white"
+            className="flex-1 bg-gray-900 hover:bg-black text-white"
           >
             {creating ? (
               <>

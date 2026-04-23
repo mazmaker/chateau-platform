@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
-import { Search, Plus, User, Shield, ToggleLeft, ToggleRight, Trash2, Edit, UserPlus, Sparkles } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Search, Plus, User, Shield, ToggleLeft, ToggleRight, Trash2, Edit, UserPlus, Sparkles, Paperclip, Key } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -11,6 +12,7 @@ import { useSimpleAuth } from "@/contexts/AuthContextSimple";
 import { supabase } from "@/lib/supabase";
 import InviteUserModal from "./InviteUserModal";
 import EditUserModal from "./EditUserModal";
+import UserAccountManagement from "./UserAccountManagement";
 import DemoUserModal from "./DemoUserModal";
 import { toast } from "sonner";
 
@@ -27,6 +29,7 @@ interface UserData {
   is_active: boolean;
   created_at: string;
   last_sign_in_at?: string;
+  password_set_at?: string;
 }
 
 interface Tenant {
@@ -45,29 +48,46 @@ const UserManagementContent = () => {
   const [loading, setLoading] = useState(true);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showAccountManagementModal, setShowAccountManagementModal] = useState(false);
   const [showDemoModal, setShowDemoModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [deletingUser, setDeletingUser] = useState<UserData | null>(null);
-  const { currentTenant, userRole, user } = useSimpleAuth();
+  const { currentTenant, userRole, user, authChecked } = useSimpleAuth();
 
   // ADMIN can only see SALES users in their tenant
   const isAdmin = userRole === 'admin';
   const isOwner = userRole === 'owner';
 
   useEffect(() => {
-    fetchUsers();
-    if (isOwner) {
-      fetchTenants();
+    console.log('🔄 UseEffect triggered:', { authChecked, currentTenantId: currentTenant?.id, isAdmin, isOwner });
+
+    // Wait for auth to be fully loaded before fetching data
+    if (!authChecked) {
+      console.log('⏳ UseEffect: Auth not checked yet, waiting...');
+      return;
     }
-  }, [currentTenant, isAdmin, isOwner]);
+
+    console.log('✅ UseEffect: Auth checked, proceeding with data fetch');
+
+    if (isOwner) {
+      console.log('👑 UseEffect: Owner - fetching tenants first, then users');
+      fetchTenants().then((tenantsData) => {
+        fetchUsers(tenantsData);
+      });
+    } else {
+      console.log('👔 UseEffect: Non-owner - fetching users directly');
+      fetchUsers();
+    }
+  }, [currentTenant?.id, isAdmin, isOwner, authChecked]);
 
   useEffect(() => {
     filterUsers();
   }, [users, searchTerm, roleFilter, statusFilter, tenantFilter]);
 
-  const fetchTenants = async () => {
+  const fetchTenants = useCallback(async () => {
     try {
+      console.log('🏢 FetchTenants: Starting...');
       const { data, error } = await supabase
         .from('tenants')
         .select('id, name')
@@ -75,13 +95,22 @@ const UserManagementContent = () => {
 
       if (error) throw error;
       setTenants((data as Tenant[]) || []);
+      console.log('✅ FetchTenants: Completed', data);
+      return data; // Return data for chaining
     } catch (error) {
-      console.error('Error fetching tenants:', error);
+      console.error('❌ Error fetching tenants:', error);
+      return [];
     }
-  };
+  }, []);
 
-  const fetchUsers = async () => {
-    if (!currentTenant && !isOwner) return;
+  const fetchUsers = useCallback(async (tenantsData?: Tenant[]) => {
+    // Owner can fetch users without currentTenant, others need it
+    if (!isOwner && !currentTenant) {
+      console.log('🚫 FetchUsers: Skipping - not owner and no currentTenant', { isOwner, currentTenant: currentTenant?.id });
+      return;
+    }
+
+    console.log('🔄 FetchUsers: Starting...', { isOwner, isAdmin, currentTenant: currentTenant?.id });
 
     try {
       // Fetch from users table
@@ -93,29 +122,38 @@ const UserManagementContent = () => {
       // ADMIN can only see SALES users in their tenant
       if (isAdmin && currentTenant) {
         query = query.eq('tenant_id', currentTenant.id).eq('role', 'sales');
+        console.log('👔 FetchUsers: Admin filter applied for tenant', currentTenant.id);
       }
 
       const { data, error } = await query;
 
       if (error) throw error;
 
+      console.log('✅ FetchUsers: Raw data received', data);
+
+      // Use provided tenants data or fallback to state
+      const availableTenants = tenantsData || tenants;
+      console.log('📋 FetchUsers: Available tenants', availableTenants);
+
       // For Owner, enrich with tenant names
       let enrichedData = (data as any[]) || [];
       if (isOwner) {
         enrichedData = enrichedData.map((user: any) => ({
           ...user,
-          tenant_name: tenants.find(t => t.id === user.tenant_id)?.name || '-'
+          tenant_name: availableTenants.find(t => t.id === user.tenant_id)?.name || '-'
         }));
+        console.log('🏢 FetchUsers: Enriched data with tenant names', enrichedData);
       }
 
       setUsers(enrichedData as UserData[]);
+      console.log('🎯 FetchUsers: Users set in state', enrichedData.length, 'users');
     } catch (error) {
-      console.error('Error fetching users:', error);
+      console.error('❌ Error fetching users:', error);
       toast.error('ไม่สามารถโหลดข้อมูลผู้ใช้ได้');
     } finally {
       setLoading(false);
     }
-  };
+  }, [isOwner, isAdmin, currentTenant?.id, tenants]);
 
   const filterUsers = () => {
     let filtered = users;
@@ -170,6 +208,13 @@ const UserManagementContent = () => {
     }
   };
 
+  // Show confirmation dialog
+  const confirmDeleteUser = (user: UserData) => {
+    setDeletingUser(user);
+    setShowDeleteDialog(true);
+  };
+
+  // Actually delete the user
   const handleDeleteUser = async () => {
     if (!deletingUser) return;
 
@@ -218,7 +263,9 @@ const UserManagementContent = () => {
 
       // Update local state
       setUsers(prev => prev.filter(user => user.id !== deletingUser.id));
-      toast.success('ลบผู้ใช้สำเร็จ');
+      toast.success('ลบบัญชีผู้ใช้สำเร็จ');
+
+      // Close dialog and reset state
       setShowDeleteDialog(false);
       setDeletingUser(null);
     } catch (error) {
@@ -229,8 +276,8 @@ const UserManagementContent = () => {
 
   const getRoleBadge = (role: UserRole) => {
     const styles = {
-      owner: "bg-purple-100 text-purple-800 border-purple-300",
-      admin: "bg-blue-100 text-blue-800 border-blue-300",
+      owner: "bg-gray-100 text-gray-700 border-gray-300",
+      admin: "bg-gray-100 text-gray-700 border-blue-300",
       sales: "bg-green-100 text-green-800 border-green-300"
     };
 
@@ -260,10 +307,37 @@ const UserManagementContent = () => {
     return email?.split('@')[0].toUpperCase().slice(0, 2) || 'U';
   };
 
-  if (loading) {
+  // Check if user has temporary password (password_set_at is null)
+  const hasTemporaryPassword = (user: UserData) => {
+    return user.password_set_at === null || user.password_set_at === undefined;
+  };
+
+  const getPasswordStatus = (user: UserData) => {
+    if (hasTemporaryPassword(user)) {
+      return (
+        <Badge className="bg-amber-100 text-amber-800 border-amber-300 border">
+          🔑 รหัสผ่านชั่วคราว
+        </Badge>
+      );
+    } else {
+      return (
+        <Badge className="bg-green-100 text-green-800 border-green-300 border">
+          ✅ รหัสผ่านถาวร
+        </Badge>
+      );
+    }
+  };
+
+  // Show loading while auth is checking or data is loading
+  if (!authChecked || loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-gray-600">
+            {!authChecked ? 'กำลังตรวจสอบสิทธิ์...' : 'กำลังโหลดข้อมูลผู้ใช้...'}
+          </p>
+        </div>
       </div>
     );
   }
@@ -271,11 +345,11 @@ const UserManagementContent = () => {
   return (
     <div className="space-y-6">
       {/* Header Section */}
-      <Card className="bg-gradient-to-r from-violet-50 to-purple-50 border-violet-100">
+      <Card className="bg-white border-gray-200 shadow-lg">
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
+              <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl rounded-xl flex items-center justify-center">
                 <User className="w-6 h-6 text-white" />
               </div>
               <div>
@@ -301,7 +375,7 @@ const UserManagementContent = () => {
               </Button>
               <Button
                 onClick={() => setShowInviteModal(true)}
-                className="flex items-center gap-2 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
+                className="flex items-center gap-2 bg-gray-900 hover:bg-black text-white shadow-lg"
               >
                 <UserPlus className="w-4 h-4" />
                 {isAdmin ? 'เพิ่มพนักงานขาย' : 'เพิ่มผู้ใช้ใหม่'}
@@ -316,7 +390,7 @@ const UserManagementContent = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center">
-              <div className="p-2 bg-blue-100 rounded-lg">
+              <div className="p-2 bg-gray-100 rounded-lg">
                 <User className="w-5 h-5 text-blue-600" />
               </div>
               <div className="ml-3">
@@ -347,7 +421,7 @@ const UserManagementContent = () => {
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center">
-                  <div className="p-2 bg-purple-100 rounded-lg">
+                  <div className="p-2 bg-gray-100 rounded-lg">
                     <User className="w-5 h-5 text-purple-600" />
                   </div>
                   <div className="ml-3">
@@ -361,7 +435,7 @@ const UserManagementContent = () => {
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center">
-                  <div className="p-2 bg-blue-100 rounded-lg">
+                  <div className="p-2 bg-gray-100 rounded-lg">
                     <User className="w-5 h-5 text-blue-600" />
                   </div>
                   <div className="ml-3">
@@ -460,6 +534,7 @@ const UserManagementContent = () => {
                   {isOwner && <th className="text-left py-3 px-4 font-semibold text-gray-700">🏢 บริษัท</th>}
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">👤 ตำแหน่ง (Role)</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">สถานะ</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">🔑 รหัสผ่าน</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">เข้าร่วมเมื่อ</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">เข้าใช้ล่าสุด</th>
                   <th className="text-center py-3 px-4 font-semibold text-gray-700">จัดการ</th>
@@ -500,6 +575,9 @@ const UserManagementContent = () => {
                         {user.is_active ? "ใช้งานอยู่" : "ระงับ"}
                       </Badge>
                     </td>
+                    <td className="py-3 px-4">
+                      {getPasswordStatus(user)}
+                    </td>
                     <td className="py-3 px-4 text-sm text-gray-600">
                       {new Date(user.created_at).toLocaleDateString('th-TH')}
                     </td>
@@ -535,13 +613,39 @@ const UserManagementContent = () => {
                         >
                           <Edit className="w-4 h-4 text-blue-600" />
                         </Button>
+                        {hasTemporaryPassword(user) ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setShowAccountManagementModal(true);
+                            }}
+                            disabled={user.role === 'owner'}
+                            className="p-1"
+                            title="📎 จัดการบัญชีผู้ใช้"
+                          >
+                            <Paperclip className="w-4 h-4 text-purple-600" />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setShowAccountManagementModal(true);
+                            }}
+                            disabled={user.role === 'owner'}
+                            className="p-1"
+                            title="🔑 สร้างรหัสผ่านชั่วคราว"
+                          >
+                            <Key className="w-4 h-4 text-orange-600" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => {
-                            setDeletingUser(user);
-                            setShowDeleteDialog(true);
-                          }}
+                          onClick={() => confirmDeleteUser(user)}
                           disabled={user.role === 'owner'}
                           className="p-1"
                           title="ลบผู้ใช้"
@@ -588,27 +692,90 @@ const UserManagementContent = () => {
         currentUserRole={userRole}
       />
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {isAdmin ? 'ยืนยันการลบพนักงานขาย' : 'ยืนยันการลบผู้ใช้'}
-            </DialogTitle>
+      {/* User Account Management Modal */}
+      <Dialog open={showAccountManagementModal} onOpenChange={setShowAccountManagementModal}>
+        <DialogContent className="max-w-2xl p-0">
+          <DialogHeader className="sr-only">
+            <DialogTitle>จัดการบัญชีผู้ใช้</DialogTitle>
             <DialogDescription>
-              คุณต้องการลบ "{deletingUser?.full_name || deletingUser?.email}" ใช่หรือไม่?
-              <br /><br />
-              <span className="text-red-600 font-medium">
-                การกระทำนี้ไม่สามารถกู้คืนได้
-              </span>
+              จัดการรหัสผ่านและการตั้งค่าบัญชีผู้ใช้
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+          {selectedUser && (
+            <UserAccountManagement
+              userId={selectedUser.id}
+              initialData={{
+                email: selectedUser.email,
+                full_name: selectedUser.full_name || '',
+                role: selectedUser.role,
+                is_active: selectedUser.is_active,
+                last_sign_in_at: selectedUser.last_sign_in_at,
+                password_set_at: selectedUser.password_set_at
+              }}
+              onClose={() => {
+                setShowAccountManagementModal(false);
+                fetchUsers(); // Refresh the user list after changes
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl flex items-center justify-center shadow-xl">
+                <Trash2 className="w-6 h-6 text-white" strokeWidth={2} />
+              </div>
+              <div>
+                <DialogTitle className="text-xl text-red-600">
+                  ยืนยันการลบบัญชีผู้ใช้
+                </DialogTitle>
+                <DialogDescription className="text-gray-600">
+                  ลบบัญชีการเข้าสู่ระบบเท่านั้น
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <h4 className="font-medium text-red-800 mb-2">ผู้ใช้ที่จะถูกลบ:</h4>
+              <div className="space-y-1 text-sm">
+                <p><span className="font-medium">ชื่อ:</span> {deletingUser?.full_name || 'ไม่ระบุ'}</p>
+                <p><span className="font-medium">อีเมล:</span> {deletingUser?.email}</p>
+                <p><span className="font-medium">สิทธิ์:</span> {deletingUser?.role?.toUpperCase()}</p>
+              </div>
+            </div>
+
+            <div className="bg-white shadow-sm border border-gray-200 rounded-lg p-4">
+              <h4 className="font-medium text-gray-700 mb-2">✅ ข้อมูลที่จะคงอยู่:</h4>
+              <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
+                <li>ข้อมูลโครงการทั้งหมด</li>
+                <li>ข้อมูล Leads และลูกค้า</li>
+                <li>ประวัติการทำงาน</li>
+                <li>รายงานและเอกสาร</li>
+              </ul>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <h4 className="font-medium text-amber-800 mb-2">⚠️ สิ่งที่จะถูกลบ:</h4>
+              <ul className="text-sm text-amber-700 space-y-1 list-disc list-inside">
+                <li><strong>บัญชีเข้าสู่ระบบเท่านั้น</strong></li>
+                <li>ผู้ใช้จะไม่สามารถล็อกอินได้</li>
+                <li>สิทธิ์การเข้าถึงระบบจะหมดอายุ</li>
+              </ul>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-3">
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} className="flex-1">
               ยกเลิก
             </Button>
-            <Button variant="destructive" onClick={handleDeleteUser}>
-              {isAdmin ? 'ลบพนักงานขาย' : 'ลบผู้ใช้'}
+            <Button variant="destructive" onClick={handleDeleteUser} className="flex-1">
+              🗑️ ลบบัญชี
             </Button>
           </DialogFooter>
         </DialogContent>

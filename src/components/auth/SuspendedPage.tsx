@@ -11,10 +11,10 @@ const SuspendedPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-red-50 to-amber-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-white p-4">
       <Card className="w-full max-w-lg border-orange-200">
         <CardHeader className="text-center pb-4">
-          <div className="w-20 h-20 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="w-20 h-20 bg-orange-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <Lock className="w-10 h-10 text-white" />
           </div>
           <CardTitle className="text-2xl text-orange-900">บริษัทถูกระงับชั่วคราว</CardTitle>
@@ -47,16 +47,16 @@ const SuspendedPage = () => {
           )}
 
           {/* Contact Info */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="bg-white shadow-sm border border-gray-200 rounded-lg p-4">
             <p className="text-sm font-medium text-blue-900 mb-3">ติดต่อเราเพื่อแก้ไขปัญหา:</p>
             <div className="space-y-2 text-sm">
-              <div className="flex items-center gap-2 text-blue-800">
+              <div className="flex items-center gap-2 text-gray-700">
                 <Mail className="w-4 h-4" />
                 <a href="mailto:support@chateau.platform" className="hover:underline">
                   support@chateau.platform
                 </a>
               </div>
-              <div className="flex items-center gap-2 text-blue-800">
+              <div className="flex items-center gap-2 text-gray-700">
                 <Phone className="w-4 h-4" />
                 <a href="tel:02-123-4567" className="hover:underline">
                   02-123-4567
@@ -84,7 +84,7 @@ const SuspendedPage = () => {
             </Button>
             <Button
               variant="default"
-              className="flex-1 bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700"
+              className="flex-1 bg-orange-600 hover:bg-orange-700"
               onClick={handleSignOut}
             >
               ออกจากระบบ

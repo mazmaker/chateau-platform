@@ -80,7 +80,19 @@ export const PermissionGuard: React.FC<PermissionGuardProps> = ({
   fallback = null,
   showMessage = true
 }) => {
-  const { userRole } = useSimpleAuth();
+  const { userRole, authChecked } = useSimpleAuth();
+
+  // Show loading while auth is being checked
+  if (!authChecked) {
+    return (
+      <div className="flex items-center justify-center h-32">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-2"></div>
+          <p className="text-sm text-gray-600">กำลังตรวจสอบสิทธิ์...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Check if user has required role
   if (requiredRole) {

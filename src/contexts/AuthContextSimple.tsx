@@ -36,6 +36,9 @@ interface UserProfile {
   is_active: boolean
   created_at: string | null
   tenant_id?: string | null
+  password_reset_required?: boolean
+  password_set_at?: string | null
+  first_login_at?: string | null
 }
 
 interface UserTenant {
@@ -56,8 +59,9 @@ interface AuthContextType {
   currentTenant: Tenant | null
   userRole: 'owner' | 'admin' | 'sales' | null
   tenantSuspended: boolean  // true when tenant status is 'suspended'
+  passwordResetRequired: boolean  // true when user must change password on next login
   userTenants: UserTenant[]
-  signIn: (email: string, password: string) => Promise<{ error: AuthError | null; data?: any }>
+  signIn: (email: string, password: string) => Promise<{ error: AuthError | null; data?: any; passwordResetRequired?: boolean }>
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: AuthError | null; data?: any }>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>
@@ -87,6 +91,7 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(null)
   const [userRole, setUserRole] = useState<'owner' | 'admin' | 'sales' | null>(null)
   const [tenantSuspended, setTenantSuspended] = useState(false) // Track if tenant is suspended
+  const [passwordResetRequired, setPasswordResetRequired] = useState(false) // Track if user must change password
   const [userTenants, setUserTenants] = useState<UserTenant[]>([])
   const [authChecked, setAuthChecked] = useState(false) // Track if we've checked auth at least once
   const navigate = useNavigate()
@@ -279,6 +284,8 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
 
         if (profile) {
           setUserProfile(profile)
+          // Check if password reset is required (password_set_at is null)
+          setPasswordResetRequired(profile.password_set_at === null)
         }
 
         setUserTenants(tenants)
@@ -321,6 +328,8 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
       const profile = await fetchUserProfile(user.id)
       if (profile) {
         setUserProfile(profile)
+        // Update password reset required state
+        setPasswordResetRequired(profile.password_set_at === null)
       }
 
       const tenants = await fetchUserTenants(user.id)
@@ -353,8 +362,18 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
       })
 
       if (!error && data.user) {
+        // Check if user needs to reset password
+        const { data: userProfile } = await supabase
+          .from('users')
+          .select('password_set_at')
+          .eq('id', data.user.id)
+          .single()
+
+        // Check if user has temporary password (password_set_at is null)
+        const passwordResetRequired = userProfile?.password_set_at === null
+
         // User is signed in, auth state change will handle the rest
-        return { error: null, data }
+        return { error: null, data, passwordResetRequired }
       }
 
       return { error }
@@ -552,6 +571,7 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
     currentTenant,
     userRole,
     tenantSuspended,
+    passwordResetRequired,
     userTenants,
     signIn,
     signUp,

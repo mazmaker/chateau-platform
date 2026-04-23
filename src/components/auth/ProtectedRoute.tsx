@@ -22,7 +22,7 @@ const ProtectedRoute = ({
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto mb-4" />
           <p className="text-gray-600">Loading...</p>
@@ -35,7 +35,7 @@ const ProtectedRoute = ({
   if (onlyPublic) {
     if (user && userRole && userRole !== 'owner') {
       return (
-        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center px-4">
+        <div className="min-h-screen bg-white flex items-center justify-center px-4">
           <div className="w-full max-w-md">
             <div className="bg-white rounded-xl shadow-xl border border-gray-200 p-8 text-center">
               <div className="flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mb-4 mx-auto">

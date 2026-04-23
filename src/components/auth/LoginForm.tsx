@@ -40,7 +40,7 @@ const LoginForm = () => {
       <div className="bg-white rounded-xl shadow-xl border border-gray-200 p-8">
         {/* Logo and Title */}
         <div className="text-center mb-8">
-          <div className="flex items-center justify-center w-16 h-16 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl mb-4">
+          <div className="flex items-center justify-center w-16 h-16 bg-gray-900 text-white shadow-lg rounded-xl mb-4">
             <Building2 className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
@@ -135,7 +135,7 @@ const LoginForm = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gray-900 hover:bg-black text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
           >
             {loading ? (
               <div className="flex items-center">
