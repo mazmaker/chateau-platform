@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { SalesGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
@@ -44,12 +44,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Users,
+  User,
   Plus,
   Search,
   Edit,
   Eye,
   Phone,
   Mail,
+  Building,
   MapPin,
   Calendar,
   TrendingUp,
@@ -175,94 +177,123 @@ interface LeadInterestCount {
   count: number;
 }
 
+// Helper component for lead detail rendering
+const LeadDetailView = ({
+  selectedLead,
+  customer,
+  prefs,
+  navigate,
+  openEditDialog,
+  openDeleteDialog,
+  selectedLeadInterests,
+  loadingInterests,
+  getCustomerName,
+  getStatusBadge,
+  getSourceLabel,
+  getMaritalStatusLabel,
+  getEducationLabel,
+  getOccupationLabel,
+  formatCurrency
+}: any) => {
+  return (
+    <div className="space-y-6">
+      {/* Back Button */}
+      <Button variant="outline" onClick={() => navigate('/leads')}>
+        ← กลับไปรายการ Leads
+      </Button>
+
+      {/* Lead Header */}
+      <Card>
+        <CardHeader className="pb-4">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-3">
+                <CardTitle className="text-3xl font-bold">{customer?.full_name || 'ไม่พบข้อมูลลูกค้า'}</CardTitle>
+                {getStatusBadge(selectedLead.status)}
+                <Badge variant="outline">{getSourceLabel(selectedLead.source)}</Badge>
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
+    </div>
+  );
+};
+
 const LeadManagement = () => {
   const navigate = useNavigate();
+  const { id: leadId } = useParams();
   const { currentTenant, userRole, userProfile } = useSimpleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
-  const [units, setUnits] = useState<Unit[]>([]);
-  const [interestCounts, setInterestCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [sourceFilter, setSourceFilter] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'all' | 'my' | 'team'>('all');
 
   // Dialog states
   const [showLeadDialog, setShowLeadDialog] = useState(false);
-  const [showDetailDialog, setShowDetailDialog] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [selectedLeadInterests, setSelectedLeadInterests] = useState<LeadInterestWithDetails[]>([]);
-  const [loadingInterests, setLoadingInterests] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
-  const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // Form state
-  const [leadForm, setLeadForm] = useState({
-    customer_id: '',
-    property_id: '',
-    status: 'new' as LeadStatus,
-    source: 'website',
-    budget_min: '',
-    budget_max: '',
-    preferred_location: '',
-    notes: '',
-    next_follow_up: ''
-  });
+  // Selected lead data
+  const selectedLead = leads.find(lead => lead.id === leadId) || null;
+  const customer = selectedLead ? getCustomerData(selectedLead.customer_id) : null;
+  const prefs = customer?.preferences || {};
 
-  useEffect(() => {
-    if (currentTenant) {
-      fetchLeads();
-      fetchCustomers();
-      fetchProperties();
-      fetchUnits();
-      fetchInterestCounts();
-    }
-  }, [currentTenant, activeTab]);
+  // Helper functions
+  const getCustomerData = (customerId: string) => {
+    return customers.find(c => c.id === customerId);
+  };
 
+  const getCustomerName = (customerId: string) => {
+    const customer = getCustomerData(customerId);
+    return customer?.name || 'ไม่พบข้อมูลลูกค้า';
+  };
+
+  const getPropertyName = (propertyId: string) => {
+    const property = properties.find(p => p.id === propertyId);
+    return property?.name || 'ไม่พบข้อมูลโครงการ';
+  };
+
+  const getStatusBadge = (status: LeadStatus) => {
+    const statusConfig = {
+      new: { label: 'ใหม่', color: 'bg-blue-100 text-blue-800 border-blue-200' },
+      contacted: { label: 'ติดต่อแล้ว', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+      qualified: { label: 'มีคุณสมบัติ', color: 'bg-green-100 text-green-800 border-green-200' },
+      proposal: { label: 'เสนอราคา', color: 'bg-purple-100 text-purple-800 border-purple-200' },
+      negotiation: { label: 'เจรจา', color: 'bg-orange-100 text-orange-800 border-orange-200' },
+      closed: { label: 'ปิดการขาย', color: 'bg-green-100 text-green-800 border-green-200' },
+      lost: { label: 'เสียลูกค้า', color: 'bg-red-100 text-red-800 border-red-200' }
+    };
+
+    const config = statusConfig[status] || statusConfig.new;
+    return <Badge className={`${config.color} border`}>{config.label}</Badge>;
+  };
+
+  const getSourceLabel = (source: string) => {
+    const sourceMap = {
+      online: 'ออนไลน์',
+      offline: 'ออฟไลน์',
+      referral: 'แนะนำ',
+      advertisement: 'โฆษณา',
+      social_media: 'โซเชียลมีเดีย'
+    };
+    return sourceMap[source as keyof typeof sourceMap] || source;
+  };
+
+  // Fetch data functions
   const fetchLeads = async () => {
-    setLoading(true);
     try {
-      let query = supabase
+      setLoading(true);
+      const { data, error } = await supabase
         .from('leads')
         .select('*')
-        .eq('tenant_id', currentTenant?.id)
+        .eq('tenant_id', currentTenant?.id || '')
         .order('created_at', { ascending: false });
 
-      // Filter by assigned user if viewing "my" leads
-      if (activeTab === 'my' && userProfile) {
-        query = query.eq('assigned_to', userProfile.id);
-      }
-
-      const { data, error } = await query;
-
       if (error) throw error;
-
-      // Map leads data to the expected format
-      const mappedLeads = (data || []).map((item: any) => ({
-        id: item.id,
-        tenant_id: item.tenant_id,
-        customer_id: item.customer_id,
-        property_id: item.property_id,
-        unit_id: item.unit_id,
-        status: item.status || 'new',
-        source: item.source || 'website',
-        budget_min: item.estimated_value,
-        budget_max: item.estimated_value,
-        preferred_location: undefined,
-        notes: item.notes || '',
-        assigned_to: item.assigned_to,
-        next_follow_up: item.next_follow_up,
-        created_at: item.created_at,
-        updated_at: item.updated_at
-      }));
-
-      setLeads(mappedLeads);
+      setLeads(data || []);
     } catch (error) {
       console.error('Error fetching leads:', error);
       setLeads([]);
@@ -271,60 +302,15 @@ const LeadManagement = () => {
     }
   };
 
-  const mapStatusToLead = (status: string): LeadStatus => {
-    const mapping: Record<string, LeadStatus> = {
-      pending: 'new',
-      confirmed: 'proposal',
-      checked_in: 'negotiation',
-      checked_out: 'closed',
-      cancelled: 'lost'
-    };
-    return mapping[status] || 'new';
-  };
-
-  const generateMockLeads = (): Lead[] => {
-    const mockLeads: Lead[] = [];
-    const statuses: LeadStatus[] = ['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'closed', 'lost'];
-    const sources = ['website', 'facebook', 'line', 'referral', 'walk_in', 'advertising'];
-
-    for (let i = 1; i <= 15; i++) {
-      const status = statuses[Math.floor(Math.random() * statuses.length)];
-      mockLeads.push({
-        id: `lead-${i}`,
-        tenant_id: currentTenant?.id || '',
-        customer_id: `cust-${i}`,
-        property_id: `prop-${(i % 3) + 1}`,
-        status,
-        source: sources[Math.floor(Math.random() * sources.length)],
-        budget_min: 2000000 + Math.floor(Math.random() * 3000000),
-        budget_max: 5000000 + Math.floor(Math.random() * 5000000),
-        preferred_location: 'บางนา, ลาดพร้าว, วัฒนา',
-        notes: `Lead หมายเลขที่ ${i}`,
-        created_at: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-        updated_at: new Date().toISOString()
-      });
-    }
-
-    return mockLeads;
-  };
-
   const fetchCustomers = async () => {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('customers')
-        .select('id, full_name, email, phone, preferences')
-        .eq('tenant_id', currentTenant?.id);
+        .select('*')
+        .eq('tenant_id', currentTenant?.id || '');
 
-      // Transform to customer format
-      const transformed = (data || []).map((c: any) => ({
-        id: c.id,
-        name: c.full_name,
-        email: c.email,
-        phone: c.phone || '-',
-        preferences: c.preferences || {}
-      }));
-
-      setCustomers(transformed);
+      if (error) throw error;
+      setCustomers(data || []);
     } catch (error) {
       console.error('Error fetching customers:', error);
       setCustomers([]);
@@ -333,1118 +319,204 @@ const LeadManagement = () => {
 
   const fetchProperties = async () => {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('properties')
         .select('id, name, type')
-        .eq('tenant_id', currentTenant?.id);
+        .eq('tenant_id', currentTenant?.id || '');
 
+      if (error) throw error;
       setProperties(data || []);
     } catch (error) {
       console.error('Error fetching properties:', error);
+      setProperties([]);
     }
   };
 
-  const fetchUnits = async () => {
-    try {
-      const { data } = await supabase
-        .from('units')
-        .select('id, unit_number, project_id')
-        .order('unit_number');
-
-      setUnits(data || []);
-    } catch (error) {
-      console.error('Error fetching units:', error);
-    }
-  };
-
-  const fetchInterestCounts = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('lead_interests')
-        .select('lead_id')
-        .eq('tenant_id', currentTenant?.id);
-
-      if (error) throw error;
-
-      // Count interests per lead
-      const counts: Record<string, number> = {};
-      (data || []).forEach((item: { lead_id: string }) => {
-        counts[item.lead_id] = (counts[item.lead_id] || 0) + 1;
-      });
-      setInterestCounts(counts);
-    } catch (error) {
-      console.error('Error fetching interest counts:', error);
-    }
-  };
-
-  // Fetch lead interests with property and unit details for detail modal
-  const fetchLeadInterests = async (leadId: string) => {
-    setLoadingInterests(true);
-    try {
-      const { data: interestsData, error } = await supabase
-        .from('lead_interests')
-        .select('*')
-        .eq('lead_id', leadId)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      if (interestsData && interestsData.length > 0) {
-        // Fetch all properties and units for the interests
-        const propertyIds = [...new Set(interestsData.map(i => i.property_id))];
-        const unitIds = [...new Set(interestsData.map(i => i.unit_id))];
-
-        const [{ data: propertiesData }, { data: unitsData }] = await Promise.all([
-          supabase.from('properties').select('id, name, type').in('id', propertyIds),
-          supabase.from('units').select('id, unit_number, price, status').in('id', unitIds)
-        ]);
-
-        const propertiesMap = new Map((propertiesData || []).map(p => [p.id, p]));
-        const unitsMap = new Map((unitsData || []).map(u => [u.id, u]));
-
-        const enrichedInterests: LeadInterestWithDetails[] = interestsData.map(interest => ({
-          ...interest,
-          property: propertiesMap.get(interest.property_id),
-          unit: unitsMap.get(interest.unit_id)
-        }));
-
-        setSelectedLeadInterests(enrichedInterests);
-      } else {
-        setSelectedLeadInterests([]);
-      }
-    } catch (error) {
-      console.error('Error fetching lead interests:', error);
-      setSelectedLeadInterests([]);
-    } finally {
-      setLoadingInterests(false);
-    }
-  };
-
-  const handleSaveLead = async () => {
-    try {
-      // TODO: Implement lead creation
-      setShowLeadDialog(false);
-      resetLeadForm();
+  // Effects
+  useEffect(() => {
+    if (currentTenant) {
       fetchLeads();
-    } catch (error) {
-      console.error('Error saving lead:', error);
+      fetchCustomers();
+      fetchProperties();
     }
-  };
+  }, [currentTenant]);
 
-  const handleUpdateStatus = async (lead: Lead, newStatus: LeadStatus) => {
-    try {
-      const { error } = await supabase
-        .from('leads')
-        .update({ status: newStatus })
-        .eq('id', lead.id);
-
-      if (error) throw error;
-
-      // Log activity for status update
-      try {
-        const customer = customers.find(c => c.id === lead.customer_id);
-        await supabase.rpc('log_activity', {
-          p_tenant_id: currentTenant?.id,
-          p_user_id: userProfile?.id,
-          p_activity_type: 'lead_status_updated',
-          p_description: `อัปเดตสถานะ Lead: ${customer?.name || lead.customer_id} (${lead.status} → ${newStatus})`,
-          p_metadata: {
-            lead_id: lead.id,
-            customer_id: lead.customer_id,
-            customer_name: customer?.name,
-            old_status: lead.status,
-            new_status: newStatus
-          }
-        });
-      } catch {
-        // Ignore log_activity errors
-      }
-
-      setLeads(leads.map(l =>
-        l.id === lead.id ? { ...l, status: newStatus } : l
-      ));
-    } catch (error) {
-      console.error('Error updating lead status:', error);
-    }
-  };
-
-  const handleDeleteLead = async () => {
-    if (!leadToDelete) return;
-
-    setDeleteLoading(true);
-    try {
-      const { error } = await supabase
-        .from('leads')
-        .delete()
-        .eq('id', leadToDelete.id);
-
-      if (error) throw error;
-
-      // Log activity for lead deletion
-      try {
-        const customer = customers.find(c => c.id === leadToDelete.customer_id);
-        await supabase.rpc('log_activity', {
-          p_tenant_id: currentTenant?.id,
-          p_user_id: userProfile?.id,
-          p_activity_type: 'lead_deleted',
-          p_description: `ลบ Lead: ${customer?.name || leadToDelete.customer_id}`,
-          p_metadata: {
-            lead_id: leadToDelete.id,
-            customer_id: leadToDelete.customer_id,
-            customer_name: customer?.name
-          }
-        });
-      } catch {
-        // Ignore log_activity errors
-      }
-
-      setLeads(leads.filter(l => l.id !== leadToDelete.id));
-      setShowDeleteDialog(false);
-      setLeadToDelete(null);
-    } catch (error) {
-      console.error('Error deleting lead:', error);
-    } finally {
-      setDeleteLoading(false);
-    }
-  };
-
-  const handleEditLead = async () => {
-    if (!editingLead) return;
-
-    try {
-      const { error } = await supabase
-        .from('leads')
-        .update({
-          status: editingLead.status,
-          notes: editingLead.notes,
-          next_follow_up: editingLead.next_follow_up || null,
-        })
-        .eq('id', editingLead.id);
-
-      if (error) throw error;
-
-      // Log activity for lead update
-      try {
-        const customer = customers.find(c => c.id === editingLead.customer_id);
-        await supabase.rpc('log_activity', {
-          p_tenant_id: currentTenant?.id,
-          p_user_id: userProfile?.id,
-          p_activity_type: 'lead_updated',
-          p_description: `แก้ไข Lead: ${customer?.name || editingLead.customer_id}`,
-          p_metadata: {
-            lead_id: editingLead.id,
-            customer_id: editingLead.customer_id,
-            customer_name: customer?.name,
-            status: editingLead.status,
-            notes: editingLead.notes
-          }
-        });
-      } catch {
-        // Ignore log_activity errors
-      }
-
-      setLeads(leads.map(l =>
-        l.id === editingLead.id ? editingLead : l
-      ));
-      setShowEditDialog(false);
-      setEditingLead(null);
-    } catch (error) {
-      console.error('Error updating lead:', error);
-    }
-  };
-
-  const openEditDialog = (lead: Lead) => {
-    setEditingLead({ ...lead });
-    setShowEditDialog(true);
-  };
-
-  const openDeleteDialog = (lead: Lead) => {
-    setLeadToDelete(lead);
-    setShowDeleteDialog(true);
-  };
-
-  const resetLeadForm = () => {
-    setLeadForm({
-      customer_id: '',
-      property_id: '',
-      status: 'new',
-      source: 'website',
-      budget_min: '',
-      budget_max: '',
-      preferred_location: '',
-      notes: '',
-      next_follow_up: ''
-    });
-  };
-
-  const getStatusBadge = (status: LeadStatus) => {
-    const badges: Record<LeadStatus, { label: string; variant: any; icon: any }> = {
-      new: { label: 'ใหม่', variant: 'default', icon: FileText },
-      contacted: { label: 'ติดต่อแล้ว', variant: 'secondary', icon: Phone },
-      qualified: { label: 'มีคุณสมบัติ', variant: 'secondary', icon: CheckCircle },
-      proposal: { label: 'เสนอขาย', variant: 'default', icon: FileText },
-      negotiation: { label: 'เจรจา', variant: 'default', icon: TrendingUp },
-      closed: { label: 'ปิดการขาย', variant: 'default', icon: CheckCircle },
-      lost: { label: 'สูญเสีย', variant: 'destructive', icon: XCircle }
-    };
-    const badge = badges[status];
-    const Icon = badge.icon;
-    return (
-      <Badge variant={badge.variant} className="flex items-center gap-1">
-        <Icon className="w-3 h-3" />
-        {badge.label}
-      </Badge>
-    );
-  };
-
-  const getSourceLabel = (source: string) => {
-    if (!source) return '-';
-    // Handle complex source strings like "online_google" or "online_facebook_other: xxx"
-    const sourceMap: Record<string, string> = {
-      'website': 'Website',
-      'facebook': 'Facebook',
-      'line': 'LINE',
-      'referral': 'แนะนำ',
-      'walk_in': 'Walk-in',
-      'advertising': 'โฆษณา',
-      'online': 'ออนไลน์',
-      'online_google': 'Google',
-      'online_facebook': 'Facebook',
-      'online_line': 'LINE OA',
-      'online_tiktok': 'TikTok',
-      'online_youtube': 'YouTube',
-      'billboard': 'ป้ายโฆษณา',
-      'brochure': 'แผ่นพับ/โบรชัวร์',
-      'event': 'งานอีเว้นท์',
-      'friend': 'เพื่อน/ญาติแนะนำ',
-    };
-    // Check for exact match first
-    if (sourceMap[source]) return sourceMap[source];
-    // Check for partial matches
-    for (const [key, label] of Object.entries(sourceMap)) {
-      if (source.startsWith(key)) return label;
-    }
-    return source;
-  };
-
-  const getGenderLabel = (gender: string) => {
-    const labels: Record<string, string> = {
-      male: 'ชาย',
-      female: 'หญิง',
-      other: 'อื่นๆ'
-    };
-    return labels[gender] || gender || '-';
-  };
-
-  const getOccupationLabel = (occupation: string) => {
-    const labels: Record<string, string> = {
-      business_owner: 'ธุรกิจส่วนตัว',
-      government: 'รับราชการ / พนักงานของรัฐ',
-      state_enterprise: 'พนักงานรัฐวิสาหกิจ',
-      private_company: 'พนักงานบริษัทเอกชน',
-      farmer: 'เกษตรกร',
-      employee: 'รับจ้าง',
-      other: 'อื่นๆ'
-    };
-    return labels[occupation] || occupation || '-';
-  };
-
-  const getMaritalStatusLabel = (status: string) => {
-    const labels: Record<string, string> = {
-      single: 'โสด',
-      married: 'สมรส',
-      widowed: 'หม้าย',
-      divorced: 'หย่า',
-      separated: 'แยกกันอยู่'
-    };
-    return labels[status] || status || '-';
-  };
-
-  const getEducationLabel = (education: string) => {
-    const labels: Record<string, string> = {
-      primary: 'ระดับประถมศึกษา',
-      junior_high: 'ระดับมัธยมศึกษาตอนต้น',
-      senior_high: 'ระดับมัธยมศึกษาตอนปลาย',
-      vocational: 'ระดับ ปวช./ปวส.',
-      bachelor: 'ระดับปริญญาตรี',
-      master: 'ระดับปริญญาโท',
-      doctorate: 'ระดับปริญญาเอก',
-      other: 'อื่นๆ'
-    };
-    return labels[education] || education || '-';
-  };
-
-  const getPurchasePurposeLabel = (purpose: string) => {
-    if (!purpose) return '-';
-    const labels: Record<string, string> = {
-      residence: 'เพื่ออยู่อาศัย',
-      speculation: 'เก็งกำไร',
-      monthly_rent: 'ปล่อยเช่ารายเดือน',
-      daily_rent: 'ปล่อยเช่ารายวัน',
-      flip: 'ซ่อมแล้วขาย',
-      investment: 'ลงทุน/ปล่อยเช่า',
-      children: 'ซื้อให้บุตรหลาน',
-      parents: 'ซื้อให้พ่อแม่'
-    };
-    if (labels[purpose]) return labels[purpose];
-    if (purpose.startsWith('other:')) return purpose.replace('other:', 'อื่นๆ: ').trim();
-    if (purpose.startsWith('other')) return 'อื่นๆ';
-    return purpose;
-  };
-
-  const getCustomerData = (customerId: string) => {
-    return customers.find(c => c.id === customerId);
-  };
-
-  const getCustomerName = (customerId: string) => {
-    const customer = customers.find(c => c.id === customerId);
-    return customer?.name || '-';
-  };
-
-  const getPropertyName = (propertyId: string) => {
-    const property = properties.find(p => p.id === propertyId);
-    return property?.name || '-';
-  };
-
-  const getUnitNumber = (unitId: string | undefined) => {
-    if (!unitId) return '-';
-    const unit = units.find(u => u.id === unitId);
-    return unit?.unit_number || '-';
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('th-TH', {
-      style: 'currency',
-      currency: 'THB',
-      minimumFractionDigits: 0
-    }).format(amount);
-  };
-
+  // Filter leads
   const filteredLeads = leads.filter(lead => {
-    const customerName = getCustomerName(lead.customer_id).toLowerCase();
-    const propertyName = getPropertyName(lead.property_id).toLowerCase();
-    const matchesSearch = customerName.includes(searchQuery.toLowerCase()) ||
-                         propertyName.includes(searchQuery.toLowerCase());
+    const matchesSearch = searchQuery === '' ||
+      getCustomerName(lead.customer_id).toLowerCase().includes(searchQuery.toLowerCase()) ||
+      getPropertyName(lead.property_id).toLowerCase().includes(searchQuery.toLowerCase());
+
     const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
-    const matchesSource = sourceFilter === 'all' || lead.source === sourceFilter;
-    return matchesSearch && matchesStatus && matchesSource;
+
+    return matchesSearch && matchesStatus;
   });
 
-  // Calculate stats
-  const totalLeads = leads.length;
-  const newLeads = leads.filter(l => l.status === 'new').length;
-  const qualifiedLeads = leads.filter(l => l.status === 'qualified' || l.status === 'proposal' || l.status === 'negotiation').length;
-  const closedLeads = leads.filter(l => l.status === 'closed').length;
-  const lostLeads = leads.filter(l => l.status === 'lost').length;
-  const conversionRate = totalLeads > 0 ? Math.round((closedLeads / totalLeads) * 100) : 0;
-
   return (
-    <div className="min-h-screen bg-[#f8fafc]">
-      {/* Sidebar */}
+    <div className="min-h-screen bg-background">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      {/* Main Content */}
-      <div className="lg:ml-[260px] min-h-screen">
-        {/* Header */}
+      <div className="lg:pl-[260px]">
         <Header onMenuClick={() => setSidebarOpen(true)} />
 
-        {/* Lead Management Content */}
-        <main className="p-6">
+        <main className="p-6 space-y-6 bg-background">
           <SalesGuard>
-            <div className="space-y-6">
-              {/* Page Header */}
-              <Card className="bg-gradient-to-r from-violet-50 to-purple-50 border-violet-100">
-                <CardContent className="pt-6">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
-                        <Users className="w-6 h-6 text-white" />
-                      </div>
-                      <div>
-                        <h1 className="text-2xl font-bold text-gray-900">ระบบติดตามลูกค้า (Leads)</h1>
-                        <p className="text-gray-600 mt-1">
-                          จัดการลูกค้าและติดตามสถานะการขายอสังหาริมทรัพย์
-                        </p>
-                      </div>
+            {/* Page Header */}
+            <Card className="bg-white border border-gray-200 hover:shadow-lg transition-shadow duration-300" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderRadius: '12px' }}>
+              <CardContent className="pt-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl rounded-xl flex items-center justify-center">
+                      <Users className="w-6 h-6 text-white" />
                     </div>
-                    <Button
-                      onClick={() => {
-                        resetLeadForm();
-                        setShowLeadDialog(true);
-                      }}
-                      className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      เพิ่ม Lead ใหม่
-                    </Button>
+                    <div>
+                      <h1 className="text-2xl font-bold text-gray-900">ระบบติดตามลูกค้า (Leads)</h1>
+                      <p className="text-gray-600 mt-1">จัดการลูกค้าและติดตามสถานะการขายอสังหาริมทรัพย์</p>
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
-
-        {/* Stats */}
-        <div className="grid gap-4 md:grid-cols-5">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Lead ทั้งหมด
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalLeads}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Lead ใหม่
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{newLeads}</div>
-              <p className="text-xs text-muted-foreground">ต้องติดต่อ</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                กำลังดำเนินการ
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-orange-600">{qualifiedLeads}</div>
-              <p className="text-xs text-muted-foreground">Qualified + Proposal + Negotiation</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                ปิดการขาย
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{closedLeads}</div>
-              <p className="text-xs text-muted-foreground">อัตราแปลง {conversionRate}%</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                สูญเสีย
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-600">{lostLeads}</div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Tabs and Filters */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="space-y-4">
-              <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)}>
-                <TabsList>
-                  <TabsTrigger value="all">Leads ทั้งหมด</TabsTrigger>
-                  {userRole === 'admin' && (
-                    <TabsTrigger value="my">Leads ของฉัน</TabsTrigger>
-                  )}
-                  {userRole === 'admin' && (
-                    <TabsTrigger value="team">Leads ทีม</TabsTrigger>
-                  )}
-                </TabsList>
-              </Tabs>
-
-              <div className="flex gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="ค้นหาชื่อลูกค้า หรือโครงการ..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
+                  <Button
+                    onClick={() => setShowLeadDialog(true)}
+                    className="bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 text-white shadow-lg"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    เพิ่ม Lead
+                  </Button>
                 </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[150px]">
-                    <Filter className="w-4 h-4 mr-2" />
-                    <SelectValue placeholder="สถานะ" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">ทุกสถานะ</SelectItem>
-                    <SelectItem value="new">ใหม่</SelectItem>
-                    <SelectItem value="contacted">ติดต่อแล้ว</SelectItem>
-                    <SelectItem value="qualified">มีคุณสมบัติ</SelectItem>
-                    <SelectItem value="proposal">เสนอขาย</SelectItem>
-                    <SelectItem value="negotiation">เจรจา</SelectItem>
-                    <SelectItem value="closed">ปิดการขาย</SelectItem>
-                    <SelectItem value="lost">สูญเสีย</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="แหล่งที่มา" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">ทุกแหล่ง</SelectItem>
-                    <SelectItem value="website">Website</SelectItem>
-                    <SelectItem value="facebook">Facebook</SelectItem>
-                    <SelectItem value="line">LINE</SelectItem>
-                    <SelectItem value="referral">แนะนำ</SelectItem>
-                    <SelectItem value="walk_in">Walk-in</SelectItem>
-                    <SelectItem value="advertising">โฆษณา</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
 
-        {/* Leads Table */}
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ชื่อลูกค้า</TableHead>
-                  <TableHead>โครงการที่สนใจ</TableHead>
-                  <TableHead>ยูนิตสนใจ</TableHead>
-                  <TableHead>สถานะ</TableHead>
-                  <TableHead>Potential Score</TableHead>
-                  <TableHead>วงเงินกู้ (฿)</TableHead>
-                  <TableHead>แหล่งที่มา</TableHead>
-                  <TableHead>วันที่สร้าง</TableHead>
-                  <TableHead className="text-right">ดำเนินการ</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            {/* Filters */}
+            <Card className="bg-white border border-gray-200" style={{ borderRadius: '12px' }}>
+              <CardContent className="pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      type="text"
+                      placeholder="ค้นหาลูกค้า หรือ โครงการ..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10 h-12 bg-white border border-gray-300 rounded-xl focus:border-yellow-600 focus:ring-2 focus:ring-yellow-600/20"
+                    />
+                  </div>
+
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="h-12 bg-white border border-gray-300 rounded-xl focus:border-yellow-600 focus:ring-2 focus:ring-yellow-600/20">
+                      <SelectValue placeholder="กรองตามสถานะ" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border border-gray-200 rounded-xl shadow-xl">
+                      <SelectItem value="all">ทุกสถานะ</SelectItem>
+                      <SelectItem value="new">ใหม่</SelectItem>
+                      <SelectItem value="contacted">ติดต่อแล้ว</SelectItem>
+                      <SelectItem value="qualified">มีคุณสมบัติ</SelectItem>
+                      <SelectItem value="proposal">เสนอราคา</SelectItem>
+                      <SelectItem value="negotiation">เจรจา</SelectItem>
+                      <SelectItem value="closed">ปิดการขาย</SelectItem>
+                      <SelectItem value="lost">เสียลูกค้า</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Users className="w-4 h-4" />
+                    <span>รวม {filteredLeads.length} รายการ</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Leads Table */}
+            <Card className="bg-white border border-gray-200" style={{ borderRadius: '12px' }}>
+              <CardContent className="p-0">
                 {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8">
-                      กำลังโหลด...
-                    </TableCell>
-                  </TableRow>
-                ) : filteredLeads.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                      <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                      ไม่พบ Leads
-                    </TableCell>
-                  </TableRow>
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-600"></div>
+                    <span className="ml-2 text-gray-600">กำลังโหลดข้อมูล...</span>
+                  </div>
                 ) : (
-                  filteredLeads.map((lead) => (
-                    <TableRow
-                      key={lead.id}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => {
-                        setSelectedLead(lead);
-                        fetchLeadInterests(lead.id);
-                        setShowDetailDialog(true);
-                      }}
-                    >
-                      <TableCell className="font-medium">
-                        {getCustomerName(lead.customer_id)}
-                      </TableCell>
-                      <TableCell>{getPropertyName(lead.property_id)}</TableCell>
-                      <TableCell>
-                        {interestCounts[lead.id] ? (
-                          <Badge variant="secondary" className="font-medium">
-                            {interestCounts[lead.id]} ยูนิต
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <Select
-                          value={lead.status}
-                          onValueChange={(value: LeadStatus) => handleUpdateStatus(lead, value)}
-                        >
-                          <SelectTrigger className="w-[140px] h-8 text-xs">
-                            <SelectValue>
-                              {getStatusBadge(lead.status)}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="new">
-                              <div className="flex items-center gap-2">
-                                <FileText className="w-3 h-3" />
-                                <span>ใหม่</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="contacted">
-                              <div className="flex items-center gap-2">
-                                <Phone className="w-3 h-3" />
-                                <span>ติดต่อแล้ว</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="qualified">
-                              <div className="flex items-center gap-2">
-                                <CheckCircle className="w-3 h-3" />
-                                <span>มีคุณสมบัติ</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="proposal">
-                              <div className="flex items-center gap-2">
-                                <FileText className="w-3 h-3" />
-                                <span>เสนอขาย</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="negotiation">
-                              <div className="flex items-center gap-2">
-                                <TrendingUp className="w-3 h-3" />
-                                <span>เจรจา</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="closed">
-                              <div className="flex items-center gap-2">
-                                <CheckCircle className="w-3 h-3 text-green-600" />
-                                <span>ปิดการขาย</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="lost">
-                              <div className="flex items-center gap-2">
-                                <XCircle className="w-3 h-3 text-red-600" />
-                                <span>สูญเสีย</span>
-                              </div>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        {/* Mock Potential Score based on lead id */}
-                        {(() => {
-                          const score = Math.floor((parseInt(lead.id.replace(/\D/g, '') || '0') % 40) + 60);
-                          const colorClass = score >= 80 ? 'text-green-600' : score >= 60 ? 'text-yellow-600' : 'text-red-600';
-                          return (
-                            <span className={`font-semibold ${colorClass}`}>
-                              {score}%
-                            </span>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell>
-                        {/* Mock Loan Amount - roughly 70-90% of budget based on lead id */}
-                        {(() => {
-                          const idNum = parseInt(lead.id.replace(/\D/g, '') || '0');
-                          const mockBudget = lead.budget_min || (2000000 + (idNum % 8) * 500000);
-                          const loanAmount = Math.round(mockBudget * (0.7 + ((idNum % 20) / 100)));
-                          return (
-                            <span className="text-sm font-medium text-blue-600">
-                              {formatCurrency(loanAmount)}
-                            </span>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{getSourceLabel(lead.source)}</Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {new Date(lead.created_at).toLocaleDateString('th-TH')}
-                      </TableCell>
-                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => navigate(`/leads/${lead.id}/cdp`)}>
-                              <Target className="w-4 h-4 mr-2 text-indigo-600" />
-                              CDP
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => {
-                              setSelectedLead(lead);
-                              fetchLeadInterests(lead.id);
-                              setShowDetailDialog(true);
-                            }}>
-                              <Eye className="w-4 h-4 mr-2" />
-                              ดูรายละเอียด
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => openEditDialog(lead)}>
-                              <Edit className="w-4 h-4 mr-2" />
-                              แก้ไข
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => openDeleteDialog(lead)}
-                              className="text-red-600 focus:text-red-600"
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              ลบ
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        {/* Add Lead Modal */}
-        <AddLeadModal
-          isOpen={showLeadDialog}
-          onClose={() => setShowLeadDialog(false)}
-          onLeadCreated={() => {
-            setShowLeadDialog(false);
-            fetchLeads();
-          }}
-        />
-
-        {/* Lead Detail Dialog */}
-        <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
-          <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-xl">รายละเอียด Lead</DialogTitle>
-              <DialogDescription>
-                ข้อมูลลูกค้าและรายละเอียดที่เกี่ยวข้อง
-              </DialogDescription>
-            </DialogHeader>
-            {selectedLead && (() => {
-              const customer = getCustomerData(selectedLead.customer_id);
-              const prefs = customer?.preferences || {};
-              return (
-                <div className="space-y-6">
-                  {/* Header with Photo and Basic Info */}
-                  <div className="flex gap-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl">
-                    {/* Profile Image */}
-                    <div className="flex-shrink-0">
-                      {prefs.profile_image ? (
-                        <img
-                          src={prefs.profile_image}
-                          alt="รูปโปรไฟล์"
-                          className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-lg"
-                        />
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>ชื่อลูกค้า</TableHead>
+                        <TableHead>โครงการที่สนใจ</TableHead>
+                        <TableHead>สถานะ</TableHead>
+                        <TableHead>แหล่งที่มา</TableHead>
+                        <TableHead>วันที่สร้าง</TableHead>
+                        <TableHead>จัดการ</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredLeads.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                            ไม่พบข้อมูล Lead
+                          </TableCell>
+                        </TableRow>
                       ) : (
-                        <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center border-4 border-white shadow-lg">
-                          <Users className="w-10 h-10 text-gray-400" />
-                        </div>
-                      )}
-                    </div>
-                    {/* Basic Info */}
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h2 className="text-2xl font-bold text-gray-800">
-                            {prefs.first_name || ''} {prefs.last_name || customer?.name || '-'}
-                          </h2>
-                          <div className="mt-2 space-y-1">
-                            <div className="flex items-center gap-2 text-gray-600">
-                              <Phone className="w-4 h-4" />
-                              <span>{customer?.phone || '-'}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-gray-600">
-                              <Mail className="w-4 h-4" />
-                              <span>{customer?.email || '-'}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          {getStatusBadge(selectedLead.status)}
-                          <p className="text-xs text-gray-500 mt-2">
-                            สร้างเมื่อ {new Date(selectedLead.created_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Project Interest Section */}
-                  <div className="bg-white border rounded-xl p-4">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                      <Building2 className="w-5 h-5 text-cyan-600" />
-                      ยูนิตที่สนใจ
-                      <Badge variant="secondary" className="ml-2">
-                        {loadingInterests ? '...' : selectedLeadInterests.length > 0 ? selectedLeadInterests.length : 1} รายการ
-                      </Badge>
-                    </h3>
-
-                    {loadingInterests ? (
-                      <div className="flex items-center justify-center py-6">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-600"></div>
-                      </div>
-                    ) : selectedLeadInterests.length > 0 ? (
-                      <div className="space-y-3 max-h-[300px] overflow-y-auto">
-                        {selectedLeadInterests.map((interest) => {
-                          const statusOption = INTEREST_STATUS_OPTIONS.find(o => o.value === interest.status);
-                          const levelOption = INTEREST_LEVEL_OPTIONS.find(o => o.value === interest.interest_level);
-                          return (
-                            <div key={interest.id} className="p-3 border rounded-lg bg-gradient-to-r from-cyan-50 to-blue-50 hover:shadow-md transition-shadow">
-                              <div className="flex items-start gap-3">
-                                <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                                  <Building2 className="w-5 h-5 text-cyan-700" />
+                        filteredLeads.map((lead) => (
+                          <TableRow key={lead.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
+                                  <User className="w-4 h-4 text-gray-600" />
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between mb-1">
-                                    <p className="font-semibold text-gray-800 truncate">
-                                      {interest.property?.name || 'โครงการ'}
-                                    </p>
-                                    <div className="flex items-center gap-2 flex-shrink-0">
-                                      <Badge className={statusOption?.color || 'bg-gray-100'}>
-                                        {statusOption?.icon} {statusOption?.label || interest.status}
-                                      </Badge>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-4 text-sm">
-                                    <span className="text-gray-600">
-                                      ยูนิต <strong className="text-gray-800">{interest.unit?.unit_number || '-'}</strong>
-                                    </span>
-                                    {interest.unit?.price && (
-                                      <span className="font-semibold text-cyan-600">
-                                        {new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', minimumFractionDigits: 0 }).format(interest.unit.price)}
-                                      </span>
-                                    )}
-                                    <span className={levelOption?.color || 'text-gray-600'}>
-                                      {levelOption?.icon} {levelOption?.label}
-                                    </span>
-                                  </div>
-                                  {interest.viewing_date && (
-                                    <p className="text-xs text-gray-500 mt-1">
-                                      📅 นัดดู: {new Date(interest.viewing_date).toLocaleString('th-TH')}
-                                    </p>
-                                  )}
-                                  {interest.notes && (
-                                    <p className="text-xs text-gray-500 mt-1 truncate">
-                                      📝 {interest.notes}
-                                    </p>
-                                  )}
-                                </div>
+                                <span className="font-medium">{getCustomerName(lead.customer_id)}</span>
                               </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      // Fallback to legacy single unit display
-                      <div className="p-3 border rounded-lg bg-gradient-to-r from-cyan-50 to-blue-50">
-                        <div className="flex items-start gap-3">
-                          <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <Building2 className="w-5 h-5 text-cyan-700" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-semibold text-gray-800">{getPropertyName(selectedLead.property_id)}</p>
-                            <p className="text-sm text-gray-600">ยูนิต {getUnitNumber(selectedLead.unit_id)}</p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Lead Info - source, purpose, follow-up */}
-                    <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t">
-                      <div>
-                        <p className="text-sm text-gray-500">แหล่งที่มา</p>
-                        <Badge variant="outline">{getSourceLabel(selectedLead.source)}</Badge>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">จุดประสงค์การซื้อ</p>
-                        <p className="font-medium">{getPurchasePurposeLabel(prefs.purchase_purpose || '')}</p>
-                      </div>
-                      {selectedLead.next_follow_up && (
-                        <div>
-                          <p className="text-sm text-gray-500">นัดติดตามครั้งต่อไป</p>
-                          <p className="font-medium text-orange-600">
-                            {new Date(selectedLead.next_follow_up).toLocaleDateString('th-TH')}
-                          </p>
-                        </div>
+                            </TableCell>
+                            <TableCell>{getPropertyName(lead.property_id)}</TableCell>
+                            <TableCell>{getStatusBadge(lead.status)}</TableCell>
+                            <TableCell>{getSourceLabel(lead.source)}</TableCell>
+                            <TableCell>{new Date(lead.created_at).toLocaleDateString('th-TH')}</TableCell>
+                            <TableCell>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" className="w-8 h-8 p-0">
+                                    <MoreHorizontal className="w-4 h-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="bg-white border border-gray-200 rounded-lg shadow-lg">
+                                  <DropdownMenuItem onClick={() => navigate(`/leads/${lead.id}`)} className="hover:bg-gray-50">
+                                    <Eye className="w-4 h-4 mr-2" />
+                                    ดูรายละเอียด
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => setEditingLead(lead)} className="hover:bg-gray-50">
+                                    <Edit className="w-4 h-4 mr-2" />
+                                    แก้ไข
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        ))
                       )}
-                    </div>
-                  </div>
-
-                  {/* Personal Info Section */}
-                  <div className="bg-white border rounded-xl p-4">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                      <Users className="w-5 h-5 text-green-600" />
-                      ข้อมูลส่วนตัว
-                    </h3>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <p className="text-sm text-gray-500">เพศ</p>
-                        <p className="font-medium">{getGenderLabel(prefs.gender || '')}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">อายุ</p>
-                        <p className="font-medium">{prefs.age ? `${prefs.age} ปี` : '-'}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">สถานภาพ</p>
-                        <p className="font-medium">{getMaritalStatusLabel(prefs.marital_status || '')}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">การศึกษา</p>
-                        <p className="font-medium">{getEducationLabel(prefs.education || '')}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">จำนวนสมาชิกในครอบครัว</p>
-                        <p className="font-medium">{prefs.family_members ? `${prefs.family_members} คน` : '-'}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Financial Info Section */}
-                  <div className="bg-white border rounded-xl p-4">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                      <DollarSign className="w-5 h-5 text-yellow-600" />
-                      ข้อมูลทางการเงิน
-                    </h3>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <p className="text-sm text-gray-500">อาชีพ</p>
-                        <p className="font-medium">{getOccupationLabel(prefs.occupation || '')}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">รายได้ต่อเดือน</p>
-                        <p className="font-medium text-green-600">
-                          {prefs.monthly_income ? formatCurrency(prefs.monthly_income) : '-'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">ภาระหนี้ต่อเดือน</p>
-                        <p className="font-medium text-red-600">
-                          {prefs.monthly_debt ? formatCurrency(prefs.monthly_debt) : '-'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Work Address Section */}
-                  <div className="bg-white border rounded-xl p-4">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                      <MapPin className="w-5 h-5 text-red-600" />
-                      ที่อยู่ที่ทำงาน
-                    </h3>
-                    <div className="space-y-2">
-                      <div>
-                        <p className="text-sm text-gray-500">สถานที่ทำงาน</p>
-                        <p className="font-medium">{prefs.workplace || '-'}</p>
-                      </div>
-                      {prefs.address && (
-                        <div>
-                          <p className="text-sm text-gray-500">ที่อยู่</p>
-                          <p className="font-medium">
-                            {[
-                              prefs.address.sub_district && `ต.${prefs.address.sub_district}`,
-                              prefs.address.district && `อ.${prefs.address.district}`,
-                              prefs.address.province && `จ.${prefs.address.province}`,
-                              prefs.address.postal_code
-                            ].filter(Boolean).join(' ') || '-'}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Notes Section */}
-                  {selectedLead.notes && (
-                    <div className="bg-white border rounded-xl p-4">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                        <FileText className="w-5 h-5 text-purple-600" />
-                        บันทึก
-                      </h3>
-                      <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">{selectedLead.notes}</p>
-                    </div>
-                  )}
-
-                  {/* Consent Section */}
-                  <div className="bg-white border rounded-xl p-4">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-teal-600" />
-                      การยินยอม
-                    </h3>
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        {prefs.consent_given ? (
-                          <Badge className="bg-green-100 text-green-800">ยินยอม</Badge>
-                        ) : (
-                          <Badge variant="secondary">ไม่ยินยอม</Badge>
-                        )}
-                      </div>
-                      {prefs.consent_date && (
-                        <p className="text-sm text-gray-500">
-                          วันที่ยินยอม: {new Date(prefs.consent_date).toLocaleDateString('th-TH')}
-                        </p>
-                      )}
-                    </div>
-                    {prefs.signature && (
-                      <div className="mt-3">
-                        <p className="text-sm text-gray-500 mb-2">ลายเซ็น</p>
-                        <img
-                          src={prefs.signature}
-                          alt="ลายเซ็น"
-                          className="h-16 border rounded bg-white p-1"
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-3 pt-4 border-t">
-                    <Button variant="outline" className="flex-1" onClick={() => {
-                      setShowDetailDialog(false);
-                      if (selectedLead) openEditDialog(selectedLead);
-                    }}>
-                      <Edit className="w-4 h-4 mr-2" />
-                      แก้ไข
-                    </Button>
-                    <Button variant="destructive" className="flex-1" onClick={() => {
-                      setShowDetailDialog(false);
-                      if (selectedLead) openDeleteDialog(selectedLead);
-                    }}>
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      ลบ
-                    </Button>
-                  </div>
-                </div>
-              );
-            })()}
-          </DialogContent>
-        </Dialog>
-
-        {/* Edit Lead Modal */}
-        <EditLeadModal
-          isOpen={showEditDialog}
-          onClose={() => {
-            setShowEditDialog(false);
-            setEditingLead(null);
-          }}
-          onLeadUpdated={() => {
-            setShowEditDialog(false);
-            setEditingLead(null);
-            fetchLeads();
-            fetchCustomers();
-            fetchInterestCounts();
-          }}
-          lead={editingLead}
-        />
-
-        {/* Delete Confirmation Dialog */}
-        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>ยืนยันการลบ Lead</DialogTitle>
-              <DialogDescription>
-                คุณต้องการลบ Lead "{leadToDelete ? getCustomerName(leadToDelete.customer_id) : ''}" ใช่หรือไม่?
-                <br /><br />
-                <span className="text-red-600 font-medium">
-                  การกระทำนี้ไม่สามารถกู้คืนได้
-                </span>
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={deleteLoading}>
-                ยกเลิก
-              </Button>
-              <Button variant="destructive" onClick={handleDeleteLead} disabled={deleteLoading}>
-                {deleteLoading ? 'กำลังลบ...' : 'ลบ Lead'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-            </div>
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
           </SalesGuard>
         </main>
       </div>
+
+      {/* Add Lead Modal */}
+      <AddLeadModal
+        isOpen={showLeadDialog}
+        onClose={() => setShowLeadDialog(false)}
+        onLeadCreated={() => {
+          setShowLeadDialog(false);
+          fetchLeads();
+        }}
+      />
+
+      {/* Edit Lead Modal */}
+      <EditLeadModal
+        isOpen={editingLead !== null}
+        onClose={() => setEditingLead(null)}
+        onLeadUpdated={() => {
+          setEditingLead(null);
+          fetchLeads();
+        }}
+        lead={editingLead}
+      />
     </div>
   );
 };

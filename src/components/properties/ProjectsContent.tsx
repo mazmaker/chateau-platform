@@ -193,7 +193,7 @@ const ProjectsContent = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center">
-              <div className="p-2 bg-blue-100 rounded-lg">
+              <div className="p-2 bg-gray-100 rounded-lg">
                 <Building2 className="w-5 h-5 text-blue-600" />
               </div>
               <div className="ml-3">
@@ -221,7 +221,7 @@ const ProjectsContent = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center">
-              <div className="p-2 bg-purple-100 rounded-lg">
+              <div className="p-2 bg-gray-100 rounded-lg">
                 <Users className="w-5 h-5 text-purple-600" />
               </div>
               <div className="ml-3">

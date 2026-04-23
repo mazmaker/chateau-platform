@@ -51,7 +51,7 @@ const bookingsData = [
 const getStatusBadge = (status: string) => {
   const styles = {
     'Checked-in': 'bg-green-100 text-green-800',
-    'Confirmed': 'bg-blue-100 text-blue-800',
+    'Confirmed': 'bg-gray-100 text-gray-700',
     'Pending': 'bg-yellow-100 text-yellow-800',
     'Cancelled': 'bg-red-100 text-red-800'
   };

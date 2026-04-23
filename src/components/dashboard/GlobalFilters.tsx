@@ -116,7 +116,7 @@ const GlobalFilters = () => {
             {dateRanges.find(r => r.id === dateRange)?.name}
           </span>
           {selectedProject !== 'all' && (
-            <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+            <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">
               {projects.find(p => p.id === selectedProject)?.name}
             </span>
           )}

@@ -1020,7 +1020,7 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated }: AddLeadModalProps) => 
                     return (
                       <div
                         key={interest.id}
-                        className="p-3 border rounded-lg bg-gradient-to-r from-cyan-50 to-blue-50 flex items-start gap-3"
+                        className="p-3 border rounded-lg bg-white border border-gray-200 shadow-sm flex items-start gap-3"
                       >
                         <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center flex-shrink-0">
                           <Building2 className="w-5 h-5 text-cyan-700" />

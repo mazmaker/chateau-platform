@@ -61,7 +61,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
   };
 
   return (
-    <header className="h-16 bg-[#F0F8FD] border-b border-border flex items-center justify-between px-6">
+    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shadow-sm">
       {/* Left Side */}
       <div className="flex items-center gap-4">
         <Button
@@ -103,7 +103,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <div className="w-9 h-9 cursor-pointer rounded-full overflow-hidden bg-gradient-to-br from-[#676AF1] to-[#38B6FFCC] flex items-center justify-center ring-2 ring-border hover:ring-primary transition-all">
+            <div className="w-9 h-9 cursor-pointer rounded-full overflow-hidden bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center ring-2 ring-border hover:ring-primary transition-all">
               {userProfile?.avatar_url ? (
                 <img src={userProfile.avatar_url} alt={getUserName()} className="w-full h-full object-cover" />
               ) : (

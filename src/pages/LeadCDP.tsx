@@ -392,7 +392,7 @@ const LeadCDP = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-white">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="lg:ml-[260px] min-h-screen">
@@ -407,7 +407,7 @@ const LeadCDP = () => {
             </Button>
             <div>
               <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <Target className="w-7 h-7 text-violet-600" />
+                <Target className="w-7 h-7 text-gray-600" />
                 Customer Data Platform (CDP)
               </h1>
               <p className="text-gray-600">รายละเอียดและการวิเคราะห์ข้อมูลลูกค้า</p>
@@ -420,7 +420,7 @@ const LeadCDP = () => {
             <div className="lg:col-span-2">
               {/* Section 1: Lead Information */}
               <Card className="shadow-lg border-0 overflow-hidden">
-                <CardHeader className="bg-gradient-to-r from-violet-500 to-purple-600 text-white">
+                <CardHeader className="bg-gray-900 text-white shadow-lg">
                   <CardTitle className="flex items-center gap-2">
                     <User className="w-5 h-5" />
                     ข้อมูล Lead
@@ -430,9 +430,9 @@ const LeadCDP = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Personal Info */}
                     <div className="space-y-4">
-                      <div className="flex items-center gap-3 p-3 bg-violet-50 rounded-lg">
-                        <div className="w-12 h-12 bg-violet-100 rounded-full flex items-center justify-center">
-                          <User className="w-6 h-6 text-violet-600" />
+                      <div className="flex items-center gap-3 p-3 bg-white shadow-sm rounded-lg">
+                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
+                          <User className="w-6 h-6 text-gray-600" />
                         </div>
                         <div>
                           <p className="text-sm text-gray-500">ชื่อ - นามสกุล</p>
@@ -483,7 +483,7 @@ const LeadCDP = () => {
 
                     {/* Contact Info */}
                     <div className="space-y-3">
-                      <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
+                      <div className="flex items-center gap-3 p-3 bg-white shadow-sm rounded-lg">
                         <Phone className="w-5 h-5 text-blue-600" />
                         <div>
                           <p className="text-xs text-gray-500">เบอร์โทร</p>
@@ -504,7 +504,7 @@ const LeadCDP = () => {
                           <p className="font-medium">{prefs.workplace || '-'}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-lg">
+                      <div className="flex items-center gap-3 p-3 bg-white shadow-sm rounded-lg">
                         <MapPin className="w-5 h-5 text-purple-600" />
                         <div>
                           <p className="text-xs text-gray-500">ที่อยู่</p>
@@ -532,7 +532,7 @@ const LeadCDP = () => {
             <div className="lg:col-span-1">
               {/* Section 2: Unit Interests */}
               <Card className="shadow-lg border-0 overflow-hidden h-full">
-                <CardHeader className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white">
+                <CardHeader className="bg-blue-600 text-white">
                   <CardTitle className="flex items-center gap-2">
                     <Home className="w-5 h-5" />
                     เลือกยูนิตที่สนใจ ({interests.length > 0 ? interests.length : 1})
@@ -601,7 +601,7 @@ const LeadCDP = () => {
 
           {/* Row 2: Selected Unit Details + Analysis */}
           {selectedInterest && (
-            <div className="bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-200 rounded-lg p-4 mb-6">
+            <div className="bg-white border border-gray-200 shadow-lg rounded-lg p-4 mb-6">
               <div className="flex items-center gap-4">
                 <div className="w-24 h-20 bg-gray-200 rounded-lg overflow-hidden shadow-md flex-shrink-0">
                   {selectedInterest.unit?.thumbnail_url || selectedInterest.property?.thumbnail_url ? (
@@ -618,7 +618,7 @@ const LeadCDP = () => {
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <p className="text-xs text-violet-600 font-medium">กำลังวิเคราะห์ข้อมูลยูนิต</p>
+                    <p className="text-xs text-gray-600 font-medium">กำลังวิเคราะห์ข้อมูลยูนิต</p>
                     <Badge className={getInterestStatusBadge(selectedInterest.status).color}>
                       {getInterestStatusBadge(selectedInterest.status).label}
                     </Badge>
@@ -646,7 +646,7 @@ const LeadCDP = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             {/* Loan Potential */}
             <Card className="shadow-lg border-0 overflow-hidden flex flex-col">
-              <CardHeader className="bg-gradient-to-r from-blue-500 to-cyan-600 text-white">
+              <CardHeader className="bg-blue-600 text-white">
                 <CardTitle className="flex items-center gap-2">
                   <CreditCard className="w-5 h-5" />
                   ศักยภาพในการขอสินเชื่อ
@@ -678,7 +678,7 @@ const LeadCDP = () => {
 
                   {/* Stats */}
                   <div className="space-y-3">
-                    <div className="p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-100">
+                    <div className="p-3 bg-white rounded-xl border border-green-200 shadow-sm">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
                           <Wallet className="w-5 h-5 text-green-600" />
@@ -689,7 +689,7 @@ const LeadCDP = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="p-3 bg-gradient-to-r from-red-50 to-orange-50 rounded-xl border border-red-100">
+                    <div className="p-3 bg-white rounded-xl border border-red-200 shadow-sm">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
                           <CreditCard className="w-5 h-5 text-red-600" />
@@ -700,9 +700,9 @@ const LeadCDP = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+                    <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-sm">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                        <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
                           <DollarSign className="w-5 h-5 text-blue-600" />
                         </div>
                         <div>
@@ -718,7 +718,7 @@ const LeadCDP = () => {
 
             {/* Potential Score */}
             <Card className="shadow-lg border-0 overflow-hidden flex flex-col">
-              <CardHeader className="bg-gradient-to-r from-amber-500 to-orange-600 text-white">
+              <CardHeader className="bg-orange-600 text-white">
                 <CardTitle className="flex items-center gap-2">
                   <BarChart3 className="w-5 h-5" />
                   Potential Score
@@ -783,7 +783,7 @@ const LeadCDP = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Positive Factors */}
             <Card className="shadow-lg border-0 overflow-hidden">
-              <CardHeader className="bg-gradient-to-r from-cyan-500 to-teal-600 text-white py-3">
+              <CardHeader className="bg-teal-600 text-white py-3">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <TrendingUp className="w-5 h-5" />
                   ปัจจัยที่ส่งผลให้ขายได้
@@ -851,7 +851,7 @@ const LeadCDP = () => {
 
             {/* Negative Factors */}
             <Card className="shadow-lg border-0 overflow-hidden">
-              <CardHeader className="bg-gradient-to-r from-pink-500 to-rose-600 text-white py-3">
+              <CardHeader className="bg-rose-600 text-white py-3">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <TrendingDown className="w-5 h-5" />
                   ปัจจัยที่ส่งผลให้ขายไม่ได้

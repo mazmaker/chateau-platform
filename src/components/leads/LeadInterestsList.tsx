@@ -433,9 +433,9 @@ const LeadInterestsList = forwardRef<LeadInterestsListRef, LeadInterestsListProp
         <div className="space-y-4">
           {/* Inline Add Form */}
           {showAddForm && (
-            <div className="border-2 border-blue-200 rounded-lg p-4 bg-blue-50/50 space-y-4">
+            <div className="border-2 border-gray-200 rounded-lg p-4 bg-white shadow-sm space-y-4">
               <div className="flex items-center justify-between">
-                <h4 className="font-medium text-blue-800 flex items-center gap-2">
+                <h4 className="font-medium text-gray-700 flex items-center gap-2">
                   <Plus className="w-4 h-4" />
                   เพิ่มยูนิตที่สนใจ
                 </h4>

@@ -129,6 +129,11 @@ const OwnerDashboard = () => {
   const [recentActivities, setRecentActivities] = useState<ActivityItem[]>([]);
   const [topTenants, setTopTenants] = useState<TenantWithStats[]>([]);
   const [upcomingRenewals, setUpcomingRenewals] = useState<Tenant[]>([]);
+  const [revenueByPlan, setRevenueByPlan] = useState<{
+    enterprise: number;
+    professional: number;
+    starter: number;
+  }>({ enterprise: 0, professional: 0, starter: 0 });
 
   useEffect(() => {
     if (!isOwner) {
@@ -154,25 +159,56 @@ const OwnerDashboard = () => {
         const activeCount = tenantList.filter(t => t.status === 'active').length;
         const trialCount = tenantList.filter(t => t.status === 'trial').length;
 
-        // Calculate revenue (simplified - should come from billing table)
-        const revenue = tenantList.reduce((sum, t) => {
-          const planPrices = {
-            starter: 2900,
-            professional: 5900,
-            enterprise: 15900
-          };
-          return sum + (planPrices[t.subscription_plan] || 0);
-        }, 0);
+        // Calculate actual revenue from paid invoices
+        const { data: paidInvoices } = await supabase
+          .from('invoices')
+          .select('amount, paid_at')
+          .eq('status', 'paid');
+
+        const currentRevenue = paidInvoices?.reduce((sum, inv) => {
+          const paidDate = new Date(inv.paid_at || inv.created_at);
+          const currentMonth = new Date();
+          currentMonth.setDate(1); // First day of current month
+
+          if (paidDate >= currentMonth) {
+            return sum + inv.amount;
+          }
+          return sum;
+        }, 0) || 0;
+
+        // Calculate churn rate from actual data (last 30 days)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        const churnedTenants = tenantList.filter(t =>
+          t.status === 'cancelled' && new Date(t.updated_at || t.created_at) >= thirtyDaysAgo
+        ).length;
+        const realChurnRate = tenantList.length > 0 ? (churnedTenants / tenantList.length) * 100 : 0;
+
+        // Calculate MRR growth from previous month
+        const previousMonth = new Date();
+        previousMonth.setMonth(previousMonth.getMonth() - 1);
+        previousMonth.setDate(1);
+
+        const { data: previousMonthInvoices } = await supabase
+          .from('invoices')
+          .select('amount, paid_at')
+          .eq('status', 'paid')
+          .gte('paid_at', previousMonth.toISOString())
+          .lt('paid_at', new Date(previousMonth.getFullYear(), previousMonth.getMonth() + 1, 1).toISOString());
+
+        const previousRevenue = previousMonthInvoices?.reduce((sum, inv) => sum + inv.amount, 0) || 1;
+        const realMrrGrowth = previousRevenue > 0 ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 : 0;
 
         setStats({
           totalTenants: tenantList.length,
           activeTenants: activeCount,
           trialTenants: trialCount,
           totalUsers: 0, // Will fetch from users table
-          monthlyRevenue: revenue,
-          annualRunRate: revenue * 12,
-          churnRate: 2.5, // Placeholder
-          mrrGrowth: 12.3 // Placeholder
+          monthlyRevenue: currentRevenue,
+          annualRunRate: currentRevenue * 12,
+          churnRate: Math.round(realChurnRate * 100) / 100,
+          mrrGrowth: Math.round(realMrrGrowth * 100) / 100
         });
 
         // Recent tenants (last 7 days)
@@ -199,25 +235,46 @@ const OwnerDashboard = () => {
 
         setAtRiskTenants(atRisk);
 
-        // Generate revenue trend data (last 6 months)
+        // Generate real revenue trend data from invoices (last 6 months)
         const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
         const currentMonth = new Date().getMonth();
         const currentYear = new Date().getFullYear();
         const revenueTrend: RevenueData[] = [];
+
+        // Get all paid invoices for the last 6 months
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+        const { data: historicalInvoices } = await supabase
+          .from('invoices')
+          .select('amount, paid_at, tenant_id')
+          .eq('status', 'paid')
+          .gte('paid_at', sixMonthsAgo.toISOString());
 
         for (let i = 5; i >= 0; i--) {
           const monthIndex = (currentMonth - i + 12) % 12;
           const year = currentMonth - i < 0 ? currentYear - 1 : currentYear;
           const monthName = months[monthIndex];
 
-          // Simulate growing trend
-          const baseRevenue = revenue * (0.6 + (i * 0.08));
-          const tenantCount = Math.round(tenantList.length * (0.5 + (i * 0.08)));
+          // Get start and end of this month
+          const monthStart = new Date(year, monthIndex, 1);
+          const monthEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59);
+
+          // Calculate actual revenue for this month
+          const monthInvoices = historicalInvoices?.filter(inv => {
+            const paidDate = new Date(inv.paid_at || inv.created_at);
+            return paidDate >= monthStart && paidDate <= monthEnd;
+          }) || [];
+
+          const monthRevenue = monthInvoices.reduce((sum, inv) => sum + inv.amount, 0);
+
+          // Calculate unique tenants who paid in this month
+          const uniqueTenants = new Set(monthInvoices.map(inv => inv.tenant_id)).size;
 
           revenueTrend.push({
             month: monthName,
-            revenue: Math.round(baseRevenue),
-            tenants: Math.max(tenantCount, 1)
+            revenue: monthRevenue,
+            tenants: uniqueTenants
           });
         }
         setRevenueData(revenueTrend);
@@ -241,17 +298,54 @@ const OwnerDashboard = () => {
           setRecentActivities([]);
         }
 
-        // Generate top performing tenants (by revenue contribution)
-        const planPrices = { starter: 2900, professional: 5900, enterprise: 15900 };
-        const tenantsWithRevenue = tenantList
+        // Generate top performing tenants with real revenue and user counts
+        const { data: tenantUserCounts } = await supabase
+          .from('users')
+          .select('tenant_id')
+          .not('tenant_id', 'is', null);
+
+        // Count users per tenant
+        const userCountMap = new Map<string, number>();
+        tenantUserCounts?.forEach(user => {
+          const count = userCountMap.get(user.tenant_id) || 0;
+          userCountMap.set(user.tenant_id, count + 1);
+        });
+
+        // Get actual revenue per tenant from paid invoices
+        const { data: tenantRevenues } = await supabase
+          .from('invoices')
+          .select('tenant_id, amount')
+          .eq('status', 'paid');
+
+        const revenueMap = new Map<string, number>();
+        tenantRevenues?.forEach(invoice => {
+          const current = revenueMap.get(invoice.tenant_id) || 0;
+          revenueMap.set(invoice.tenant_id, current + invoice.amount);
+        });
+
+        const tenantsWithRealData = tenantList
           .map(t => ({
             ...t,
-            revenue: planPrices[t.subscription_plan] || 0,
-            userCount: Math.floor(Math.random() * 15) + 1 // Random for demo
+            revenue: revenueMap.get(t.id) || 0,
+            userCount: userCountMap.get(t.id) || 0
           }))
           .sort((a, b) => b.revenue - a.revenue)
           .slice(0, 5) as TenantWithStats[];
-        setTopTenants(tenantsWithRevenue);
+        setTopTenants(tenantsWithRealData);
+
+        // Calculate revenue by plan from real data
+        const planRevenue = {
+          enterprise: tenantList
+            .filter(t => t.subscription_plan === 'enterprise' && t.status === 'active')
+            .reduce((sum, t) => sum + (revenueMap.get(t.id) || 0), 0),
+          professional: tenantList
+            .filter(t => t.subscription_plan === 'professional' && t.status === 'active')
+            .reduce((sum, t) => sum + (revenueMap.get(t.id) || 0), 0),
+          starter: tenantList
+            .filter(t => t.subscription_plan === 'starter' && t.status === 'active')
+            .reduce((sum, t) => sum + (revenueMap.get(t.id) || 0), 0)
+        };
+        setRevenueByPlan(planRevenue);
 
         // Upcoming renewals (trial ending or subscriptions ending in 30 days)
         const thirtyDaysFromNow = new Date();
@@ -374,11 +468,11 @@ const OwnerDashboard = () => {
           <main className="p-6">
             <div className="space-y-6">
               {/* Page Header */}
-              <Card className="bg-gradient-to-r from-violet-50 to-purple-50 border-violet-100">
+              <Card className="bg-white border-gray-200 shadow-lg">
                 <CardContent className="pt-6">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
+                      <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl flex items-center justify-center shadow-xl">
                         <TrendingUp className="w-6 h-6 text-white" />
                       </div>
                       <div>
@@ -398,8 +492,8 @@ const OwnerDashboard = () => {
           <Card className="border-l-4 border-l-cyan-500">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-cyan-100 rounded-xl flex items-center justify-center">
-                  <DollarSign className="w-6 h-6 text-cyan-600" />
+                <div className="w-12 h-12 bg-gradient-to-br from-amber-600 to-amber-700 rounded-xl flex items-center justify-center shadow-xl">
+                  <DollarSign className="w-6 h-6 text-white" strokeWidth={2} />
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{formatCurrency(stats.monthlyRevenue)}</p>
@@ -417,8 +511,8 @@ const OwnerDashboard = () => {
           <Card className="border-l-4 border-l-purple-500">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6 text-purple-600" />
+                <div className="w-12 h-12 bg-gradient-to-br from-gray-600 to-gray-700 rounded-xl flex items-center justify-center shadow-xl">
+                  <TrendingUp className="w-6 h-6 text-white" strokeWidth={2} />
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{formatCurrency(stats.annualRunRate)}</p>
@@ -435,8 +529,8 @@ const OwnerDashboard = () => {
           <Card className="border-l-4 border-l-pink-500">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-pink-100 rounded-xl flex items-center justify-center">
-                  <Building2 className="w-6 h-6 text-pink-600" />
+                <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl flex items-center justify-center shadow-xl">
+                  <Building2 className="w-6 h-6 text-white" strokeWidth={2} />
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{stats.totalTenants}</p>
@@ -455,8 +549,8 @@ const OwnerDashboard = () => {
           <Card className="border-l-4 border-l-orange-500">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                  <Users className="w-6 h-6 text-orange-600" />
+                <div className="w-12 h-12 bg-gradient-to-br from-amber-800 to-amber-900 rounded-xl flex items-center justify-center shadow-xl">
+                  <Users className="w-6 h-6 text-white" strokeWidth={2} />
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{stats.totalUsers}</p>
@@ -552,20 +646,20 @@ const OwnerDashboard = () => {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-purple-500" />
+                    <div className="w-3 h-3 rounded-full bg-white shadow-sm0" />
                     <span>Enterprise</span>
                   </div>
                   <span className="font-medium">
-                    {formatCurrency(15900 * recentTenants.filter(t => t.subscription_plan === 'enterprise').length)}
+                    {formatCurrency(revenueByPlan.enterprise)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-blue-500" />
+                    <div className="w-3 h-3 rounded-full bg-white shadow-sm0" />
                     <span>Professional</span>
                   </div>
                   <span className="font-medium">
-                    {formatCurrency(5900 * recentTenants.filter(t => t.subscription_plan === 'professional').length)}
+                    {formatCurrency(revenueByPlan.professional)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
@@ -574,7 +668,7 @@ const OwnerDashboard = () => {
                     <span>Starter</span>
                   </div>
                   <span className="font-medium">
-                    {formatCurrency(2900 * recentTenants.filter(t => t.subscription_plan === 'starter').length)}
+                    {formatCurrency(revenueByPlan.starter)}
                   </span>
                 </div>
               </div>
@@ -588,7 +682,7 @@ const OwnerDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-violet-600" />
+                  <TrendingUp className="w-5 h-5 text-gray-600" />
                   แนวโน้มรายได้ (Revenue Trend)
                 </CardTitle>
                 <CardDescription>6 เดือนที่ผ่านมา</CardDescription>
@@ -614,10 +708,10 @@ const OwnerDashboard = () => {
                 <Line
                   type="monotone"
                   dataKey="revenue"
-                  stroke="#8b5cf6"
+                  stroke="#4b5563"
                   strokeWidth={3}
                   name="รายได้ (บาท)"
-                  dot={{ fill: '#8b5cf6', r: 5 }}
+                  dot={{ fill: '#4b5563', r: 5 }}
                   activeDot={{ r: 7 }}
                 />
               </LineChart>
@@ -714,7 +808,7 @@ const OwnerDashboard = () => {
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-semibold text-violet-600">{formatCurrency(tenant.revenue)}</p>
+                        <p className="text-sm font-semibold text-gray-600">{formatCurrency(tenant.revenue)}</p>
                         <p className="text-xs text-gray-500">/เดือน</p>
                       </div>
                     </div>

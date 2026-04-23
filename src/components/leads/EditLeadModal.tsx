@@ -756,7 +756,7 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
 
               {/* Section 2: Units of Interest */}
               {lead && (
-                <div className="space-y-4 border rounded-lg p-4 bg-blue-50/30">
+                <div className="space-y-4 border rounded-lg p-4 bg-white shadow-sm">
                   <LeadInterestsList
                     leadId={lead.id}
                     onInterestsChange={() => {

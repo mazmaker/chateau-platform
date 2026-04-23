@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { AdminGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
@@ -65,7 +65,9 @@ import {
   User,
   ImagePlus,
   X,
-  Upload
+  Upload,
+  Clock,
+  FileText
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -124,15 +126,19 @@ interface Unit {
 
 const PropertyManagement = () => {
   const navigate = useNavigate();
-  const { currentTenant, userRole } = useSimpleAuth();
+  const { id: propertyId } = useParams();
+  const { currentTenant, userRole, user } = useSimpleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
-  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [companyFilter, setCompanyFilter] = useState<string>('all');
+  const [tenants, setTenants] = useState<any[]>([]);
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
+  const [showActivityLogs, setShowActivityLogs] = useState(false);
 
   // Dialog states
   const [showPropertyDialog, setShowPropertyDialog] = useState(false);
@@ -180,24 +186,46 @@ const PropertyManagement = () => {
   useEffect(() => {
     if (currentTenant) {
       fetchProperties();
+      fetchTenants();
     }
   }, [currentTenant]);
 
   useEffect(() => {
-    if (selectedProperty) {
-      fetchUnits(selectedProperty.id);
+    if (propertyId) {
+      fetchUnits(propertyId);
+      fetchPropertyActivityLogs(propertyId);
     }
-  }, [selectedProperty]);
+  }, [propertyId]);
+
+  // Find selectedProperty from properties list using URL param
+  const selectedProperty = properties.find(p => p.id === propertyId) || null;
+
+  // Handle case where property ID is invalid (not found)
+  useEffect(() => {
+    if (propertyId && properties.length > 0 && !selectedProperty) {
+      // Invalid property ID - redirect to properties list
+      navigate('/properties');
+    }
+  }, [propertyId, properties, selectedProperty, navigate]);
 
   const fetchProperties = async () => {
     setLoading(true);
     try {
-      // Fetch from properties table
-      const { data: propertiesData, error: propertiesError } = await supabase
+      // Fetch properties with tenant information
+      let propertiesQuery = supabase
         .from('properties')
-        .select('*')
-        .eq('tenant_id', currentTenant?.id)
+        .select(`
+          *,
+          tenant:tenants!tenant_id(id, name)
+        `)
         .order('created_at', { ascending: false });
+
+      // For non-owner users, filter by their tenant
+      if (userRole !== 'owner') {
+        propertiesQuery = propertiesQuery.eq('tenant_id', currentTenant?.id);
+      }
+
+      const { data: propertiesData, error: propertiesError } = await propertiesQuery;
 
       if (propertiesError) {
         console.error('Error fetching properties:', propertiesError);
@@ -245,6 +273,55 @@ const PropertyManagement = () => {
       console.error('Error fetching properties:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTenants = async () => {
+    try {
+      // For OWNER users, fetch all tenants. For others, just their own tenant
+      if (userRole === 'owner') {
+        const { data, error } = await supabase
+          .from('tenants')
+          .select('id, name, status')
+          .order('name');
+
+        if (error) {
+          console.error('Error fetching tenants:', error);
+        } else {
+          setTenants(data || []);
+        }
+      } else {
+        // For admin/sales, only show their own tenant
+        if (currentTenant) {
+          setTenants([currentTenant]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching tenants:', error);
+    }
+  };
+
+  const fetchPropertyActivityLogs = async (propertyId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('activity_logs')
+        .select(`
+          *,
+          user:users(full_name)
+        `)
+        .eq('tenant_id', currentTenant?.id)
+        .or(`metadata->>'property_id'.eq.${propertyId},metadata->>'project_id'.eq.${propertyId}`)
+        .in('activity_type', ['property_created', 'property_updated', 'property_deleted', 'unit_created', 'unit_updated', 'unit_deleted'])
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.error('Error fetching activity logs:', error);
+      } else {
+        setActivityLogs(data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching activity logs:', error);
     }
   };
 
@@ -315,13 +392,15 @@ const PropertyManagement = () => {
       };
 
       if (editingProperty) {
-        await supabase.from('properties').update(propertyData).eq('id', editingProperty.id);
+        // Add updated_by for property updates
+        const updateData = { ...propertyData, updated_by: user?.id };
+        await supabase.from('properties').update(updateData).eq('id', editingProperty.id);
 
         // Log activity for property update
         try {
           await supabase.rpc('log_activity', {
             p_tenant_id: currentTenant?.id,
-            p_user_id: null,
+            p_user_id: user?.id,
             p_activity_type: 'property_updated',
             p_description: `แก้ไขโครงการ: ${propertyForm.name}`,
             p_metadata: {
@@ -334,13 +413,15 @@ const PropertyManagement = () => {
           // Ignore log_activity errors
         }
       } else {
-        const { data } = await supabase.from('properties').insert(propertyData).select();
+        // Add created_by for new properties
+        const insertData = { ...propertyData, created_by: user?.id };
+        const { data } = await supabase.from('properties').insert(insertData).select();
 
         // Log activity for property creation
         try {
           await supabase.rpc('log_activity', {
             p_tenant_id: currentTenant?.id,
-            p_user_id: null,
+            p_user_id: user?.id,
             p_activity_type: 'property_created',
             p_description: `สร้างโครงการใหม่: ${propertyForm.name}`,
             p_metadata: {
@@ -358,6 +439,11 @@ const PropertyManagement = () => {
       setEditingProperty(null);
       resetPropertyForm();
       fetchProperties();
+
+      // Refresh activity logs if we're viewing this property's details
+      if (propertyId && (editingProperty?.id === propertyId || !editingProperty)) {
+        fetchPropertyActivityLogs(propertyId);
+      }
     } catch (error) {
       console.error('Error saving property:', error);
     }
@@ -366,7 +452,7 @@ const PropertyManagement = () => {
   const [savingUnit, setSavingUnit] = useState(false);
 
   const handleSaveUnit = async () => {
-    if (!selectedProperty || !currentTenant) return;
+    if (!propertyId || !currentTenant || !selectedProperty) return;
 
     setSavingUnit(true);
     try {
@@ -417,7 +503,7 @@ const PropertyManagement = () => {
         try {
           await supabase.rpc('log_activity', {
             p_tenant_id: currentTenant.id,
-            p_user_id: null,
+            p_user_id: user?.id,
             p_activity_type: 'unit_updated',
             p_description: `แก้ไขยูนิต: ${unitForm.unit_number} (${selectedProperty.name})`,
             p_metadata: {
@@ -446,7 +532,7 @@ const PropertyManagement = () => {
         try {
           await supabase.rpc('log_activity', {
             p_tenant_id: currentTenant.id,
-            p_user_id: null,
+            p_user_id: user?.id,
             p_activity_type: 'unit_created',
             p_description: `สร้างยูนิตใหม่: ${unitForm.unit_number} (${selectedProperty.name})`,
             p_metadata: {
@@ -466,6 +552,7 @@ const PropertyManagement = () => {
       setEditingUnit(null);
       resetUnitForm();
       fetchUnits(selectedProperty.id);
+      fetchPropertyActivityLogs(selectedProperty.id); // Refresh activity logs
     } catch (error: any) {
       console.error('Error saving unit:', error);
       alert(error.message || 'เกิดข้อผิดพลาดในการบันทึกยูนิต');
@@ -483,7 +570,7 @@ const PropertyManagement = () => {
       try {
         await supabase.rpc('log_activity', {
           p_tenant_id: currentTenant?.id,
-          p_user_id: null,
+          p_user_id: user?.id,
           p_activity_type: 'property_deleted',
           p_description: `ลบโครงการ: ${selectedProperty.name}`,
           p_metadata: {
@@ -497,7 +584,7 @@ const PropertyManagement = () => {
       }
 
       setShowDeleteDialog(false);
-      setSelectedProperty(null);
+      navigate('/properties');
       fetchProperties();
     } catch (error) {
       console.error('Error deleting property:', error);
@@ -643,7 +730,7 @@ const PropertyManagement = () => {
       try {
         await supabase.rpc('log_activity', {
           p_tenant_id: currentTenant.id,
-          p_user_id: null,
+          p_user_id: user?.id,
           p_activity_type: 'unit_deleted',
           p_description: `ลบยูนิต: ${deletingUnit.unit_number} (${selectedProperty.name})`,
           p_metadata: {
@@ -660,6 +747,7 @@ const PropertyManagement = () => {
       setShowDeleteUnitDialog(false);
       setDeletingUnit(null);
       fetchUnits(selectedProperty.id);
+      fetchPropertyActivityLogs(selectedProperty.id); // Refresh activity logs
     } catch (error: any) {
       console.error('Error deleting unit:', error);
       alert(error.message || 'เกิดข้อผิดพลาดในการลบยูนิต');
@@ -670,7 +758,7 @@ const PropertyManagement = () => {
   const uploadUnitImage = async (file: File, folder: string): Promise<string | null> => {
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${currentTenant?.id}/${selectedProperty?.id}/${folder}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const fileName = `${currentTenant?.id}/${propertyId}/${folder}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
       const { data, error } = await supabase.storage
         .from('units')
@@ -732,7 +820,16 @@ const PropertyManagement = () => {
   const filteredProperties = properties.filter(property => {
     const matchesSearch = property.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = typeFilter === 'all' || property.type === typeFilter;
-    return matchesSearch && matchesType;
+
+    // Company filter logic
+    let matchesCompany = false;
+    if (companyFilter === 'all') {
+      matchesCompany = true;
+    } else {
+      matchesCompany = property.tenant_id === companyFilter;
+    }
+
+    return matchesSearch && matchesType && matchesCompany;
   });
 
   const filteredUnits = units.filter(unit => {
@@ -782,11 +879,11 @@ const PropertyManagement = () => {
           <AdminGuard>
             <div className="space-y-6">
               {/* Header */}
-              <Card className="bg-gradient-to-r from-violet-50 to-purple-50 border-violet-100">
+              <Card className="bg-white border-gray-200 shadow-lg">
                 <CardContent className="pt-6">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
+                      <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl rounded-xl flex items-center justify-center">
                         <Building2 className="w-6 h-6 text-white" />
                       </div>
                       <div>
@@ -801,7 +898,7 @@ const PropertyManagement = () => {
                         setEditingProperty(null);
                         setShowPropertyDialog(true);
                       }}
-                      className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
+                      className="bg-gray-900 hover:bg-black text-white shadow-lg"
                     >
                       <Plus className="w-4 h-4 mr-2" />
                       เพิ่มโครงการใหม่
@@ -811,7 +908,7 @@ const PropertyManagement = () => {
               </Card>
 
         {/* Property List or Units */}
-        {!selectedProperty ? (
+        {!propertyId ? (
           // Properties List
           <>
             {/* Stats */}
@@ -907,6 +1004,20 @@ const PropertyManagement = () => {
                       <SelectItem value="commercial">อาคารพาณิชย์</SelectItem>
                     </SelectContent>
                   </Select>
+                  <Select value={companyFilter} onValueChange={setCompanyFilter}>
+                    <SelectTrigger className="w-[200px]">
+                      <Building2 className="w-4 h-4 mr-2" />
+                      <SelectValue placeholder="บริษัท" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">ทุกบริษัท</SelectItem>
+                      {tenants.map(tenant => (
+                        <SelectItem key={tenant.id} value={tenant.id}>
+                          {tenant.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardContent>
             </Card>
@@ -927,7 +1038,7 @@ const PropertyManagement = () => {
                   <Card
                     key={property.id}
                     className="cursor-pointer hover:shadow-lg transition-shadow overflow-hidden"
-                    onClick={() => setSelectedProperty(property)}
+                    onClick={() => navigate(`/properties/${property.id}`)}
                   >
                     {/* Thumbnail Image */}
                     <div className="relative h-48 bg-gray-100">
@@ -982,6 +1093,15 @@ const PropertyManagement = () => {
                             </div>
                           )}
                         </div>
+
+                        {/* Company Information */}
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>บริษัท:</span>
+                          <div className="flex items-center gap-1">
+                            <Building2 className="w-3 h-3" />
+                            <span>{property.tenant?.name || 'ไม่ระบุ'}</span>
+                          </div>
+                        </div>
                         <div className="pt-2 border-t">
                           <div className="flex items-center justify-between">
                             <span className="text-sm text-muted-foreground">ราคาเริ่มต้น</span>
@@ -1001,40 +1121,260 @@ const PropertyManagement = () => {
           // Units View
           <div className="space-y-6">
             {/* Back Button */}
-            <Button variant="outline" onClick={() => setSelectedProperty(null)}>
+            <Button variant="outline" onClick={() => navigate('/properties')}>
               ← กลับไปรายการโครงการ
             </Button>
 
-            {/* Property Info */}
+            {/* Property Header */}
             <Card>
-              <CardHeader>
+              <CardHeader className="pb-4">
                 <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-2xl">{selectedProperty.name}</CardTitle>
-                    <CardDescription className="flex items-center gap-1 mt-1">
-                      <MapPin className="w-4 h-4" />
-                      {selectedProperty.address?.district || '-'} {selectedProperty.address?.province ? `, ${selectedProperty.address.province}` : ''}
-                    </CardDescription>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-3">
+                      <CardTitle className="text-3xl font-bold">{selectedProperty.name}</CardTitle>
+                      <Badge variant="secondary" className="font-medium">
+                        {getPropertyTypeLabel(selectedProperty.type)}
+                      </Badge>
+                      <Badge variant={selectedProperty.is_active ? "default" : "secondary"} className="ml-auto">
+                        {selectedProperty.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-muted-foreground">Location</p>
+                        <div className="flex items-center gap-1">
+                          <MapPin className="w-4 h-4 text-gray-500" />
+                          <span className="text-sm">{selectedProperty.address?.district || 'N/A'}, {selectedProperty.address?.province || 'N/A'}</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-muted-foreground">Starting Price</p>
+                        <span className="text-xl font-bold text-emerald-600">
+                          {formatCurrency(selectedProperty.base_price)}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-muted-foreground">Total Units</p>
+                        <span className="text-xl font-semibold">
+                          {selectedProperty.total_units?.toLocaleString() || 'N/A'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
+
+                  <div className="flex gap-2 ml-6">
                     <Button variant="outline" size="sm" onClick={() => {
                       setEditingProperty(selectedProperty);
                       setShowPropertyDialog(true);
                     }}>
                       <Edit className="w-4 h-4 mr-2" />
-                      แก้ไข
+                      Edit
                     </Button>
                     <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
                       <Trash2 className="w-4 h-4 mr-2" />
-                      ลบ
+                      Delete
                     </Button>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">{selectedProperty.description || '-'}</p>
-              </CardContent>
             </Card>
+
+            {/* Property Gallery & Details */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Image Gallery */}
+              {(selectedProperty.thumbnail_url || (selectedProperty.images && selectedProperty.images.length > 0)) && (
+                <Card className="lg:col-span-2">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <ImagePlus className="w-5 h-5" />
+                      Property Gallery
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      {selectedProperty.thumbnail_url && (
+                        <div className="relative group cursor-pointer">
+                          <img
+                            src={selectedProperty.thumbnail_url}
+                            alt={`${selectedProperty.name} - Primary`}
+                            className="w-full h-32 object-cover rounded-lg border shadow-sm hover:shadow-md transition-shadow"
+                          />
+                          <div className="absolute top-2 left-2">
+                            <Badge variant="secondary" className="text-xs">Primary</Badge>
+                          </div>
+                        </div>
+                      )}
+                      {selectedProperty.images && selectedProperty.images.map((image: string, index: number) => (
+                        <div key={index} className="relative group cursor-pointer">
+                          <img
+                            src={image}
+                            alt={`${selectedProperty.name} - ${index + 1}`}
+                            className="w-full h-32 object-cover rounded-lg border shadow-sm hover:shadow-md transition-shadow"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Property Description */}
+              <Card className={selectedProperty.thumbnail_url || (selectedProperty.images && selectedProperty.images.length > 0) ? "" : "lg:col-span-3"}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="w-5 h-5" />
+                    Description
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-gray-700 leading-relaxed">
+                    {selectedProperty.description || 'No description available'}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Property Specifications */}
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building2 className="w-5 h-5" />
+                    Company Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Company</p>
+                    <p className="font-medium">{selectedProperty.tenant?.name || 'Not specified'}</p>
+                  </div>
+                  {selectedProperty.developer && (
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-muted-foreground">Developer</p>
+                      <p className="font-medium">{selectedProperty.developer}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Home className="w-5 h-5" />
+                    Property Details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {selectedProperty.floor_count && (
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-muted-foreground">Number of Floors</p>
+                      <p className="font-medium">{selectedProperty.floor_count}</p>
+                    </div>
+                  )}
+                  {selectedProperty.has_facilities !== undefined && (
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-muted-foreground">Facilities</p>
+                      <Badge variant={selectedProperty.has_facilities ? "default" : "outline"} className="font-medium">
+                        {selectedProperty.has_facilities ? "Available" : "Not Available"}
+                      </Badge>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="w-5 h-5" />
+                    Timeline
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Created</p>
+                    <p className="text-sm">{new Date(selectedProperty.created_at).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(selectedProperty.created_at).toLocaleTimeString('en-US')}
+                    </p>
+                  </div>
+                  {selectedProperty.updated_at && selectedProperty.updated_at !== selectedProperty.created_at && (
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-muted-foreground">Last Updated</p>
+                      <p className="text-sm">{new Date(selectedProperty.updated_at).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      })}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(selectedProperty.updated_at).toLocaleTimeString('en-US')}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Activity Timeline */}
+                  {activityLogs.length > 0 && (
+                    <div className="border-t pt-4">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowActivityLogs(!showActivityLogs)}
+                        className="w-full justify-between p-0 h-auto font-medium text-sm"
+                      >
+                        <span className="flex items-center gap-2">
+                          <TrendingUp className="w-4 h-4" />
+                          Activity History ({activityLogs.length})
+                        </span>
+                        <span className={`transform transition-transform ${showActivityLogs ? 'rotate-180' : ''}`}>
+                          ▼
+                        </span>
+                      </Button>
+
+                      {showActivityLogs && (
+                        <div className="mt-3 space-y-3 max-h-60 overflow-y-auto">
+                          {activityLogs.map((log, index) => (
+                            <div key={log.id} className="flex gap-3 text-sm">
+                              <div className="flex-shrink-0">
+                                <div className={`w-2 h-2 rounded-full mt-1 ${
+                                  log.activity_type.includes('created') ? 'bg-green-500' :
+                                  log.activity_type.includes('updated') ? 'bg-white shadow-sm0' :
+                                  log.activity_type.includes('deleted') ? 'bg-red-500' :
+                                  'bg-gray-500'
+                                }`} />
+                              </div>
+                              <div className="flex-1 space-y-1">
+                                <p className="text-sm leading-relaxed">{log.description}</p>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <span>{new Date(log.created_at).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}</span>
+                                  {log.user?.full_name && (
+                                    <>
+                                      <span>•</span>
+                                      <span>{log.user.full_name}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
 
             {/* Units Stats */}
             <div className="grid gap-4 md:grid-cols-4">
@@ -1204,7 +1544,6 @@ const PropertyManagement = () => {
             fetchProperties();
             setShowPropertyDialog(false);
             setEditingProperty(null);
-            setSelectedProperty(null);
           }}
           editingProject={editingProperty}
         />

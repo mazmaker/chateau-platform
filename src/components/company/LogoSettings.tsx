@@ -20,8 +20,8 @@ import { supabase } from '@/lib/supabase';
 export function LogoSettings() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState<string | null>(null);
-  const [primaryColor, setPrimaryColor] = useState('#676AF1');
-  const [secondaryColor, setSecondaryColor] = useState('#38B6FFCC');
+  const [primaryColor, setPrimaryColor] = useState('#374151');
+  const [secondaryColor, setSecondaryColor] = useState('#6b7280');
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const { isOwner, isAdmin } = usePermissions();

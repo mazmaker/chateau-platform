@@ -10,14 +10,18 @@ import NotFound from "./pages/NotFound";
 import OwnerDashboard from "./pages/OwnerDashboard";
 import TenantManagement from "./pages/TenantManagement";
 import BillingManagement from "./pages/BillingManagement";
+import PaymentDashboard from "./pages/PaymentDashboard";
 import PropertyManagement from "./pages/PropertyManagement";
 import LeadManagement from "./pages/LeadManagement";
 import LeadCDP from "./pages/LeadCDP";
 import CampaignManagement from "./pages/CampaignManagement";
 import AdminCustomization from "./pages/AdminCustomization";
+import Analytics from "./pages/Analytics";
+import ApiManagement from "./pages/ApiManagement";
 import Settings from "./pages/Settings";
 import SetupPassword from "./pages/SetupPassword";
 import AcceptInvite from "./pages/AcceptInvite";
+import ForcePasswordChange from "./pages/ForcePasswordChange";
 import { ProtectedRouteSimple } from "@/components/auth/ProtectedRouteSimple";
 import { TenantStatusGuard } from "@/components/auth/TenantStatusGuard";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -69,6 +73,20 @@ const App = () => (
               context={{ page: 'accept-invite' }}
             >
               <AcceptInvite />
+            </ErrorBoundary>
+          } />
+
+          {/* Force Password Change Route - For users with temporary passwords */}
+          <Route path="/auth/change-password" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้าเปลี่ยนรหัสผ่านได้"
+              context={{ page: 'force-password-change' }}
+            >
+              <ProtectedRouteSimple>
+                <ForcePasswordChange />
+              </ProtectedRouteSimple>
             </ErrorBoundary>
           } />
 
@@ -154,6 +172,19 @@ const App = () => (
             </ErrorBoundary>
           } />
 
+          <Route path="/tenants/:id" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดรายละเอียดบริษัทได้"
+              context={{ page: 'tenant-detail' }}
+            >
+              <ProtectedRouteSimple requireRole="owner">
+                <TenantManagement />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
           <Route path="/billing" element={
             <ErrorBoundary
               showRetry={true}
@@ -163,6 +194,19 @@ const App = () => (
             >
               <ProtectedRouteSimple requireRole="owner">
                 <BillingManagement />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/payments" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้าจัดการการชำระเงินได้"
+              context={{ page: 'payment-dashboard' }}
+            >
+              <ProtectedRouteSimple requireRole="owner">
+                <PaymentDashboard />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />
@@ -181,12 +225,38 @@ const App = () => (
             </ErrorBoundary>
           } />
 
+          <Route path="/properties/:id" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดรายละเอียดโครงการได้"
+              context={{ page: 'property-detail' }}
+            >
+              <ProtectedRouteSimple>
+                <PropertyManagement />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
           <Route path="/leads" element={
             <ErrorBoundary
               showRetry={true}
               showHome={true}
               errorMessage="ไม่สามารถโหลดหน้าจัดการ Leads ได้"
               context={{ page: 'lead-management' }}
+            >
+              <ProtectedRouteSimple>
+                <LeadManagement />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/leads/:id" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดรายละเอียด Lead ได้"
+              context={{ page: 'lead-detail' }}
             >
               <ProtectedRouteSimple>
                 <LeadManagement />
@@ -220,6 +290,19 @@ const App = () => (
             </ErrorBoundary>
           } />
 
+          <Route path="/campaigns/:id" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดรายละเอียดแคมเปญได้"
+              context={{ page: 'campaign-detail' }}
+            >
+              <ProtectedRouteSimple>
+                <CampaignManagement />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
           <Route path="/customization" element={
             <ErrorBoundary
               showRetry={true}
@@ -229,6 +312,33 @@ const App = () => (
             >
               <ProtectedRouteSimple>
                 <AdminCustomization />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          {/* Premium Feature Routes - Subscription-based access */}
+          <Route path="/analytics" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้ารายงานวิเคราะห์ได้"
+              context={{ page: 'analytics' }}
+            >
+              <ProtectedRouteSimple>
+                <Analytics />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/api" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้าการจัดการ API ได้"
+              context={{ page: 'api-management' }}
+            >
+              <ProtectedRouteSimple>
+                <ApiManagement />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />

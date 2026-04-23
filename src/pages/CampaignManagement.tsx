@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { AdminGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
@@ -154,7 +155,7 @@ const STATUS_OPTIONS = [
   { value: 'draft', label: 'แบบร่าง', color: 'bg-gray-100 text-gray-800' },
   { value: 'active', label: 'ส่งแล้ว', color: 'bg-green-100 text-green-800' },
   { value: 'paused', label: 'หยุดชั่วคราว', color: 'bg-yellow-100 text-yellow-800' },
-  { value: 'completed', label: 'เสร็จสิ้น', color: 'bg-blue-100 text-blue-800' },
+  { value: 'completed', label: 'เสร็จสิ้น', color: 'bg-gray-100 text-gray-700' },
 ];
 
 // Mock data for charts
@@ -207,6 +208,8 @@ const MOCK_TOP_CAMPAIGNS = [
 ];
 
 const CampaignManagement = () => {
+  const navigate = useNavigate();
+  const { id: campaignId } = useParams();
   const { currentTenant, userProfile } = useSimpleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -220,6 +223,26 @@ const CampaignManagement = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+
+  // Compute selectedCampaign based on URL parameter instead of state
+  const selectedCampaignFromUrl = campaigns.find(campaign => campaign.id === campaignId) || null;
+
+  // Handle invalid campaign ID in URL
+  useEffect(() => {
+    // Check if campaignId is a valid UUID format
+    const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(campaignId || '');
+
+    if (campaignId && !isValidUUID) {
+      console.warn(`Invalid campaign ID format: ${campaignId}, redirecting to campaigns list`);
+      navigate('/campaigns', { replace: true });
+      return;
+    }
+
+    if (campaignId && campaigns.length > 0 && !selectedCampaignFromUrl) {
+      console.warn(`Campaign with ID ${campaignId} not found, redirecting to campaigns list`);
+      navigate('/campaigns', { replace: true });
+    }
+  }, [campaignId, campaigns, selectedCampaignFromUrl, navigate]);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -540,8 +563,7 @@ const CampaignManagement = () => {
   };
 
   const handleView = (campaign: Campaign) => {
-    setSelectedCampaign(campaign);
-    setShowViewModal(true);
+    navigate(`/campaigns/${campaign.id}`);
   };
 
   const toggleSegment = (value: string) => {
@@ -584,7 +606,7 @@ const CampaignManagement = () => {
 
   return (
     <AdminGuard>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      <div className="min-h-screen bg-white">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
         <div className="lg:pl-[260px]">
@@ -592,11 +614,11 @@ const CampaignManagement = () => {
 
           <main className="p-6">
             {/* Page Title */}
-            <Card className="bg-gradient-to-r from-violet-50 to-purple-50 border-violet-100 mb-6">
+            <Card className="bg-white border-gray-200 shadow-lg mb-6">
               <CardContent className="pt-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
+                    <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl flex items-center justify-center shadow-xl">
                       <Megaphone className="w-6 h-6 text-white" />
                     </div>
                     <div>
@@ -613,7 +635,7 @@ const CampaignManagement = () => {
                       setSelectedCampaign(null);
                       setShowAddModal(true);
                     }}
-                    className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
+                    className="bg-gray-900 hover:bg-black text-white shadow-lg"
                   >
                     <Plus className="w-4 h-4 mr-2" />
                     สร้างแคมเปญใหม่
@@ -626,7 +648,7 @@ const CampaignManagement = () => {
             <div className="space-y-6 mb-8">
               {/* Stats Cards */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                <Card className="bg-gradient-to-br from-violet-500 to-purple-600 text-white">
+                <Card className="bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl text-white">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
@@ -640,7 +662,7 @@ const CampaignManagement = () => {
                   </CardContent>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-cyan-500 to-blue-600 text-white">
+                <Card className="bg-blue-600 text-white">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
@@ -654,7 +676,7 @@ const CampaignManagement = () => {
                   </CardContent>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-teal-500 to-emerald-600 text-white">
+                <Card className="bg-emerald-600 text-white">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
@@ -668,7 +690,7 @@ const CampaignManagement = () => {
                   </CardContent>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-amber-500 to-orange-600 text-white">
+                <Card className="bg-orange-600 text-white">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
@@ -682,7 +704,7 @@ const CampaignManagement = () => {
                   </CardContent>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-pink-500 to-rose-600 text-white">
+                <Card className="bg-rose-600 text-white">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
@@ -703,7 +725,7 @@ const CampaignManagement = () => {
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <Target className="w-5 h-5 text-violet-600" />
+                      <Target className="w-5 h-5 text-gray-600" />
                       แผนภูมิเปอร์เซ็นต์ลูกค้าแต่ละ Segment
                     </CardTitle>
                     <CardDescription className="text-xs">
@@ -725,8 +747,8 @@ const CampaignManagement = () => {
                         <YAxis tick={{ fontSize: 10 }} />
                         <Tooltip />
                         <Legend wrapperStyle={{ fontSize: 12 }} />
-                        <Bar dataKey="customers" name="ลูกค้า (%)" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="ctr" name="CTR (%)" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="customers" name="ลูกค้า (%)" fill="#6b7280" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="ctr" name="CTR (%)" fill="#ca8a04" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </CardContent>
@@ -758,8 +780,8 @@ const CampaignManagement = () => {
                         <YAxis tick={{ fontSize: 10 }} />
                         <Tooltip />
                         <Legend wrapperStyle={{ fontSize: 12 }} />
-                        <Bar dataKey="customers" name="ลูกค้า (%)" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="ctr" name="CTR (%)" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="customers" name="ลูกค้า (%)" fill="#6b7280" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="ctr" name="CTR (%)" fill="#ca8a04" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </CardContent>
@@ -772,7 +794,7 @@ const CampaignManagement = () => {
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <BarChart3 className="w-5 h-5 text-violet-600" />
+                      <BarChart3 className="w-5 h-5 text-gray-600" />
                       แผนภูมิเปอร์เซ็นต์ Click Through Rate (CTR) รายเดือน
                     </CardTitle>
                   </CardHeader>
@@ -785,20 +807,20 @@ const CampaignManagement = () => {
                         <Tooltip />
                         <Bar dataKey="line" radius={[4, 4, 0, 0]}>
                           {MOCK_MONTHLY_CTR.map((entry, index) => {
-                            // ไล่สีม่วงจากอ่อน (จาง) ไปเข้ม (12 เดือน)
+                            // ไล่สีจากอ่อน (จาง) ไปเข้ม (12 เดือน) ในธีมสีหรู
                             const colors = [
-                              '#f3e8ff', // ม.ค. - ม่วงอ่อนมากๆ
-                              '#e9d5ff', // ก.พ. - ม่วงอ่อนมาก
-                              '#d8b4fe', // มี.ค. - ม่วงอ่อน
-                              '#c4b5fd', // เม.ย. - ม่วงอ่อน
-                              '#c084fc', // พ.ค. - ม่วงอ่อน-กลาง
-                              '#a78bfa', // มิ.ย. - ม่วงกลาง
-                              '#a855f7', // ก.ค. - ม่วงกลาง-เข้ม
-                              '#9333ea', // ส.ค. - ม่วงเข้ม
-                              '#8b5cf6', // ก.ย. - violet
-                              '#7c3aed', // ต.ค. - violet เข้ม
-                              '#6d28d9', // พ.ย. - ม่วงเข้มมาก
-                              '#5b21b6', // ธ.ค. - ม่วงเข้มสุด
+                              '#f5f5f4', // ม.ค. - ขาวอ่อนมากๆ
+                              '#e7e5e4', // ก.พ. - ขาวอ่อนมาก
+                              '#d6d3d1', // มี.ค. - เทาอ่อน
+                              '#a8a29e', // เม.ย. - เทาอ่อน
+                              '#78716c', // พ.ค. - เทาอ่อน-กลาง
+                              '#6b7280', // มิ.ย. - เทากลาง
+                              '#57534e', // ก.ค. - เทากลาง-เข้ม
+                              '#44403c', // ส.ค. - เทาเข้ม
+                              '#292524', // ก.ย. - ชาร์โคลเข้ม
+                              '#1c1917', // ต.ค. - ชาร์โคล
+                              '#8b5a2b', // พ.ย. - น้ำตาลอบอุ่น
+                              '#ca8a04', // ธ.ค. - ทองราชา
                             ];
                             return <Cell key={`cell-${index}`} fill={colors[index]} />;
                           })}
@@ -823,7 +845,7 @@ const CampaignManagement = () => {
                           <span className="text-sm text-gray-500 w-24 text-right truncate">{campaign.name}</span>
                           <div className="flex-1 relative h-6">
                             <div
-                              className="absolute inset-y-0 left-0 bg-gradient-to-r from-cyan-400 to-violet-500 rounded"
+                              className="absolute inset-y-0 left-0 bg-gradient-to-r from-amber-500 to-yellow-600 rounded"
                               style={{ width: `${campaign.ctr}%` }}
                             />
                             <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-white font-semibold">
@@ -839,13 +861,17 @@ const CampaignManagement = () => {
               </div>
             </div>
 
-            {/* Section 2: Campaign Management Table */}
-            <Card>
+            {/* Conditional rendering: Campaigns List or Campaign Detail */}
+            {!campaignId ? (
+              /* Campaigns List */
+              <>
+                {/* Section 2: Campaign Management Table */}
+                <Card>
               <CardHeader>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <CardTitle className="flex items-center gap-2">
-                      <span className="text-2xl font-bold text-violet-600">{filteredCampaigns.length}</span>
+                      <span className="text-2xl font-bold text-gray-600">{filteredCampaigns.length}</span>
                       <span className="text-base font-medium">รายชื่อแคมเปญ</span>
                     </CardTitle>
                     <div className="flex gap-2">
@@ -929,7 +955,7 @@ const CampaignManagement = () => {
                                 {(campaign.segments || []).slice(0, 2).map((seg, i) => {
                                   const option = SEGMENT_OPTIONS.find(o => o.value === seg);
                                   return (
-                                    <Badge key={i} variant="secondary" className="text-xs bg-violet-50 text-violet-700">
+                                    <Badge key={i} variant="secondary" className="text-xs bg-white shadow-sm text-gray-700">
                                       {option?.label || seg}
                                     </Badge>
                                   );
@@ -1004,6 +1030,171 @@ const CampaignManagement = () => {
                 </div>
               </CardContent>
             </Card>
+              </>
+            ) : (
+              /* Campaign Detail View */
+              selectedCampaignFromUrl && (
+                <div className="space-y-6">
+                  {/* Back Button */}
+                  <Button variant="outline" onClick={() => navigate('/campaigns')}>
+                    ← กลับไปรายการแคมเปญ
+                  </Button>
+
+                  {/* Campaign Detail Content */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-xl">รายละเอียดแคมเปญ</CardTitle>
+                      <CardDescription>
+                        ข้อมูลและสถิติการทำงานของแคมเปญ
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {/* Campaign Info */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6 bg-white rounded-lg border border-gray-200 shadow-sm">
+                        <div>
+                          <p className="text-sm text-gray-500">รหัสแคมเปญ</p>
+                          <p className="font-mono text-lg font-medium">{selectedCampaignFromUrl.campaign_code}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">ชื่อแคมเปญ</p>
+                          <p className="font-medium text-lg">{selectedCampaignFromUrl.campaign_name}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">สถานะ</p>
+                          {getStatusBadge(selectedCampaignFromUrl.status)}
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">ระยะเวลา</p>
+                          <p className="font-medium">
+                            {formatDate(selectedCampaignFromUrl.start_date)} - {formatDate(selectedCampaignFromUrl.end_date)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">ความถี่</p>
+                          <p className="font-medium">
+                            {FREQUENCY_OPTIONS.find(o => o.value === selectedCampaignFromUrl.frequency)?.label}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">CTR</p>
+                          <p className="text-2xl font-bold text-green-600">{selectedCampaignFromUrl.ctr}%</p>
+                        </div>
+                      </div>
+
+                      {/* Image Section */}
+                      {selectedCampaignFromUrl.image_url && (
+                        <div className="w-full">
+                          <h3 className="text-lg font-semibold mb-3">รูปภาพแคมเปญ</h3>
+                          <img
+                            src={selectedCampaignFromUrl.image_url}
+                            alt={selectedCampaignFromUrl.campaign_name}
+                            className="w-full max-w-md h-64 object-cover rounded-lg border"
+                          />
+                        </div>
+                      )}
+
+                      {/* URL Section */}
+                      {selectedCampaignFromUrl.campaign_url && (
+                        <div>
+                          <h3 className="text-lg font-semibold mb-3">ลิงก์แคมเปญ</h3>
+                          <a
+                            href={selectedCampaignFromUrl.campaign_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-gray-600 hover:underline break-all"
+                          >
+                            {selectedCampaignFromUrl.campaign_url}
+                          </a>
+                        </div>
+                      )}
+
+                      {/* Description */}
+                      {selectedCampaignFromUrl.detail && (
+                        <div>
+                          <h3 className="text-lg font-semibold mb-3">รายละเอียด</h3>
+                          <p className="text-gray-700 bg-gray-50 p-4 rounded-lg">{selectedCampaignFromUrl.detail}</p>
+                        </div>
+                      )}
+
+                      {/* Segments */}
+                      <div>
+                        <h3 className="text-lg font-semibold mb-3">Segments</h3>
+                        <div className="flex flex-wrap gap-2">
+                          {(selectedCampaignFromUrl.segments || []).map((seg, i) => {
+                            const option = SEGMENT_OPTIONS.find(o => o.value === seg);
+                            return (
+                              <Badge key={i} variant="outline" className="bg-white shadow-sm text-blue-700 border-gray-200">
+                                {option?.label || seg}
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Activities */}
+                      <div>
+                        <h3 className="text-lg font-semibold mb-3">Activities</h3>
+                        <div className="flex flex-wrap gap-2">
+                          {(selectedCampaignFromUrl.activities || []).map((act, i) => {
+                            const option = ACTIVITY_OPTIONS.find(o => o.value === act);
+                            return (
+                              <Badge key={i} variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                {option?.label || act}
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Statistics */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-6 bg-gray-50 rounded-lg">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-gray-600">
+                            {selectedCampaignFromUrl.recipients_count.toLocaleString()}
+                          </p>
+                          <p className="text-sm text-gray-600">ผู้รับ</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-cyan-600">
+                            {selectedCampaignFromUrl.impressions_count.toLocaleString()}
+                          </p>
+                          <p className="text-sm text-gray-600">แสดงผล</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-amber-600">
+                            {selectedCampaignFromUrl.clicks_count.toLocaleString()}
+                          </p>
+                          <p className="text-sm text-gray-600">คลิก</p>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-3 pt-4 border-t">
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => handleEdit(selectedCampaignFromUrl)}
+                        >
+                          <Edit className="w-4 h-4 mr-2" />
+                          แก้ไข
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          className="flex-1"
+                          onClick={() => {
+                            setSelectedCampaign(selectedCampaignFromUrl);
+                            setShowDeleteDialog(true);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          ลบ
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )
+            )}
           </main>
         </div>
 
@@ -1012,7 +1203,7 @@ const CampaignManagement = () => {
           <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Megaphone className="w-5 h-5 text-violet-600" />
+                <Megaphone className="w-5 h-5 text-gray-600" />
                 {isEditing ? 'แก้ไขแคมเปญ' : 'เพิ่มแคมเปญใหม่'}
               </DialogTitle>
               <DialogDescription>
@@ -1159,7 +1350,7 @@ const CampaignManagement = () => {
               {/* Segments */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
-                  <Target className="w-4 h-4 text-violet-600" />
+                  <Target className="w-4 h-4 text-gray-600" />
                   Segment (ปัจจัยที่ส่งผลต่อการซื้อ)
                 </Label>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3 bg-gray-50 rounded-lg">
@@ -1169,7 +1360,7 @@ const CampaignManagement = () => {
                         type="checkbox"
                         checked={formData.segments.includes(option.value)}
                         onChange={() => toggleSegment(option.value)}
-                        className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                        className="w-4 h-4 rounded border-gray-300 text-gray-600 focus:ring-violet-500"
                         disabled={formLoading}
                       />
                       <span className="text-sm">{option.label}</span>
@@ -1245,7 +1436,7 @@ const CampaignManagement = () => {
                 <Button
                   type="submit"
                   disabled={formLoading}
-                  className="bg-gradient-to-r from-violet-500 to-purple-600"
+                  className="bg-gray-900 text-white shadow-lg"
                 >
                   {formLoading ? (
                     <>
@@ -1264,140 +1455,8 @@ const CampaignManagement = () => {
           </DialogContent>
         </Dialog>
 
-        {/* View Campaign Modal */}
-        <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Megaphone className="w-5 h-5 text-violet-600" />
-                รายละเอียดแคมเปญ
-              </DialogTitle>
-            </DialogHeader>
-
-            {selectedCampaign && (
-              <div className="space-y-4">
-                {/* Image Section */}
-                <div className="w-full">
-                  {selectedCampaign.image_url ? (
-                    <img
-                      src={selectedCampaign.image_url}
-                      alt={selectedCampaign.campaign_name}
-                      className="w-full h-48 object-cover rounded-lg border"
-                    />
-                  ) : (
-                    <div className="w-full h-48 bg-gray-100 rounded-lg border flex flex-col items-center justify-center">
-                      <ImageIcon className="w-12 h-12 text-gray-300" />
-                      <span className="text-sm text-gray-400 mt-2">ไม่มีรูปโปรโมชัน</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">รหัสแคมเปญ</p>
-                    <p className="font-mono">{selectedCampaign.campaign_code}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">ชื่อแคมเปญ</p>
-                    <p className="font-medium">{selectedCampaign.campaign_name}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">ระยะเวลา</p>
-                    <p>{formatDate(selectedCampaign.start_date)} - {formatDate(selectedCampaign.end_date)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">ความถี่</p>
-                    <p>{FREQUENCY_OPTIONS.find(o => o.value === selectedCampaign.frequency)?.label}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">สถานะ</p>
-                    {getStatusBadge(selectedCampaign.status)}
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">CTR</p>
-                    <p className="font-semibold text-green-600">{selectedCampaign.ctr}%</p>
-                  </div>
-                </div>
-
-                {selectedCampaign.campaign_url && (
-                  <div>
-                    <p className="text-sm text-gray-500">URL</p>
-                    <a href={selectedCampaign.campaign_url} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:underline">
-                      {selectedCampaign.campaign_url}
-                    </a>
-                  </div>
-                )}
-
-                {selectedCampaign.detail && (
-                  <div>
-                    <p className="text-sm text-gray-500">รายละเอียด</p>
-                    <p className="text-sm">{selectedCampaign.detail}</p>
-                  </div>
-                )}
-
-                <div>
-                  <p className="text-sm text-gray-500 mb-2">Segments</p>
-                  <div className="flex flex-wrap gap-2">
-                    {(selectedCampaign.segments || []).map((seg, i) => {
-                      const option = SEGMENT_OPTIONS.find(o => o.value === seg);
-                      return (
-                        <Badge key={i} className="bg-violet-100 text-violet-700">
-                          {option?.label || seg}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-500 mb-2">Activities</p>
-                  <div className="flex flex-wrap gap-2">
-                    {(selectedCampaign.activities || []).map((act, i) => {
-                      const option = ACTIVITY_OPTIONS.find(o => o.value === act);
-                      return (
-                        <Badge key={i} className="bg-cyan-100 text-cyan-700">
-                          {option?.label || act}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Stats */}
-                <div className="grid grid-cols-3 gap-4 pt-4 border-t">
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-violet-600">{selectedCampaign.recipients_count.toLocaleString()}</p>
-                    <p className="text-xs text-gray-500">ผู้รับ</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-cyan-600">{selectedCampaign.impressions_count.toLocaleString()}</p>
-                    <p className="text-xs text-gray-500">แสดงผล</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-amber-600">{selectedCampaign.clicks_count.toLocaleString()}</p>
-                    <p className="text-xs text-gray-500">คลิก</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowViewModal(false)}>
-                ปิด
-              </Button>
-              <Button
-                onClick={() => {
-                  setShowViewModal(false);
-                  if (selectedCampaign) handleEdit(selectedCampaign);
-                }}
-                className="bg-gradient-to-r from-violet-500 to-purple-600"
-              >
-                <Edit className="w-4 h-4 mr-2" />
-                แก้ไข
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* View Campaign Modal - REMOVED - Now using URL routing instead */}
+        {/* All dialog content removed - moved to URL routing */}
 
         {/* Delete Confirmation Dialog */}
         <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

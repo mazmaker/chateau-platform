@@ -86,12 +86,12 @@ export function DefaultErrorFallback({
   const userMessage = customMessage || getUserErrorMessage(error);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-50 via-orange-50 to-yellow-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-white flex items-center justify-center p-4">
       <div className="max-w-md w-full">
         {/* Error Card */}
         <div className="bg-white rounded-2xl shadow-2xl border border-red-200 overflow-hidden">
           {/* Header with Icon */}
-          <div className="bg-gradient-to-r from-red-500 to-orange-500 p-6 text-center">
+          <div className="bg-red-600 p-6 text-center">
             <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
               <AlertCircle className="w-10 h-10 text-red-500" />
             </div>
@@ -115,7 +115,7 @@ export function DefaultErrorFallback({
               {showRetry && (
                 <button
                   onClick={handleRetry}
-                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-red-500 to-orange-500 text-white py-3 px-4 rounded-lg font-medium hover:from-red-600 hover:to-orange-600 transition-all shadow-md hover:shadow-lg"
+                  className="w-full flex items-center justify-center gap-2 bg-red-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-red-700 transition-all shadow-md hover:shadow-lg"
                 >
                   <RefreshCw className="w-4 h-4" />
                   ลองใหม่

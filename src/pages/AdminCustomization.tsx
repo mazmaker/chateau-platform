@@ -71,25 +71,25 @@ const AdminCustomization = () => {
   // Theme settings
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>({
     primaryColor: '#3b82f6',
-    secondaryColor: '#8b5cf6',
+    secondaryColor: '#4b5563',
     accentColor: '#10b981'
   });
 
   // Company Logo & Brand settings
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState<string | null>(null);
-  const [brandPrimaryColor, setBrandPrimaryColor] = useState('#676AF1');
-  const [brandSecondaryColor, setBrandSecondaryColor] = useState('#38B6FFCC');
+  const [brandPrimaryColor, setBrandPrimaryColor] = useState('#374151');
+  const [brandSecondaryColor, setBrandSecondaryColor] = useState('#6b7280');
   const [uploading, setUploading] = useState(false);
 
   // Preset color schemes for Theme
   const colorPresets = [
-    { name: 'Default (Blue)', primary: '#3b82f6', secondary: '#8b5cf6', accent: '#10b981' },
+    { name: 'Default (Blue)', primary: '#3b82f6', secondary: '#4b5563', accent: '#10b981' },
     { name: 'Ocean', primary: '#06b6d4', secondary: '#0ea5e9', accent: '#14b8a6' },
     { name: 'Sunset', primary: '#f97316', secondary: '#ef4444', accent: '#eab308' },
     { name: 'Forest', primary: '#22c55e', secondary: '#16a34a', accent: '#84cc16' },
     { name: 'Berry', primary: '#ec4899', secondary: '#d946ef', accent: '#f43f5e' },
-    { name: 'Royal', primary: '#6366f1', secondary: '#4f46e5', accent: '#8b5cf6' },
+    { name: 'Royal', primary: '#6366f1', secondary: '#4f46e5', accent: '#4b5563' },
     { name: 'Earth', primary: '#a3a3a3', secondary: '#737373', accent: '#a1a1aa' },
     { name: 'Emerald', primary: '#10b981', secondary: '#059669', accent: '#34d399' }
   ];
@@ -567,8 +567,8 @@ const AdminCustomization = () => {
                 )}
 
                 {/* Info banner */}
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm text-blue-800">
+                <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                  <p className="text-sm text-gray-700">
                     <strong>หมายเหตุ:</strong> โลโก้ที่อัปโหลดจะแสดงที่ Header และ Sidebar ของระบบ
                   </p>
                 </div>
@@ -650,7 +650,7 @@ const AdminCustomization = () => {
                                 <Input
                                   value={themeSettings.secondaryColor}
                                   onChange={(e) => setThemeSettings({ ...themeSettings, secondaryColor: e.target.value })}
-                                  placeholder="#8b5cf6"
+                                  placeholder="#4b5563"
                                 />
                               </div>
                             </div>
