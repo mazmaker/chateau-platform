@@ -25,6 +25,7 @@ import ForcePasswordChange from "./pages/ForcePasswordChange";
 import { ProtectedRouteSimple } from "@/components/auth/ProtectedRouteSimple";
 import { TenantStatusGuard } from "@/components/auth/TenantStatusGuard";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 
 const App = () => (
   <ErrorBoundary
@@ -316,32 +317,34 @@ const App = () => (
             </ErrorBoundary>
           } />
 
-          {/* Premium Feature Routes - Subscription-based access */}
-          <Route path="/analytics" element={
-            <ErrorBoundary
-              showRetry={true}
-              showHome={true}
-              errorMessage="ไม่สามารถโหลดหน้ารายงานวิเคราะห์ได้"
-              context={{ page: 'analytics' }}
-            >
-              <ProtectedRouteSimple>
+          {/* Premium Feature Routes - Subscription-based access (wrapped with DashboardLayout) */}
+          <Route element={
+            <ProtectedRouteSimple>
+              <DashboardLayout />
+            </ProtectedRouteSimple>
+          }>
+            <Route path="/analytics" element={
+              <ErrorBoundary
+                showRetry={true}
+                showHome={true}
+                errorMessage="ไม่สามารถโหลดหน้ารายงานวิเคราะห์ได้"
+                context={{ page: 'analytics' }}
+              >
                 <Analytics />
-              </ProtectedRouteSimple>
-            </ErrorBoundary>
-          } />
+              </ErrorBoundary>
+            } />
 
-          <Route path="/api" element={
-            <ErrorBoundary
-              showRetry={true}
-              showHome={true}
-              errorMessage="ไม่สามารถโหลดหน้าการจัดการ API ได้"
-              context={{ page: 'api-management' }}
-            >
-              <ProtectedRouteSimple>
+            <Route path="/api" element={
+              <ErrorBoundary
+                showRetry={true}
+                showHome={true}
+                errorMessage="ไม่สามารถโหลดหน้าการจัดการ API ได้"
+                context={{ page: 'api-management' }}
+              >
                 <ApiManagement />
-              </ProtectedRouteSimple>
-            </ErrorBoundary>
-          } />
+              </ErrorBoundary>
+            } />
+          </Route>
 
           {/* Settings Route - Available to all authenticated users */}
           <Route path="/settings" element={
