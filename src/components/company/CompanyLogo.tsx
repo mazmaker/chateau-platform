@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Building2 } from 'lucide-react';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 
@@ -7,7 +7,6 @@ interface CompanyLogoProps {
   size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
 }
 
-// Event name for logo update notification
 const LOGO_UPDATE_EVENT = 'company-logo-updated';
 
 export function notifyLogoUpdated() {
@@ -15,12 +14,8 @@ export function notifyLogoUpdated() {
 }
 
 export function CompanyLogo({ className = '', size = 'md' }: CompanyLogoProps) {
-  const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
-  const { currentTenant } = useSimpleAuth();
-
-  // Track tenant ID to avoid unnecessary reloads
-  const tenantIdRef = useRef<string | null>(null);
+  const { currentTenant, loading, authChecked } = useSimpleAuth();
 
   const sizeClasses = {
     sm: 'w-8 h-8',
@@ -38,67 +33,42 @@ export function CompanyLogo({ className = '', size = 'md' }: CompanyLogoProps) {
     '2xl': 'w-8 h-8'
   };
 
-  // Get logo URL from cached tenant data (fast! - no API call needed)
   const logoUrl = currentTenant?.logo_url_cached || null;
   const companyName = currentTenant?.company_name_cached || currentTenant?.name || null;
+  // Tenant is "resolving" if auth hasn't finished OR currentTenant hasn't populated yet.
+  // The latter catches the post-signIn race where user/role are set from cache but the
+  // tenants Promise.all is still resolving in the background (AuthContextSimple.tsx:506).
+  const tenantResolving = loading || !authChecked || !currentTenant;
 
   useEffect(() => {
-    // Only reset if tenant actually changed
-    if (currentTenant?.id && tenantIdRef.current !== currentTenant.id) {
-      tenantIdRef.current = currentTenant.id;
-      setImageLoaded(false);
-      setImageError(false);
-    }
+    setImageError(false);
+  }, [logoUrl]);
 
-    // Listen for logo update events
-    const handleLogoUpdate = () => {
-      setImageLoaded(false);
-      setImageError(false);
-    };
-
+  useEffect(() => {
+    const handleLogoUpdate = () => setImageError(false);
     window.addEventListener(LOGO_UPDATE_EVENT, handleLogoUpdate);
+    return () => window.removeEventListener(LOGO_UPDATE_EVENT, handleLogoUpdate);
+  }, []);
 
-    return () => {
-      window.removeEventListener(LOGO_UPDATE_EVENT, handleLogoUpdate);
-    };
-  }, [currentTenant?.id]);
+  // Auth still resolving — render invisible placeholder of correct size to avoid flash-of-fallback
+  if (tenantResolving && !logoUrl) {
+    return <div className={`${sizeClasses[size]} ${className}`} aria-hidden="true" />;
+  }
 
-  const handleImageLoad = () => {
-    setImageLoaded(true);
-  };
-
-  const handleImageError = () => {
-    setImageError(true);
-  };
-
-  // Show fallback if: no logo, image error, or image not loaded yet
-  if (!logoUrl || imageError || !imageLoaded) {
+  if (!logoUrl || imageError) {
     return (
-      <>
-        {/* Show fallback */}
-        <div className={`${sizeClasses[size]} ${className} gradient-primary rounded-xl flex items-center justify-center`}>
-          <Building2 className={`${iconSizes[size]} text-primary-foreground`} />
-        </div>
-        {/* Preload image in background - hidden until loaded */}
-        {logoUrl && !imageError && !imageLoaded && (
-          <img
-            src={logoUrl}
-            alt=""
-            className="hidden"
-            onLoad={handleImageLoad}
-            onError={handleImageError}
-          />
-        )}
-      </>
+      <div className={`${sizeClasses[size]} ${className} gradient-primary rounded-xl flex items-center justify-center`}>
+        <Building2 className={`${iconSizes[size]} text-primary-foreground`} />
+      </div>
     );
   }
 
-  // Show logo image only when fully loaded
   return (
     <img
       src={logoUrl}
       alt={companyName || 'Company Logo'}
       className={`${sizeClasses[size]} ${className} object-contain rounded-lg`}
+      onError={() => setImageError(true)}
     />
   );
 }
