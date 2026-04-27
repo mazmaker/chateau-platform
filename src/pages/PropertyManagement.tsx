@@ -83,6 +83,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 import CreateProjectModal from '@/components/properties/CreateProjectModal';
 import AddLeadModal from '@/components/leads/AddLeadModal';
 
@@ -141,6 +142,7 @@ const PropertyManagement = () => {
   const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [unitSearchQuery, setUnitSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
@@ -160,20 +162,7 @@ const PropertyManagement = () => {
   const [minPrices, setMinPrices] = useState<Record<string, number>>({});
 
   // Form states
-  const [propertyForm, setPropertyForm] = useState({
-    name: '',
-    type: 'condo' as Property['type'],
-    description: '',
-    address: '',
-    province: '',
-    district: '',
-    base_price: '',
-    max_guests: 2,
-    bedrooms: 1,
-    bathrooms: 1,
-    size_sqft: ''
-  });
-
+  // Note: propertyForm state removed — CreateProjectModal manages its own form state
   const [unitForm, setUnitForm] = useState({
     unit_number: '',
     floor: '',
@@ -358,77 +347,7 @@ const PropertyManagement = () => {
     return `${amount.toFixed(0)} บาท`;
   };
 
-  const handleSaveProperty = async () => {
-    try {
-      const propertyData = {
-        tenant_id: currentTenant?.id,
-        name: propertyForm.name,
-        type: propertyForm.type,
-        description: propertyForm.description,
-        address: {
-          street: propertyForm.address,
-          province: propertyForm.province,
-          district: propertyForm.district
-        },
-        base_price: parseFloat(propertyForm.base_price),
-        currency: 'THB',
-        max_guests: propertyForm.max_guests,
-        bedrooms: propertyForm.bedrooms,
-        bathrooms: propertyForm.bathrooms,
-        size_sqft: parseFloat(propertyForm.size_sqft),
-        images: [],
-        is_active: true
-      };
-
-      if (editingProperty) {
-        await supabase.from('properties').update(propertyData).eq('id', editingProperty.id);
-
-        // Log activity for property update
-        try {
-          await supabase.rpc('log_activity', {
-            p_tenant_id: currentTenant?.id,
-            p_user_id: null,
-            p_activity_type: 'property_updated',
-            p_description: `แก้ไขโครงการ: ${propertyForm.name}`,
-            p_metadata: {
-              property_id: editingProperty.id,
-              property_name: propertyForm.name,
-              type: propertyForm.type
-            }
-          });
-        } catch {
-          // Ignore log_activity errors
-        }
-      } else {
-        const { data } = await supabase.from('properties').insert(propertyData).select();
-
-        // Log activity for property creation
-        try {
-          await supabase.rpc('log_activity', {
-            p_tenant_id: currentTenant?.id,
-            p_user_id: null,
-            p_activity_type: 'property_created',
-            p_description: `สร้างโครงการใหม่: ${propertyForm.name}`,
-            p_metadata: {
-              property_id: data?.[0]?.id,
-              property_name: propertyForm.name,
-              type: propertyForm.type
-            }
-          });
-        } catch {
-          // Ignore log_activity errors
-        }
-      }
-
-      setShowPropertyDialog(false);
-      setEditingProperty(null);
-      resetPropertyForm();
-      fetchProperties();
-    } catch (error) {
-      console.error('Error saving property:', error);
-    }
-  };
-
+  // Note: handleSaveProperty was removed — CreateProjectModal handles its own save logic
   const [savingUnit, setSavingUnit] = useState(false);
 
   const handleSaveUnit = async () => {
@@ -532,9 +451,10 @@ const PropertyManagement = () => {
       setEditingUnit(null);
       resetUnitForm();
       fetchUnits(selectedProperty.id);
+      toast.success(editingUnit ? `แก้ไขยูนิต ${unitForm.unit_number} สำเร็จ` : `เพิ่มยูนิต ${unitForm.unit_number} สำเร็จ`);
     } catch (error: any) {
       console.error('Error saving unit:', error);
-      alert(error.message || 'เกิดข้อผิดพลาดในการบันทึกยูนิต');
+      toast.error(error.message || 'เกิดข้อผิดพลาดในการบันทึกยูนิต');
     } finally {
       setSavingUnit(false);
     }
@@ -543,7 +463,8 @@ const PropertyManagement = () => {
   const handleDeleteProperty = async () => {
     if (!selectedProperty) return;
     try {
-      await supabase.from('properties').delete().eq('id', selectedProperty.id);
+      const { error } = await supabase.from('properties').delete().eq('id', selectedProperty.id);
+      if (error) throw error;
 
       // Log activity for property deletion
       try {
@@ -562,28 +483,15 @@ const PropertyManagement = () => {
         // Ignore log_activity errors
       }
 
+      const deletedName = selectedProperty.name;
       setShowDeleteDialog(false);
       setSelectedProperty(null);
       fetchProperties();
-    } catch (error) {
+      toast.success(`ลบโครงการ "${deletedName}" สำเร็จ`);
+    } catch (error: any) {
       console.error('Error deleting property:', error);
+      toast.error(error.message || 'เกิดข้อผิดพลาดในการลบโครงการ');
     }
-  };
-
-  const resetPropertyForm = () => {
-    setPropertyForm({
-      name: '',
-      type: 'condo',
-      description: '',
-      address: '',
-      province: '',
-      district: '',
-      base_price: '',
-      max_guests: 2,
-      bedrooms: 1,
-      bathrooms: 1,
-      size_sqft: ''
-    });
   };
 
   const resetUnitForm = () => {
@@ -784,12 +692,14 @@ const PropertyManagement = () => {
         // Ignore log_activity errors
       }
 
+      const deletedUnitNumber = deletingUnit.unit_number;
       setShowDeleteUnitDialog(false);
       setDeletingUnit(null);
       fetchUnits(selectedProperty.id);
+      toast.success(`ลบยูนิต ${deletedUnitNumber} สำเร็จ`);
     } catch (error: any) {
       console.error('Error deleting unit:', error);
-      alert(error.message || 'เกิดข้อผิดพลาดในการลบยูนิต');
+      toast.error(error.message || 'เกิดข้อผิดพลาดในการลบยูนิต');
     }
   };
 
@@ -863,7 +773,10 @@ const PropertyManagement = () => {
   });
 
   const filteredUnits = units.filter(unit => {
-    return statusFilter === 'all' || unit.status === statusFilter;
+    const matchesStatus = statusFilter === 'all' || unit.status === statusFilter;
+    const matchesSearch = unitSearchQuery === '' ||
+      unit.unit_number.toLowerCase().includes(unitSearchQuery.toLowerCase());
+    return matchesStatus && matchesSearch;
   });
 
   // Calculate stats for selected property's units
@@ -945,70 +858,64 @@ const PropertyManagement = () => {
           <>
             {/* Stats */}
             <div className="grid gap-4 md:grid-cols-4">
-              <Card className="border-l-4 border-l-cyan-500">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-cyan-100 text-cyan-600 rounded-xl flex items-center justify-center">
-                      <Building2 className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">{properties.length}</p>
-                      <p className="text-xs text-muted-foreground">
-                        โครงการทั้งหมด
-                      </p>
-                    </div>
-                  </div>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    โครงการทั้งหมด
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{properties.length}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {projectStats.totalUnits.toLocaleString()} ยูนิต
+                  </p>
                 </CardContent>
               </Card>
-              <Card className="border-l-4 border-l-green-500">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-green-100 text-green-600 rounded-xl flex items-center justify-center">
-                      <Layers className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">
-                        {projectStats.totalUnits.toLocaleString()}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        ยูนิตทั้งหมด
-                      </p>
-                    </div>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    ยูนิตทั้งหมด
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">
+                    {projectStats.totalUnits.toLocaleString()}
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    จาก {properties.length} โครงการ
+                  </p>
                 </CardContent>
               </Card>
-              <Card className="border-l-4 border-l-blue-500">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center">
-                      <TrendingUp className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">
-                        {properties.filter(p => p.is_active).length}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        โครงการที่เปิดขาย
-                      </p>
-                    </div>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    โครงการที่เปิดขาย
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-blue-600">
+                    {properties.filter(p => p.is_active).length}
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    {properties.length > 0
+                      ? Math.round((properties.filter(p => p.is_active).length / properties.length) * 100)
+                      : 0}% ของทั้งหมด
+                  </p>
                 </CardContent>
               </Card>
-              <Card className="border-l-4 border-l-purple-500">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center">
-                      <DollarSign className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <p className="text-xl font-bold">
-                        {formatCurrency(projectStats.totalValue)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        มูลค่ารวม
-                      </p>
-                    </div>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    มูลค่ารวม
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-xl font-bold">
+                    {formatCurrency(projectStats.totalValue)}
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    ราคาเริ่มต้น x จำนวนยูนิต
+                  </p>
                 </CardContent>
               </Card>
             </div>
@@ -1175,56 +1082,50 @@ const PropertyManagement = () => {
 
             {/* Units Stats */}
             <div className="grid gap-4 md:grid-cols-4">
-              <Card className="border-l-4 border-l-cyan-500">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-cyan-100 text-cyan-600 rounded-xl flex items-center justify-center">
-                      <Building2 className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">{totalUnits}</p>
-                      <p className="text-xs text-muted-foreground">ยูนิตทั้งหมด</p>
-                    </div>
-                  </div>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    ยูนิตทั้งหมด
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{totalUnits}</div>
                 </CardContent>
               </Card>
-              <Card className="border-l-4 border-l-orange-500">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center">
-                      <Home className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">{availableUnits}</p>
-                      <p className="text-xs text-muted-foreground">ว่างขาย</p>
-                    </div>
-                  </div>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    ว่างขาย
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">{availableUnits}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {totalUnits > 0 ? Math.round((availableUnits / totalUnits) * 100) : 0}% ของทั้งหมด
+                  </p>
                 </CardContent>
               </Card>
-              <Card className="border-l-4 border-l-pink-500">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-pink-100 text-pink-600 rounded-xl flex items-center justify-center">
-                      <TrendingUp className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">{soldUnits}</p>
-                      <p className="text-xs text-muted-foreground">ขายแล้ว</p>
-                    </div>
-                  </div>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    ขายแล้ว
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-blue-600">{soldUnits}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {totalUnits > 0 ? Math.round((soldUnits / totalUnits) * 100) : 0}% ของทั้งหมด
+                  </p>
                 </CardContent>
               </Card>
-              <Card className="border-l-4 border-l-purple-500">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center">
-                      <DollarSign className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <p className="text-xl font-bold">{formatCurrency(totalValue)}</p>
-                      <p className="text-xs text-muted-foreground">มูลค่ารวม</p>
-                    </div>
-                  </div>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    มูลค่ารวม
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-xl font-bold">{formatCurrency(totalValue)}</div>
                 </CardContent>
               </Card>
             </div>
@@ -1236,6 +1137,8 @@ const PropertyManagement = () => {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     placeholder="ค้นหาเลขที่ยูนิต..."
+                    value={unitSearchQuery}
+                    onChange={(e) => setUnitSearchQuery(e.target.value)}
                     className="pl-10 w-64"
                   />
                 </div>
