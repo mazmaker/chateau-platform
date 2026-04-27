@@ -1,58 +1,16 @@
 
 
-/* CHATEAU Platform - Luxury Design System with Noto Sans Thai */
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-html {
-  background-color: #F9FAFB !important;
-}
-
 body {
   margin: 0;
-  background-color: #F9FAFB !important;
-  font-family: 'Noto Sans Thai', 'Noto Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: 'Kanit', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
-  font-weight: 400;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: "liga" 1, "kern" 1;
-  color: #1c1917;
-}
-
-#root {
-  background-color: #F9FAFB !important;
-  min-height: 100vh;
-}
-
-/* Luxury background system */
-.bg-background {
-  background-color: #F9FAFB !important;
-}
-
-.bg-card {
-  background-color: #FFFFFF !important;
-}
-
-/* Luxury surface backgrounds */
-.bg-surface-primary {
-  background-color: #FFFFFF;
-}
-
-.bg-surface-secondary {
-  background-color: #F9FAFB;
-}
-
-/* Specific overrides for main containers */
-div[class*="min-h-screen"] {
-  background-color: #F9FAFB !important;
-}
-
-main {
-  background-color: #F9FAFB !important;
 }
 
 code {
@@ -125,30 +83,30 @@ code {
 }
 
 :root {
-  /* CHATEAU Platform - Luxury Design System */
-  --background: #F9FAFB;
-  --foreground: #1c1917;
-  --card: #FFFFFF;
-  --card-foreground: #1c1917;
-  --popover: #FFFFFF;
-  --popover-foreground: #1c1917;
-  --primary: #ca8a04;
-  --primary-foreground: #FFFFFF;
-  --secondary: #4B5563;
-  --secondary-foreground: #FFFFFF;
-  --muted: #F9FAFB;
-  --muted-foreground: #6B7280;
-  --accent: #8b5a2b;
-  --accent-foreground: #FFFFFF;
+  /* Lovable-inspired Modern Design System - CHATEAU Platform */
+  --background: #F0F8FD;
+  --foreground: #1f2937;
+  --card: #ffffff;
+  --card-foreground: #1f2937;
+  --popover: #ffffff;
+  --popover-foreground: #1f2937;
+  --primary: #7c3aed;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f4f6;
+  --secondary-foreground: #1f2937;
+  --muted: #f3f4f6;
+  --muted-foreground: #6b7280;
+  --accent: #ddd6fe;
+  --accent-foreground: #1f2937;
   --destructive: #ef4444;
-  --destructive-foreground: #FFFFFF;
+  --destructive-foreground: #ffffff;
   --border: #e5e7eb;
   --input: #e5e7eb;
-  --ring: #ca8a04;
-  --chart-1: #ca8a04;
-  --chart-2: #8b5a2b;
+  --ring: #7c3aed;
+  --chart-1: #7c3aed;
+  --chart-2: #3b82f6;
   --chart-3: #10b981;
-  --chart-4: #d97706;
+  --chart-4: #f59e0b;
   --chart-5: #ef4444;
   --radius: 0.75rem;
 }
@@ -207,93 +165,41 @@ code {
 @layer base {
   * {
     border-color: #e5e7eb;
-    font-family: 'Noto Sans Thai', 'Noto Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-      sans-serif;
   }
   body {
-    font-feature-settings: 'rlig' 1, 'calt' 1, "liga" 1, "kern" 1;
-  }
-  h1, h2, h3, h4, h5, h6 {
-    font-family: 'Noto Sans Thai', 'Noto Sans', sans-serif;
-    font-weight: 700;
-    color: #1c1917;
-    letter-spacing: -0.02em;
-    line-height: 1.2;
-  }
-  h1 {
-    font-weight: 700;
-    font-size: 2.25rem;
-    color: #1c1917;
-  }
-  h2 {
-    font-weight: 600;
-    font-size: 1.875rem;
-    color: #292524;
-  }
-  h3 {
-    font-weight: 600;
-    font-size: 1.5rem;
-    color: #292524;
-  }
-  h4 {
-    font-weight: 600;
-    font-size: 1.25rem;
-    color: #292524;
-  }
-  h5 {
-    font-weight: 500;
-    font-size: 1.125rem;
-    color: #292524;
-  }
-  h6 {
-    font-weight: 500;
-    font-size: 1rem;
-    color: #292524;
-  }
-  p {
-    color: #4B5563;
-    line-height: 1.6;
-  }
-  input, textarea, select, button {
-    font-family: 'Noto Sans Thai', 'Noto Sans', sans-serif;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
   }
 }
 
-/* Luxury Design System - Gradients */
+/* Lovable-inspired Modern gradient utilities */
 .gradient-primary {
-  background: linear-gradient(135deg, #ca8a04 0%, #d97706 50%, #8b5a2b 100%);
+  background: linear-gradient(135deg, #676AF1 0%, #7c3aed 50%, #a78bfa 100%);
 }
 
 .gradient-primary-text {
-  background: linear-gradient(135deg, #ca8a04 0%, #d97706 100%);
+  background: linear-gradient(135deg, #676AF1 0%, #7c3aed 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .gradient-secondary {
-  background: linear-gradient(135deg, #4B5563 0%, #6B7280 100%);
-}
-
-.gradient-charcoal {
-  background: linear-gradient(135deg, #1c1917 0%, #292524 100%);
+  background: linear-gradient(135deg, #38B6FF 0%, #3b82f6 100%);
 }
 
 .gradient-card {
   background: #FFFFFF;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(229, 231, 235, 0.6);
+  box-shadow: 0 2px 12px rgba(103, 106, 241, 0.08);
+  border: 1px solid #e5e7eb;
 }
 
 .gradient-card-hover {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s ease;
 }
 
 .gradient-card-hover:hover {
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 10px 15px rgba(0, 0, 0, 0.08);
-  transform: translateY(-1px);
-  border-color: rgba(202, 138, 4, 0.2);
+  box-shadow: 0 4px 20px rgba(103, 106, 241, 0.15);
+  transform: translateY(-2px);
 }
 
 /* Glass morphism for modern feel */
@@ -301,65 +207,30 @@ code {
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(103, 106, 241, 0.1);
 }
 
-/* Luxury Button System */
+/* Button modern styles */
 .btn-primary {
-  background: linear-gradient(135deg, #ca8a04 0%, #d97706 100%);
+  background: linear-gradient(135deg, #676AF1 0%, #7c3aed 100%);
   color: #ffffff;
-  box-shadow: 0 2px 4px rgba(202, 138, 4, 0.2);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  border: none;
+  box-shadow: 0 2px 8px rgba(103, 106, 241, 0.3);
+  transition: all 0.3s ease;
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, #b8790a 0%, #c2750b 100%);
-  box-shadow: 0 4px 8px rgba(202, 138, 4, 0.3);
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  box-shadow: 0 4px 12px rgba(103, 106, 241, 0.4);
   transform: translateY(-1px);
 }
 
-.btn-secondary {
-  background: linear-gradient(135deg, #4B5563 0%, #6B7280 100%);
-  color: #ffffff;
-  box-shadow: 0 2px 4px rgba(75, 85, 99, 0.2);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  border: none;
-}
-
-.btn-secondary:hover {
-  background: linear-gradient(135deg, #374151 0%, #4B5563 100%);
-  box-shadow: 0 4px 8px rgba(75, 85, 99, 0.3);
-  transform: translateY(-1px);
-}
-
-.btn-emphasis {
-  background: linear-gradient(135deg, #1c1917 0%, #292524 100%);
-  color: #ffffff;
-  box-shadow: 0 2px 4px rgba(28, 25, 23, 0.2);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  border: none;
-}
-
-.btn-emphasis:hover {
-  background: linear-gradient(135deg, #0c0a09 0%, #1c1917 100%);
-  box-shadow: 0 4px 8px rgba(28, 25, 23, 0.3);
-  transform: translateY(-1px);
-}
-
-/* Luxury KPI Card System */
+/* Stat card modern styling */
 .stat-card {
-  background: #FFFFFF;
-  border: 1px solid rgba(229, 231, 235, 0.6);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  background: linear-gradient(180deg, #FFFFFF 0%, #F0F8FD 100%);
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 2px 12px rgba(103, 106, 241, 0.08);
   position: relative;
   overflow: hidden;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.stat-card:hover {
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 10px 15px rgba(0, 0, 0, 0.08);
-  border-color: rgba(202, 138, 4, 0.2);
 }
 
 .stat-card::before {
@@ -369,19 +240,7 @@ code {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #ca8a04, #d97706, #8b5a2b);
-}
-
-.stat-card-gold::before {
-  background: linear-gradient(90deg, #ca8a04, #d97706);
-}
-
-.stat-card-charcoal::before {
-  background: linear-gradient(90deg, #1c1917, #292524);
-}
-
-.stat-card-gray::before {
-  background: linear-gradient(90deg, #4B5563, #6B7280);
+  background: linear-gradient(90deg, #676AF1, #7c3aed, #a78bfa);
 }
 
 /* Card utilities */
@@ -390,191 +249,10 @@ code {
 }
 
 .card-hover {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s ease;
 }
 
 .card-hover:hover {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   transform: translateY(-2px);
-}
-
-/* Enhanced Typography Hierarchy with Noto Sans Thai */
-.text-display-1 {
-  font-size: 3rem;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  color: #1c1917;
-}
-
-.text-display-2 {
-  font-size: 2.5rem;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  color: #1c1917;
-}
-
-.text-display-3 {
-  font-size: 2rem;
-  font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-  color: #292524;
-}
-
-.text-heading-1 {
-  font-size: 1.875rem;
-  font-weight: 600;
-  line-height: 1.2;
-  color: #292524;
-}
-
-.text-heading-2 {
-  font-size: 1.5rem;
-  font-weight: 600;
-  line-height: 1.3;
-  color: #292524;
-}
-
-.text-heading-3 {
-  font-size: 1.25rem;
-  font-weight: 500;
-  line-height: 1.3;
-  color: #292524;
-}
-
-.text-body-large {
-  font-size: 1.125rem;
-  font-weight: 400;
-  line-height: 1.6;
-  color: #4B5563;
-}
-
-.text-body {
-  font-size: 1rem;
-  font-weight: 400;
-  line-height: 1.6;
-  color: #4B5563;
-}
-
-.text-body-small {
-  font-size: 0.875rem;
-  font-weight: 400;
-  line-height: 1.5;
-  color: #6B7280;
-}
-
-.text-caption {
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1.4;
-  color: #6B7280;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-/* Luxury Form Elements */
-.input-luxury {
-  background: #FFFFFF;
-  border: 2px solid #e5e7eb;
-  border-radius: 0.75rem;
-  color: #1c1917;
-  font-family: 'Noto Sans Thai', 'Noto Sans', sans-serif;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.input-luxury:focus {
-  outline: none;
-  border-color: #ca8a04;
-  box-shadow: 0 0 0 3px rgba(202, 138, 4, 0.1);
-}
-
-.input-luxury:hover {
-  border-color: #6B7280;
-}
-
-/* Luxury Badge System */
-.badge-luxury {
-  background: #FFFFFF;
-  border: 1px solid rgba(202, 138, 4, 0.2);
-  color: #ca8a04;
-  padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  font-family: 'Noto Sans Thai', 'Noto Sans', sans-serif;
-  line-height: 1;
-}
-
-.badge-gold {
-  background: rgba(202, 138, 4, 0.1);
-  border-color: rgba(202, 138, 4, 0.3);
-  color: #ca8a04;
-}
-
-.badge-charcoal {
-  background: rgba(28, 25, 23, 0.1);
-  border-color: rgba(28, 25, 23, 0.3);
-  color: #1c1917;
-}
-
-.badge-gray {
-  background: rgba(75, 85, 99, 0.1);
-  border-color: rgba(75, 85, 99, 0.3);
-  color: #4B5563;
-}
-
-/* Enhanced KPI and Chart Color System */
-.chart-color-gold { color: #ca8a04; }
-.chart-color-brown { color: #8b5a2b; }
-.chart-color-charcoal { color: #1c1917; }
-.chart-color-gray { color: #4B5563; }
-.chart-color-success { color: #22c55e; }
-.chart-color-warning { color: #f97316; }
-.chart-color-danger { color: #ef4444; }
-
-.bg-chart-gold { background-color: rgba(202, 138, 4, 0.1); }
-.bg-chart-brown { background-color: rgba(139, 90, 43, 0.1); }
-.bg-chart-charcoal { background-color: rgba(28, 25, 23, 0.1); }
-.bg-chart-gray { background-color: rgba(75, 85, 99, 0.1); }
-.bg-chart-success { background-color: rgba(34, 197, 94, 0.1); }
-.bg-chart-warning { background-color: rgba(249, 115, 22, 0.1); }
-.bg-chart-danger { background-color: rgba(239, 68, 68, 0.1); }
-
-/* Luxury Text Shadows and Depth */
-.text-shadow-luxury {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-.text-shadow-gold {
-  text-shadow: 0 1px 3px rgba(202, 138, 4, 0.2);
-}
-
-/* Advanced Gradient Backgrounds */
-.gradient-luxury-surface {
-  background: linear-gradient(135deg, rgba(249, 250, 251, 0.8) 0%, rgba(255, 255, 255, 0.9) 100%);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.gradient-luxury-card {
-  background: linear-gradient(135deg, #ffffff 0%, rgba(249, 250, 251, 0.8) 100%);
-  border: 1px solid rgba(229, 231, 235, 0.6);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
-}
-
-/* Enhanced Interactive States */
-.luxury-interactive {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.luxury-interactive:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1), 0 3px 10px rgba(0, 0, 0, 0.05);
-}
-
-.luxury-interactive:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }

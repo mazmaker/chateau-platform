@@ -108,3 +108,9 @@ Thumbs.db
 # Package manager files
 .npm
 .eslintcache
+
+# Project-specific ignores
+nul
+*.bak
+.playwright-mcp/
+docs/chat/

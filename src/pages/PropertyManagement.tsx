@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
-import { AdminGuard } from '@/components/auth/PermissionGuard';
+import { ViewPropertiesGuard, ManagePropertiesGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import {
@@ -63,11 +63,18 @@ import {
   Home,
   Layers,
   User,
+  Users,
   ImagePlus,
   X,
   Upload,
-  Clock,
-  FileText
+  UserPlus,
+  DollarSign,
+  ImageIcon,
+  Ruler,
+  FileText,
+  Settings,
+  Save,
+  AlertTriangle
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -77,6 +84,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/lib/supabase';
 import CreateProjectModal from '@/components/properties/CreateProjectModal';
+import AddLeadModal from '@/components/leads/AddLeadModal';
 
 interface Property {
   id: string;
@@ -126,19 +134,15 @@ interface Unit {
 
 const PropertyManagement = () => {
   const navigate = useNavigate();
-  const { id: propertyId } = useParams();
-  const { currentTenant, userRole, user } = useSimpleAuth();
+  const { currentTenant, userRole } = useSimpleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [companyFilter, setCompanyFilter] = useState<string>('all');
-  const [tenants, setTenants] = useState<any[]>([]);
-  const [activityLogs, setActivityLogs] = useState<any[]>([]);
-  const [showActivityLogs, setShowActivityLogs] = useState(false);
 
   // Dialog states
   const [showPropertyDialog, setShowPropertyDialog] = useState(false);
@@ -146,10 +150,14 @@ const PropertyManagement = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showUnitDetailDialog, setShowUnitDetailDialog] = useState(false);
   const [showDeleteUnitDialog, setShowDeleteUnitDialog] = useState(false);
+  const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
   const [viewingUnit, setViewingUnit] = useState<Unit | null>(null);
   const [deletingUnit, setDeletingUnit] = useState<Unit | null>(null);
+  const [selectedUnitForLead, setSelectedUnitForLead] = useState<{ propertyId: string; propertyName: string; unitId: string; unitNumber: string } | null>(null);
+  const [unitLeads, setUnitLeads] = useState<any[]>([]);
+  const [minPrices, setMinPrices] = useState<Record<string, number>>({});
 
   // Form states
   const [propertyForm, setPropertyForm] = useState({
@@ -186,46 +194,32 @@ const PropertyManagement = () => {
   useEffect(() => {
     if (currentTenant) {
       fetchProperties();
-      fetchTenants();
     }
   }, [currentTenant]);
 
   useEffect(() => {
-    if (propertyId) {
-      fetchUnits(propertyId);
-      fetchPropertyActivityLogs(propertyId);
+    if (selectedProperty) {
+      fetchUnits(selectedProperty.id);
     }
-  }, [propertyId]);
+  }, [selectedProperty]);
 
-  // Find selectedProperty from properties list using URL param
-  const selectedProperty = properties.find(p => p.id === propertyId) || null;
-
-  // Handle case where property ID is invalid (not found)
+  // Fetch min prices when properties are loaded
   useEffect(() => {
-    if (propertyId && properties.length > 0 && !selectedProperty) {
-      // Invalid property ID - redirect to properties list
-      navigate('/properties');
+    if (properties.length > 0) {
+      const propertyIds = properties.map(p => p.id);
+      fetchMinPrices(propertyIds);
     }
-  }, [propertyId, properties, selectedProperty, navigate]);
+  }, [properties]);
 
   const fetchProperties = async () => {
     setLoading(true);
     try {
-      // Fetch properties with tenant information
-      let propertiesQuery = supabase
+      // Fetch from properties table
+      const { data: propertiesData, error: propertiesError } = await supabase
         .from('properties')
-        .select(`
-          *,
-          tenant:tenants!tenant_id(id, name)
-        `)
+        .select('*')
+        .eq('tenant_id', currentTenant?.id)
         .order('created_at', { ascending: false });
-
-      // For non-owner users, filter by their tenant
-      if (userRole !== 'owner') {
-        propertiesQuery = propertiesQuery.eq('tenant_id', currentTenant?.id);
-      }
-
-      const { data: propertiesData, error: propertiesError } = await propertiesQuery;
 
       if (propertiesError) {
         console.error('Error fetching properties:', propertiesError);
@@ -276,55 +270,6 @@ const PropertyManagement = () => {
     }
   };
 
-  const fetchTenants = async () => {
-    try {
-      // For OWNER users, fetch all tenants. For others, just their own tenant
-      if (userRole === 'owner') {
-        const { data, error } = await supabase
-          .from('tenants')
-          .select('id, name, status')
-          .order('name');
-
-        if (error) {
-          console.error('Error fetching tenants:', error);
-        } else {
-          setTenants(data || []);
-        }
-      } else {
-        // For admin/sales, only show their own tenant
-        if (currentTenant) {
-          setTenants([currentTenant]);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching tenants:', error);
-    }
-  };
-
-  const fetchPropertyActivityLogs = async (propertyId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('activity_logs')
-        .select(`
-          *,
-          user:users(full_name)
-        `)
-        .eq('tenant_id', currentTenant?.id)
-        .or(`metadata->>'property_id'.eq.${propertyId},metadata->>'project_id'.eq.${propertyId}`)
-        .in('activity_type', ['property_created', 'property_updated', 'property_deleted', 'unit_created', 'unit_updated', 'unit_deleted'])
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (error) {
-        console.error('Error fetching activity logs:', error);
-      } else {
-        setActivityLogs(data || []);
-      }
-    } catch (error) {
-      console.error('Error fetching activity logs:', error);
-    }
-  };
-
   const fetchUnits = async (projectId: string) => {
     try {
       const { data, error } = await supabase
@@ -369,6 +314,50 @@ const PropertyManagement = () => {
     }
   };
 
+  // Fetch minimum prices from units for all properties
+  const fetchMinPrices = async (propertyIds: string[]) => {
+    if (!currentTenant || propertyIds.length === 0) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('units')
+        .select('project_id, price')
+        .eq('tenant_id', currentTenant.id)
+        .in('project_id', propertyIds)
+        .gt('price', 0);
+
+      if (error) {
+        console.error('Error fetching min prices:', error);
+        return;
+      }
+
+      // Group by project_id and find minimum price
+      const priceMap: Record<string, number> = {};
+      (data || []).forEach((unit: { project_id: string; price: number }) => {
+        if (!priceMap[unit.project_id] || unit.price < priceMap[unit.project_id]) {
+          priceMap[unit.project_id] = unit.price;
+        }
+      });
+
+      setMinPrices(priceMap);
+    } catch (error) {
+      console.error('Error fetching min prices:', error);
+    }
+  };
+
+  // Format price as abbreviated Thai Baht (e.g., 2.5 ล้านบาท)
+  const formatPriceShort = (amount?: number) => {
+    if (!amount) return "-";
+    if (amount >= 1000000) {
+      const millions = amount / 1000000;
+      return `${millions.toFixed(1)} ล้านบาท`;
+    } else if (amount >= 1000) {
+      const thousands = amount / 1000;
+      return `${thousands.toFixed(0)} พันบาท`;
+    }
+    return `${amount.toFixed(0)} บาท`;
+  };
+
   const handleSaveProperty = async () => {
     try {
       const propertyData = {
@@ -392,15 +381,13 @@ const PropertyManagement = () => {
       };
 
       if (editingProperty) {
-        // Add updated_by for property updates
-        const updateData = { ...propertyData, updated_by: user?.id };
-        await supabase.from('properties').update(updateData).eq('id', editingProperty.id);
+        await supabase.from('properties').update(propertyData).eq('id', editingProperty.id);
 
         // Log activity for property update
         try {
           await supabase.rpc('log_activity', {
             p_tenant_id: currentTenant?.id,
-            p_user_id: user?.id,
+            p_user_id: null,
             p_activity_type: 'property_updated',
             p_description: `แก้ไขโครงการ: ${propertyForm.name}`,
             p_metadata: {
@@ -413,15 +400,13 @@ const PropertyManagement = () => {
           // Ignore log_activity errors
         }
       } else {
-        // Add created_by for new properties
-        const insertData = { ...propertyData, created_by: user?.id };
-        const { data } = await supabase.from('properties').insert(insertData).select();
+        const { data } = await supabase.from('properties').insert(propertyData).select();
 
         // Log activity for property creation
         try {
           await supabase.rpc('log_activity', {
             p_tenant_id: currentTenant?.id,
-            p_user_id: user?.id,
+            p_user_id: null,
             p_activity_type: 'property_created',
             p_description: `สร้างโครงการใหม่: ${propertyForm.name}`,
             p_metadata: {
@@ -439,11 +424,6 @@ const PropertyManagement = () => {
       setEditingProperty(null);
       resetPropertyForm();
       fetchProperties();
-
-      // Refresh activity logs if we're viewing this property's details
-      if (propertyId && (editingProperty?.id === propertyId || !editingProperty)) {
-        fetchPropertyActivityLogs(propertyId);
-      }
     } catch (error) {
       console.error('Error saving property:', error);
     }
@@ -452,7 +432,7 @@ const PropertyManagement = () => {
   const [savingUnit, setSavingUnit] = useState(false);
 
   const handleSaveUnit = async () => {
-    if (!propertyId || !currentTenant || !selectedProperty) return;
+    if (!selectedProperty || !currentTenant) return;
 
     setSavingUnit(true);
     try {
@@ -503,7 +483,7 @@ const PropertyManagement = () => {
         try {
           await supabase.rpc('log_activity', {
             p_tenant_id: currentTenant.id,
-            p_user_id: user?.id,
+            p_user_id: null,
             p_activity_type: 'unit_updated',
             p_description: `แก้ไขยูนิต: ${unitForm.unit_number} (${selectedProperty.name})`,
             p_metadata: {
@@ -532,7 +512,7 @@ const PropertyManagement = () => {
         try {
           await supabase.rpc('log_activity', {
             p_tenant_id: currentTenant.id,
-            p_user_id: user?.id,
+            p_user_id: null,
             p_activity_type: 'unit_created',
             p_description: `สร้างยูนิตใหม่: ${unitForm.unit_number} (${selectedProperty.name})`,
             p_metadata: {
@@ -552,7 +532,6 @@ const PropertyManagement = () => {
       setEditingUnit(null);
       resetUnitForm();
       fetchUnits(selectedProperty.id);
-      fetchPropertyActivityLogs(selectedProperty.id); // Refresh activity logs
     } catch (error: any) {
       console.error('Error saving unit:', error);
       alert(error.message || 'เกิดข้อผิดพลาดในการบันทึกยูนิต');
@@ -570,7 +549,7 @@ const PropertyManagement = () => {
       try {
         await supabase.rpc('log_activity', {
           p_tenant_id: currentTenant?.id,
-          p_user_id: user?.id,
+          p_user_id: null,
           p_activity_type: 'property_deleted',
           p_description: `ลบโครงการ: ${selectedProperty.name}`,
           p_metadata: {
@@ -584,7 +563,7 @@ const PropertyManagement = () => {
       }
 
       setShowDeleteDialog(false);
-      navigate('/properties');
+      setSelectedProperty(null);
       fetchProperties();
     } catch (error) {
       console.error('Error deleting property:', error);
@@ -702,10 +681,71 @@ const PropertyManagement = () => {
     setShowUnitDialog(true);
   };
 
+  // Fetch leads interested in a specific unit
+  const fetchUnitLeads = async (unitId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('lead_interests')
+        .select(`
+          *,
+          leads:lead_id (
+            id,
+            status,
+            source,
+            notes,
+            created_at,
+            customers:customer_id (
+              id,
+              full_name,
+              email,
+              phone
+            ),
+            users:assigned_to (
+              id,
+              full_name,
+              email
+            )
+          )
+        `)
+        .eq('unit_id', unitId)
+        .eq('tenant_id', currentTenant?.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setUnitLeads(data || []);
+    } catch (err) {
+      console.error('Error fetching unit leads:', err);
+      setUnitLeads([]);
+    }
+  };
+
   // Handle view unit details
-  const handleViewUnit = (unit: Unit) => {
+  const handleViewUnit = async (unit: Unit) => {
     setViewingUnit(unit);
     setShowUnitDetailDialog(true);
+    // Fetch leads for this unit
+    await fetchUnitLeads(unit.id);
+  };
+
+  // Handle add lead from unit
+  const handleAddLeadFromUnit = (unit: Unit) => {
+    if (!selectedProperty) return;
+
+    setSelectedUnitForLead({
+      propertyId: selectedProperty.id,
+      propertyName: selectedProperty.name,
+      unitId: unit.id,
+      unitNumber: unit.unit_number
+    });
+    setShowAddLeadModal(true);
+  };
+
+  // Handle lead created - navigate to leads page
+  const handleLeadCreated = () => {
+    setShowAddLeadModal(false);
+    setSelectedUnitForLead(null);
+    navigate('/leads');
   };
 
   // Handle delete unit confirmation
@@ -730,7 +770,7 @@ const PropertyManagement = () => {
       try {
         await supabase.rpc('log_activity', {
           p_tenant_id: currentTenant.id,
-          p_user_id: user?.id,
+          p_user_id: null,
           p_activity_type: 'unit_deleted',
           p_description: `ลบยูนิต: ${deletingUnit.unit_number} (${selectedProperty.name})`,
           p_metadata: {
@@ -747,7 +787,6 @@ const PropertyManagement = () => {
       setShowDeleteUnitDialog(false);
       setDeletingUnit(null);
       fetchUnits(selectedProperty.id);
-      fetchPropertyActivityLogs(selectedProperty.id); // Refresh activity logs
     } catch (error: any) {
       console.error('Error deleting unit:', error);
       alert(error.message || 'เกิดข้อผิดพลาดในการลบยูนิต');
@@ -758,7 +797,7 @@ const PropertyManagement = () => {
   const uploadUnitImage = async (file: File, folder: string): Promise<string | null> => {
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${currentTenant?.id}/${propertyId}/${folder}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const fileName = `${currentTenant?.id}/${selectedProperty?.id}/${folder}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
       const { data, error } = await supabase.storage
         .from('units')
@@ -820,16 +859,7 @@ const PropertyManagement = () => {
   const filteredProperties = properties.filter(property => {
     const matchesSearch = property.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = typeFilter === 'all' || property.type === typeFilter;
-
-    // Company filter logic
-    let matchesCompany = false;
-    if (companyFilter === 'all') {
-      matchesCompany = true;
-    } else {
-      matchesCompany = property.tenant_id === companyFilter;
-    }
-
-    return matchesSearch && matchesType && matchesCompany;
+    return matchesSearch && matchesType;
   });
 
   const filteredUnits = units.filter(unit => {
@@ -876,14 +906,14 @@ const PropertyManagement = () => {
       <div className="lg:ml-[260px] min-h-screen">
         <Header onMenuClick={() => setSidebarOpen(true)} />
         <main className="p-6">
-          <AdminGuard>
+          <ViewPropertiesGuard>
             <div className="space-y-6">
               {/* Header */}
-              <Card className="bg-white border-gray-200 shadow-lg">
+              <Card className="bg-gradient-to-r from-violet-50 to-purple-50 border-violet-100">
                 <CardContent className="pt-6">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl rounded-xl flex items-center justify-center">
+                      <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
                         <Building2 className="w-6 h-6 text-white" />
                       </div>
                       <div>
@@ -893,84 +923,92 @@ const PropertyManagement = () => {
                         </p>
                       </div>
                     </div>
-                    <Button
-                      onClick={() => {
-                        setEditingProperty(null);
-                        setShowPropertyDialog(true);
-                      }}
-                      className="bg-gray-900 hover:bg-black text-white shadow-lg"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      เพิ่มโครงการใหม่
-                    </Button>
+                    <ManagePropertiesGuard fallback={null} showMessage={false}>
+                      <Button
+                        onClick={() => {
+                          setEditingProperty(null);
+                          setShowPropertyDialog(true);
+                        }}
+                        className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        เพิ่มโครงการใหม่
+                      </Button>
+                    </ManagePropertiesGuard>
                   </div>
                 </CardContent>
               </Card>
 
         {/* Property List or Units */}
-        {!propertyId ? (
+        {!selectedProperty ? (
           // Properties List
           <>
             {/* Stats */}
             <div className="grid gap-4 md:grid-cols-4">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    โครงการทั้งหมด
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{properties.length}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {projectStats.totalUnits.toLocaleString()} ยูนิต
-                  </p>
+              <Card className="border-l-4 border-l-cyan-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-cyan-100 text-cyan-600 rounded-xl flex items-center justify-center">
+                      <Building2 className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{properties.length}</p>
+                      <p className="text-xs text-muted-foreground">
+                        โครงการทั้งหมด
+                      </p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    ยูนิตทั้งหมด
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-green-600">
-                    {projectStats.totalUnits.toLocaleString()}
+              <Card className="border-l-4 border-l-green-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-green-100 text-green-600 rounded-xl flex items-center justify-center">
+                      <Layers className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">
+                        {projectStats.totalUnits.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        ยูนิตทั้งหมด
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    จาก {properties.length} โครงการ
-                  </p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    โครงการที่เปิดขาย
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-blue-600">
-                    {properties.filter(p => p.is_active).length}
+              <Card className="border-l-4 border-l-blue-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center">
+                      <TrendingUp className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">
+                        {properties.filter(p => p.is_active).length}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        โครงการที่เปิดขาย
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {properties.length > 0
-                      ? Math.round((properties.filter(p => p.is_active).length / properties.length) * 100)
-                      : 0}% ของทั้งหมด
-                  </p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    มูลค่ารวม
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-xl font-bold">
-                    {formatCurrency(projectStats.totalValue)}
+              <Card className="border-l-4 border-l-purple-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center">
+                      <DollarSign className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-xl font-bold">
+                        {formatCurrency(projectStats.totalValue)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        มูลค่ารวม
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    ราคาเริ่มต้น x จำนวนยูนิต
-                  </p>
                 </CardContent>
               </Card>
             </div>
@@ -1004,20 +1042,6 @@ const PropertyManagement = () => {
                       <SelectItem value="commercial">อาคารพาณิชย์</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Select value={companyFilter} onValueChange={setCompanyFilter}>
-                    <SelectTrigger className="w-[200px]">
-                      <Building2 className="w-4 h-4 mr-2" />
-                      <SelectValue placeholder="บริษัท" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">ทุกบริษัท</SelectItem>
-                      {tenants.map(tenant => (
-                        <SelectItem key={tenant.id} value={tenant.id}>
-                          {tenant.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
               </CardContent>
             </Card>
@@ -1038,7 +1062,7 @@ const PropertyManagement = () => {
                   <Card
                     key={property.id}
                     className="cursor-pointer hover:shadow-lg transition-shadow overflow-hidden"
-                    onClick={() => navigate(`/properties/${property.id}`)}
+                    onClick={() => setSelectedProperty(property)}
                   >
                     {/* Thumbnail Image */}
                     <div className="relative h-48 bg-gray-100">
@@ -1093,20 +1117,11 @@ const PropertyManagement = () => {
                             </div>
                           )}
                         </div>
-
-                        {/* Company Information */}
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span>บริษัท:</span>
-                          <div className="flex items-center gap-1">
-                            <Building2 className="w-3 h-3" />
-                            <span>{property.tenant?.name || 'ไม่ระบุ'}</span>
-                          </div>
-                        </div>
                         <div className="pt-2 border-t">
                           <div className="flex items-center justify-between">
                             <span className="text-sm text-muted-foreground">ราคาเริ่มต้น</span>
                             <span className="text-lg font-bold text-green-600">
-                              {formatCurrency(property.base_price)}
+                              {formatPriceShort(minPrices[property.id] || property.base_price)}
                             </span>
                           </div>
                         </div>
@@ -1121,307 +1136,95 @@ const PropertyManagement = () => {
           // Units View
           <div className="space-y-6">
             {/* Back Button */}
-            <Button variant="outline" onClick={() => navigate('/properties')}>
+            <Button variant="outline" onClick={() => setSelectedProperty(null)}>
               ← กลับไปรายการโครงการ
             </Button>
 
-            {/* Property Header */}
+            {/* Property Info */}
             <Card>
-              <CardHeader className="pb-4">
+              <CardHeader>
                 <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-3">
-                      <CardTitle className="text-3xl font-bold">{selectedProperty.name}</CardTitle>
-                      <Badge variant="secondary" className="font-medium">
-                        {getPropertyTypeLabel(selectedProperty.type)}
-                      </Badge>
-                      <Badge variant={selectedProperty.is_active ? "default" : "secondary"} className="ml-auto">
-                        {selectedProperty.is_active ? "Active" : "Inactive"}
-                      </Badge>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-muted-foreground">Location</p>
-                        <div className="flex items-center gap-1">
-                          <MapPin className="w-4 h-4 text-gray-500" />
-                          <span className="text-sm">{selectedProperty.address?.district || 'N/A'}, {selectedProperty.address?.province || 'N/A'}</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-muted-foreground">Starting Price</p>
-                        <span className="text-xl font-bold text-emerald-600">
-                          {formatCurrency(selectedProperty.base_price)}
-                        </span>
-                      </div>
-
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-muted-foreground">Total Units</p>
-                        <span className="text-xl font-semibold">
-                          {selectedProperty.total_units?.toLocaleString() || 'N/A'}
-                        </span>
-                      </div>
-                    </div>
+                  <div>
+                    <CardTitle className="text-2xl">{selectedProperty.name}</CardTitle>
+                    <CardDescription className="flex items-center gap-1 mt-1">
+                      <MapPin className="w-4 h-4" />
+                      {selectedProperty.address?.district || '-'} {selectedProperty.address?.province ? `, ${selectedProperty.address.province}` : ''}
+                    </CardDescription>
                   </div>
-
-                  <div className="flex gap-2 ml-6">
-                    <Button variant="outline" size="sm" onClick={() => {
-                      setEditingProperty(selectedProperty);
-                      setShowPropertyDialog(true);
-                    }}>
-                      <Edit className="w-4 h-4 mr-2" />
-                      Edit
-                    </Button>
-                    <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Delete
-                    </Button>
-                  </div>
+                  <ManagePropertiesGuard fallback={null} showMessage={false}>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => {
+                        setEditingProperty(selectedProperty);
+                        setShowPropertyDialog(true);
+                      }}>
+                        <Edit className="w-4 h-4 mr-2" />
+                        แก้ไข
+                      </Button>
+                      <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        ลบ
+                      </Button>
+                    </div>
+                  </ManagePropertiesGuard>
                 </div>
               </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">{selectedProperty.description || '-'}</p>
+              </CardContent>
             </Card>
-
-            {/* Property Gallery & Details */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Image Gallery */}
-              {(selectedProperty.thumbnail_url || (selectedProperty.images && selectedProperty.images.length > 0)) && (
-                <Card className="lg:col-span-2">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <ImagePlus className="w-5 h-5" />
-                      Property Gallery
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      {selectedProperty.thumbnail_url && (
-                        <div className="relative group cursor-pointer">
-                          <img
-                            src={selectedProperty.thumbnail_url}
-                            alt={`${selectedProperty.name} - Primary`}
-                            className="w-full h-32 object-cover rounded-lg border shadow-sm hover:shadow-md transition-shadow"
-                          />
-                          <div className="absolute top-2 left-2">
-                            <Badge variant="secondary" className="text-xs">Primary</Badge>
-                          </div>
-                        </div>
-                      )}
-                      {selectedProperty.images && selectedProperty.images.map((image: string, index: number) => (
-                        <div key={index} className="relative group cursor-pointer">
-                          <img
-                            src={image}
-                            alt={`${selectedProperty.name} - ${index + 1}`}
-                            className="w-full h-32 object-cover rounded-lg border shadow-sm hover:shadow-md transition-shadow"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Property Description */}
-              <Card className={selectedProperty.thumbnail_url || (selectedProperty.images && selectedProperty.images.length > 0) ? "" : "lg:col-span-3"}>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="w-5 h-5" />
-                    Description
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-gray-700 leading-relaxed">
-                    {selectedProperty.description || 'No description available'}
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Property Specifications */}
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Building2 className="w-5 h-5" />
-                    Company Information
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-muted-foreground">Company</p>
-                    <p className="font-medium">{selectedProperty.tenant?.name || 'Not specified'}</p>
-                  </div>
-                  {selectedProperty.developer && (
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-muted-foreground">Developer</p>
-                      <p className="font-medium">{selectedProperty.developer}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Home className="w-5 h-5" />
-                    Property Details
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {selectedProperty.floor_count && (
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-muted-foreground">Number of Floors</p>
-                      <p className="font-medium">{selectedProperty.floor_count}</p>
-                    </div>
-                  )}
-                  {selectedProperty.has_facilities !== undefined && (
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-muted-foreground">Facilities</p>
-                      <Badge variant={selectedProperty.has_facilities ? "default" : "outline"} className="font-medium">
-                        {selectedProperty.has_facilities ? "Available" : "Not Available"}
-                      </Badge>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Clock className="w-5 h-5" />
-                    Timeline
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-muted-foreground">Created</p>
-                    <p className="text-sm">{new Date(selectedProperty.created_at).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric'
-                    })}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(selectedProperty.created_at).toLocaleTimeString('en-US')}
-                    </p>
-                  </div>
-                  {selectedProperty.updated_at && selectedProperty.updated_at !== selectedProperty.created_at && (
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-muted-foreground">Last Updated</p>
-                      <p className="text-sm">{new Date(selectedProperty.updated_at).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                      })}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(selectedProperty.updated_at).toLocaleTimeString('en-US')}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Activity Timeline */}
-                  {activityLogs.length > 0 && (
-                    <div className="border-t pt-4">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowActivityLogs(!showActivityLogs)}
-                        className="w-full justify-between p-0 h-auto font-medium text-sm"
-                      >
-                        <span className="flex items-center gap-2">
-                          <TrendingUp className="w-4 h-4" />
-                          Activity History ({activityLogs.length})
-                        </span>
-                        <span className={`transform transition-transform ${showActivityLogs ? 'rotate-180' : ''}`}>
-                          ▼
-                        </span>
-                      </Button>
-
-                      {showActivityLogs && (
-                        <div className="mt-3 space-y-3 max-h-60 overflow-y-auto">
-                          {activityLogs.map((log, index) => (
-                            <div key={log.id} className="flex gap-3 text-sm">
-                              <div className="flex-shrink-0">
-                                <div className={`w-2 h-2 rounded-full mt-1 ${
-                                  log.activity_type.includes('created') ? 'bg-green-500' :
-                                  log.activity_type.includes('updated') ? 'bg-white shadow-sm0' :
-                                  log.activity_type.includes('deleted') ? 'bg-red-500' :
-                                  'bg-gray-500'
-                                }`} />
-                              </div>
-                              <div className="flex-1 space-y-1">
-                                <p className="text-sm leading-relaxed">{log.description}</p>
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  <span>{new Date(log.created_at).toLocaleDateString('en-US', {
-                                    month: 'short',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })}</span>
-                                  {log.user?.full_name && (
-                                    <>
-                                      <span>•</span>
-                                      <span>{log.user.full_name}</span>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
 
             {/* Units Stats */}
             <div className="grid gap-4 md:grid-cols-4">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    ยูนิตทั้งหมด
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{totalUnits}</div>
+              <Card className="border-l-4 border-l-cyan-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-cyan-100 text-cyan-600 rounded-xl flex items-center justify-center">
+                      <Building2 className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{totalUnits}</p>
+                      <p className="text-xs text-muted-foreground">ยูนิตทั้งหมด</p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    ว่างขาย
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-green-600">{availableUnits}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {totalUnits > 0 ? Math.round((availableUnits / totalUnits) * 100) : 0}% ของทั้งหมด
-                  </p>
+              <Card className="border-l-4 border-l-orange-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center">
+                      <Home className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{availableUnits}</p>
+                      <p className="text-xs text-muted-foreground">ว่างขาย</p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    ขายแล้ว
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-blue-600">{soldUnits}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {totalUnits > 0 ? Math.round((soldUnits / totalUnits) * 100) : 0}% ของทั้งหมด
-                  </p>
+              <Card className="border-l-4 border-l-pink-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-pink-100 text-pink-600 rounded-xl flex items-center justify-center">
+                      <TrendingUp className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{soldUnits}</p>
+                      <p className="text-xs text-muted-foreground">ขายแล้ว</p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    มูลค่ารวม
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-xl font-bold">{formatCurrency(totalValue)}</div>
+              <Card className="border-l-4 border-l-purple-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center">
+                      <DollarSign className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-xl font-bold">{formatCurrency(totalValue)}</p>
+                      <p className="text-xs text-muted-foreground">มูลค่ารวม</p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -1449,13 +1252,15 @@ const PropertyManagement = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <Button onClick={() => {
-                resetUnitForm();
-                setShowUnitDialog(true);
-              }}>
-                <Plus className="w-4 h-4 mr-2" />
-                เพิ่มยูนิตใหม่
-              </Button>
+              <ManagePropertiesGuard fallback={null} showMessage={false}>
+                <Button onClick={() => {
+                  resetUnitForm();
+                  setShowUnitDialog(true);
+                }}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  เพิ่มยูนิตใหม่
+                </Button>
+              </ManagePropertiesGuard>
             </div>
 
             {/* Units Table */}
@@ -1509,17 +1314,23 @@ const PropertyManagement = () => {
                                   <Eye className="w-4 h-4 mr-2" />
                                   ดูรายละเอียด
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleEditUnit(unit)}>
-                                  <Edit className="w-4 h-4 mr-2" />
-                                  แก้ไข
+                                <DropdownMenuItem onClick={() => handleAddLeadFromUnit(unit)}>
+                                  <UserPlus className="w-4 h-4 mr-2" />
+                                  เพิ่ม Lead ใหม่
                                 </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => handleDeleteUnitClick(unit)}
-                                  className="text-red-600 focus:text-red-600"
-                                >
-                                  <Trash2 className="w-4 h-4 mr-2" />
-                                  ลบ
-                                </DropdownMenuItem>
+                                <ManagePropertiesGuard fallback={null} showMessage={false}>
+                                  <DropdownMenuItem onClick={() => handleEditUnit(unit)}>
+                                    <Edit className="w-4 h-4 mr-2" />
+                                    แก้ไข
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => handleDeleteUnitClick(unit)}
+                                    className="text-red-600 focus:text-red-600"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    ลบ
+                                  </DropdownMenuItem>
+                                </ManagePropertiesGuard>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>
@@ -1544,380 +1355,726 @@ const PropertyManagement = () => {
             fetchProperties();
             setShowPropertyDialog(false);
             setEditingProperty(null);
+            setSelectedProperty(null);
           }}
           editingProject={editingProperty}
         />
 
         {/* Unit Dialog */}
         <Dialog open={showUnitDialog} onOpenChange={setShowUnitDialog}>
-          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {editingUnit ? 'แก้ไขยูนิต' : 'เพิ่มยูนิตใหม่'}
-              </DialogTitle>
-              <DialogDescription>
-                {selectedProperty?.name} - กรอกข้อมูลยูนิต
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-6 py-4">
-              {/* Row 1: Unit Number and Floor */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="unit_number">เลขที่ยูนิต *</Label>
-                  <Input
-                    id="unit_number"
-                    value={unitForm.unit_number}
-                    onChange={(e) => setUnitForm({ ...unitForm, unit_number: e.target.value })}
-                    placeholder="เช่น A101"
-                    required
-                  />
+          <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-hidden p-0 flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-[#676AF1]/10 via-[#8B5CF6]/10 to-[#676AF1]/10 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gradient-to-br from-[#676AF1] to-[#8B5CF6] rounded-xl shadow-md">
+                  <Home className="w-5 h-5 text-white" />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="floor">เลขที่ชั้น (คอนโด)</Label>
-                  <Input
-                    id="floor"
-                    type="number"
-                    value={unitForm.floor}
-                    onChange={(e) => setUnitForm({ ...unitForm, floor: e.target.value })}
-                    placeholder="เช่น 15"
-                  />
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">
+                    {editingUnit ? 'แก้ไขยูนิต' : 'เพิ่มยูนิตใหม่'}
+                  </h2>
+                  <p className="text-xs text-gray-500">{selectedProperty?.name}</p>
                 </div>
-              </div>
-
-              {/* Row 2: Price */}
-              <div className="space-y-2">
-                <Label htmlFor="unit_price">ราคา (฿) *</Label>
-                <Input
-                  id="unit_price"
-                  type="number"
-                  value={unitForm.price}
-                  onChange={(e) => setUnitForm({ ...unitForm, price: e.target.value })}
-                  placeholder="2500000"
-                  required
-                />
-              </div>
-
-              {/* Row 3: Thumbnail Upload */}
-              <div>
-                <h3 className="text-base font-medium text-gray-900 mb-2">รูป Thumbnail</h3>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                  {unitForm.thumbnail_preview ? (
-                    <div className="relative inline-block">
-                      <img
-                        src={unitForm.thumbnail_preview}
-                        alt="Thumbnail preview"
-                        className="w-48 h-32 object-cover rounded-lg"
-                      />
-                      <button
-                        type="button"
-                        onClick={removeThumbnail}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="flex flex-col items-center cursor-pointer py-4">
-                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
-                      <span className="text-sm text-gray-500">คลิกเพื่ออัปโหลดรูป Thumbnail</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleThumbnailChange}
-                        className="hidden"
-                      />
-                    </label>
-                  )}
-                </div>
-              </div>
-
-              {/* Row 4: Image Gallery */}
-              <div>
-                <h3 className="text-base font-medium text-gray-900 mb-2">รูปยูนิต (Gallery)</h3>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                  <div className="grid grid-cols-4 gap-3 mb-3">
-                    {unitForm.image_previews.map((preview, index) => (
-                      <div key={index} className="relative">
-                        <img
-                          src={preview}
-                          alt={`Gallery ${index + 1}`}
-                          className="w-full h-24 object-cover rounded-lg"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeImage(index)}
-                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                    <label className="flex flex-col items-center justify-center cursor-pointer border-2 border-dashed border-gray-300 rounded-lg h-24 hover:border-gray-400">
-                      <ImagePlus className="w-6 h-6 text-gray-400" />
-                      <span className="text-xs text-gray-500 mt-1">เพิ่มรูป</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={handleImagesChange}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 5: Areas */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="size_sqm">พื้นที่ใช้สอย (ตร.ม.)</Label>
-                  <Input
-                    id="size_sqm"
-                    type="number"
-                    step="0.01"
-                    value={unitForm.size_sqm}
-                    onChange={(e) => setUnitForm({ ...unitForm, size_sqm: e.target.value })}
-                    placeholder="เช่น 45.5"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="land_area_sqw">พื้นที่ดิน (ตร.ว.)</Label>
-                  <Input
-                    id="land_area_sqw"
-                    type="number"
-                    step="0.01"
-                    value={unitForm.land_area_sqw}
-                    onChange={(e) => setUnitForm({ ...unitForm, land_area_sqw: e.target.value })}
-                    placeholder="เช่น 50"
-                  />
-                </div>
-              </div>
-
-              {/* Row 6: Rooms */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="unit_bedrooms">จำนวนห้องนอน</Label>
-                  <Input
-                    id="unit_bedrooms"
-                    type="number"
-                    min="0"
-                    value={unitForm.bedrooms}
-                    onChange={(e) => setUnitForm({ ...unitForm, bedrooms: e.target.value })}
-                    placeholder="เช่น 2"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="unit_bathrooms">จำนวนห้องน้ำ</Label>
-                  <Input
-                    id="unit_bathrooms"
-                    type="number"
-                    min="0"
-                    value={unitForm.bathrooms}
-                    onChange={(e) => setUnitForm({ ...unitForm, bathrooms: e.target.value })}
-                    placeholder="เช่น 2"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="floor_count">จำนวนชั้น</Label>
-                  <Input
-                    id="floor_count"
-                    type="number"
-                    min="1"
-                    value={unitForm.floor_count}
-                    onChange={(e) => setUnitForm({ ...unitForm, floor_count: e.target.value })}
-                    placeholder="เช่น 2"
-                  />
-                </div>
-              </div>
-
-              {/* Row 7: Description */}
-              <div className="space-y-2">
-                <Label htmlFor="description">ข้อมูลเพิ่มเติม</Label>
-                <Textarea
-                  id="description"
-                  value={unitForm.description}
-                  onChange={(e) => setUnitForm({ ...unitForm, description: e.target.value })}
-                  placeholder="รายละเอียดเพิ่มเติมของยูนิต..."
-                  rows={3}
-                />
-              </div>
-
-              {/* Row 8: Status */}
-              <div className="space-y-2">
-                <Label htmlFor="unit_status">สถานะ</Label>
-                <Select
-                  value={unitForm.status}
-                  onValueChange={(value: any) => setUnitForm({ ...unitForm, status: value })}
-                >
-                  <SelectTrigger id="unit_status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="available">ว่าง</SelectItem>
-                    <SelectItem value="reserved">จอง</SelectItem>
-                    <SelectItem value="sold">ขายแล้ว</SelectItem>
-                    <SelectItem value="unavailable">ไม่ว่าง</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
-            <DialogFooter>
+
+            {/* Form Content - Scrollable */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+
+              {/* Section 1: ข้อมูลพื้นฐาน */}
+              <Card className="border-2 border-blue-100 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-blue-100/50 border-b border-blue-100">
+                    <div className="p-1.5 bg-blue-500 rounded-lg">
+                      <Home className="w-3.5 h-3.5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-blue-900 text-sm">ข้อมูลพื้นฐาน</h3>
+                      <p className="text-xs text-blue-600">เลขที่ยูนิต ชั้น และราคา</p>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <Label htmlFor="unit_number" className="text-sm font-medium">เลขที่ยูนิต <span className="text-red-500">*</span></Label>
+                        <Input
+                          id="unit_number"
+                          value={unitForm.unit_number}
+                          onChange={(e) => setUnitForm({ ...unitForm, unit_number: e.target.value })}
+                          placeholder="เช่น A101"
+                          required
+                          className="mt-1.5"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="floor" className="text-sm font-medium">เลขที่ชั้น</Label>
+                        <Input
+                          id="floor"
+                          type="number"
+                          value={unitForm.floor}
+                          onChange={(e) => setUnitForm({ ...unitForm, floor: e.target.value })}
+                          placeholder="เช่น 15"
+                          className="mt-1.5"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="unit_price" className="text-sm font-medium">ราคา (฿) <span className="text-red-500">*</span></Label>
+                        <Input
+                          id="unit_price"
+                          type="number"
+                          value={unitForm.price}
+                          onChange={(e) => setUnitForm({ ...unitForm, price: e.target.value })}
+                          placeholder="เช่น 2,500,000"
+                          required
+                          className="mt-1.5"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Section 2: รูปภาพ */}
+              <Card className="border-2 border-purple-100 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-purple-50 to-purple-100/50 border-b border-purple-100">
+                    <div className="p-1.5 bg-purple-500 rounded-lg">
+                      <ImageIcon className="w-3.5 h-3.5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-purple-900 text-sm">รูปภาพยูนิต</h3>
+                      <p className="text-xs text-purple-600">รูป Thumbnail และ Gallery</p>
+                    </div>
+                  </div>
+                  <div className="p-4 space-y-4">
+                    {/* Thumbnail */}
+                    <div>
+                      <Label className="text-sm font-medium mb-2 block">รูป Thumbnail (รูปหลัก)</Label>
+                      <div className="border-2 border-dashed border-purple-200 rounded-xl p-3 bg-purple-50/30 hover:bg-purple-50/50 transition-colors">
+                        {unitForm.thumbnail_preview ? (
+                          <div className="flex items-center gap-4">
+                            <div className="relative">
+                              <img
+                                src={unitForm.thumbnail_preview}
+                                alt="Thumbnail preview"
+                                className="w-32 h-24 object-cover rounded-lg shadow-md"
+                              />
+                              <button
+                                type="button"
+                                onClick={removeThumbnail}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-md"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              <p className="font-medium text-green-600">อัปโหลดสำเร็จ</p>
+                              <p className="text-xs text-gray-500">คลิกที่ปุ่ม X เพื่อลบ</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <label className="flex flex-col items-center cursor-pointer py-4">
+                            <div className="p-2 bg-purple-100 rounded-full mb-2">
+                              <Upload className="w-5 h-5 text-purple-500" />
+                            </div>
+                            <span className="text-sm font-medium text-purple-700">คลิกเพื่ออัปโหลดรูป Thumbnail</span>
+                            <span className="text-xs text-gray-500 mt-1">PNG, JPG ขนาดแนะนำ 800x600 px</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleThumbnailChange}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Gallery */}
+                    <div>
+                      <Label className="text-sm font-medium mb-2 block">รูป Gallery (รูปเพิ่มเติม)</Label>
+                      <div className="border-2 border-dashed border-purple-200 rounded-xl p-3 bg-purple-50/30">
+                        <div className="grid grid-cols-5 gap-2">
+                          {unitForm.image_previews.map((preview, index) => (
+                            <div key={index} className="relative group">
+                              <img
+                                src={preview}
+                                alt={`Gallery ${index + 1}`}
+                                className="w-full h-20 object-cover rounded-lg shadow-sm"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeImage(index)}
+                                className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                          <label className="flex flex-col items-center justify-center cursor-pointer border-2 border-dashed border-purple-300 rounded-lg h-20 hover:border-purple-400 hover:bg-purple-50 transition-colors">
+                            <Plus className="w-4 h-4 text-purple-400" />
+                            <span className="text-xs text-purple-500 mt-0.5">เพิ่มรูป</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              onChange={handleImagesChange}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Section 3: พื้นที่ */}
+              <Card className="border-2 border-green-100 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-green-50 to-green-100/50 border-b border-green-100">
+                    <div className="p-1.5 bg-green-500 rounded-lg">
+                      <Ruler className="w-3.5 h-3.5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-green-900 text-sm">ขนาดพื้นที่</h3>
+                      <p className="text-xs text-green-600">พื้นที่ใช้สอยและพื้นที่ดิน</p>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="size_sqm" className="text-sm font-medium">พื้นที่ใช้สอย (ตร.ม.)</Label>
+                        <Input
+                          id="size_sqm"
+                          type="number"
+                          step="0.01"
+                          value={unitForm.size_sqm}
+                          onChange={(e) => setUnitForm({ ...unitForm, size_sqm: e.target.value })}
+                          placeholder="เช่น 45.5"
+                          className="mt-1.5"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="land_area_sqw" className="text-sm font-medium">พื้นที่ดิน (ตร.ว.)</Label>
+                        <Input
+                          id="land_area_sqw"
+                          type="number"
+                          step="0.01"
+                          value={unitForm.land_area_sqw}
+                          onChange={(e) => setUnitForm({ ...unitForm, land_area_sqw: e.target.value })}
+                          placeholder="เช่น 50"
+                          className="mt-1.5"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Section 4: ห้อง */}
+              <Card className="border-2 border-orange-100 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-orange-50 to-orange-100/50 border-b border-orange-100">
+                    <div className="p-1.5 bg-orange-500 rounded-lg">
+                      <Bed className="w-3.5 h-3.5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-orange-900 text-sm">จำนวนห้อง</h3>
+                      <p className="text-xs text-orange-600">ห้องนอน ห้องน้ำ และชั้น</p>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <Label htmlFor="unit_bedrooms" className="text-sm font-medium flex items-center gap-1.5">
+                          <Bed className="w-3.5 h-3.5 text-orange-500" />
+                          ห้องนอน
+                        </Label>
+                        <Input
+                          id="unit_bedrooms"
+                          type="number"
+                          min="0"
+                          value={unitForm.bedrooms}
+                          onChange={(e) => setUnitForm({ ...unitForm, bedrooms: e.target.value })}
+                          placeholder="เช่น 2"
+                          className="mt-1.5"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="unit_bathrooms" className="text-sm font-medium flex items-center gap-1.5">
+                          <Bath className="w-3.5 h-3.5 text-orange-500" />
+                          ห้องน้ำ
+                        </Label>
+                        <Input
+                          id="unit_bathrooms"
+                          type="number"
+                          min="0"
+                          value={unitForm.bathrooms}
+                          onChange={(e) => setUnitForm({ ...unitForm, bathrooms: e.target.value })}
+                          placeholder="เช่น 2"
+                          className="mt-1.5"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="floor_count" className="text-sm font-medium flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-orange-500" />
+                          จำนวนชั้น
+                        </Label>
+                        <Input
+                          id="floor_count"
+                          type="number"
+                          min="1"
+                          value={unitForm.floor_count}
+                          onChange={(e) => setUnitForm({ ...unitForm, floor_count: e.target.value })}
+                          placeholder="เช่น 2"
+                          className="mt-1.5"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Section 5: รายละเอียดและสถานะ */}
+              <Card className="border-2 border-gray-200 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-gray-50 to-gray-100/50 border-b border-gray-200">
+                    <div className="p-1.5 bg-gray-600 rounded-lg">
+                      <FileText className="w-3.5 h-3.5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 text-sm">รายละเอียดและสถานะ</h3>
+                      <p className="text-xs text-gray-600">ข้อมูลเพิ่มเติมและสถานะยูนิต</p>
+                    </div>
+                  </div>
+                  <div className="p-4 space-y-4">
+                    <div>
+                      <Label htmlFor="description" className="text-sm font-medium">ข้อมูลเพิ่มเติม</Label>
+                      <Textarea
+                        id="description"
+                        value={unitForm.description}
+                        onChange={(e) => setUnitForm({ ...unitForm, description: e.target.value })}
+                        placeholder="รายละเอียดเพิ่มเติมของยูนิต เช่น วิวสวย ห้องมุม ฯลฯ"
+                        rows={2}
+                        className="mt-1.5"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="unit_status" className="text-sm font-medium">สถานะยูนิต</Label>
+                      <Select
+                        value={unitForm.status}
+                        onValueChange={(value: any) => setUnitForm({ ...unitForm, status: value })}
+                      >
+                        <SelectTrigger id="unit_status" className="mt-1.5">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="available">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                              ว่าง
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="reserved">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                              จอง
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="sold">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                              ขายแล้ว
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="unavailable">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-gray-500"></span>
+                              ไม่ว่าง
+                            </span>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Footer - Fixed at bottom */}
+            <div className="flex gap-3 px-6 py-4 border-t bg-gray-50 flex-shrink-0">
               <Button
                 variant="outline"
                 onClick={() => setShowUnitDialog(false)}
                 disabled={savingUnit}
+                className="flex-1"
               >
                 ยกเลิก
               </Button>
               <Button
                 onClick={handleSaveUnit}
                 disabled={!unitForm.unit_number || !unitForm.price || savingUnit}
+                className="flex-1 bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] hover:opacity-90"
               >
                 {savingUnit ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="flex items-center justify-center">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
                     กำลังบันทึก...
                   </div>
                 ) : (
-                  editingUnit ? 'บันทึก' : 'เพิ่มยูนิต'
+                  <div className="flex items-center justify-center">
+                    <Save className="w-4 h-4 mr-2" />
+                    {editingUnit ? 'บันทึกการแก้ไข' : 'เพิ่มยูนิต'}
+                  </div>
                 )}
               </Button>
-            </DialogFooter>
+            </div>
           </DialogContent>
         </Dialog>
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>ยืนยันการลบโครงการ</DialogTitle>
-              <DialogDescription>
-                คุณต้องการลบโครงการ "{selectedProperty?.name}" ใช่หรือไม่?
-                <br /><br />
-                <span className="text-red-600 font-medium">
-                  การกระทำนี้จะลบข้อมูลยูนิตและข้อมูลอื่นๆ ทั้งหมดของโครงการนี้
-                  และไม่สามารถกู้คืนได้
-                </span>
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+          <DialogContent className="sm:max-w-[450px] p-0 overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
+                  <AlertTriangle className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-bold text-white">
+                    ยืนยันการลบโครงการ
+                  </DialogTitle>
+                  <DialogDescription className="text-purple-100 text-sm mt-0.5">
+                    การดำเนินการนี้ไม่สามารถย้อนกลับได้
+                  </DialogDescription>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <Card className="border-2 border-purple-100 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100">
+                    <div className="p-1.5 bg-purple-500 rounded-lg">
+                      <Building2 className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-purple-900 text-sm">โครงการที่จะลบ</h3>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <p className="text-lg font-medium text-gray-800">
+                      {selectedProperty?.name}
+                    </p>
+                    <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                        <p className="text-sm text-red-700">
+                          การลบโครงการนี้จะลบข้อมูลยูนิตและข้อมูลที่เกี่ยวข้องทั้งหมด
+                          <strong> ไม่สามารถกู้คืนได้</strong>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 px-6 py-4 border-t bg-gray-50">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteDialog(false)}
+                className="flex-1"
+              >
                 ยกเลิก
               </Button>
-              <Button variant="destructive" onClick={handleDeleteProperty}>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteProperty}
+                className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
                 ลบโครงการ
               </Button>
-            </DialogFooter>
+            </div>
           </DialogContent>
         </Dialog>
 
         {/* Unit Detail Dialog */}
         <Dialog open={showUnitDetailDialog} onOpenChange={setShowUnitDetailDialog}>
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="sm:max-w-[950px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-xl">
-                รายละเอียดยูนิต {viewingUnit?.unit_number}
-              </DialogTitle>
-              <DialogDescription>
-                {selectedProperty?.name}
-              </DialogDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <DialogTitle className="text-2xl font-bold gradient-primary-text">
+                    ยูนิต {viewingUnit?.unit_number}
+                  </DialogTitle>
+                  <DialogDescription className="text-base mt-1">
+                    {selectedProperty?.name}
+                  </DialogDescription>
+                </div>
+                {viewingUnit && getUnitStatusBadge(viewingUnit.status)}
+              </div>
             </DialogHeader>
             {viewingUnit && (
-              <div className="space-y-6 py-4">
-                {/* Status Badge */}
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">สถานะ:</span>
-                  {getUnitStatusBadge(viewingUnit.status)}
-                </div>
-
+              <div className="space-y-5 py-2">
                 {/* Images */}
                 {viewingUnit.images && viewingUnit.images.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium mb-2">รูปภาพ</h4>
-                    <div className="grid grid-cols-3 gap-2">
-                      {viewingUnit.images.map((img, index) => (
-                        <img
-                          key={index}
-                          src={img}
-                          alt={`Unit image ${index + 1}`}
-                          className="w-full h-24 object-cover rounded-lg"
-                        />
-                      ))}
-                    </div>
-                  </div>
+                  <Card className="overflow-hidden border-2">
+                    <CardHeader className="bg-gradient-to-r from-blue-50 to-purple-50 pb-3">
+                      <CardTitle className="text-base font-semibold text-[#676AF1]">
+                        รูปภาพยูนิต
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <div className="grid grid-cols-3 gap-3">
+                        {viewingUnit.images.map((img, index) => (
+                          <img
+                            key={index}
+                            src={img}
+                            alt={`Unit image ${index + 1}`}
+                            className="w-full h-32 object-cover rounded-lg border-2 border-gray-100 hover:border-[#676AF1] transition-all cursor-pointer shadow-sm"
+                          />
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
                 )}
 
-                {/* Basic Info */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <h4 className="text-sm font-medium text-muted-foreground">เลขที่ยูนิต</h4>
-                    <p className="text-lg font-semibold">{viewingUnit.unit_number}</p>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-medium text-muted-foreground">ชั้น</h4>
-                    <p className="text-lg font-semibold">{viewingUnit.floor_number || '-'}</p>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-medium text-muted-foreground">พื้นที่ใช้สอย</h4>
-                    <p className="text-lg font-semibold">{viewingUnit.area_sqm ? `${viewingUnit.area_sqm} ตร.ม.` : '-'}</p>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-medium text-muted-foreground">ราคา</h4>
-                    <p className="text-lg font-semibold text-green-600">{formatCurrency(viewingUnit.price)}</p>
-                  </div>
-                </div>
+                {/* Basic Information */}
+                <Card className="border-2">
+                  <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 pb-3">
+                    <CardTitle className="text-base font-semibold text-green-700 flex items-center gap-2">
+                      <Building2 className="w-5 h-5" />
+                      ข้อมูลพื้นฐาน
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-3 bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-lg">
+                        <p className="text-xs font-medium text-blue-700 mb-1">เลขที่ยูนิต</p>
+                        <p className="text-xl font-bold text-blue-900">{viewingUnit.unit_number}</p>
+                      </div>
+                      <div className="p-3 bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-lg">
+                        <p className="text-xs font-medium text-purple-700 mb-1">ชั้น</p>
+                        <p className="text-xl font-bold text-purple-900">{viewingUnit.floor_number || '-'}</p>
+                      </div>
+                      <div className="p-3 bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-lg">
+                        <p className="text-xs font-medium text-orange-700 mb-1">พื้นที่ใช้สอย</p>
+                        <p className="text-xl font-bold text-orange-900">{viewingUnit.area_sqm ? `${viewingUnit.area_sqm} ตร.ม.` : '-'}</p>
+                      </div>
+                      <div className="p-3 bg-gradient-to-br from-green-50 to-green-100/50 rounded-lg">
+                        <p className="text-xs font-medium text-green-700 mb-1">ราคา</p>
+                        <p className="text-xl font-bold text-green-900">{formatCurrency(viewingUnit.price)}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
                 {/* Room Details */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                    <Bed className="w-5 h-5 text-gray-500" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">ห้องนอน</p>
-                      <p className="font-semibold">{viewingUnit.bedrooms}</p>
+                <Card className="border-2">
+                  <CardHeader className="bg-gradient-to-r from-indigo-50 to-blue-50 pb-3">
+                    <CardTitle className="text-base font-semibold text-indigo-700 flex items-center gap-2">
+                      <Home className="w-5 h-5" />
+                      รายละเอียดห้อง
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-pink-50 to-pink-100/50 rounded-lg border border-pink-200">
+                        <div className="p-2 bg-white rounded-lg">
+                          <Bed className="w-6 h-6 text-pink-600" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-pink-700">ห้องนอน</p>
+                          <p className="text-2xl font-bold text-pink-900">{viewingUnit.bedrooms}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-cyan-50 to-cyan-100/50 rounded-lg border border-cyan-200">
+                        <div className="p-2 bg-white rounded-lg">
+                          <Bath className="w-6 h-6 text-cyan-600" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-cyan-700">ห้องน้ำ</p>
+                          <p className="text-2xl font-bold text-cyan-900">{viewingUnit.bathrooms}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-amber-50 to-amber-100/50 rounded-lg border border-amber-200">
+                        <div className="p-2 bg-white rounded-lg">
+                          <Square className="w-6 h-6 text-amber-600" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-amber-700">ราคา/ตร.ม.</p>
+                          <p className="text-lg font-bold text-amber-900">{viewingUnit.price_per_sqm ? formatCurrency(viewingUnit.price_per_sqm) : '-'}</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                    <Bath className="w-5 h-5 text-gray-500" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">ห้องน้ำ</p>
-                      <p className="font-semibold">{viewingUnit.bathrooms}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                    <Square className="w-5 h-5 text-gray-500" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">ราคา/ตร.ม.</p>
-                      <p className="font-semibold">{viewingUnit.price_per_sqm ? formatCurrency(viewingUnit.price_per_sqm) : '-'}</p>
-                    </div>
-                  </div>
-                </div>
 
-                {/* Additional Info */}
-                {viewingUnit.layout_description && (
-                  <div>
-                    <h4 className="text-sm font-medium text-muted-foreground mb-1">รายละเอียดเพิ่มเติม</h4>
-                    <p className="text-sm bg-gray-50 p-3 rounded-lg">{viewingUnit.layout_description}</p>
-                  </div>
-                )}
+                    {/* Additional Info */}
+                    {viewingUnit.layout_description && (
+                      <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <p className="text-xs font-semibold text-slate-700 mb-2">รายละเอียดเพิ่มเติม</p>
+                        <p className="text-sm text-slate-600 leading-relaxed">{viewingUnit.layout_description}</p>
+                      </div>
+                    )}
 
-                {/* Features */}
-                <div className="flex flex-wrap gap-2">
-                  {viewingUnit.balcony && (
-                    <Badge variant="secondary">มีระเบียง</Badge>
-                  )}
-                  {viewingUnit.garden && (
-                    <Badge variant="secondary">มีสวน</Badge>
-                  )}
-                  {viewingUnit.pool && (
-                    <Badge variant="secondary">มีสระว่ายน้ำ</Badge>
-                  )}
-                  {viewingUnit.facing_direction && (
-                    <Badge variant="outline">ทิศ {viewingUnit.facing_direction}</Badge>
-                  )}
-                  {viewingUnit.building && (
-                    <Badge variant="outline">อาคาร {viewingUnit.building}</Badge>
-                  )}
-                </div>
+                    {/* Features */}
+                    {(viewingUnit.balcony || viewingUnit.garden || viewingUnit.pool || viewingUnit.facing_direction || viewingUnit.building) && (
+                      <div className="mt-4">
+                        <p className="text-xs font-semibold text-slate-700 mb-2">คุณสมบัติพิเศษ</p>
+                        <div className="flex flex-wrap gap-2">
+                          {viewingUnit.balcony && (
+                            <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-200">มีระเบียง</Badge>
+                          )}
+                          {viewingUnit.garden && (
+                            <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-200">มีสวน</Badge>
+                          )}
+                          {viewingUnit.pool && (
+                            <Badge variant="secondary" className="bg-cyan-100 text-cyan-800 hover:bg-cyan-200">มีสระว่ายน้ำ</Badge>
+                          )}
+                          {viewingUnit.facing_direction && (
+                            <Badge variant="outline" className="border-purple-300 text-purple-700">ทิศ {viewingUnit.facing_direction}</Badge>
+                          )}
+                          {viewingUnit.building && (
+                            <Badge variant="outline" className="border-orange-300 text-orange-700">อาคาร {viewingUnit.building}</Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Leads Interested in This Unit */}
+                <Card className="border-2">
+                  <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base font-semibold text-purple-700 flex items-center gap-2">
+                        <Users className="w-5 h-5" />
+                        Leads ที่สนใจยูนิตนี้
+                      </CardTitle>
+                      <Badge variant="secondary" className="bg-purple-100 text-purple-800">
+                        {unitLeads.length} รายการ
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    {unitLeads.length > 0 ? (
+                      <div className="border-2 rounded-lg overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] hover:from-[#676AF1] hover:to-[#8B5CF6]">
+                              <TableHead className="text-white font-semibold">ชื่อลูกค้า</TableHead>
+                              <TableHead className="text-white font-semibold">เบอร์โทร</TableHead>
+                              <TableHead className="text-white font-semibold">สถานะ</TableHead>
+                              <TableHead className="text-white font-semibold">ระดับความสนใจ</TableHead>
+                              <TableHead className="text-white font-semibold">พนักงานขาย</TableHead>
+                              <TableHead className="text-white font-semibold text-center">ดูข้อมูล</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {unitLeads.map((leadInterest: any) => {
+                              const lead = leadInterest.leads;
+                              const customer = lead?.customers;
+                              const assignedUser = lead?.users;
+
+                              return (
+                                <TableRow key={leadInterest.id} className="hover:bg-purple-50/50">
+                                  <TableCell className="font-medium">
+                                    <div>
+                                      <p className="font-semibold text-foreground">{customer?.full_name || '-'}</p>
+                                      {customer?.email && (
+                                        <p className="text-xs text-muted-foreground mt-0.5">{customer.email}</p>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-sm">
+                                    {customer?.phone || '-'}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge
+                                      variant={
+                                        leadInterest.status === 'interested' ? 'default' :
+                                        leadInterest.status === 'contacted' ? 'secondary' :
+                                        leadInterest.status === 'viewing_scheduled' ? 'outline' :
+                                        leadInterest.status === 'negotiating' ? 'outline' :
+                                        leadInterest.status === 'reserved' ? 'default' :
+                                        leadInterest.status === 'purchased' ? 'default' :
+                                        'secondary'
+                                      }
+                                      className={
+                                        leadInterest.status === 'interested' ? 'bg-blue-100 text-blue-800' :
+                                        leadInterest.status === 'contacted' ? 'bg-purple-100 text-purple-800' :
+                                        leadInterest.status === 'viewing_scheduled' ? 'bg-yellow-100 text-yellow-800' :
+                                        leadInterest.status === 'negotiating' ? 'bg-orange-100 text-orange-800' :
+                                        leadInterest.status === 'reserved' ? 'bg-indigo-100 text-indigo-800' :
+                                        leadInterest.status === 'purchased' ? 'bg-green-100 text-green-800' :
+                                        ''
+                                      }
+                                    >
+                                      {leadInterest.status === 'interested' && 'สนใจ'}
+                                      {leadInterest.status === 'contacted' && 'ติดต่อแล้ว'}
+                                      {leadInterest.status === 'viewing_scheduled' && 'นัดชม'}
+                                      {leadInterest.status === 'negotiating' && 'เจรจา'}
+                                      {leadInterest.status === 'reserved' && 'จอง'}
+                                      {leadInterest.status === 'purchased' && 'ซื้อแล้ว'}
+                                      {leadInterest.status === 'lost' && 'เสียโอกาส'}
+                                      {!['interested', 'contacted', 'viewing_scheduled', 'negotiating', 'reserved', 'purchased', 'lost'].includes(leadInterest.status) && leadInterest.status}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge
+                                      variant="outline"
+                                      className={
+                                        leadInterest.interest_level === 'high' ? 'bg-red-50 text-red-700 border-red-300 font-semibold' :
+                                        leadInterest.interest_level === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-300 font-semibold' :
+                                        leadInterest.interest_level === 'low' ? 'bg-gray-50 text-gray-700 border-gray-300' :
+                                        ''
+                                      }
+                                    >
+                                      {leadInterest.interest_level === 'high' && '⭐ สูง'}
+                                      {leadInterest.interest_level === 'medium' && '⭐ กลาง'}
+                                      {leadInterest.interest_level === 'low' && '⭐ ต่ำ'}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="text-sm font-medium text-foreground">
+                                      {assignedUser?.full_name || assignedUser?.email || '-'}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex justify-center">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-[#676AF1] hover:text-[#8B5CF6] hover:bg-purple-50"
+                                        onClick={() => {
+                                          navigate(`/leads/${lead?.id}/cdp`);
+                                        }}
+                                        title="ดูข้อมูล CDP"
+                                      >
+                                        <Eye className="w-4 h-4" />
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    ) : (
+                      <div className="text-center py-10 bg-gradient-to-br from-gray-50 to-slate-50 rounded-lg border-2 border-dashed border-gray-300">
+                        <User className="w-16 h-16 mx-auto mb-3 text-gray-300" />
+                        <p className="text-sm font-medium text-muted-foreground">ยังไม่มี Lead ที่สนใจยูนิตนี้</p>
+                        <p className="text-xs text-muted-foreground mt-1">เมื่อมีผู้สนใจจะแสดงที่นี่</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             )}
             <DialogFooter>
@@ -1937,29 +2094,88 @@ const PropertyManagement = () => {
 
         {/* Delete Unit Confirmation Dialog */}
         <Dialog open={showDeleteUnitDialog} onOpenChange={setShowDeleteUnitDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>ยืนยันการลบยูนิต</DialogTitle>
-              <DialogDescription>
-                คุณต้องการลบยูนิต "{deletingUnit?.unit_number}" ใช่หรือไม่?
-                <br /><br />
-                <span className="text-red-600 font-medium">
-                  การกระทำนี้ไม่สามารถกู้คืนได้
-                </span>
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowDeleteUnitDialog(false)}>
+          <DialogContent className="sm:max-w-[450px] p-0 overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
+                  <AlertTriangle className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-bold text-white">
+                    ยืนยันการลบยูนิต
+                  </DialogTitle>
+                  <DialogDescription className="text-purple-100 text-sm mt-0.5">
+                    การดำเนินการนี้ไม่สามารถย้อนกลับได้
+                  </DialogDescription>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <Card className="border-2 border-purple-100 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100">
+                    <div className="p-1.5 bg-purple-500 rounded-lg">
+                      <Home className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-purple-900 text-sm">ยูนิตที่จะลบ</h3>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <p className="text-lg font-medium text-gray-800">
+                      ยูนิต {deletingUnit?.unit_number}
+                    </p>
+                    <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                        <p className="text-sm text-red-700">
+                          การลบยูนิตนี้จะลบข้อมูลที่เกี่ยวข้องทั้งหมด
+                          <strong> ไม่สามารถกู้คืนได้</strong>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 px-6 py-4 border-t bg-gray-50">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteUnitDialog(false)}
+                className="flex-1"
+              >
                 ยกเลิก
               </Button>
-              <Button variant="destructive" onClick={handleDeleteUnit}>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteUnit}
+                className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
                 ลบยูนิต
               </Button>
-            </DialogFooter>
+            </div>
           </DialogContent>
         </Dialog>
+
+        {/* Add Lead Modal */}
+        <AddLeadModal
+          isOpen={showAddLeadModal}
+          onClose={() => {
+            setShowAddLeadModal(false);
+            setSelectedUnitForLead(null);
+          }}
+          onLeadCreated={handleLeadCreated}
+          initialPropertyId={selectedUnitForLead?.propertyId}
+          initialUnitId={selectedUnitForLead?.unitId}
+        />
             </div>
-          </AdminGuard>
+          </ViewPropertiesGuard>
         </main>
       </div>
     </div>

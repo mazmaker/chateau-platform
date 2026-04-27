@@ -52,7 +52,7 @@ const getAllNavItems = (): NavItem[] => [
   { icon: FileText, label: "Leads", href: "/leads", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
   { icon: Megaphone, label: "แคมเปญ", href: "/campaigns", requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Palette, label: "ปรับแต่งระบบ", href: "/customization", requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: Settings, label: "แก้ไขโปรไฟล์", href: "/settings", requiredRoles: ["OWNER", "ADMIN"] },
+  { icon: Settings, label: "การตั้งค่า", href: "/settings", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
   { icon: LogOut, label: "ออกจากระบบ", href: "/logout", isLogout: true },
 ];
 

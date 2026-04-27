@@ -1,6 +1,9 @@
 -- Create get_recent_activities function for Owner Dashboard
 -- Returns activities with tenant names for display
 
+-- Drop existing function if it exists with different signature
+DROP FUNCTION IF EXISTS get_recent_activities(INTEGER);
+
 CREATE OR REPLACE FUNCTION get_recent_activities(limit_count INTEGER DEFAULT 10)
 RETURNS TABLE (
   id UUID,

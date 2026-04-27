@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Save, Upload, User } from "lucide-react";
+import { X, Save, User, UserCircle, Briefcase, MapPin, Megaphone, Target, ShieldCheck, FileText, Building2, CalendarDays, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -150,13 +151,13 @@ const PURCHASE_PURPOSE_OPTIONS = [
 ];
 
 const STATUS_OPTIONS = [
-  { value: "new", label: "ใหม่" },
-  { value: "contacted", label: "ติดต่อแล้ว" },
-  { value: "qualified", label: "มีคุณสมบัติ" },
-  { value: "proposal", label: "เสนอขาย" },
-  { value: "negotiation", label: "เจรจา" },
-  { value: "closed", label: "ปิดการขาย" },
-  { value: "lost", label: "สูญเสีย" },
+  { value: "new", label: "ใหม่", color: "bg-blue-100 text-blue-700" },
+  { value: "contacted", label: "ติดต่อแล้ว", color: "bg-cyan-100 text-cyan-700" },
+  { value: "qualified", label: "มีคุณสมบัติ", color: "bg-green-100 text-green-700" },
+  { value: "proposal", label: "เสนอขาย", color: "bg-yellow-100 text-yellow-700" },
+  { value: "negotiation", label: "เจรจา", color: "bg-orange-100 text-orange-700" },
+  { value: "closed", label: "ปิดการขาย", color: "bg-emerald-100 text-emerald-700" },
+  { value: "lost", label: "สูญเสีย", color: "bg-red-100 text-red-700" },
 ];
 
 const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalProps) => {
@@ -432,7 +433,24 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
     setSalesPeople(data || []);
   };
 
-  // Signature pad functions
+  // Signature pad functions with proper scaling
+  const getCanvasCoordinates = (
+    canvas: HTMLCanvasElement,
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+
+    return { x, y };
+  };
+
   const initCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -459,22 +477,15 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
   }, [isOpen, policyAccepted, formData.signature]);
 
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    setIsDrawing(true);
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    setIsDrawing(true);
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const rect = canvas.getBoundingClientRect();
-    let x, y;
-    if ('touches' in e) {
-      x = e.touches[0].clientX - rect.left;
-      y = e.touches[0].clientY - rect.top;
-    } else {
-      x = e.clientX - rect.left;
-      y = e.clientY - rect.top;
-    }
     ctx.beginPath();
+    const { x, y } = getCanvasCoordinates(canvas, e);
     ctx.moveTo(x, y);
   };
 
@@ -482,32 +493,21 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
     if (!isDrawing) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const rect = canvas.getBoundingClientRect();
-    let x, y;
-    if ('touches' in e) {
-      e.preventDefault();
-      x = e.touches[0].clientX - rect.left;
-      y = e.touches[0].clientY - rect.top;
-    } else {
-      x = e.clientX - rect.left;
-      y = e.clientY - rect.top;
-    }
+    const { x, y } = getCanvasCoordinates(canvas, e);
+
     ctx.lineTo(x, y);
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
     ctx.stroke();
   };
 
   const stopDrawing = () => {
     setIsDrawing(false);
-  };
-
-  const saveSignature = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const signatureData = canvas.toDataURL('image/png');
-    setFormData(prev => ({ ...prev, signature: signatureData }));
   };
 
   const clearSignature = () => {
@@ -546,6 +546,12 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
         purchasePurpose = `other: ${formData.purchase_purpose_other}`;
       }
 
+      // Get signature from canvas
+      let signatureData = formData.signature;
+      if (formData.consent === "consent" && canvasRef.current) {
+        signatureData = canvasRef.current.toDataURL('image/png');
+      }
+
       // Update customer data
       const customerUpdate = {
         full_name: `${formData.first_name} ${formData.last_name}`,
@@ -576,7 +582,7 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
           news_source: newsSource,
           purchase_purpose: purchasePurpose,
           consent_given: formData.consent === "consent",
-          signature: formData.signature || null,
+          signature: signatureData || null,
           consent_date: formData.consent === "consent" ? new Date().toISOString() : null,
         },
       };
@@ -641,608 +647,791 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
   return (
     <>
       <Dialog open={isOpen} onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>แก้ไขข้อมูล Lead</DialogTitle>
-            <DialogDescription>
-              แก้ไขข้อมูลลูกค้าและรายละเอียด Lead
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-hidden p-0 flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-[#676AF1]/10 via-[#8B5CF6]/10 to-[#676AF1]/10 flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-[#676AF1] to-[#8B5CF6] rounded-xl shadow-md">
+                <UserCog className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">แก้ไขข้อมูล Lead</h2>
+                <p className="text-xs text-gray-500">อัปเดตข้อมูลลูกค้าและรายละเอียด Lead</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleClose}
+              disabled={loading}
+              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
 
           {dataLoading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center py-12 flex-1">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
                 <p className="text-muted-foreground">กำลังโหลดข้อมูล...</p>
               </div>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Section 1: Lead Status & Project Info */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium border-b pb-2">ข้อมูลโครงการและสถานะ</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label>สถานะ Lead *</Label>
-                    <Select
-                      value={formData.status}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, status: value }))}
-                      disabled={loading}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="เลือกสถานะ" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {STATUS_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+            <>
+              {/* Form Content - Scrollable */}
+              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
+                <div className="p-6 space-y-5">
 
-                  <div className="space-y-2">
-                    <Label>โครงการที่สนใจ *</Label>
-                    <Select
-                      value={formData.property_id}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, property_id: value, unit_id: "" }))}
-                      disabled={loading}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="เลือกโครงการ" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60">
-                        {properties.map((property) => (
-                          <SelectItem key={property.id} value={property.id}>
-                            {property.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>ยูนิตที่สนใจ</Label>
-                    <Select
-                      value={formData.unit_id}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, unit_id: value }))}
-                      disabled={loading || !formData.property_id}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={formData.property_id ? "เลือกยูนิต" : "เลือกโครงการก่อน"} />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60">
-                        {units.map((unit) => (
-                          <SelectItem key={unit.id} value={unit.id}>
-                            {unit.unit_number}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>พนักงานขายผู้รับผิดชอบ</Label>
-                    <Select
-                      value={formData.assigned_to}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, assigned_to: value }))}
-                      disabled={loading}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="เลือกพนักงานขาย" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60">
-                        {salesPeople.map((person) => (
-                          <SelectItem key={person.id} value={person.id}>
-                            {person.full_name || person.email}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>นัดติดตามครั้งต่อไป</Label>
-                    <Input
-                      type="date"
-                      value={formData.next_follow_up}
-                      onChange={(e) => setFormData(prev => ({ ...prev, next_follow_up: e.target.value }))}
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 2: Units of Interest */}
-              {lead && (
-                <div className="space-y-4 border rounded-lg p-4 bg-white shadow-sm">
-                  <LeadInterestsList
-                    leadId={lead.id}
-                    onInterestsChange={() => {
-                      // Optionally refresh data
-                    }}
-                  />
-                </div>
-              )}
-
-              {/* Section 3: Personal Info */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium border-b pb-2">ข้อมูลส่วนตัว</h3>
-
-                {/* Profile Image */}
-                <div className="flex items-center gap-4">
-                  <div className="w-20 h-20 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50">
-                    {formData.imagePreview ? (
-                      <img src={formData.imagePreview} alt="Profile" className="w-full h-full object-cover" />
-                    ) : (
-                      <User className="w-8 h-8 text-gray-400" />
-                    )}
-                  </div>
-                  <p className="text-sm text-muted-foreground">รูปภาพปัจจุบัน (ไม่สามารถเปลี่ยนได้จากหน้านี้)</p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label>ชื่อ *</Label>
-                    <Input
-                      value={formData.first_name}
-                      onChange={(e) => setFormData(prev => ({ ...prev, first_name: e.target.value }))}
-                      placeholder="กรอกชื่อ"
-                      disabled={loading}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>นามสกุล *</Label>
-                    <Input
-                      value={formData.last_name}
-                      onChange={(e) => setFormData(prev => ({ ...prev, last_name: e.target.value }))}
-                      placeholder="กรอกนามสกุล"
-                      disabled={loading}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>เพศ</Label>
-                    <Select
-                      value={formData.gender}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, gender: value }))}
-                      disabled={loading}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="เลือกเพศ" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {GENDER_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value || "none"}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>อายุ</Label>
-                    <Input
-                      type="number"
-                      value={formData.age}
-                      onChange={(e) => setFormData(prev => ({ ...prev, age: e.target.value }))}
-                      placeholder="กรอกอายุ"
-                      disabled={loading}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>เบอร์โทร *</Label>
-                    <Input
-                      value={formData.phone}
-                      onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                      placeholder="กรอกเบอร์โทร"
-                      disabled={loading}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Email</Label>
-                    <Input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                      placeholder="กรอก Email"
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 3: Financial Info */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium border-b pb-2">ข้อมูลทางการเงิน</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label>อาชีพ</Label>
-                    <Select
-                      value={formData.occupation}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, occupation: value }))}
-                      disabled={loading}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="เลือกอาชีพ" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {OCCUPATION_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value || "none"}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>สถานภาพสมรส</Label>
-                    <Select
-                      value={formData.marital_status}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, marital_status: value }))}
-                      disabled={loading}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="เลือกสถานภาพ" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {MARITAL_STATUS_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value || "none"}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>รายได้ต่อเดือน (บาท)</Label>
-                    <Input
-                      type="number"
-                      value={formData.monthly_income}
-                      onChange={(e) => setFormData(prev => ({ ...prev, monthly_income: e.target.value }))}
-                      placeholder="กรอกรายได้"
-                      disabled={loading}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>ภาระหนี้ต่อเดือน (บาท)</Label>
-                    <Input
-                      type="number"
-                      value={formData.monthly_debt}
-                      onChange={(e) => setFormData(prev => ({ ...prev, monthly_debt: e.target.value }))}
-                      placeholder="กรอกภาระหนี้"
-                      disabled={loading}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>จำนวนสมาชิกในครอบครัว</Label>
-                    <Input
-                      type="number"
-                      value={formData.family_members}
-                      onChange={(e) => setFormData(prev => ({ ...prev, family_members: e.target.value }))}
-                      placeholder="กรอกจำนวน"
-                      disabled={loading}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>ระดับการศึกษา</Label>
-                    <Select
-                      value={formData.education}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, education: value }))}
-                      disabled={loading}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="เลือกระดับการศึกษา" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {EDUCATION_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value || "none"}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 4: Work Address */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium border-b pb-2">ที่อยู่ที่ทำงาน</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2 md:col-span-2">
-                    <Label>สถานที่ทำงาน *</Label>
-                    <Input
-                      value={formData.workplace}
-                      onChange={(e) => setFormData(prev => ({ ...prev, workplace: e.target.value }))}
-                      placeholder="กรอกชื่อบริษัท/สถานที่ทำงาน"
-                      disabled={loading}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>จังหวัด *</Label>
-                    <Select
-                      value={formData.province_id}
-                      onValueChange={(value) => setFormData(prev => ({
-                        ...prev,
-                        province_id: value,
-                        district_id: "",
-                        sub_district_id: "",
-                        postal_code: ""
-                      }))}
-                      disabled={loading}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="เลือกจังหวัด" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60">
-                        {provinces.map((province) => (
-                          <SelectItem key={province.id} value={province.id.toString()}>
-                            {province.name_th}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>อำเภอ/เขต *</Label>
-                    <Select
-                      value={formData.district_id}
-                      onValueChange={(value) => setFormData(prev => ({
-                        ...prev,
-                        district_id: value,
-                        sub_district_id: "",
-                        postal_code: ""
-                      }))}
-                      disabled={loading || !formData.province_id}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={formData.province_id ? "เลือกอำเภอ/เขต" : "เลือกจังหวัดก่อน"} />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60">
-                        {districts.map((district) => (
-                          <SelectItem key={district.id} value={district.id.toString()}>
-                            {district.name_th}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>ตำบล/แขวง *</Label>
-                    <Select
-                      value={formData.sub_district_id}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, sub_district_id: value }))}
-                      disabled={loading || !formData.district_id}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={formData.district_id ? "เลือกตำบล/แขวง" : "เลือกอำเภอก่อน"} />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60">
-                        {subDistricts.map((subDistrict) => (
-                          <SelectItem key={subDistrict.id} value={subDistrict.id.toString()}>
-                            {subDistrict.name_th}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>รหัสไปรษณีย์</Label>
-                    <Input
-                      value={formData.postal_code}
-                      onChange={(e) => setFormData(prev => ({ ...prev, postal_code: e.target.value }))}
-                      placeholder="รหัสไปรษณีย์"
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 5: News Source */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium border-b pb-2">แหล่งข่าวสาร</h3>
-                <div className="space-y-4">
-                  <div className="flex flex-wrap gap-4">
-                    {NEWS_SOURCE_MAIN.map((option) => (
-                      <label key={option.value} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="news_source_main"
-                          value={option.value}
-                          checked={formData.news_source_main === option.value}
-                          onChange={(e) => setFormData(prev => ({
-                            ...prev,
-                            news_source_main: e.target.value,
-                            news_source_online: "",
-                            news_source_other: ""
-                          }))}
-                          disabled={loading}
-                          className="w-4 h-4"
-                        />
-                        <span>{option.label}</span>
-                      </label>
-                    ))}
-                  </div>
-
-                  {formData.news_source_main === "online" && (
-                    <div className="ml-6 space-y-2">
-                      <Label>ช่องทางออนไลน์</Label>
-                      <div className="flex flex-wrap gap-4">
-                        {NEWS_SOURCE_ONLINE.map((option) => (
-                          <label key={option.value} className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="news_source_online"
-                              value={option.value}
-                              checked={formData.news_source_online === option.value}
-                              onChange={(e) => setFormData(prev => ({ ...prev, news_source_online: e.target.value }))}
-                              disabled={loading}
-                              className="w-4 h-4"
-                            />
-                            <span>{option.label}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {(formData.news_source_main === "other" || formData.news_source_online === "other") && (
-                    <div className="ml-6">
-                      <Input
-                        value={formData.news_source_other}
-                        onChange={(e) => setFormData(prev => ({ ...prev, news_source_other: e.target.value }))}
-                        placeholder="ระบุแหล่งข่าวสารอื่นๆ"
-                        disabled={loading}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Section 6: Purchase Purpose */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium border-b pb-2">จุดประสงค์การซื้อ</h3>
-                <div className="space-y-4">
-                  <div className="flex flex-wrap gap-4">
-                    {PURCHASE_PURPOSE_OPTIONS.map((option) => (
-                      <label key={option.value} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="purchase_purpose"
-                          value={option.value}
-                          checked={formData.purchase_purpose === option.value}
-                          onChange={(e) => setFormData(prev => ({
-                            ...prev,
-                            purchase_purpose: e.target.value,
-                            purchase_purpose_other: ""
-                          }))}
-                          disabled={loading}
-                          className="w-4 h-4"
-                        />
-                        <span>{option.label}</span>
-                      </label>
-                    ))}
-                  </div>
-
-                  {formData.purchase_purpose === "other" && (
-                    <div className="ml-6">
-                      <Textarea
-                        value={formData.purchase_purpose_other}
-                        onChange={(e) => setFormData(prev => ({ ...prev, purchase_purpose_other: e.target.value }))}
-                        placeholder="ระบุจุดประสงค์อื่นๆ"
-                        disabled={loading}
-                        rows={2}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Section 7: Notes */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium border-b pb-2">บันทึกเพิ่มเติม</h3>
-                <Textarea
-                  value={formData.lead_notes}
-                  onChange={(e) => setFormData(prev => ({ ...prev, lead_notes: e.target.value }))}
-                  placeholder="บันทึกข้อมูลเพิ่มเติม..."
-                  disabled={loading}
-                  rows={3}
-                />
-              </div>
-
-              {/* Section 8: Consent */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium border-b pb-2">การยินยอม PDPA</h3>
-                <div className="space-y-4">
-                  <div className="flex gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="consent"
-                        value="consent"
-                        checked={formData.consent === "consent"}
-                        onChange={() => handleConsentChange("consent")}
-                        disabled={loading}
-                        className="w-4 h-4"
-                      />
-                      <span>ยินยอม</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="consent"
-                        value="no_consent"
-                        checked={formData.consent === "no_consent"}
-                        onChange={() => handleConsentChange("no_consent")}
-                        disabled={loading}
-                        className="w-4 h-4"
-                      />
-                      <span>ไม่ยินยอม</span>
-                    </label>
-                  </div>
-
-                  {formData.consent === "consent" && (
-                    <div className="space-y-2">
-                      <Label>ลายเซ็น</Label>
-                      <div className="border rounded-lg p-2 bg-white">
-                        <canvas
-                          ref={canvasRef}
-                          width={400}
-                          height={150}
-                          className="border rounded cursor-crosshair w-full"
-                          onMouseDown={startDrawing}
-                          onMouseMove={draw}
-                          onMouseUp={stopDrawing}
-                          onMouseLeave={stopDrawing}
-                          onTouchStart={startDrawing}
-                          onTouchMove={draw}
-                          onTouchEnd={stopDrawing}
-                        />
-                        <div className="flex gap-2 mt-2">
-                          <Button type="button" variant="outline" size="sm" onClick={clearSignature}>
-                            ล้างลายเซ็น
-                          </Button>
-                          <Button type="button" variant="outline" size="sm" onClick={saveSignature}>
-                            บันทึกลายเซ็น
-                          </Button>
+                  {/* Section 1: Lead Status & Project Info - Cyan */}
+                  <Card className="border-2 border-cyan-100 shadow-sm">
+                    <CardContent className="p-0">
+                      <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-cyan-50 to-cyan-100/50 border-b border-cyan-100">
+                        <div className="p-1.5 bg-cyan-500 rounded-lg">
+                          <Building2 className="w-3.5 h-3.5 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-cyan-900 text-sm">ข้อมูลโครงการและสถานะ</h3>
+                          <p className="text-xs text-cyan-600">สถานะ Lead โครงการ และพนักงานขายที่รับผิดชอบ</p>
                         </div>
                       </div>
-                      {formData.signature && (
-                        <p className="text-sm text-green-600">✓ บันทึกลายเซ็นแล้ว</p>
-                      )}
+                      <div className="p-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <Label className="text-sm font-medium">สถานะ Lead <span className="text-red-500">*</span></Label>
+                            <Select
+                              value={formData.status}
+                              onValueChange={(value) => setFormData(prev => ({ ...prev, status: value }))}
+                              disabled={loading}
+                            >
+                              <SelectTrigger className="mt-1.5">
+                                <SelectValue placeholder="เลือกสถานะ" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {STATUS_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    <span className={`px-2 py-0.5 rounded text-xs ${option.color}`}>
+                                      {option.label}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <Label className="text-sm font-medium">โครงการที่สนใจ <span className="text-red-500">*</span></Label>
+                            <Select
+                              value={formData.property_id}
+                              onValueChange={(value) => setFormData(prev => ({ ...prev, property_id: value, unit_id: "" }))}
+                              disabled={loading}
+                            >
+                              <SelectTrigger className="mt-1.5">
+                                <SelectValue placeholder="เลือกโครงการ" />
+                              </SelectTrigger>
+                              <SelectContent className="max-h-60">
+                                {properties.map((property) => (
+                                  <SelectItem key={property.id} value={property.id}>
+                                    {property.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <Label className="text-sm font-medium">ยูนิตที่สนใจ</Label>
+                            <Select
+                              value={formData.unit_id}
+                              onValueChange={(value) => setFormData(prev => ({ ...prev, unit_id: value }))}
+                              disabled={loading || !formData.property_id}
+                            >
+                              <SelectTrigger className="mt-1.5">
+                                <SelectValue placeholder={formData.property_id ? "เลือกยูนิต" : "เลือกโครงการก่อน"} />
+                              </SelectTrigger>
+                              <SelectContent className="max-h-60">
+                                {units.map((unit) => (
+                                  <SelectItem key={unit.id} value={unit.id}>
+                                    {unit.unit_number}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <Label className="text-sm font-medium">พนักงานขายผู้รับผิดชอบ</Label>
+                            <Select
+                              value={formData.assigned_to}
+                              onValueChange={(value) => setFormData(prev => ({ ...prev, assigned_to: value }))}
+                              disabled={loading}
+                            >
+                              <SelectTrigger className="mt-1.5">
+                                <SelectValue placeholder="เลือกพนักงานขาย" />
+                              </SelectTrigger>
+                              <SelectContent className="max-h-60">
+                                {salesPeople.map((person) => (
+                                  <SelectItem key={person.id} value={person.id}>
+                                    {person.full_name || person.email}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <Label className="text-sm font-medium flex items-center gap-2">
+                              <CalendarDays className="w-4 h-4 text-cyan-500" />
+                              นัดติดตามครั้งต่อไป
+                            </Label>
+                            <Input
+                              type="date"
+                              value={formData.next_follow_up}
+                              onChange={(e) => setFormData(prev => ({ ...prev, next_follow_up: e.target.value }))}
+                              disabled={loading}
+                              className="mt-1.5"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Section 2: Units of Interest */}
+                  {lead && (
+                    <Card className="border-2 border-indigo-100 shadow-sm">
+                      <CardContent className="p-0">
+                        <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-indigo-100/50 border-b border-indigo-100">
+                          <div className="p-1.5 bg-indigo-500 rounded-lg">
+                            <Building2 className="w-3.5 h-3.5 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-indigo-900 text-sm">ยูนิตที่สนใจ</h3>
+                            <p className="text-xs text-indigo-600">รายการยูนิตที่ลูกค้าสนใจ</p>
+                          </div>
+                        </div>
+                        <div className="p-4">
+                          <LeadInterestsList
+                            leadId={lead.id}
+                            onInterestsChange={() => {}}
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Section 3: Personal Information - Blue */}
+                  <Card className="border-2 border-blue-100 shadow-sm">
+                    <CardContent className="p-0">
+                      <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-blue-100/50 border-b border-blue-100">
+                        <div className="p-1.5 bg-blue-500 rounded-lg">
+                          <UserCircle className="w-3.5 h-3.5 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-blue-900 text-sm">ข้อมูลส่วนตัว</h3>
+                          <p className="text-xs text-blue-600">ชื่อ รูปภาพ และข้อมูลติดต่อ</p>
+                        </div>
+                      </div>
+                      <div className="p-4 space-y-4">
+                        {/* Profile Image */}
+                        <div className="flex items-center gap-4">
+                          {formData.imagePreview ? (
+                            <img
+                              src={formData.imagePreview}
+                              alt="Profile"
+                              className="w-20 h-20 object-cover rounded-full border-2 border-blue-200 shadow-sm"
+                            />
+                          ) : (
+                            <div className="w-20 h-20 rounded-full border-2 border-dashed border-blue-300 flex items-center justify-center bg-blue-50">
+                              <User className="w-8 h-8 text-blue-300" />
+                            </div>
+                          )}
+                          <div className="text-xs text-gray-500">
+                            <p>รูปภาพปัจจุบัน</p>
+                            <p className="text-gray-400">(ไม่สามารถเปลี่ยนได้จากหน้านี้)</p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <Label className="text-sm font-medium">ชื่อ <span className="text-red-500">*</span></Label>
+                            <Input
+                              value={formData.first_name}
+                              onChange={(e) => setFormData(prev => ({ ...prev, first_name: e.target.value }))}
+                              placeholder="กรอกชื่อ"
+                              disabled={loading}
+                              className="mt-1.5"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">นามสกุล <span className="text-red-500">*</span></Label>
+                            <Input
+                              value={formData.last_name}
+                              onChange={(e) => setFormData(prev => ({ ...prev, last_name: e.target.value }))}
+                              placeholder="กรอกนามสกุล"
+                              disabled={loading}
+                              className="mt-1.5"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">เพศ</Label>
+                            <Select
+                              value={formData.gender}
+                              onValueChange={(value) => setFormData(prev => ({ ...prev, gender: value }))}
+                              disabled={loading}
+                            >
+                              <SelectTrigger className="mt-1.5">
+                                <SelectValue placeholder="เลือกเพศ" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {GENDER_OPTIONS.filter(o => o.value).map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">อายุ (ปี)</Label>
+                            <Input
+                              type="number"
+                              value={formData.age}
+                              onChange={(e) => setFormData(prev => ({ ...prev, age: e.target.value }))}
+                              placeholder="กรอกอายุ"
+                              disabled={loading}
+                              className="mt-1.5"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">เบอร์โทร <span className="text-red-500">*</span></Label>
+                            <Input
+                              value={formData.phone}
+                              onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                              placeholder="0812345678"
+                              disabled={loading}
+                              className="mt-1.5"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">Email</Label>
+                            <Input
+                              type="email"
+                              value={formData.email}
+                              onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                              placeholder="email@example.com"
+                              disabled={loading}
+                              className="mt-1.5"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Section 4: Financial Info - Green */}
+                  <Card className="border-2 border-green-100 shadow-sm">
+                    <CardContent className="p-0">
+                      <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-green-50 to-green-100/50 border-b border-green-100">
+                        <div className="p-1.5 bg-green-500 rounded-lg">
+                          <Briefcase className="w-3.5 h-3.5 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-green-900 text-sm">ข้อมูลอาชีพและการเงิน</h3>
+                          <p className="text-xs text-green-600">อาชีพ รายได้ และภาระทางการเงิน</p>
+                        </div>
+                      </div>
+                      <div className="p-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <Label className="text-sm font-medium">อาชีพ</Label>
+                            <Select
+                              value={formData.occupation}
+                              onValueChange={(value) => setFormData(prev => ({ ...prev, occupation: value }))}
+                              disabled={loading}
+                            >
+                              <SelectTrigger className="mt-1.5">
+                                <SelectValue placeholder="เลือกอาชีพ" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {OCCUPATION_OPTIONS.filter(o => o.value).map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">สถานภาพ</Label>
+                            <Select
+                              value={formData.marital_status}
+                              onValueChange={(value) => setFormData(prev => ({ ...prev, marital_status: value }))}
+                              disabled={loading}
+                            >
+                              <SelectTrigger className="mt-1.5">
+                                <SelectValue placeholder="เลือกสถานภาพ" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {MARITAL_STATUS_OPTIONS.filter(o => o.value).map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">รายได้ต่อเดือน (บาท)</Label>
+                            <Input
+                              type="number"
+                              value={formData.monthly_income}
+                              onChange={(e) => setFormData(prev => ({ ...prev, monthly_income: e.target.value }))}
+                              placeholder="0"
+                              disabled={loading}
+                              className="mt-1.5"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">ภาระหนี้ต่อเดือน (บาท)</Label>
+                            <Input
+                              type="number"
+                              value={formData.monthly_debt}
+                              onChange={(e) => setFormData(prev => ({ ...prev, monthly_debt: e.target.value }))}
+                              placeholder="0"
+                              disabled={loading}
+                              className="mt-1.5"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">สมาชิกในครอบครัว (คน)</Label>
+                            <Input
+                              type="number"
+                              value={formData.family_members}
+                              onChange={(e) => setFormData(prev => ({ ...prev, family_members: e.target.value }))}
+                              placeholder="0"
+                              disabled={loading}
+                              className="mt-1.5"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">ระดับการศึกษา</Label>
+                            <Select
+                              value={formData.education}
+                              onValueChange={(value) => setFormData(prev => ({ ...prev, education: value }))}
+                              disabled={loading}
+                            >
+                              <SelectTrigger className="mt-1.5">
+                                <SelectValue placeholder="เลือกระดับการศึกษา" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {EDUCATION_OPTIONS.filter(o => o.value).map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Section 5: Work Address - Orange */}
+                  <Card className="border-2 border-orange-100 shadow-sm">
+                    <CardContent className="p-0">
+                      <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-orange-50 to-orange-100/50 border-b border-orange-100">
+                        <div className="p-1.5 bg-orange-500 rounded-lg">
+                          <MapPin className="w-3.5 h-3.5 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-orange-900 text-sm">ที่อยู่ที่ทำงาน</h3>
+                          <p className="text-xs text-orange-600">สถานที่ทำงานและที่อยู่ติดต่อ</p>
+                        </div>
+                      </div>
+                      <div className="p-4 space-y-4">
+                        <div>
+                          <Label className="text-sm font-medium">สถานที่ทำงาน <span className="text-red-500">*</span></Label>
+                          <Input
+                            value={formData.workplace}
+                            onChange={(e) => setFormData(prev => ({ ...prev, workplace: e.target.value }))}
+                            placeholder="ชื่อบริษัท / สถานที่ทำงาน"
+                            disabled={loading}
+                            className="mt-1.5"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label className="text-sm font-medium">จังหวัด <span className="text-red-500">*</span></Label>
+                            <Select
+                              value={formData.province_id}
+                              onValueChange={(value) => setFormData(prev => ({
+                                ...prev,
+                                province_id: value,
+                                district_id: "",
+                                sub_district_id: "",
+                                postal_code: ""
+                              }))}
+                              disabled={loading}
+                            >
+                              <SelectTrigger className="mt-1.5">
+                                <SelectValue placeholder="เลือกจังหวัด" />
+                              </SelectTrigger>
+                              <SelectContent className="max-h-60">
+                                {provinces.map((province) => (
+                                  <SelectItem key={province.id} value={province.id.toString()}>
+                                    {province.name_th}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <Label className="text-sm font-medium">อำเภอ <span className="text-red-500">*</span></Label>
+                            <Select
+                              value={formData.district_id}
+                              onValueChange={(value) => setFormData(prev => ({
+                                ...prev,
+                                district_id: value,
+                                sub_district_id: "",
+                                postal_code: ""
+                              }))}
+                              disabled={loading || !formData.province_id}
+                            >
+                              <SelectTrigger className="mt-1.5">
+                                <SelectValue placeholder={formData.province_id ? "เลือกอำเภอ" : "เลือกจังหวัดก่อน"} />
+                              </SelectTrigger>
+                              <SelectContent className="max-h-60">
+                                {districts.map((district) => (
+                                  <SelectItem key={district.id} value={district.id.toString()}>
+                                    {district.name_th}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <Label className="text-sm font-medium">ตำบล <span className="text-red-500">*</span></Label>
+                            <Select
+                              value={formData.sub_district_id}
+                              onValueChange={(value) => setFormData(prev => ({ ...prev, sub_district_id: value }))}
+                              disabled={loading || !formData.district_id}
+                            >
+                              <SelectTrigger className="mt-1.5">
+                                <SelectValue placeholder={formData.district_id ? "เลือกตำบล" : "เลือกอำเภอก่อน"} />
+                              </SelectTrigger>
+                              <SelectContent className="max-h-60">
+                                {subDistricts.map((subDistrict) => (
+                                  <SelectItem key={subDistrict.id} value={subDistrict.id.toString()}>
+                                    {subDistrict.name_th}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <Label className="text-sm font-medium">รหัสไปรษณีย์</Label>
+                            <Input
+                              value={formData.postal_code}
+                              readOnly
+                              placeholder="จะแสดงอัตโนมัติ"
+                              className="mt-1.5 bg-gray-50"
+                              disabled={loading}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Section 6: News Source - Purple */}
+                  <Card className="border-2 border-purple-100 shadow-sm">
+                    <CardContent className="p-0">
+                      <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-purple-50 to-purple-100/50 border-b border-purple-100">
+                        <div className="p-1.5 bg-purple-500 rounded-lg">
+                          <Megaphone className="w-3.5 h-3.5 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-purple-900 text-sm">แหล่งข่าวสาร</h3>
+                          <p className="text-xs text-purple-600">ท่านได้รับข่าวสารมาจากแหล่งใด</p>
+                        </div>
+                      </div>
+                      <div className="p-4">
+                        <div className="space-y-3">
+                          {NEWS_SOURCE_MAIN.map((source) => (
+                            <div key={source.value} className="flex items-center space-x-2">
+                              <input
+                                type="radio"
+                                id={`edit_news_source_${source.value}`}
+                                name="edit_news_source_main"
+                                value={source.value}
+                                checked={formData.news_source_main === source.value}
+                                onChange={(e) => setFormData(prev => ({
+                                  ...prev,
+                                  news_source_main: e.target.value,
+                                  news_source_online: "",
+                                  news_source_other: ""
+                                }))}
+                                className="w-4 h-4 text-purple-600"
+                                disabled={loading}
+                              />
+                              <Label htmlFor={`edit_news_source_${source.value}`} className="font-normal cursor-pointer">
+                                {source.label}
+                              </Label>
+                            </div>
+                          ))}
+
+                          {formData.news_source_main === "online" && (
+                            <div className="ml-6 space-y-2 p-3 bg-purple-50/50 rounded-xl border border-purple-100">
+                              <Label className="text-sm text-purple-700 font-medium">เลือกช่องทางออนไลน์:</Label>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                {NEWS_SOURCE_ONLINE.map((source) => (
+                                  <div key={source.value} className="flex items-center space-x-2">
+                                    <input
+                                      type="radio"
+                                      id={`edit_news_source_online_${source.value}`}
+                                      name="edit_news_source_online"
+                                      value={source.value}
+                                      checked={formData.news_source_online === source.value}
+                                      onChange={(e) => setFormData(prev => ({
+                                        ...prev,
+                                        news_source_online: e.target.value,
+                                        news_source_other: source.value === "other" ? prev.news_source_other : ""
+                                      }))}
+                                      className="w-4 h-4 text-purple-600"
+                                      disabled={loading}
+                                    />
+                                    <Label htmlFor={`edit_news_source_online_${source.value}`} className="font-normal cursor-pointer text-sm">
+                                      {source.label}
+                                    </Label>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {formData.news_source_online === "other" && (
+                                <Textarea
+                                  value={formData.news_source_other}
+                                  onChange={(e) => setFormData(prev => ({ ...prev, news_source_other: e.target.value }))}
+                                  placeholder="ระบุรายละเอียดเพิ่มเติม..."
+                                  className="mt-2"
+                                  disabled={loading}
+                                />
+                              )}
+                            </div>
+                          )}
+
+                          {formData.news_source_main === "other" && (
+                            <div className="ml-6">
+                              <Textarea
+                                value={formData.news_source_other}
+                                onChange={(e) => setFormData(prev => ({ ...prev, news_source_other: e.target.value }))}
+                                placeholder="ระบุรายละเอียดเพิ่มเติม..."
+                                disabled={loading}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Section 7: Purchase Purpose - Indigo */}
+                  <Card className="border-2 border-indigo-100 shadow-sm">
+                    <CardContent className="p-0">
+                      <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-indigo-100/50 border-b border-indigo-100">
+                        <div className="p-1.5 bg-indigo-500 rounded-lg">
+                          <Target className="w-3.5 h-3.5 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-indigo-900 text-sm">จุดประสงค์การซื้อ</h3>
+                          <p className="text-xs text-indigo-600">เหตุผลในการซื้ออสังหาริมทรัพย์</p>
+                        </div>
+                      </div>
+                      <div className="p-4">
+                        <div className="space-y-3">
+                          {PURCHASE_PURPOSE_OPTIONS.map((purpose) => (
+                            <div key={purpose.value} className="flex items-center space-x-2">
+                              <input
+                                type="radio"
+                                id={`edit_purchase_purpose_${purpose.value}`}
+                                name="edit_purchase_purpose"
+                                value={purpose.value}
+                                checked={formData.purchase_purpose === purpose.value}
+                                onChange={(e) => setFormData(prev => ({
+                                  ...prev,
+                                  purchase_purpose: e.target.value,
+                                  purchase_purpose_other: ""
+                                }))}
+                                className="w-4 h-4 text-indigo-600"
+                                disabled={loading}
+                              />
+                              <Label htmlFor={`edit_purchase_purpose_${purpose.value}`} className="font-normal cursor-pointer">
+                                {purpose.label}
+                              </Label>
+                            </div>
+                          ))}
+
+                          {formData.purchase_purpose === "other" && (
+                            <div className="ml-6">
+                              <Textarea
+                                value={formData.purchase_purpose_other}
+                                onChange={(e) => setFormData(prev => ({ ...prev, purchase_purpose_other: e.target.value }))}
+                                placeholder="ระบุรายละเอียดเพิ่มเติม..."
+                                disabled={loading}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Section 8: Notes - Teal */}
+                  <Card className="border-2 border-teal-100 shadow-sm">
+                    <CardContent className="p-0">
+                      <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-teal-50 to-teal-100/50 border-b border-teal-100">
+                        <div className="p-1.5 bg-teal-500 rounded-lg">
+                          <FileText className="w-3.5 h-3.5 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-teal-900 text-sm">บันทึกเพิ่มเติม</h3>
+                          <p className="text-xs text-teal-600">หมายเหตุและรายละเอียดอื่นๆ</p>
+                        </div>
+                      </div>
+                      <div className="p-4">
+                        <Textarea
+                          value={formData.lead_notes}
+                          onChange={(e) => setFormData(prev => ({ ...prev, lead_notes: e.target.value }))}
+                          placeholder="บันทึกข้อมูลเพิ่มเติม..."
+                          disabled={loading}
+                          rows={3}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Section 9: Consent - Gray */}
+                  <Card className="border-2 border-gray-200 shadow-sm">
+                    <CardContent className="p-0">
+                      <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-gray-50 to-gray-100/50 border-b border-gray-200">
+                        <div className="p-1.5 bg-gray-600 rounded-lg">
+                          <ShieldCheck className="w-3.5 h-3.5 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900 text-sm">การยินยอม PDPA</h3>
+                          <p className="text-xs text-gray-600">ยินยอมให้สามารถนำข้อมูลไปใช้งานได้</p>
+                        </div>
+                      </div>
+                      <div className="p-4">
+                        <div className="space-y-3">
+                          <div className="flex gap-4">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="edit_consent"
+                                value="consent"
+                                checked={formData.consent === "consent"}
+                                onChange={() => handleConsentChange("consent")}
+                                disabled={loading}
+                                className="w-4 h-4"
+                              />
+                              <span>ยินยอม</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="edit_consent"
+                                value="no_consent"
+                                checked={formData.consent === "no_consent"}
+                                onChange={() => handleConsentChange("no_consent")}
+                                disabled={loading}
+                                className="w-4 h-4"
+                              />
+                              <span>ไม่ยินยอม</span>
+                            </label>
+                          </div>
+
+                          {formData.consent === "consent" && (
+                            <div className="ml-6 space-y-2 p-4 bg-gray-50/50 rounded-xl border border-gray-200">
+                              <Label className="text-sm font-medium">ลงลายมือชื่อ</Label>
+                              <div className="border-2 border-gray-200 rounded-lg bg-white">
+                                <canvas
+                                  ref={canvasRef}
+                                  width={400}
+                                  height={150}
+                                  className="w-full touch-none cursor-crosshair"
+                                  onMouseDown={startDrawing}
+                                  onMouseMove={draw}
+                                  onMouseUp={stopDrawing}
+                                  onMouseLeave={stopDrawing}
+                                  onTouchStart={startDrawing}
+                                  onTouchMove={draw}
+                                  onTouchEnd={stopDrawing}
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={clearSignature}
+                                disabled={loading}
+                              >
+                                ล้างลายเซ็น
+                              </Button>
+                              {formData.signature && (
+                                <p className="text-sm text-green-600">✓ มีลายเซ็นเดิมอยู่แล้ว (สามารถลงใหม่ได้)</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Error Message */}
+                  {error && (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+                      <p className="text-sm text-red-600 font-medium">{error}</p>
                     </div>
                   )}
                 </div>
-              </div>
+              </form>
 
-              {/* Error Message */}
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-                  {error}
-                </div>
-              )}
-
-              {/* Submit Button */}
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={handleClose} disabled={loading}>
+              {/* Footer - Fixed at bottom */}
+              <div className="flex gap-3 px-6 py-4 border-t bg-gray-50 flex-shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleClose}
+                  disabled={loading}
+                  className="flex-1"
+                >
                   ยกเลิก
                 </Button>
-                <Button type="submit" disabled={loading}>
+                <Button
+                  type="submit"
+                  onClick={handleSubmit}
+                  disabled={loading}
+                  className="flex-1 bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] hover:opacity-90"
+                >
                   {loading ? (
-                    <>
-                      <span className="animate-spin mr-2">⏳</span>
+                    <div className="flex items-center justify-center">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
                       กำลังบันทึก...
-                    </>
+                    </div>
                   ) : (
-                    <>
+                    <div className="flex items-center justify-center">
                       <Save className="w-4 h-4 mr-2" />
                       บันทึกการแก้ไข
-                    </>
+                    </div>
                   )}
                 </Button>
-              </DialogFooter>
-            </form>
+              </div>
+            </>
           )}
         </DialogContent>
       </Dialog>
@@ -1251,7 +1440,7 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
       <Dialog open={showPolicyDialog} onOpenChange={setShowPolicyDialog}>
         <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>นโยบายความเป็นส่วนตัว (PDPA)</DialogTitle>
+            <DialogTitle>นโยบายการนำข้อมูลไปใช้งาน</DialogTitle>
           </DialogHeader>
           <div className="prose prose-sm max-w-none">
             <p>
@@ -1276,13 +1465,12 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
             <Button variant="outline" onClick={() => setShowPolicyDialog(false)}>
               ปิด
             </Button>
-            <Button onClick={handleAcceptPolicy}>
+            <Button onClick={handleAcceptPolicy} className="bg-gradient-to-r from-[#676AF1] to-[#8B5CF6]">
               ยอมรับและดำเนินการต่อ
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
     </>
   );
 };
