@@ -1,15 +1,7 @@
-import React, { useState } from 'react'
-import { LoginForm } from '@/components/LoginForm'
-import { RegisterForm } from '@/components/RegisterForm'
-import { SupabaseTest } from '@/components/SupabaseTest'
+import React from 'react'
+import LoginForm from '@/components/auth/LoginForm'
 
 export function Login() {
-  const [isLoginMode, setIsLoginMode] = useState(true)
-
-  const toggleMode = () => {
-    setIsLoginMode(!isLoginMode)
-  }
-
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="absolute inset-0 flex flex-col">
@@ -35,17 +27,8 @@ export function Login() {
         {/* Main Content */}
         <main className="flex-1 flex flex-col justify-center px-4 py-12">
           <div className="w-full max-w-4xl mx-auto">
-            {/* Supabase Test Section */}
-            <div className="mb-12">
-              <SupabaseTest />
-            </div>
-
-            {/* Login/Register Forms */}
-            {isLoginMode ? (
-              <LoginForm onToggleMode={toggleMode} />
-            ) : (
-              <RegisterForm onToggleMode={toggleMode} />
-            )}
+            {/* Login Form */}
+            <LoginForm />
           </div>
         </main>
 

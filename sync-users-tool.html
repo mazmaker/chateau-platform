@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sync Users Tool - CHATEAU Platform</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 { color: #333; margin-bottom: 10px; }
+        p { color: #666; margin-bottom: 30px; }
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .status.success { background: #d4edda; color: #155724; display: block; }
+        .status.error { background: #f8d7da; color: #721c24; display: block; }
+        .status.info { background: #d1ecf1; color: #0c5460; display: block; }
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover { transform: scale(1.02); }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .log {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+        }
+        .log.show { display: block; }
+        .user-list {
+            margin-top: 20px;
+        }
+        .user-item {
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .role-badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .role-owner { background: #f3e8ff; color: #7c3aed; }
+        .role-admin { background: #dbeafe; color: #2563eb; }
+        .role-sales { background: #dcfce7; color: #16a34a; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Sync Users Tool</h1>
+        <p>คลิกปุ่มด้านล่างเพื่อ sync users จาก auth.users → public.users และตั้งค่า role</p>
+
+        <div id="status" class="status"></div>
+
+        <button id="syncBtn" onclick="syncUsers()">
+            🚀 เริ่ม Sync Users
+        </button>
+
+        <div id="log" class="log"></div>
+
+        <div id="userList" class="user-list"></div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://pqnjvcbmnatrtvpqnrdx.supabase.co';
+        const SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBxbmp2Y2JtbmF0cnR2cHFucmR4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTk4MzY1MSwiZXhwIjoyMDgxNTU5NjUxfQ.1clCRvzg5KgPgqFmmtQXc9JjOjQnlvrcANsJb8YbKb4';
+
+        const supabase = supabase.createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+            auth: { persistSession: false }
+        });
+
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            logDiv.classList.add('show');
+            logDiv.innerHTML += message + '<br>';
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+        }
+
+        async function syncUsers() {
+            const btn = document.getElementById('syncBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ กำลังดำเนินการ...';
+
+            document.getElementById('log').innerHTML = '';
+            document.getElementById('userList').innerHTML = '';
+
+            try {
+                log('🔍 Step 1: Fetching auth.users...');
+
+                // Get auth users
+                const { data: { users }, error: authError } = await supabase.auth.admin.listUsers();
+
+                if (authError) throw authError;
+
+                log(`   Found ${users.length} users in auth.users`);
+
+                // Step 2: Create default tenant via RPC
+                log('');
+                log('🏢 Step 2: Creating default tenant...');
+
+                const { data: tenantData, error: tenantError } = await supabase
+                    .from('tenants')
+                    .upsert({
+                        id: '00000000-0000-0000-0000-000000000001',
+                        name: 'Default Company',
+                        slug: 'default-company',
+                        status: 'active',
+                        subscription_plan: 'professional',
+                        max_properties: 100
+                    }, { onConflict: 'id' })
+                    .select();
+
+                if (tenantError) {
+                    log(`   ⚠️ Tenant warning: ${tenantError.message}`);
+                } else {
+                    log(`   ✅ Tenant ready: ${tenantData[0].id}`);
+                }
+
+                // Step 3: Sync users
+                log('');
+                log('👥 Step 3: Syncing users to public.users...');
+
+                const tenantId = '00000000-0000-0000-0000-000000000001';
+
+                for (let i = 0; i < users.length; i++) {
+                    const user = users[i];
+                    let role = i === 0 ? 'owner' : 'admin';
+
+                    // Override for specific email
+                    if (user.email === 'mazmakerv2.sup@gmail.com') {
+                        role = 'owner';
+                    }
+
+                    log(`   [${i+1}/${users.length}] ${user.email} → ${role}`);
+
+                    // Insert/Update user
+                    const { error: upsertError } = await supabase
+                        .from('users')
+                        .upsert({
+                            id: user.id,
+                            email: user.email,
+                            role: role,
+                            tenant_id: tenantId,
+                            is_active: true,
+                            created_at: user.created_at
+                        }, { onConflict: 'id' });
+
+                    if (upsertError) {
+                        log(`      ❌ Error: ${upsertError.message}`);
+                    } else {
+                        log(`      ✅ Success`);
+                    }
+
+                    // Update auth metadata
+                    await supabase.auth.admin.updateUserById(user.id, {
+                        user_metadata: { ...user.user_metadata, role }
+                    });
+                }
+
+                // Step 4: Verify
+                log('');
+                log('✅ Step 4: Verification...');
+
+                const { data: finalUsers, error: fetchError } = await supabase
+                    .from('users')
+                    .select('*');
+
+                if (fetchError) {
+                    log(`   ❌ Error: ${fetchError.message}`);
+                } else {
+                    log(`   ✅ Found ${finalUsers.length} users in public.users`);
+
+                    // Display users
+                    displayUsers(finalUsers);
+                }
+
+                showStatus('✅ Sync completed successfully!', 'success');
+
+            } catch (error) {
+                log('');
+                log(`❌ Error: ${error.message}`);
+                showStatus(`Error: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🔄 Sync Again';
+            }
+        }
+
+        function displayUsers(users) {
+            const container = document.getElementById('userList');
+            container.innerHTML = '<h3>📋 Users in public.users:</h3>';
+
+            users.forEach(user => {
+                const roleClass = `role-${user.role}`;
+                const roleIcon = user.role === 'owner' ? '👑' : user.role === 'admin' ? '🔧' : '💼';
+
+                container.innerHTML += `
+                    <div class="user-item">
+                        <span>${roleIcon}</span>
+                        <div style="flex:1">
+                            <div style="font-weight:bold">${user.email}</div>
+                            <div style="font-size:12px;color:#666">ID: ${user.id.substring(0,8)}...</div>
+                        </div>
+                        <span class="role-badge ${roleClass}">${user.role.toUpperCase()}</span>
+                    </div>
+                `;
+            });
+        }
+
+        // Auto-run on load
+        window.onload = () => {
+            log('👋 Ready to sync users');
+            log('📌 Click the button above to start');
+        };
+    </script>
+</body>
+</html>

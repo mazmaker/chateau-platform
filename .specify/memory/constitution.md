@@ -1,10 +1,10 @@
 <!-- Sync Impact Report:
-- Version change: 0.0.0 → 1.0.0 (Initial constitution)
-- Modified principles: N/A (initial creation)
-- Added sections: Core Principles (5), Production Requirements, Development Workflow, Governance
+- Version change: 1.0.0 → 1.1.0 (Added AI/LLM development principles)
+- Modified principles: N/A (all preserved, new section added)
+- Added sections: AI/LLM Development Principles, MCP Tools Integration
 - Removed sections: N/A
-- Templates requiring updates: ✅ plan-template.md, ✅ spec-template.md, ✅ tasks-template.md (all aligned with new principles)
-- Follow-up TODOs: None
+- Templates requiring updates: ⚠ plan-template.md (add AI task types), ⚠ tasks-template.md (MCP task categories)
+- Follow-up TODOs: Update template files to include AI/LLM and MCP-specific guidance
 -->
 
 # CHATEAU Constitution
@@ -27,10 +27,28 @@ All user data MUST be encrypted at rest (AES-256) and in transit (TLS 1.3). The 
 ### V. AI Score Integration
 Customer Potential Score and Financial Score MUST be integrated into all relevant workflows. Sales representatives MUST see these scores prominently in customer views. The scoring algorithm MUST be consistent and transparent. AI-based segmentation MUST be available for campaign targeting. All AI features MUST maintain explainability.
 
+## AI/LLM Development Principles
+
+### VI. AI-Assisted Development Mandate
+All development activities MUST leverage available MCP (Model Context Protocol) tools for enhanced productivity and consistency. Context7 MUST be used for maintaining conversation context across development sessions. Supabase MCP MUST be used for database operations. Playwright MUST be used for test generation and validation. Shadcn components MUST be preferred for UI consistency.
+
+### VII. Context Preservation
+All AI-assisted development MUST maintain context using Context7 MCP. Critical decisions, architectural patterns, and business logic MUST be documented and retrievable across sessions. No significant implementation should start without reviewing relevant historical context. The system MUST track the evolution of features from prototype through production.
+
+### VIII. Automated Quality Assurance
+Playwright MCP MUST be used to generate E2E tests for all user-facing features. Tests MUST cover multi-tenant scenarios. Test generation MUST happen concurrently with feature development. All critical user journeys from the prototype MUST have automated test coverage before any modifications.
+
 ## Production Requirements
 
+### MCP Tools Integration
+The system MUST integrate and utilize four core MCP tools:
+1. **Context7** for persistent AI conversation context and knowledge management
+2. **Supabase** for database operations, authentication, and real-time subscriptions
+3. **Playwright** for automated E2E testing and quality assurance
+4. **Shadcn** for consistent, accessible UI component library
+
 ### Technology Stack Enforcement
-Frontend MUST use React.js with Tailwind CSS. Backend MUST use Node.js with NestJS framework. Database MUST be Supabase (PostgreSQL). All new components MUST follow established patterns from the prototype. Technology changes require architecture review and migration plan.
+Frontend MUST use React.js with Tailwind CSS and Shadcn components. Backend MUST use Node.js with NestJS framework. Database MUST be Supabase (PostgreSQL). All new components MUST follow established patterns from the prototype. Technology changes require architecture review and migration plan.
 
 ### Performance Standards
 Dashboard pages MUST load within 1.5 seconds. API responses MUST be under 200ms for non-computational endpoints. Real-time updates MUST reach all clients within 500ms. The system MUST support 1000 concurrent users per tenant. Database queries MUST use connection pooling via Supavisor.
@@ -60,4 +78,4 @@ This constitution supersedes all conflicting practices. Amendments require:
 
 All pull requests MUST verify constitutional compliance. Complexity beyond these principles requires explicit approval and documentation. Use runtime guidance documents for day-to-day development decisions.
 
-**Version**: 1.0.0 | **Ratified**: 2025-01-19 | **Last Amended**: 2025-01-19
+**Version**: 1.1.0 | **Ratified**: 2025-01-19 | **Last Amended**: 2025-12-19
