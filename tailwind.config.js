@@ -7,7 +7,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Anantason', 'sans-serif'],
+        sans: ['Kanit', 'sans-serif'],
       },
       colors: {
         background: "#F0F8FD",

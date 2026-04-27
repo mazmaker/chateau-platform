@@ -945,64 +945,70 @@ const PropertyManagement = () => {
           <>
             {/* Stats */}
             <div className="grid gap-4 md:grid-cols-4">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    โครงการทั้งหมด
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{properties.length}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {projectStats.totalUnits.toLocaleString()} ยูนิต
-                  </p>
+              <Card className="border-l-4 border-l-cyan-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-cyan-100 text-cyan-600 rounded-xl flex items-center justify-center">
+                      <Building2 className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{properties.length}</p>
+                      <p className="text-xs text-muted-foreground">
+                        โครงการทั้งหมด
+                      </p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    ยูนิตทั้งหมด
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-green-600">
-                    {projectStats.totalUnits.toLocaleString()}
+              <Card className="border-l-4 border-l-green-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-green-100 text-green-600 rounded-xl flex items-center justify-center">
+                      <Layers className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">
+                        {projectStats.totalUnits.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        ยูนิตทั้งหมด
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    จาก {properties.length} โครงการ
-                  </p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    โครงการที่เปิดขาย
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-blue-600">
-                    {properties.filter(p => p.is_active).length}
+              <Card className="border-l-4 border-l-blue-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center">
+                      <TrendingUp className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">
+                        {properties.filter(p => p.is_active).length}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        โครงการที่เปิดขาย
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {properties.length > 0
-                      ? Math.round((properties.filter(p => p.is_active).length / properties.length) * 100)
-                      : 0}% ของทั้งหมด
-                  </p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    มูลค่ารวม
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-xl font-bold">
-                    {formatCurrency(projectStats.totalValue)}
+              <Card className="border-l-4 border-l-purple-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center">
+                      <DollarSign className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-xl font-bold">
+                        {formatCurrency(projectStats.totalValue)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        มูลค่ารวม
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    ราคาเริ่มต้น x จำนวนยูนิต
-                  </p>
                 </CardContent>
               </Card>
             </div>
@@ -1169,50 +1175,56 @@ const PropertyManagement = () => {
 
             {/* Units Stats */}
             <div className="grid gap-4 md:grid-cols-4">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    ยูนิตทั้งหมด
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{totalUnits}</div>
+              <Card className="border-l-4 border-l-cyan-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-cyan-100 text-cyan-600 rounded-xl flex items-center justify-center">
+                      <Building2 className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{totalUnits}</p>
+                      <p className="text-xs text-muted-foreground">ยูนิตทั้งหมด</p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    ว่างขาย
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-green-600">{availableUnits}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {totalUnits > 0 ? Math.round((availableUnits / totalUnits) * 100) : 0}% ของทั้งหมด
-                  </p>
+              <Card className="border-l-4 border-l-orange-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center">
+                      <Home className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{availableUnits}</p>
+                      <p className="text-xs text-muted-foreground">ว่างขาย</p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    ขายแล้ว
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-blue-600">{soldUnits}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {totalUnits > 0 ? Math.round((soldUnits / totalUnits) * 100) : 0}% ของทั้งหมด
-                  </p>
+              <Card className="border-l-4 border-l-pink-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-pink-100 text-pink-600 rounded-xl flex items-center justify-center">
+                      <TrendingUp className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{soldUnits}</p>
+                      <p className="text-xs text-muted-foreground">ขายแล้ว</p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    มูลค่ารวม
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-xl font-bold">{formatCurrency(totalValue)}</div>
+              <Card className="border-l-4 border-l-purple-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center">
+                      <DollarSign className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-xl font-bold">{formatCurrency(totalValue)}</p>
+                      <p className="text-xs text-muted-foreground">มูลค่ารวม</p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </div>

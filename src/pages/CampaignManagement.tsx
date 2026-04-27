@@ -620,71 +620,71 @@ const CampaignManagement = () => {
             <div className="space-y-6 mb-8">
               {/* Stats Cards */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                <Card className="bg-gradient-to-br from-violet-500 to-purple-600 text-white">
+                <Card className="border-l-4 border-l-violet-500">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                      <div className="w-12 h-12 bg-violet-100 text-violet-600 rounded-xl flex items-center justify-center">
                         <Megaphone className="w-6 h-6" />
                       </div>
                       <div>
                         <p className="text-2xl font-bold">{stats.totalCampaigns}</p>
-                        <p className="text-sm text-white/80">แคมเปญ</p>
+                        <p className="text-xs text-muted-foreground">แคมเปญ</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-cyan-500 to-blue-600 text-white">
+                <Card className="border-l-4 border-l-cyan-500">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                      <div className="w-12 h-12 bg-cyan-100 text-cyan-600 rounded-xl flex items-center justify-center">
                         <Users className="w-6 h-6" />
                       </div>
                       <div>
                         <p className="text-2xl font-bold">{stats.totalRecipients.toLocaleString()}</p>
-                        <p className="text-sm text-white/80">ผู้รับแคมเปญ</p>
+                        <p className="text-xs text-muted-foreground">ผู้รับแคมเปญ</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-teal-500 to-emerald-600 text-white">
+                <Card className="border-l-4 border-l-teal-500">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                      <div className="w-12 h-12 bg-teal-100 text-teal-600 rounded-xl flex items-center justify-center">
                         <Eye className="w-6 h-6" />
                       </div>
                       <div>
                         <p className="text-2xl font-bold">{stats.totalImpressions.toLocaleString()}</p>
-                        <p className="text-sm text-white/80">การแสดงผล</p>
+                        <p className="text-xs text-muted-foreground">การแสดงผล</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-amber-500 to-orange-600 text-white">
+                <Card className="border-l-4 border-l-orange-500">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                      <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center">
                         <MousePointer className="w-6 h-6" />
                       </div>
                       <div>
                         <p className="text-2xl font-bold">{stats.totalClicks.toLocaleString()}</p>
-                        <p className="text-sm text-white/80">การคลิก</p>
+                        <p className="text-xs text-muted-foreground">การคลิก</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-pink-500 to-rose-600 text-white">
+                <Card className="border-l-4 border-l-pink-500">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                      <div className="w-12 h-12 bg-pink-100 text-pink-600 rounded-xl flex items-center justify-center">
                         <TrendingUp className="w-6 h-6" />
                       </div>
                       <div>
                         <p className="text-2xl font-bold">{stats.avgCtr.toFixed(1)}%</p>
-                        <p className="text-sm text-white/80">CTR</p>
+                        <p className="text-xs text-muted-foreground">CTR</p>
                       </div>
                     </div>
                   </CardContent>

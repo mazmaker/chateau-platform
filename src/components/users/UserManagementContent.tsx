@@ -292,29 +292,29 @@ const UserManagementContent = () => {
 
       {/* Stats Cards */}
       <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-2' : 'md:grid-cols-5'} gap-4`}>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <User className="w-5 h-5 text-blue-600" />
+        <Card className="border-l-4 border-l-blue-500">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center">
+                <User className="w-6 h-6" />
               </div>
-              <div className="ml-3">
-                <p className="text-sm text-gray-600">{isAdmin ? 'พนักงานขายทั้งหมด' : 'ทั้งหมด'}</p>
-                <p className="text-xl font-semibold">{users.length}</p>
+              <div>
+                <p className="text-2xl font-bold">{users.length}</p>
+                <p className="text-xs text-muted-foreground">{isAdmin ? 'พนักงานขายทั้งหมด' : 'ทั้งหมด'}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Shield className="w-5 h-5 text-green-600" />
+        <Card className="border-l-4 border-l-green-500">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-green-100 text-green-600 rounded-xl flex items-center justify-center">
+                <Shield className="w-6 h-6" />
               </div>
-              <div className="ml-3">
-                <p className="text-sm text-gray-600">ใช้งานอยู่</p>
-                <p className="text-xl font-semibold">{users.filter(u => u.is_active).length}</p>
+              <div>
+                <p className="text-2xl font-bold">{users.filter(u => u.is_active).length}</p>
+                <p className="text-xs text-muted-foreground">ใช้งานอยู่</p>
               </div>
             </div>
           </CardContent>
@@ -323,43 +323,43 @@ const UserManagementContent = () => {
         {/* Only show owner/admin stats for OWNER users */}
         {!isAdmin && (
           <>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center">
-                  <div className="p-2 bg-purple-100 rounded-lg">
-                    <User className="w-5 h-5 text-purple-600" />
+            <Card className="border-l-4 border-l-purple-500">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center">
+                    <User className="w-6 h-6" />
                   </div>
-                  <div className="ml-3">
-                    <p className="text-sm text-gray-600">เจ้าของ</p>
-                    <p className="text-xl font-semibold">{users.filter(u => u.role === 'owner').length}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <User className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm text-gray-600">แอดมิน</p>
-                    <p className="text-xl font-semibold">{users.filter(u => u.role === 'admin').length}</p>
+                  <div>
+                    <p className="text-2xl font-bold">{users.filter(u => u.role === 'owner').length}</p>
+                    <p className="text-xs text-muted-foreground">เจ้าของ</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <User className="w-5 h-5 text-green-600" />
+            <Card className="border-l-4 border-l-cyan-500">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-cyan-100 text-cyan-600 rounded-xl flex items-center justify-center">
+                    <User className="w-6 h-6" />
                   </div>
-                  <div className="ml-3">
-                    <p className="text-sm text-gray-600">พนักงานขาย</p>
-                    <p className="text-xl font-semibold">{users.filter(u => u.role === 'sales').length}</p>
+                  <div>
+                    <p className="text-2xl font-bold">{users.filter(u => u.role === 'admin').length}</p>
+                    <p className="text-xs text-muted-foreground">แอดมิน</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-orange-500">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center">
+                    <User className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{users.filter(u => u.role === 'sales').length}</p>
+                    <p className="text-xs text-muted-foreground">พนักงานขาย</p>
                   </div>
                 </div>
               </CardContent>
