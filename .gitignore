@@ -114,3 +114,4 @@ nul
 *.bak
 .playwright-mcp/
 docs/chat/
+backups/

@@ -250,8 +250,16 @@ const PropertyManagement = () => {
         created_at: project.created_at
       }));
 
-      // Merge both arrays
-      setProperties([...(propertiesData || []), ...mappedProjects]);
+      // Dedupe by id: same project may exist in both tables with same UUID.
+      // Prefer projects entry (has richer fields like total_units, developer, FK to units).
+      const propertiesMap = new Map<string, Property>();
+      for (const p of (propertiesData || [])) {
+        propertiesMap.set(p.id, p);
+      }
+      for (const p of mappedProjects) {
+        propertiesMap.set(p.id, p);
+      }
+      setProperties(Array.from(propertiesMap.values()));
     } catch (error) {
       console.error('Error fetching properties:', error);
     } finally {
