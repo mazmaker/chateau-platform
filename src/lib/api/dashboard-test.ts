@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+﻿import { supabase } from '@/lib/supabase';
 
 // Test function to check database connection and data
 export async function testDashboardData() {
@@ -108,27 +108,27 @@ export async function getRealisticChartData() {
     // Realistic unit distribution
     const unitDistribution = [
       { name: 'ว่าง', value: 75, color: '#6b7280' },      // Available
-      { name: 'จอง', value: 69, color: '#8b5a2b' },      // Reserved
-      { name: 'ขาย', value: 90, color: '#ca8a04' },      // Sold
+      { name: 'จอง', value: 69, color: '#f97316' },      // Reserved
+      { name: 'ขาย', value: 90, color: '#e60023' },      // Sold
       { name: 'ไม่พร้อมขาย', value: 0, color: '#1c1917' }, // Unavailable
     ];
 
     // Realistic payment status
     const totalSoldReserved = 69 + 90; // 159 units
     const paymentStatus = [
-      { name: 'ชำระแล้ว', value: Math.round(totalSoldReserved * 0.68), color: '#ca8a04' }, // 68% paid
+      { name: 'ชำระแล้ว', value: Math.round(totalSoldReserved * 0.68), color: '#e60023' }, // 68% paid
       { name: 'ค้างชำระ', value: Math.round(totalSoldReserved * 0.32), color: '#6b7280' }, // 32% pending
     ];
 
     // Realistic sales team performance
     const customerStatus = [
-      { status: 'SALES 001-01', value: 92, color: '#ca8a04' },  // Top performer
+      { status: 'SALES 001-01', value: 92, color: '#e60023' },  // Top performer
       { status: 'SALES 002-02', value: 87, color: '#1c1917' },
-      { status: 'SALES 003-03', value: 78, color: '#8b5a2b' },
+      { status: 'SALES 003-03', value: 78, color: '#f97316' },
       { status: 'SALES 004-04', value: 74, color: '#6b7280' },
-      { status: 'SALES 005-05', value: 69, color: '#ca8a04' },
+      { status: 'SALES 005-05', value: 69, color: '#e60023' },
       { status: 'SALES 006-06', value: 65, color: '#1c1917' },
-      { status: 'SALES 007-07', value: 58, color: '#8b5a2b' },
+      { status: 'SALES 007-07', value: 58, color: '#f97316' },
     ];
 
     // Realistic monthly data (last 12 months)

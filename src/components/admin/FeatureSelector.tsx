@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
@@ -108,7 +108,7 @@ const getCategoryLabel = (category: string) => {
 const getCategoryColor = (category: string) => {
   const colors: Record<string, string> = {
     basic: 'bg-blue-100 text-blue-800',
-    analytics: 'bg-amber-100 text-amber-800',
+    analytics: 'bg-chateau-100 text-chateau-700',
     advanced: 'bg-purple-100 text-purple-800',
     support: 'bg-green-100 text-green-800'
   };
@@ -171,7 +171,7 @@ export const FeatureSelector: React.FC<FeatureSelectorProps> = ({
                     key={feature.id}
                     className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
                       isSelected
-                        ? 'border-amber-300 bg-amber-50'
+                        ? 'border-chateau-200 bg-chateau-50'
                         : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                     } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                     onClick={() => handleFeatureToggle(feature.id)}
@@ -191,7 +191,7 @@ export const FeatureSelector: React.FC<FeatureSelectorProps> = ({
                         {feature.requiredPlan && (
                           <Badge
                             variant="outline"
-                            className="text-xs bg-amber-100 text-amber-700"
+                            className="text-xs bg-chateau-100 text-chateau-600"
                           >
                             {feature.requiredPlan}
                           </Badge>
@@ -211,9 +211,9 @@ export const FeatureSelector: React.FC<FeatureSelectorProps> = ({
 
       {/* Summary */}
       {selectedFeatures.length > 0 && (
-        <Card className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200">
+        <Card className="p-4 bg-gradient-to-r from-chateau-50 to-chateau-50 border-chateau-100">
           <div className="space-y-2">
-            <h4 className="font-semibold text-amber-900">ฟีเจอร์ที่เลือก:</h4>
+            <h4 className="font-semibold text-chateau-800">ฟีเจอร์ที่เลือก:</h4>
             <div className="flex flex-wrap gap-2">
               {selectedFeatures.map((featureId) => {
                 const feature = AVAILABLE_FEATURES.find(f => f.id === featureId);
@@ -221,7 +221,7 @@ export const FeatureSelector: React.FC<FeatureSelectorProps> = ({
                   <Badge
                     key={featureId}
                     variant="secondary"
-                    className="bg-amber-100 text-amber-800"
+                    className="bg-chateau-100 text-chateau-700"
                   >
                     {feature?.label || featureId}
                   </Badge>

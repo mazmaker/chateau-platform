@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { Lock, Crown } from 'lucide-react';
 
@@ -152,30 +152,30 @@ export const SubscriptionGuard: React.FC<{
   const isEnterprise = requiredPlan === 'enterprise';
 
   return (
-    <div className="flex items-center gap-3 p-6 bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-200 rounded-xl">
+    <div className="flex items-center gap-3 p-6 bg-gradient-to-br from-chateau-50 to-chateau-50 border-2 border-chateau-100 rounded-xl">
       {isEnterprise ? (
-        <Crown className="w-8 h-8 text-amber-600 flex-shrink-0" />
+        <Crown className="w-8 h-8 text-chateau flex-shrink-0" />
       ) : (
-        <Lock className="w-8 h-8 text-amber-600 flex-shrink-0" />
+        <Lock className="w-8 h-8 text-chateau flex-shrink-0" />
       )}
       <div className="flex-1">
-        <h3 className="font-semibold text-amber-900 mb-1">
+        <h3 className="font-semibold text-chateau-800 mb-1">
           ฟีเจอร์พิเศษ {isEnterprise ? '👑' : '🔒'}
         </h3>
-        <p className="text-sm text-amber-800 mb-3">
+        <p className="text-sm text-chateau-700 mb-3">
           {getUpgradeMessage(feature)}
         </p>
         <div className="flex items-center gap-2 text-xs">
-          <span className="px-2 py-1 bg-amber-200 text-amber-800 rounded-full">
+          <span className="px-2 py-1 bg-chateau-100 text-chateau-700 rounded-full">
             ปัจจุบัน: {planLabel}
           </span>
-          <span className="text-amber-600">→</span>
+          <span className="text-chateau">→</span>
           <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full">
             ต้องการ: {PLAN_LABELS[requiredPlan || 'professional']}+
           </span>
         </div>
         <button
-          className="mt-3 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors"
+          className="mt-3 px-4 py-2 bg-chateau hover:bg-chateau-600 text-white text-sm font-medium rounded-lg transition-colors"
           onClick={() => {
             // Navigate to upgrade page or contact sales
             window.open('mailto:sales@chateau-platform.com?subject=อัปเกรดแพ็กเกจ', '_blank');

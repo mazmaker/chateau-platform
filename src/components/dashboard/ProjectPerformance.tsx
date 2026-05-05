@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Building2, TrendingUp, DollarSign, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -125,7 +125,7 @@ const ProjectPerformance = () => {
       <div className="bg-white rounded-lg border border-[#e2e8f0] p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-base font-semibold text-gray-900">สรุปผลงานลูกค้า</h3>
-          <select className="px-3 py-1 text-sm border border-[#e2e8f0] rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <select className="px-3 py-1 text-sm border border-[#e2e8f0] rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau">
             <option>เดือนนี้</option>
             <option>ไตรมาสนี้</option>
             <option>ปีนี้</option>
@@ -134,8 +134,8 @@ const ProjectPerformance = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="text-center">
-            <div className="flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-lg mx-auto mb-3">
-              <DollarSign className="w-6 h-6 text-indigo-600" />
+            <div className="flex items-center justify-center w-12 h-12 bg-chateau-100 rounded-lg mx-auto mb-3">
+              <DollarSign className="w-6 h-6 text-chateau" />
             </div>
             <p className="text-2xl font-bold text-gray-900">
               ฿{totalRevenue.toLocaleString('th-TH')}
@@ -309,7 +309,7 @@ const ProjectPerformance = () => {
                       <div className="flex items-center">
                         <div className="w-full bg-gray-200 rounded-full h-2 mr-2">
                           <div
-                            className="bg-indigo-600 h-2 rounded-full"
+                            className="bg-chateau h-2 rounded-full"
                             style={{ width: `${tenant.completion}%` }}
                           />
                         </div>

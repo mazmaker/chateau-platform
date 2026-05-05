@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { ViewPropertiesGuard, ManagePropertiesGuard } from '@/components/auth/PermissionGuard';
@@ -1275,9 +1275,9 @@ const PropertyManagement = () => {
         <Dialog open={showUnitDialog} onOpenChange={setShowUnitDialog}>
           <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-hidden p-0 flex flex-col">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-[#676AF1]/10 via-[#8B5CF6]/10 to-[#676AF1]/10 flex-shrink-0">
+            <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-[#e60023]/10 via-[#8B5CF6]/10 to-[#e60023]/10 flex-shrink-0">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-gradient-to-br from-[#676AF1] to-[#8B5CF6] rounded-xl shadow-md">
+                <div className="p-2 bg-gradient-to-br from-[#e60023] to-[#8B5CF6] rounded-xl shadow-md">
                   <Home className="w-5 h-5 text-white" />
                 </div>
                 <div>
@@ -1626,7 +1626,7 @@ const PropertyManagement = () => {
               <Button
                 onClick={handleSaveUnit}
                 disabled={!unitForm.unit_number || !unitForm.price || savingUnit}
-                className="flex-1 bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] hover:opacity-90"
+                className="flex-1 bg-gradient-to-r from-[#e60023] to-[#8B5CF6] hover:opacity-90"
               >
                 {savingUnit ? (
                   <div className="flex items-center justify-center">
@@ -1648,7 +1648,7 @@ const PropertyManagement = () => {
         <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
           <DialogContent className="sm:max-w-[450px] p-0 overflow-hidden">
             {/* Header */}
-            <div className="bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] px-6 py-4">
+            <div className="bg-gradient-to-r from-[#e60023] to-[#8B5CF6] px-6 py-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
                   <AlertTriangle className="w-6 h-6 text-white" />
@@ -1668,7 +1668,7 @@ const PropertyManagement = () => {
             <div className="p-6">
               <Card className="border-2 border-purple-100 shadow-sm">
                 <CardContent className="p-0">
-                  <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-50 to-blue-50 border-b border-purple-100">
                     <div className="p-1.5 bg-purple-500 rounded-lg">
                       <Building2 className="w-4 h-4 text-white" />
                     </div>
@@ -1737,7 +1737,7 @@ const PropertyManagement = () => {
                 {viewingUnit.images && viewingUnit.images.length > 0 && (
                   <Card className="overflow-hidden border-2">
                     <CardHeader className="bg-gradient-to-r from-blue-50 to-purple-50 pb-3">
-                      <CardTitle className="text-base font-semibold text-[#676AF1]">
+                      <CardTitle className="text-base font-semibold text-[#e60023]">
                         รูปภาพยูนิต
                       </CardTitle>
                     </CardHeader>
@@ -1748,7 +1748,7 @@ const PropertyManagement = () => {
                             key={index}
                             src={img}
                             alt={`Unit image ${index + 1}`}
-                            className="w-full h-32 object-cover rounded-lg border-2 border-gray-100 hover:border-[#676AF1] transition-all cursor-pointer shadow-sm"
+                            className="w-full h-32 object-cover rounded-lg border-2 border-gray-100 hover:border-[#e60023] transition-all cursor-pointer shadow-sm"
                           />
                         ))}
                       </div>
@@ -1788,8 +1788,8 @@ const PropertyManagement = () => {
 
                 {/* Room Details */}
                 <Card className="border-2">
-                  <CardHeader className="bg-gradient-to-r from-indigo-50 to-blue-50 pb-3">
-                    <CardTitle className="text-base font-semibold text-indigo-700 flex items-center gap-2">
+                  <CardHeader className="bg-gradient-to-r from-chateau-50 to-blue-50 pb-3">
+                    <CardTitle className="text-base font-semibold text-chateau-600 flex items-center gap-2">
                       <Home className="w-5 h-5" />
                       รายละเอียดห้อง
                     </CardTitle>
@@ -1814,13 +1814,13 @@ const PropertyManagement = () => {
                           <p className="text-2xl font-bold text-cyan-900">{viewingUnit.bathrooms}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-amber-50 to-amber-100/50 rounded-lg border border-amber-200">
+                      <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-chateau-50 to-chateau-100/50 rounded-lg border border-chateau-100">
                         <div className="p-2 bg-white rounded-lg">
-                          <Square className="w-6 h-6 text-amber-600" />
+                          <Square className="w-6 h-6 text-chateau" />
                         </div>
                         <div>
-                          <p className="text-xs font-medium text-amber-700">ราคา/ตร.ม.</p>
-                          <p className="text-lg font-bold text-amber-900">{viewingUnit.price_per_sqm ? formatCurrency(viewingUnit.price_per_sqm) : '-'}</p>
+                          <p className="text-xs font-medium text-chateau-600">ราคา/ตร.ม.</p>
+                          <p className="text-lg font-bold text-chateau-800">{viewingUnit.price_per_sqm ? formatCurrency(viewingUnit.price_per_sqm) : '-'}</p>
                         </div>
                       </div>
                     </div>
@@ -1877,7 +1877,7 @@ const PropertyManagement = () => {
                       <div className="border-2 rounded-lg overflow-hidden">
                         <Table>
                           <TableHeader>
-                            <TableRow className="bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] hover:from-[#676AF1] hover:to-[#8B5CF6]">
+                            <TableRow className="bg-gradient-to-r from-[#e60023] to-[#8B5CF6] hover:from-[#e60023] hover:to-[#8B5CF6]">
                               <TableHead className="text-white font-semibold">ชื่อลูกค้า</TableHead>
                               <TableHead className="text-white font-semibold">เบอร์โทร</TableHead>
                               <TableHead className="text-white font-semibold">สถานะ</TableHead>
@@ -1921,7 +1921,7 @@ const PropertyManagement = () => {
                                         leadInterest.status === 'contacted' ? 'bg-purple-100 text-purple-800' :
                                         leadInterest.status === 'viewing_scheduled' ? 'bg-yellow-100 text-yellow-800' :
                                         leadInterest.status === 'negotiating' ? 'bg-orange-100 text-orange-800' :
-                                        leadInterest.status === 'reserved' ? 'bg-indigo-100 text-indigo-800' :
+                                        leadInterest.status === 'reserved' ? 'bg-chateau-100 text-chateau-700' :
                                         leadInterest.status === 'purchased' ? 'bg-green-100 text-green-800' :
                                         ''
                                       }
@@ -1961,7 +1961,7 @@ const PropertyManagement = () => {
                                       <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="h-8 w-8 text-[#676AF1] hover:text-[#8B5CF6] hover:bg-purple-50"
+                                        className="h-8 w-8 text-[#e60023] hover:text-[#8B5CF6] hover:bg-purple-50"
                                         onClick={() => {
                                           navigate(`/leads/${lead?.id}/cdp`);
                                         }}
@@ -2007,7 +2007,7 @@ const PropertyManagement = () => {
         <Dialog open={showDeleteUnitDialog} onOpenChange={setShowDeleteUnitDialog}>
           <DialogContent className="sm:max-w-[450px] p-0 overflow-hidden">
             {/* Header */}
-            <div className="bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] px-6 py-4">
+            <div className="bg-gradient-to-r from-[#e60023] to-[#8B5CF6] px-6 py-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
                   <AlertTriangle className="w-6 h-6 text-white" />
@@ -2027,7 +2027,7 @@ const PropertyManagement = () => {
             <div className="p-6">
               <Card className="border-2 border-purple-100 shadow-sm">
                 <CardContent className="p-0">
-                  <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-50 to-blue-50 border-b border-purple-100">
                     <div className="p-1.5 bg-purple-500 rounded-lg">
                       <Home className="w-4 h-4 text-white" />
                     </div>

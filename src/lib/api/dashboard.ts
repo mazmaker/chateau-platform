@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+﻿import { supabase } from '@/lib/supabase';
 
 // Dashboard Statistics API
 export interface DashboardStats {
@@ -322,8 +322,8 @@ export async function getSalesChartData(): Promise<SalesChartData> {
 
     const unitDistribution = [
       { name: 'ว่าง', value: unitCounts.available, color: '#6b7280' },
-      { name: 'จอง', value: unitCounts.reserved, color: '#8b5a2b' },
-      { name: 'ขาย', value: unitCounts.sold, color: '#ca8a04' },
+      { name: 'จอง', value: unitCounts.reserved, color: '#f97316' },
+      { name: 'ขาย', value: unitCounts.sold, color: '#e60023' },
       { name: 'ไม่พร้อมขาย', value: unitCounts.unavailable, color: '#1c1917' },
     ];
 
@@ -335,7 +335,7 @@ export async function getSalesChartData(): Promise<SalesChartData> {
     const pendingUnits = totalSoldReserved - paidUnits;
 
     const paymentStatus = [
-      { name: 'ชำระแล้ว', value: paidUnits, color: '#ca8a04' },
+      { name: 'ชำระแล้ว', value: paidUnits, color: '#e60023' },
       { name: 'ค้างชำระ', value: pendingUnits, color: '#6b7280' },
     ];
 
@@ -347,7 +347,7 @@ export async function getSalesChartData(): Promise<SalesChartData> {
       const wonLeads = leads?.filter(l => l.assigned_to === staff.id && l.status === 'won').length || 0;
       const conversionRate = assignedLeads > 0 ? Math.round((wonLeads / assignedLeads) * 100) : 0;
 
-      const colors = ['#ca8a04', '#1c1917', '#8b5a2b', '#6b7280'];
+      const colors = ['#e60023', '#1c1917', '#f97316', '#6b7280'];
 
       return {
         status: staff.full_name ? staff.full_name.split(' ')[0] : `SALES ${String(index + 1).padStart(3, '0')}-${String(index + 1).padStart(2, '0')}`,
@@ -363,7 +363,7 @@ export async function getSalesChartData(): Promise<SalesChartData> {
         customerStatus.push({
           status: `SALES ${String(i + 1).padStart(3, '0')}-${String(i + 1).padStart(2, '0')}`,
           value: 60 + Math.random() * 30, // Random performance 60-90%
-          color: ['#ca8a04', '#1c1917', '#8b5a2b', '#6b7280'][i % 4],
+          color: ['#e60023', '#1c1917', '#f97316', '#6b7280'][i % 4],
         });
       }
     }
@@ -413,12 +413,12 @@ export async function getSalesChartData(): Promise<SalesChartData> {
     return {
       unitDistribution: [
         { name: 'ว่าง', value: 0, color: '#6b7280' },
-        { name: 'จอง', value: 0, color: '#8b5a2b' },
-        { name: 'ขาย', value: 0, color: '#ca8a04' },
+        { name: 'จอง', value: 0, color: '#f97316' },
+        { name: 'ขาย', value: 0, color: '#e60023' },
         { name: 'ไม่พร้อมขาย', value: 0, color: '#1c1917' },
       ],
       paymentStatus: [
-        { name: 'ชำระแล้ว', value: 0, color: '#ca8a04' },
+        { name: 'ชำระแล้ว', value: 0, color: '#e60023' },
         { name: 'ค้างชำระ', value: 0, color: '#6b7280' },
       ],
       customerStatus: [],

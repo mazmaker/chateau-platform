@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { AdminGuard } from '@/components/auth/PermissionGuard';
@@ -748,7 +748,7 @@ const CampaignManagement = () => {
                         <Tooltip />
                         <Legend wrapperStyle={{ fontSize: 12 }} />
                         <Bar dataKey="customers" name="ลูกค้า (%)" fill="#6b7280" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="ctr" name="CTR (%)" fill="#ca8a04" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="ctr" name="CTR (%)" fill="#e60023" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </CardContent>
@@ -781,7 +781,7 @@ const CampaignManagement = () => {
                         <Tooltip />
                         <Legend wrapperStyle={{ fontSize: 12 }} />
                         <Bar dataKey="customers" name="ลูกค้า (%)" fill="#6b7280" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="ctr" name="CTR (%)" fill="#ca8a04" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="ctr" name="CTR (%)" fill="#e60023" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </CardContent>
@@ -819,8 +819,8 @@ const CampaignManagement = () => {
                               '#44403c', // ส.ค. - เทาเข้ม
                               '#292524', // ก.ย. - ชาร์โคลเข้ม
                               '#1c1917', // ต.ค. - ชาร์โคล
-                              '#8b5a2b', // พ.ย. - น้ำตาลอบอุ่น
-                              '#ca8a04', // ธ.ค. - ทองราชา
+                              '#f97316', // พ.ย. - น้ำตาลอบอุ่น
+                              '#e60023', // ธ.ค. - ทองราชา
                             ];
                             return <Cell key={`cell-${index}`} fill={colors[index]} />;
                           })}
@@ -834,7 +834,7 @@ const CampaignManagement = () => {
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <TrendingUp className="w-5 h-5 text-amber-600" />
+                      <TrendingUp className="w-5 h-5 text-chateau" />
                       Top แคมเปญที่อัตราการคลิกสูง
                     </CardTitle>
                   </CardHeader>
@@ -845,7 +845,7 @@ const CampaignManagement = () => {
                           <span className="text-sm text-gray-500 w-24 text-right truncate">{campaign.name}</span>
                           <div className="flex-1 relative h-6">
                             <div
-                              className="absolute inset-y-0 left-0 bg-gradient-to-r from-amber-500 to-yellow-600 rounded"
+                              className="absolute inset-y-0 left-0 bg-gradient-to-r from-chateau-500 to-chateau-600 rounded"
                               style={{ width: `${campaign.ctr}%` }}
                             />
                             <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-white font-semibold">
@@ -989,7 +989,7 @@ const CampaignManagement = () => {
                             </TableCell>
                             <TableCell>{getStatusBadge(campaign.status)}</TableCell>
                             <TableCell className="text-right">
-                              <span className={`font-semibold ${campaign.ctr > 20 ? 'text-green-600' : campaign.ctr > 10 ? 'text-amber-600' : 'text-gray-600'}`}>
+                              <span className={`font-semibold ${campaign.ctr > 20 ? 'text-green-600' : campaign.ctr > 10 ? 'text-chateau' : 'text-gray-600'}`}>
                                 {campaign.ctr.toFixed(1)}
                               </span>
                             </TableCell>
@@ -1161,7 +1161,7 @@ const CampaignManagement = () => {
                           <p className="text-sm text-gray-600">แสดงผล</p>
                         </div>
                         <div className="text-center">
-                          <p className="text-2xl font-bold text-amber-600">
+                          <p className="text-2xl font-bold text-chateau">
                             {selectedCampaignFromUrl.clicks_count.toLocaleString()}
                           </p>
                           <p className="text-sm text-gray-600">คลิก</p>

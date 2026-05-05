@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+﻿import { format } from 'date-fns';
 
 const bookingsData = [
   {
@@ -68,7 +68,7 @@ const BookingsTable = () => {
     <div className="bg-white rounded-lg border border-[#e2e8f0] p-6">
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-base font-semibold text-gray-900">Recent Bookings</h3>
-        <button className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+        <button className="text-sm text-chateau hover:text-chateau-700 font-medium">
           View all
         </button>
       </div>

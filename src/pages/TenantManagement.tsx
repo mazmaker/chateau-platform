@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
@@ -989,7 +989,7 @@ const TenantManagement = () => {
       free: 'bg-gray-100 text-gray-700 border border-gray-300',
       starter: 'bg-blue-100 text-blue-800 border border-blue-300',
       professional: 'bg-purple-100 text-purple-800 border border-purple-300',
-      enterprise: 'bg-amber-100 text-amber-800 border border-amber-300'
+      enterprise: 'bg-chateau-100 text-chateau-700 border border-chateau-200'
     };
 
     const labels: Record<string, string> = {
@@ -1146,7 +1146,7 @@ const TenantManagement = () => {
               const colors: Record<string, string> = {
                 starter: 'bg-blue-500',
                 professional: 'bg-purple-500',
-                enterprise: 'bg-amber-500'
+                enterprise: 'bg-chateau-500'
               };
               return (
                 <div key={pkg.id} className="space-y-2">
@@ -1526,7 +1526,7 @@ const TenantManagement = () => {
                             ) : (
                               <DropdownMenuItem
                                 onClick={() => openSuspendDialog(tenant)}
-                                className="text-amber-600"
+                                className="text-chateau"
                               >
                                 <Ban className="w-4 h-4 mr-2" />
                                 ระงับ
@@ -1611,7 +1611,7 @@ const TenantManagement = () => {
                         ) : (
                           <DropdownMenuItem
                             onClick={() => openSuspendDialog(tenant)}
-                            className="text-amber-600"
+                            className="text-chateau"
                           >
                             <Ban className="w-4 h-4 mr-2" />
                             ระงับ
@@ -1827,7 +1827,7 @@ const TenantManagement = () => {
                         {selectedTenantFromUrl.trial_ends_at && (
                           <div className="space-y-1">
                             <p className="text-sm font-medium text-muted-foreground">Trial สิ้นสุด</p>
-                            <p className="font-medium text-amber-600">
+                            <p className="font-medium text-chateau">
                               {new Date(selectedTenantFromUrl.trial_ends_at).toLocaleDateString('th-TH')}
                             </p>
                           </div>
@@ -2718,8 +2718,8 @@ const TenantManagement = () => {
                 </DialogHeader>
                 {selectedTenant && (
                   <div className="space-y-4 py-4">
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                      <p className="text-sm text-amber-800">
+                    <div className="bg-chateau-50 border border-chateau-100 rounded-lg p-4">
+                      <p className="text-sm text-chateau-700">
                         <strong>ระวัง:</strong> การระงับบริษัทจะทำให้ผู้ใช้ทั้งหมดในบริษัทนี้ไม่สามารถเข้าใช้งานระบบได้
                         แต่ข้อมูลทั้งหมดจะยังคงอยู่
                       </p>

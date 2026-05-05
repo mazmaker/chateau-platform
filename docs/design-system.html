@@ -1,0 +1,1479 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kids Kingdom — Design System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    /* ─── CSS Variables ─────────────────────────────────── */
+    :root {
+      --radius: 0.75rem;
+      --radius-sm: calc(var(--radius) * 0.6);
+      --radius-md: calc(var(--radius) * 0.8);
+      --radius-lg: var(--radius);
+      --radius-xl: calc(var(--radius) * 1.4);
+      --radius-2xl: calc(var(--radius) * 1.8);
+      --radius-3xl: calc(var(--radius) * 2.2);
+      --radius-4xl: calc(var(--radius) * 2.6);
+
+      --background: oklch(0.99 0 0);
+      --foreground: oklch(0.145 0 0);
+      --card: oklch(1 0 0);
+      --card-foreground: oklch(0.145 0 0);
+      --muted: oklch(0.97 0 0);
+      --muted-foreground: oklch(0.45 0 0);
+      --border: oklch(0.92 0 0);
+      --input: oklch(0.92 0 0);
+      --ring: oklch(0.557 0.241 28.59);
+
+      --primary: oklch(0.557 0.241 28.59);
+      --primary-foreground: oklch(0.985 0 0);
+      --secondary: oklch(0.97 0 0);
+      --secondary-foreground: oklch(0.205 0 0);
+      --accent: oklch(0.97 0.02 25);
+      --accent-foreground: oklch(0.205 0 0);
+      --destructive: oklch(0.577 0.245 27.325);
+      --destructive-foreground: oklch(0.985 0 0);
+
+      --brand-50: #fff1f2;
+      --brand-100: #ffe4e6;
+      --brand-500: #e60023;
+      --brand-600: #b30019;
+      --brand-700: #8a0014;
+
+      --chart-1: oklch(0.557 0.241 28.59);
+      --chart-2: oklch(0.65 0.16 60);
+      --chart-3: oklch(0.55 0.18 240);
+      --chart-4: oklch(0.6 0.18 145);
+      --chart-5: oklch(0.55 0.2 290);
+
+      --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.06);
+      --shadow: 0 2px 8px oklch(0 0 0 / 0.08);
+      --shadow-md: 0 4px 16px oklch(0 0 0 / 0.1);
+      --shadow-lg: 0 8px 32px oklch(0 0 0 / 0.12);
+    }
+
+    /* ─── Reset & Base ──────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Noto Sans Thai', system-ui, sans-serif;
+      background: var(--background);
+      color: var(--foreground);
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+
+    /* ─── Layout ────────────────────────────────────────── */
+    .ds-sidebar {
+      position: fixed; top: 0; left: 0;
+      width: 220px; height: 100vh;
+      background: var(--card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 1.5rem 0;
+      z-index: 100;
+    }
+    .ds-sidebar-logo {
+      padding: 0 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1rem;
+    }
+    .ds-sidebar-logo h1 { font-size: 1.1rem; font-weight: 700; color: var(--primary); }
+    .ds-sidebar-logo span { font-size: 0.75rem; color: var(--muted-foreground); }
+    .ds-nav-group { padding: 0 0.75rem 0.5rem; }
+    .ds-nav-label {
+      font-size: 0.65rem; font-weight: 600; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--muted-foreground);
+      padding: 0.25rem 0.5rem; margin-bottom: 0.25rem;
+    }
+    .ds-nav-item {
+      display: block; padding: 0.375rem 0.75rem;
+      border-radius: var(--radius-md); font-size: 0.8rem;
+      color: var(--foreground); text-decoration: none;
+      transition: background 0.15s;
+    }
+    .ds-nav-item:hover { background: var(--muted); }
+    .ds-nav-item.active { background: var(--accent); color: var(--primary); font-weight: 600; }
+
+    .ds-main {
+      margin-left: 220px;
+      padding: 2rem 2.5rem;
+      max-width: 1200px;
+    }
+
+    /* ─── Sections ──────────────────────────────────────── */
+    .ds-section {
+      margin-bottom: 4rem;
+      scroll-margin-top: 2rem;
+    }
+    .ds-section-header {
+      display: flex; align-items: baseline; gap: 1rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.75rem; margin-bottom: 2rem;
+    }
+    .ds-section-header h2 {
+      font-size: 1.5rem; font-weight: 700;
+    }
+    .ds-section-header span {
+      font-size: 0.8rem; color: var(--muted-foreground);
+      font-family: 'Courier New', monospace;
+    }
+
+    .ds-subsection { margin-bottom: 2.5rem; }
+    .ds-subsection h3 {
+      font-size: 0.85rem; font-weight: 600; letter-spacing: 0.04em;
+      text-transform: uppercase; color: var(--muted-foreground);
+      margin-bottom: 1rem;
+    }
+
+    /* ─── Color Swatches ────────────────────────────────── */
+    .color-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 1rem;
+    }
+    .color-swatch {
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+    }
+    .color-swatch-block { height: 72px; width: 100%; }
+    .color-swatch-info { padding: 0.625rem 0.75rem; background: var(--card); }
+    .color-swatch-name { font-size: 0.8rem; font-weight: 600; }
+    .color-swatch-value { font-size: 0.7rem; color: var(--muted-foreground); font-family: monospace; margin-top: 0.1rem; }
+
+    /* ─── Typography ────────────────────────────────────── */
+    .type-sample { margin-bottom: 1.25rem; display: flex; align-items: baseline; gap: 1.5rem; }
+    .type-label { font-size: 0.7rem; color: var(--muted-foreground); font-family: monospace; min-width: 120px; }
+    .type-display  { font-size: 3rem;   font-weight: 700; line-height: 1.1; }
+    .type-h1       { font-size: 2.25rem; font-weight: 700; line-height: 1.2; }
+    .type-h2       { font-size: 1.875rem; font-weight: 700; line-height: 1.25; }
+    .type-h3       { font-size: 1.5rem;  font-weight: 600; line-height: 1.3; }
+    .type-h4       { font-size: 1.25rem; font-weight: 600; line-height: 1.35; }
+    .type-h5       { font-size: 1.125rem;font-weight: 600; line-height: 1.4; }
+    .type-body-lg  { font-size: 1.125rem;font-weight: 400; line-height: 1.6; }
+    .type-body     { font-size: 1rem;    font-weight: 400; line-height: 1.6; }
+    .type-body-sm  { font-size: 0.875rem;font-weight: 400; line-height: 1.6; }
+    .type-caption  { font-size: 0.75rem; font-weight: 400; line-height: 1.5; color: var(--muted-foreground); }
+    .type-overline { font-size: 0.65rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+    .type-code     { font-size: 0.875rem; font-family: 'Courier New', monospace; background: var(--muted); padding: 0.125rem 0.375rem; border-radius: var(--radius-sm); }
+
+    .weight-grid { display: flex; gap: 2rem; flex-wrap: wrap; }
+    .weight-item { }
+    .weight-item .w-label { font-size: 0.7rem; color: var(--muted-foreground); margin-bottom: 0.25rem; }
+    .weight-item .w-text { font-size: 1.25rem; }
+
+    /* ─── Spacing ───────────────────────────────────────── */
+    .spacing-grid { display: flex; flex-direction: column; gap: 0.75rem; }
+    .spacing-row { display: flex; align-items: center; gap: 1rem; }
+    .spacing-label { font-size: 0.75rem; font-family: monospace; color: var(--muted-foreground); min-width: 80px; }
+    .spacing-bar { height: 20px; background: var(--primary); border-radius: var(--radius-sm); opacity: 0.8; }
+    .spacing-px { font-size: 0.7rem; color: var(--muted-foreground); }
+
+    /* ─── Border Radius ─────────────────────────────────── */
+    .radius-grid { display: flex; gap: 1.25rem; flex-wrap: wrap; align-items: flex-end; }
+    .radius-item { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+    .radius-box { width: 64px; height: 64px; background: var(--primary); opacity: 0.8; }
+    .radius-label { font-size: 0.7rem; font-family: monospace; color: var(--muted-foreground); text-align: center; }
+
+    /* ─── Shadows ───────────────────────────────────────── */
+    .shadow-grid { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+    .shadow-item { padding: 1.5rem 2rem; background: var(--card); border-radius: var(--radius-lg); }
+    .shadow-item-label { font-size: 0.75rem; font-family: monospace; color: var(--muted-foreground); margin-top: 0.75rem; text-align: center; }
+
+    /* ─── Buttons ───────────────────────────────────────── */
+    .component-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-bottom: 1rem; }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 0.375rem; font-family: inherit; font-weight: 500;
+      cursor: pointer; border: none; outline: none;
+      transition: all 0.15s; white-space: nowrap; text-decoration: none;
+    }
+    .btn:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
+    .btn:disabled { opacity: 0.5; pointer-events: none; }
+
+    /* sizes */
+    .btn-xs   { height: 24px; padding: 0 8px;  font-size: 0.7rem;   border-radius: var(--radius-md); }
+    .btn-sm   { height: 28px; padding: 0 10px; font-size: 0.8rem;   border-radius: var(--radius-md); }
+    .btn-md   { height: 32px; padding: 0 10px; font-size: 0.875rem; border-radius: var(--radius-lg); }
+    .btn-lg   { height: 36px; padding: 0 10px; font-size: 0.875rem; border-radius: var(--radius-lg); }
+    .btn-icon { height: 32px; width: 32px; padding: 0; border-radius: var(--radius-md); }
+
+    /* variants */
+    .btn-default     { background: var(--primary); color: var(--primary-foreground); }
+    .btn-default:hover { background: oklch(0.5 0.241 28.59); }
+    .btn-secondary   { background: var(--secondary); color: var(--secondary-foreground); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: oklch(0.94 0 0); }
+    .btn-outline     { background: transparent; color: var(--foreground); border: 1px solid var(--border); }
+    .btn-outline:hover { background: var(--muted); }
+    .btn-ghost       { background: transparent; color: var(--foreground); }
+    .btn-ghost:hover { background: var(--muted); }
+    .btn-destructive { background: var(--destructive); color: var(--destructive-foreground); }
+    .btn-destructive:hover { background: oklch(0.52 0.245 27.325); }
+    .btn-link        { background: transparent; color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+
+    /* ─── Badges ────────────────────────────────────────── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 0.25rem;
+      height: 20px; padding: 0 0.5rem;
+      font-size: 0.7rem; font-weight: 500;
+      border-radius: 999px; white-space: nowrap;
+    }
+    .badge-default      { background: var(--primary); color: var(--primary-foreground); }
+    .badge-secondary    { background: var(--secondary); color: var(--secondary-foreground); border: 1px solid var(--border); }
+    .badge-destructive  { background: oklch(0.577 0.245 27.325 / 0.15); color: var(--destructive); border: 1px solid oklch(0.577 0.245 27.325 / 0.4); }
+    .badge-outline      { background: transparent; color: var(--foreground); border: 1px solid var(--border); }
+    .badge-ghost        { background: var(--muted); color: var(--muted-foreground); }
+    .badge-success      { background: oklch(0.6 0.18 145 / 0.15); color: oklch(0.4 0.18 145); border: 1px solid oklch(0.6 0.18 145 / 0.4); }
+    .badge-warning      { background: oklch(0.65 0.16 60 / 0.15); color: oklch(0.45 0.16 60);  border: 1px solid oklch(0.65 0.16 60 / 0.4); }
+
+    /* ─── Inputs ────────────────────────────────────────── */
+    .form-group { display: flex; flex-direction: column; gap: 0.5rem; max-width: 320px; margin-bottom: 1rem; }
+    .ds-label { font-size: 0.8rem; font-weight: 500; }
+    .ds-input {
+      height: 32px; padding: 0 0.75rem;
+      font-family: inherit; font-size: 0.875rem;
+      background: transparent; border: 1px solid var(--input);
+      border-radius: var(--radius-lg); outline: none;
+      transition: border 0.15s, box-shadow 0.15s; width: 100%;
+    }
+    .ds-input:focus { border-color: var(--ring); box-shadow: 0 0 0 3px oklch(0.557 0.241 28.59 / 0.2); }
+    .ds-input::placeholder { color: var(--muted-foreground); }
+    .ds-input-sm { height: 28px; font-size: 0.8rem; border-radius: var(--radius-md); }
+    .ds-input-invalid { border-color: var(--destructive); }
+    .ds-helper { font-size: 0.75rem; color: var(--muted-foreground); }
+    .ds-helper.error { color: var(--destructive); }
+    .ds-textarea {
+      padding: 0.5rem 0.75rem; font-family: inherit; font-size: 0.875rem;
+      background: transparent; border: 1px solid var(--input);
+      border-radius: var(--radius-lg); outline: none; resize: vertical;
+      transition: border 0.15s, box-shadow 0.15s; width: 100%;
+    }
+    .ds-textarea:focus { border-color: var(--ring); box-shadow: 0 0 0 3px oklch(0.557 0.241 28.59 / 0.2); }
+
+    /* ─── Cards ─────────────────────────────────────────── */
+    .ds-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+    .ds-card-sm { border-radius: var(--radius-lg); }
+    .ds-card-header { padding: 1.25rem 1.5rem 0; }
+    .ds-card-title { font-size: 1rem; font-weight: 600; margin-bottom: 0.25rem; }
+    .ds-card-desc { font-size: 0.8rem; color: var(--muted-foreground); }
+    .ds-card-content { padding: 1rem 1.5rem; }
+    .ds-card-footer {
+      padding: 0.75rem 1.5rem;
+      border-top: 1px solid var(--border);
+      background: var(--muted);
+      display: flex; gap: 0.5rem; align-items: center;
+    }
+
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.25rem; }
+
+    /* ─── Avatar ────────────────────────────────────────── */
+    .avatar {
+      border-radius: 50%; background: var(--muted);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-weight: 600; overflow: hidden; position: relative;
+      flex-shrink: 0;
+    }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .avatar-sm  { width: 24px; height: 24px; font-size: 0.65rem; }
+    .avatar-md  { width: 32px; height: 32px; font-size: 0.75rem; }
+    .avatar-lg  { width: 40px; height: 40px; font-size: 0.875rem; }
+    .avatar-xl  { width: 56px; height: 56px; font-size: 1rem; }
+    .avatar-group { display: flex; }
+    .avatar-group .avatar { border: 2px solid var(--card); margin-left: -8px; }
+    .avatar-group .avatar:first-child { margin-left: 0; }
+
+    /* ─── Progress ──────────────────────────────────────── */
+    .progress-track {
+      height: 6px; background: var(--muted);
+      border-radius: 999px; overflow: hidden; width: 100%;
+    }
+    .progress-bar { height: 100%; background: var(--primary); border-radius: 999px; transition: width 0.3s; }
+    .progress-bar.secondary { background: var(--chart-2); }
+    .progress-bar.success   { background: var(--chart-4); }
+    .progress-bar.danger    { background: var(--destructive); }
+    .progress-wrap { display: flex; flex-direction: column; gap: 0.375rem; margin-bottom: 0.75rem; }
+    .progress-label { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--muted-foreground); }
+
+    /* ─── Tabs ──────────────────────────────────────────── */
+    .ds-tabs { }
+    .ds-tab-list {
+      display: inline-flex; background: var(--muted);
+      border-radius: var(--radius-lg); padding: 3px; gap: 2px;
+    }
+    .ds-tab {
+      padding: 0.375rem 0.875rem; border-radius: var(--radius-md);
+      font-size: 0.8rem; font-weight: 500; cursor: pointer;
+      transition: all 0.15s; border: none; background: transparent;
+      color: var(--muted-foreground); font-family: inherit;
+    }
+    .ds-tab.active {
+      background: var(--card); color: var(--foreground);
+      box-shadow: var(--shadow-sm);
+    }
+    .ds-tab-list-line {
+      display: inline-flex; border-bottom: 1px solid var(--border);
+      gap: 0; padding: 0;
+    }
+    .ds-tab-line {
+      padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 500;
+      cursor: pointer; border: none; background: transparent;
+      color: var(--muted-foreground); font-family: inherit;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      transition: all 0.15s;
+    }
+    .ds-tab-line.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .ds-tab-content { padding: 1rem 0; font-size: 0.875rem; }
+
+    /* ─── Checkbox & Switch ─────────────────────────────── */
+    .ds-checkbox-wrap { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+    .ds-checkbox {
+      width: 16px; height: 16px; border-radius: 4px;
+      border: 1px solid var(--border); background: transparent;
+      display: inline-flex; align-items: center; justify-content: center;
+      flex-shrink: 0; cursor: pointer;
+    }
+    .ds-checkbox.checked { background: var(--primary); border-color: var(--primary); }
+    .ds-checkbox svg { color: white; }
+
+    .ds-switch {
+      width: 36px; height: 20px; border-radius: 999px;
+      background: var(--muted); border: 1px solid var(--border);
+      position: relative; cursor: pointer; transition: background 0.2s;
+      flex-shrink: 0;
+    }
+    .ds-switch::after {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--card); transition: transform 0.2s;
+      box-shadow: var(--shadow-sm);
+    }
+    .ds-switch.on { background: var(--primary); border-color: var(--primary); }
+    .ds-switch.on::after { transform: translateX(16px); }
+    .ds-switch-sm { width: 28px; height: 16px; }
+    .ds-switch-sm::after { width: 10px; height: 10px; }
+    .ds-switch-sm.on::after { transform: translateX(12px); }
+    .ds-control-row { display: flex; align-items: center; gap: 0.625rem; margin-bottom: 0.625rem; font-size: 0.875rem; }
+
+    /* ─── Select ────────────────────────────────────────── */
+    .ds-select {
+      height: 32px; padding: 0 2rem 0 0.75rem;
+      font-family: inherit; font-size: 0.875rem;
+      background: transparent; border: 1px solid var(--input);
+      border-radius: var(--radius-lg); outline: none; cursor: pointer;
+      appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 8px center;
+      min-width: 180px;
+    }
+    .ds-select:focus { border-color: var(--ring); box-shadow: 0 0 0 3px oklch(0.557 0.241 28.59 / 0.2); }
+
+    /* ─── Table ─────────────────────────────────────────── */
+    .ds-table-wrap { overflow-x: auto; border-radius: var(--radius-lg); border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    thead { background: var(--muted); }
+    th { padding: 0.625rem 1rem; text-align: left; font-weight: 600; font-size: 0.8rem; white-space: nowrap; }
+    td { padding: 0.75rem 1rem; border-top: 1px solid var(--border); }
+    tr:hover td { background: var(--muted); }
+
+    /* ─── Separator ─────────────────────────────────────── */
+    .ds-separator { height: 1px; background: var(--border); margin: 1rem 0; }
+    .ds-separator-v { width: 1px; background: var(--border); height: 24px; display: inline-block; margin: 0 0.5rem; }
+
+    /* ─── Alert / Notification ──────────────────────────── */
+    .ds-alert {
+      display: flex; gap: 0.75rem; align-items: flex-start;
+      padding: 0.875rem 1rem; border-radius: var(--radius-lg);
+      border: 1px solid; margin-bottom: 0.75rem; font-size: 0.875rem;
+    }
+    .ds-alert-icon { flex-shrink: 0; margin-top: 1px; }
+    .ds-alert-info { background: oklch(0.55 0.18 240 / 0.08); border-color: oklch(0.55 0.18 240 / 0.3); color: oklch(0.35 0.18 240); }
+    .ds-alert-success { background: oklch(0.6 0.18 145 / 0.08); border-color: oklch(0.6 0.18 145 / 0.3); color: oklch(0.35 0.18 145); }
+    .ds-alert-warning { background: oklch(0.65 0.16 60 / 0.08); border-color: oklch(0.65 0.16 60 / 0.3); color: oklch(0.45 0.16 60); }
+    .ds-alert-error { background: oklch(0.577 0.245 27 / 0.08); border-color: oklch(0.577 0.245 27 / 0.3); color: var(--destructive); }
+    .ds-alert strong { font-weight: 600; display: block; margin-bottom: 0.1rem; }
+
+    /* ─── Chart colors ──────────────────────────────────── */
+    .chart-colors { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .chart-swatch { width: 48px; height: 48px; border-radius: var(--radius-md); }
+
+    /* ─── Tooltip visual ─────────────────────────────────── */
+    .ds-tooltip-demo { position: relative; display: inline-block; }
+    .ds-tooltip-bubble {
+      position: absolute; bottom: calc(100% + 6px); left: 50%;
+      transform: translateX(-50%);
+      background: oklch(0.145 0 0); color: oklch(0.985 0 0);
+      font-size: 0.7rem; padding: 0.25rem 0.625rem;
+      border-radius: var(--radius-md); white-space: nowrap;
+      pointer-events: none;
+    }
+    .ds-tooltip-bubble::after {
+      content: ''; position: absolute; top: 100%; left: 50%;
+      transform: translateX(-50%);
+      border: 4px solid transparent; border-top-color: oklch(0.145 0 0);
+    }
+
+    /* ─── Skeleton ───────────────────────────────────────── */
+    @keyframes shimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
+    .skeleton {
+      background: linear-gradient(90deg, var(--muted) 25%, oklch(0.93 0 0) 50%, var(--muted) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: var(--radius-md);
+    }
+    .skeleton-text { height: 14px; margin-bottom: 0.5rem; }
+    .skeleton-title { height: 20px; margin-bottom: 0.75rem; width: 60%; }
+    .skeleton-rect { height: 80px; margin-bottom: 0.75rem; }
+
+    /* ─── Token code ─────────────────────────────────────── */
+    .token-table { width: 100%; font-size: 0.8rem; border-collapse: collapse; }
+    .token-table td, .token-table th { padding: 0.4rem 0.75rem; border-bottom: 1px solid var(--border); }
+    .token-table td:first-child { font-family: monospace; color: var(--primary); }
+    .token-table td:last-child { display: flex; align-items: center; gap: 0.5rem; }
+    .token-dot { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--border); flex-shrink: 0; }
+  </style>
+</head>
+<body>
+
+<!-- ─── Sidebar ─────────────────────────────────────────── -->
+<nav class="ds-sidebar">
+  <div class="ds-sidebar-logo">
+    <h1>Kids Kingdom</h1>
+    <span>Design System v1.0</span>
+  </div>
+  <div class="ds-nav-group">
+    <div class="ds-nav-label">Foundation</div>
+    <a href="#colors"     class="ds-nav-item">Colors</a>
+    <a href="#typography" class="ds-nav-item">Typography</a>
+    <a href="#spacing"    class="ds-nav-item">Spacing</a>
+    <a href="#radius"     class="ds-nav-item">Border Radius</a>
+    <a href="#shadows"    class="ds-nav-item">Shadows</a>
+  </div>
+  <div class="ds-nav-group">
+    <div class="ds-nav-label">Components</div>
+    <a href="#buttons"    class="ds-nav-item">Buttons</a>
+    <a href="#badges"     class="ds-nav-item">Badges</a>
+    <a href="#inputs"     class="ds-nav-item">Inputs</a>
+    <a href="#cards"      class="ds-nav-item">Cards</a>
+    <a href="#avatars"    class="ds-nav-item">Avatars</a>
+    <a href="#tabs"       class="ds-nav-item">Tabs</a>
+    <a href="#progress"   class="ds-nav-item">Progress</a>
+    <a href="#controls"   class="ds-nav-item">Controls</a>
+    <a href="#tables"     class="ds-nav-item">Tables</a>
+    <a href="#alerts"     class="ds-nav-item">Alerts</a>
+    <a href="#feedback"   class="ds-nav-item">Feedback</a>
+  </div>
+  <div class="ds-nav-group">
+    <div class="ds-nav-label">Charts</div>
+    <a href="#charts"     class="ds-nav-item">Charts (Recharts)</a>
+  </div>
+  <div class="ds-nav-group">
+    <div class="ds-nav-label">Tokens</div>
+    <a href="#tokens"     class="ds-nav-item">CSS Variables</a>
+  </div>
+</nav>
+
+<!-- ─── Main ────────────────────────────────────────────── -->
+<main class="ds-main">
+
+  <!-- HERO -->
+  <div style="margin-bottom:3rem; padding-bottom:2rem; border-bottom:1px solid var(--border)">
+    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem">
+      <span class="badge badge-default">v1.0.0</span>
+      <span class="badge badge-ghost">Next.js 16 · Tailwind 4 · shadcn/ui</span>
+    </div>
+    <h1 style="font-size:2.5rem;font-weight:800;margin-bottom:0.5rem">Kids Kingdom<br>Design System</h1>
+    <p style="font-size:1rem;color:var(--muted-foreground);max-width:560px">
+      ระบบ UI ครบชุดสำหรับแพลตฟอร์ม Kids Kingdom — สี, ตัวอักษร, ระยะห่าง, และ component ทั้งหมด
+      ออกแบบด้วย OKLch color space และรองรับภาษาไทย (Noto Sans Thai)
+    </p>
+  </div>
+
+  <!-- ─── COLORS ─────────────────────────────────────────── -->
+  <section class="ds-section" id="colors">
+    <div class="ds-section-header">
+      <h2>Colors</h2>
+      <span>oklch color space</span>
+    </div>
+
+    <div class="ds-subsection">
+      <h3>Primary & Brand</h3>
+      <div class="color-grid">
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:var(--primary)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Primary</div><div class="color-swatch-value">oklch(0.557 0.241 28.59)</div></div>
+        </div>
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:var(--primary-foreground);border-bottom:1px solid var(--border)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Primary Foreground</div><div class="color-swatch-value">oklch(0.985 0 0)</div></div>
+        </div>
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:var(--brand-50)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Brand 50</div><div class="color-swatch-value">#fff1f2</div></div>
+        </div>
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:var(--brand-100)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Brand 100</div><div class="color-swatch-value">#ffe4e6</div></div>
+        </div>
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:var(--brand-500)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Brand 500</div><div class="color-swatch-value">#e60023</div></div>
+        </div>
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:var(--brand-600)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Brand 600</div><div class="color-swatch-value">#b30019</div></div>
+        </div>
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:var(--brand-700)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Brand 700</div><div class="color-swatch-value">#8a0014</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-subsection">
+      <h3>Neutral / Surface</h3>
+      <div class="color-grid">
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:var(--background);border-bottom:1px solid var(--border)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Background</div><div class="color-swatch-value">oklch(0.99 0 0)</div></div>
+        </div>
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:var(--card);border-bottom:1px solid var(--border)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Card</div><div class="color-swatch-value">oklch(1 0 0)</div></div>
+        </div>
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:var(--muted)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Muted</div><div class="color-swatch-value">oklch(0.97 0 0)</div></div>
+        </div>
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:var(--secondary)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Secondary</div><div class="color-swatch-value">oklch(0.97 0 0)</div></div>
+        </div>
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:var(--accent)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Accent</div><div class="color-swatch-value">oklch(0.97 0.02 25)</div></div>
+        </div>
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:var(--border)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Border</div><div class="color-swatch-value">oklch(0.92 0 0)</div></div>
+        </div>
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:var(--foreground)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Foreground</div><div class="color-swatch-value">oklch(0.145 0 0)</div></div>
+        </div>
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:var(--muted-foreground)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Muted Foreground</div><div class="color-swatch-value">oklch(0.45 0 0)</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-subsection">
+      <h3>Semantic</h3>
+      <div class="color-grid">
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:var(--destructive)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Destructive</div><div class="color-swatch-value">oklch(0.577 0.245 27.3)</div></div>
+        </div>
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:oklch(0.6 0.18 145)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Success</div><div class="color-swatch-value">oklch(0.6 0.18 145)</div></div>
+        </div>
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:oklch(0.65 0.16 60)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Warning</div><div class="color-swatch-value">oklch(0.65 0.16 60)</div></div>
+        </div>
+        <div class="color-swatch">
+          <div class="color-swatch-block" style="background:oklch(0.55 0.18 240)"></div>
+          <div class="color-swatch-info"><div class="color-swatch-name">Info</div><div class="color-swatch-value">oklch(0.55 0.18 240)</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-subsection">
+      <h3>Chart / Data Visualization</h3>
+      <div class="chart-colors">
+        <div class="chart-swatch" style="background:var(--chart-1)"></div>
+        <div class="chart-swatch" style="background:var(--chart-2)"></div>
+        <div class="chart-swatch" style="background:var(--chart-3)"></div>
+        <div class="chart-swatch" style="background:var(--chart-4)"></div>
+        <div class="chart-swatch" style="background:var(--chart-5)"></div>
+      </div>
+      <div style="display:flex;gap:0.75rem;margin-top:0.5rem;font-size:0.7rem;color:var(--muted-foreground);">
+        <span>Chart 1 — Primary</span>
+        <span>Chart 2 — Amber</span>
+        <span>Chart 3 — Blue</span>
+        <span>Chart 4 — Teal</span>
+        <span>Chart 5 — Purple</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── TYPOGRAPHY ─────────────────────────────────────── -->
+  <section class="ds-section" id="typography">
+    <div class="ds-section-header">
+      <h2>Typography</h2>
+      <span>Noto Sans Thai</span>
+    </div>
+
+    <div class="ds-subsection">
+      <h3>Type Scale</h3>
+      <div class="type-sample"><span class="type-label">display / 3rem</span><span class="type-display">Kids Kingdom</span></div>
+      <div class="type-sample"><span class="type-label">h1 / 2.25rem</span><span class="type-h1">หน้าหลัก</span></div>
+      <div class="type-sample"><span class="type-label">h2 / 1.875rem</span><span class="type-h2">เนื้อหาหลัก</span></div>
+      <div class="type-sample"><span class="type-label">h3 / 1.5rem</span><span class="type-h3">หัวข้อย่อย</span></div>
+      <div class="type-sample"><span class="type-label">h4 / 1.25rem</span><span class="type-h4">ชื่อส่วน</span></div>
+      <div class="type-sample"><span class="type-label">h5 / 1.125rem</span><span class="type-h5">ป้ายกำกับ</span></div>
+      <div class="type-sample"><span class="type-label">body-lg / 1.125rem</span><span class="type-body-lg">เนื้อหาขนาดใหญ่ — Large body text for comfortable reading on mobile devices</span></div>
+      <div class="type-sample"><span class="type-label">body / 1rem</span><span class="type-body">เนื้อหาปกติ — Regular body text for the main content area of the platform</span></div>
+      <div class="type-sample"><span class="type-label">body-sm / 0.875rem</span><span class="type-body-sm">เนื้อหาเล็ก — Small body text for secondary information and descriptions</span></div>
+      <div class="type-sample"><span class="type-label">caption / 0.75rem</span><span class="type-caption">คำบรรยาย — Caption text for timestamps, metadata, and helper info</span></div>
+      <div class="type-sample"><span class="type-label">overline / 0.65rem</span><span class="type-overline">หมวดหมู่ — Overline label</span></div>
+      <div class="type-sample"><span class="type-label">code / mono</span><span class="type-code">const x = "kids-kingdom"</span></div>
+    </div>
+
+    <div class="ds-subsection">
+      <h3>Font Weights</h3>
+      <div class="weight-grid">
+        <div class="weight-item"><div class="w-label">300 — Light</div><div class="w-text" style="font-weight:300">เบา Light</div></div>
+        <div class="weight-item"><div class="w-label">400 — Regular</div><div class="w-text" style="font-weight:400">ปกติ Regular</div></div>
+        <div class="weight-item"><div class="w-label">500 — Medium</div><div class="w-text" style="font-weight:500">กลาง Medium</div></div>
+        <div class="weight-item"><div class="w-label">600 — SemiBold</div><div class="w-text" style="font-weight:600">หนากลาง SemiBold</div></div>
+        <div class="weight-item"><div class="w-label">700 — Bold</div><div class="w-text" style="font-weight:700">หนา Bold</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── SPACING ────────────────────────────────────────── -->
+  <section class="ds-section" id="spacing">
+    <div class="ds-section-header">
+      <h2>Spacing</h2>
+      <span>Tailwind 4 scale (4px base unit)</span>
+    </div>
+    <div class="spacing-grid">
+      <div class="spacing-row"><span class="spacing-label">1 / 4px</span>  <div class="spacing-bar" style="width:4px"></div>  <span class="spacing-px">4px</span></div>
+      <div class="spacing-row"><span class="spacing-label">2 / 8px</span>  <div class="spacing-bar" style="width:8px"></div>  <span class="spacing-px">8px</span></div>
+      <div class="spacing-row"><span class="spacing-label">3 / 12px</span> <div class="spacing-bar" style="width:12px"></div> <span class="spacing-px">12px</span></div>
+      <div class="spacing-row"><span class="spacing-label">4 / 16px</span> <div class="spacing-bar" style="width:16px"></div> <span class="spacing-px">16px</span></div>
+      <div class="spacing-row"><span class="spacing-label">5 / 20px</span> <div class="spacing-bar" style="width:20px"></div> <span class="spacing-px">20px</span></div>
+      <div class="spacing-row"><span class="spacing-label">6 / 24px</span> <div class="spacing-bar" style="width:24px"></div> <span class="spacing-px">24px</span></div>
+      <div class="spacing-row"><span class="spacing-label">8 / 32px</span> <div class="spacing-bar" style="width:32px"></div> <span class="spacing-px">32px</span></div>
+      <div class="spacing-row"><span class="spacing-label">10 / 40px</span><div class="spacing-bar" style="width:40px"></div> <span class="spacing-px">40px</span></div>
+      <div class="spacing-row"><span class="spacing-label">12 / 48px</span><div class="spacing-bar" style="width:48px"></div> <span class="spacing-px">48px</span></div>
+      <div class="spacing-row"><span class="spacing-label">16 / 64px</span><div class="spacing-bar" style="width:64px"></div> <span class="spacing-px">64px</span></div>
+      <div class="spacing-row"><span class="spacing-label">20 / 80px</span><div class="spacing-bar" style="width:80px"></div> <span class="spacing-px">80px</span></div>
+      <div class="spacing-row"><span class="spacing-label">24 / 96px</span><div class="spacing-bar" style="width:96px"></div> <span class="spacing-px">96px</span></div>
+    </div>
+  </section>
+
+  <!-- ─── BORDER RADIUS ──────────────────────────────────── -->
+  <section class="ds-section" id="radius">
+    <div class="ds-section-header">
+      <h2>Border Radius</h2>
+      <span>--radius: 0.75rem base</span>
+    </div>
+    <div class="radius-grid">
+      <div class="radius-item"><div class="radius-box" style="border-radius:0"></div>            <span class="radius-label">none<br>0px</span></div>
+      <div class="radius-item"><div class="radius-box" style="border-radius:var(--radius-sm)"></div>  <span class="radius-label">sm<br>7.2px</span></div>
+      <div class="radius-item"><div class="radius-box" style="border-radius:var(--radius-md)"></div>  <span class="radius-label">md<br>9.6px</span></div>
+      <div class="radius-item"><div class="radius-box" style="border-radius:var(--radius-lg)"></div>  <span class="radius-label">lg<br>12px</span></div>
+      <div class="radius-item"><div class="radius-box" style="border-radius:var(--radius-xl)"></div>  <span class="radius-label">xl<br>16.8px</span></div>
+      <div class="radius-item"><div class="radius-box" style="border-radius:var(--radius-2xl)"></div> <span class="radius-label">2xl<br>21.6px</span></div>
+      <div class="radius-item"><div class="radius-box" style="border-radius:var(--radius-3xl)"></div> <span class="radius-label">3xl<br>26.4px</span></div>
+      <div class="radius-item"><div class="radius-box" style="border-radius:var(--radius-4xl)"></div> <span class="radius-label">4xl<br>31.2px</span></div>
+      <div class="radius-item"><div class="radius-box" style="border-radius:999px"></div>            <span class="radius-label">full<br>999px</span></div>
+    </div>
+  </section>
+
+  <!-- ─── SHADOWS ────────────────────────────────────────── -->
+  <section class="ds-section" id="shadows">
+    <div class="ds-section-header"><h2>Shadows</h2></div>
+    <div class="shadow-grid">
+      <div>
+        <div class="shadow-item" style="box-shadow:none;border:1px solid var(--border)">Shadow None</div>
+        <div class="shadow-item-label">none</div>
+      </div>
+      <div>
+        <div class="shadow-item" style="box-shadow:var(--shadow-sm)">Shadow SM</div>
+        <div class="shadow-item-label">--shadow-sm</div>
+      </div>
+      <div>
+        <div class="shadow-item" style="box-shadow:var(--shadow)">Shadow Default</div>
+        <div class="shadow-item-label">--shadow</div>
+      </div>
+      <div>
+        <div class="shadow-item" style="box-shadow:var(--shadow-md)">Shadow MD</div>
+        <div class="shadow-item-label">--shadow-md</div>
+      </div>
+      <div>
+        <div class="shadow-item" style="box-shadow:var(--shadow-lg)">Shadow LG</div>
+        <div class="shadow-item-label">--shadow-lg</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── BUTTONS ────────────────────────────────────────── -->
+  <section class="ds-section" id="buttons">
+    <div class="ds-section-header"><h2>Buttons</h2></div>
+
+    <div class="ds-subsection">
+      <h3>Variants</h3>
+      <div class="component-row">
+        <button class="btn btn-md btn-default">Default</button>
+        <button class="btn btn-md btn-secondary">Secondary</button>
+        <button class="btn btn-md btn-outline">Outline</button>
+        <button class="btn btn-md btn-ghost">Ghost</button>
+        <button class="btn btn-md btn-destructive">Destructive</button>
+        <button class="btn btn-md btn-link">Link</button>
+      </div>
+    </div>
+
+    <div class="ds-subsection">
+      <h3>Sizes</h3>
+      <div class="component-row">
+        <button class="btn btn-xs btn-default">Extra Small</button>
+        <button class="btn btn-sm btn-default">Small</button>
+        <button class="btn btn-md btn-default">Default</button>
+        <button class="btn btn-lg btn-default">Large</button>
+      </div>
+    </div>
+
+    <div class="ds-subsection">
+      <h3>Icon Buttons</h3>
+      <div class="component-row">
+        <button class="btn btn-icon btn-default" title="Settings">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <button class="btn btn-icon btn-outline" title="Search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        </button>
+        <button class="btn btn-icon btn-ghost" title="More">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="ds-subsection">
+      <h3>States</h3>
+      <div class="component-row">
+        <button class="btn btn-md btn-default">Normal</button>
+        <button class="btn btn-md btn-default" disabled>Disabled</button>
+        <button class="btn btn-md btn-default" style="opacity:0.7;cursor:not-allowed">Loading...</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── BADGES ─────────────────────────────────────────── -->
+  <section class="ds-section" id="badges">
+    <div class="ds-section-header"><h2>Badges</h2></div>
+    <div class="component-row">
+      <span class="badge badge-default">Default</span>
+      <span class="badge badge-secondary">Secondary</span>
+      <span class="badge badge-outline">Outline</span>
+      <span class="badge badge-ghost">Ghost</span>
+      <span class="badge badge-destructive">Error</span>
+      <span class="badge badge-success">Success</span>
+      <span class="badge badge-warning">Warning</span>
+    </div>
+    <div class="component-row" style="margin-top:0.5rem">
+      <span class="badge badge-default">
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        ยอดนิยม
+      </span>
+      <span class="badge badge-success">
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        ยืนยันแล้ว
+      </span>
+      <span class="badge badge-warning">
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        รอดำเนินการ
+      </span>
+    </div>
+  </section>
+
+  <!-- ─── INPUTS ─────────────────────────────────────────── -->
+  <section class="ds-section" id="inputs">
+    <div class="ds-section-header"><h2>Inputs</h2></div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.5rem">
+      <div>
+        <div class="form-group">
+          <label class="ds-label">ชื่อผู้ใช้</label>
+          <input class="ds-input" type="text" placeholder="กรอกชื่อของคุณ" />
+        </div>
+        <div class="form-group">
+          <label class="ds-label">อีเมล</label>
+          <input class="ds-input" type="email" placeholder="example@email.com" />
+          <span class="ds-helper">ใช้อีเมลสำหรับเข้าสู่ระบบ</span>
+        </div>
+        <div class="form-group">
+          <label class="ds-label">รหัสผ่าน</label>
+          <input class="ds-input ds-input-invalid" type="password" placeholder="••••••••" value="wrongpassword" />
+          <span class="ds-helper error">รหัสผ่านไม่ถูกต้อง</span>
+        </div>
+        <div class="form-group">
+          <label class="ds-label">ขนาดเล็ก (sm)</label>
+          <input class="ds-input ds-input-sm" type="text" placeholder="Input small" />
+        </div>
+      </div>
+      <div>
+        <div class="form-group" style="max-width:100%">
+          <label class="ds-label">ข้อความยาว</label>
+          <textarea class="ds-textarea" rows="4" placeholder="เขียนข้อความที่นี่..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="ds-label">เลือกตัวเลือก</label>
+          <select class="ds-select">
+            <option>เลือกประเภท</option>
+            <option>เด็กเล็ก (3–6 ปี)</option>
+            <option>เด็กโต (7–12 ปี)</option>
+            <option>วัยรุ่น (13–17 ปี)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── CARDS ──────────────────────────────────────────── -->
+  <section class="ds-section" id="cards">
+    <div class="ds-section-header"><h2>Cards</h2></div>
+    <div class="card-grid">
+      <!-- Basic card -->
+      <div class="ds-card">
+        <div class="ds-card-header">
+          <div class="ds-card-title">กิจกรรมยอดนิยม</div>
+          <div class="ds-card-desc">อัปเดตล่าสุดเมื่อ 2 ชั่วโมงที่แล้ว</div>
+        </div>
+        <div class="ds-card-content">
+          <p style="font-size:0.875rem;color:var(--muted-foreground)">การ์ดมาตรฐานสำหรับแสดงเนื้อหาทั่วไป รองรับ header, content และ footer</p>
+        </div>
+        <div class="ds-card-footer">
+          <button class="btn btn-sm btn-default">ดูเพิ่มเติม</button>
+          <button class="btn btn-sm btn-ghost">บันทึก</button>
+        </div>
+      </div>
+
+      <!-- Stat card -->
+      <div class="ds-card">
+        <div class="ds-card-content" style="padding:1.5rem">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem">
+            <div>
+              <div style="font-size:0.75rem;color:var(--muted-foreground);margin-bottom:0.25rem">ผู้ใช้ทั้งหมด</div>
+              <div style="font-size:2rem;font-weight:700">12,489</div>
+            </div>
+            <div style="width:40px;height:40px;background:var(--accent);border-radius:var(--radius-lg);display:flex;align-items:center;justify-content:center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.375rem;font-size:0.8rem">
+            <span class="badge badge-success" style="font-size:0.65rem">+12%</span>
+            <span style="color:var(--muted-foreground)">เดือนที่แล้ว</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Profile card -->
+      <div class="ds-card">
+        <div class="ds-card-content" style="padding:1.5rem;text-align:center">
+          <div class="avatar avatar-xl" style="margin:0 auto 0.75rem;background:var(--accent);color:var(--primary);font-size:1.25rem;font-weight:700">นา</div>
+          <div style="font-weight:600;margin-bottom:0.25rem">น้องนารา</div>
+          <div style="font-size:0.8rem;color:var(--muted-foreground);margin-bottom:1rem">อายุ 8 ปี · ชั้น ป.2</div>
+          <div style="display:flex;justify-content:center;gap:0.5rem">
+            <span class="badge badge-secondary">คณิตศาสตร์</span>
+            <span class="badge badge-secondary">วิทยาศาสตร์</span>
+          </div>
+        </div>
+        <div class="ds-card-footer" style="justify-content:center">
+          <button class="btn btn-sm btn-default">ดูโปรไฟล์</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── AVATARS ─────────────────────────────────────────── -->
+  <section class="ds-section" id="avatars">
+    <div class="ds-section-header"><h2>Avatars</h2></div>
+
+    <div class="ds-subsection">
+      <h3>Sizes</h3>
+      <div class="component-row" style="align-items:center">
+        <div class="avatar avatar-sm" style="background:var(--accent);color:var(--primary)">A</div>
+        <div class="avatar avatar-md" style="background:var(--accent);color:var(--primary)">B</div>
+        <div class="avatar avatar-lg" style="background:var(--accent);color:var(--primary)">C</div>
+        <div class="avatar avatar-xl" style="background:var(--accent);color:var(--primary)">D</div>
+        <div class="avatar" style="width:64px;height:64px;background:var(--accent);color:var(--primary);font-size:1.1rem">E</div>
+      </div>
+    </div>
+
+    <div class="ds-subsection">
+      <h3>Avatar Group</h3>
+      <div class="avatar-group">
+        <div class="avatar avatar-md" style="background:var(--primary);color:white">A</div>
+        <div class="avatar avatar-md" style="background:var(--chart-2);color:white">B</div>
+        <div class="avatar avatar-md" style="background:var(--chart-3);color:white">C</div>
+        <div class="avatar avatar-md" style="background:var(--chart-4);color:white">D</div>
+        <div class="avatar avatar-md" style="background:var(--muted);color:var(--muted-foreground);font-size:0.65rem">+8</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── TABS ────────────────────────────────────────────── -->
+  <section class="ds-section" id="tabs">
+    <div class="ds-section-header"><h2>Tabs</h2></div>
+
+    <div class="ds-subsection">
+      <h3>Pill Tabs (Default)</h3>
+      <div class="ds-tab-list">
+        <button class="ds-tab active">ทั้งหมด</button>
+        <button class="ds-tab">กำลังเรียน</button>
+        <button class="ds-tab">สำเร็จแล้ว</button>
+        <button class="ds-tab">บันทึกไว้</button>
+      </div>
+      <div class="ds-tab-content">เนื้อหาสำหรับแท็บที่เลือก</div>
+    </div>
+
+    <div class="ds-subsection">
+      <h3>Line Tabs</h3>
+      <div class="ds-tab-list-line">
+        <button class="ds-tab-line active">ภาพรวม</button>
+        <button class="ds-tab-line">กิจกรรม</button>
+        <button class="ds-tab-line">รางวัล</button>
+        <button class="ds-tab-line">ตั้งค่า</button>
+      </div>
+      <div class="ds-tab-content">เนื้อหาสำหรับแท็บที่เลือก</div>
+    </div>
+  </section>
+
+  <!-- ─── PROGRESS ───────────────────────────────────────── -->
+  <section class="ds-section" id="progress">
+    <div class="ds-section-header"><h2>Progress</h2></div>
+    <div style="max-width:480px">
+      <div class="progress-wrap">
+        <div class="progress-label"><span>คณิตศาสตร์</span><span>78%</span></div>
+        <div class="progress-track"><div class="progress-bar" style="width:78%"></div></div>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-label"><span>วิทยาศาสตร์</span><span>55%</span></div>
+        <div class="progress-track"><div class="progress-bar secondary" style="width:55%"></div></div>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-label"><span>ภาษาไทย</span><span>92%</span></div>
+        <div class="progress-track"><div class="progress-bar success" style="width:92%"></div></div>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-label"><span>ประวัติศาสตร์</span><span>28%</span></div>
+        <div class="progress-track"><div class="progress-bar danger" style="width:28%"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── CONTROLS ───────────────────────────────────────── -->
+  <section class="ds-section" id="controls">
+    <div class="ds-section-header"><h2>Controls</h2></div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem">
+      <div>
+        <div class="ds-subsection">
+          <h3>Checkbox</h3>
+          <div class="ds-control-row">
+            <div class="ds-checkbox checked">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <span>รับการแจ้งเตือน</span>
+          </div>
+          <div class="ds-control-row">
+            <div class="ds-checkbox"></div>
+            <span>จดจำฉันไว้</span>
+          </div>
+          <div class="ds-control-row" style="opacity:0.5">
+            <div class="ds-checkbox checked">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <span>ตัวเลือกนี้ถูกปิด (disabled)</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="ds-subsection">
+          <h3>Switch</h3>
+          <div class="ds-control-row">
+            <div class="ds-switch on"></div>
+            <span>โหมดมืด</span>
+          </div>
+          <div class="ds-control-row">
+            <div class="ds-switch"></div>
+            <span>การแจ้งเตือนเสียง</span>
+          </div>
+          <div class="ds-control-row">
+            <div class="ds-switch-sm ds-switch on"></div>
+            <span>Switch ขนาดเล็ก</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── TABLES ─────────────────────────────────────────── -->
+  <section class="ds-section" id="tables">
+    <div class="ds-section-header"><h2>Tables</h2></div>
+    <div class="ds-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ชื่อนักเรียน</th>
+            <th>ชั้น</th>
+            <th>วิชา</th>
+            <th>คะแนน</th>
+            <th>สถานะ</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="display:flex;align-items:center;gap:0.625rem">
+              <div class="avatar avatar-sm" style="background:var(--primary);color:white;font-size:0.65rem">นา</div>
+              น้องนารา
+            </td>
+            <td>ป.3</td>
+            <td>คณิตศาสตร์</td>
+            <td><strong>95/100</strong></td>
+            <td><span class="badge badge-success">ผ่าน</span></td>
+          </tr>
+          <tr>
+            <td style="display:flex;align-items:center;gap:0.625rem">
+              <div class="avatar avatar-sm" style="background:var(--chart-2);color:white;font-size:0.65rem">กก</div>
+              น้องกก
+            </td>
+            <td>ป.5</td>
+            <td>วิทยาศาสตร์</td>
+            <td><strong>72/100</strong></td>
+            <td><span class="badge badge-warning">กำลังเรียน</span></td>
+          </tr>
+          <tr>
+            <td style="display:flex;align-items:center;gap:0.625rem">
+              <div class="avatar avatar-sm" style="background:var(--chart-3);color:white;font-size:0.65rem">มม</div>
+              น้องมะนาว
+            </td>
+            <td>ป.1</td>
+            <td>ภาษาไทย</td>
+            <td><strong>45/100</strong></td>
+            <td><span class="badge badge-destructive">ต้องปรับปรุง</span></td>
+          </tr>
+          <tr>
+            <td style="display:flex;align-items:center;gap:0.625rem">
+              <div class="avatar avatar-sm" style="background:var(--chart-4);color:white;font-size:0.65rem">ปป</div>
+              น้องปลาทอง
+            </td>
+            <td>ป.4</td>
+            <td>ประวัติศาสตร์</td>
+            <td><strong>88/100</strong></td>
+            <td><span class="badge badge-success">ผ่าน</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ─── ALERTS ─────────────────────────────────────────── -->
+  <section class="ds-section" id="alerts">
+    <div class="ds-section-header"><h2>Alerts</h2></div>
+    <div style="max-width:540px">
+      <div class="ds-alert ds-alert-info">
+        <div class="ds-alert-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+        <div><strong>ข้อมูล</strong>บทเรียนใหม่จะเปิดให้ใช้งานในวันพรุ่งนี้ กรุณาตรวจสอบอีกครั้ง</div>
+      </div>
+      <div class="ds-alert ds-alert-success">
+        <div class="ds-alert-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+        <div><strong>สำเร็จ!</strong>บันทึกความคืบหน้าของคุณเรียบร้อยแล้ว</div>
+      </div>
+      <div class="ds-alert ds-alert-warning">
+        <div class="ds-alert-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+        <div><strong>คำเตือน</strong>เซสชั่นของคุณจะหมดอายุในอีก 10 นาที</div>
+      </div>
+      <div class="ds-alert ds-alert-error">
+        <div class="ds-alert-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div>
+        <div><strong>เกิดข้อผิดพลาด</strong>ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่อีกครั้ง</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── FEEDBACK (Tooltip / Skeleton) ────────────────────── -->
+  <section class="ds-section" id="feedback">
+    <div class="ds-section-header"><h2>Feedback</h2></div>
+
+    <div class="ds-subsection">
+      <h3>Tooltip</h3>
+      <div class="component-row">
+        <div class="ds-tooltip-demo">
+          <div class="ds-tooltip-bubble">บันทึกเอกสาร (Ctrl+S)</div>
+          <button class="btn btn-md btn-outline">Hover ตรงนี้</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-subsection">
+      <h3>Skeleton Loading</h3>
+      <div style="max-width:320px">
+        <div class="skeleton skeleton-title"></div>
+        <div class="skeleton skeleton-text" style="width:100%"></div>
+        <div class="skeleton skeleton-text" style="width:85%"></div>
+        <div class="skeleton skeleton-text" style="width:70%"></div>
+        <div class="skeleton skeleton-rect" style="border-radius:var(--radius-lg)"></div>
+        <div style="display:flex;gap:0.5rem">
+          <div class="skeleton" style="height:28px;width:80px;flex-shrink:0"></div>
+          <div class="skeleton" style="height:28px;flex:1"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-subsection">
+      <h3>Separator</h3>
+      <div>
+        <p style="font-size:0.875rem">เนื้อหาด้านบน</p>
+        <div class="ds-separator"></div>
+        <p style="font-size:0.875rem">เนื้อหาด้านล่าง</p>
+      </div>
+      <div style="display:flex;align-items:center;margin-top:1rem;font-size:0.875rem">
+        <span>ซ้าย</span>
+        <div class="ds-separator-v"></div>
+        <span>กลาง</span>
+        <div class="ds-separator-v"></div>
+        <span>ขวา</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── CHARTS ───────────────────────────────────────────── -->
+  <section class="ds-section" id="charts">
+    <div class="ds-section-header">
+      <h2>Charts</h2>
+      <span>Recharts · src/components/admin/charts.tsx</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1.5rem">
+
+      <!-- Line / Area Chart -->
+      <div class="ds-card">
+        <div class="ds-card-header">
+          <div class="ds-card-title">RevenueLineChart</div>
+          <div class="ds-card-desc">Area chart · รายได้รายวัน (gradient fill)</div>
+        </div>
+        <div class="ds-card-content">
+          <svg viewBox="0 0 320 160" width="100%" style="overflow:visible">
+            <defs>
+              <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stop-color="#e60023" stop-opacity="0.35"/>
+                <stop offset="95%" stop-color="#e60023" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <!-- Grid lines -->
+            <line x1="40" y1="20" x2="310" y2="20" stroke="#e5e5e5" stroke-width="1" stroke-dasharray="3 3"/>
+            <line x1="40" y1="55" x2="310" y2="55" stroke="#e5e5e5" stroke-width="1" stroke-dasharray="3 3"/>
+            <line x1="40" y1="90" x2="310" y2="90" stroke="#e5e5e5" stroke-width="1" stroke-dasharray="3 3"/>
+            <line x1="40" y1="125" x2="310" y2="125" stroke="#e5e5e5" stroke-width="1" stroke-dasharray="3 3"/>
+            <!-- Y-axis labels -->
+            <text x="35" y="23" text-anchor="end" font-size="9" fill="#737373">100k</text>
+            <text x="35" y="58" text-anchor="end" font-size="9" fill="#737373">75k</text>
+            <text x="35" y="93" text-anchor="end" font-size="9" fill="#737373">50k</text>
+            <text x="35" y="128" text-anchor="end" font-size="9" fill="#737373">25k</text>
+            <!-- X-axis labels -->
+            <text x="70"  y="148" text-anchor="middle" font-size="9" fill="#737373">01</text>
+            <text x="113" y="148" text-anchor="middle" font-size="9" fill="#737373">07</text>
+            <text x="156" y="148" text-anchor="middle" font-size="9" fill="#737373">13</text>
+            <text x="199" y="148" text-anchor="middle" font-size="9" fill="#737373">19</text>
+            <text x="242" y="148" text-anchor="middle" font-size="9" fill="#737373">25</text>
+            <text x="285" y="148" text-anchor="middle" font-size="9" fill="#737373">31</text>
+            <!-- Area fill -->
+            <path d="M70,100 C83,85 96,70 113,60 C130,50 143,78 156,65 C169,52 182,40 199,45 C216,50 229,72 242,55 C255,38 268,28 285,32 L285,125 L70,125 Z"
+                  fill="url(#areaGrad)"/>
+            <!-- Line -->
+            <path d="M70,100 C83,85 96,70 113,60 C130,50 143,78 156,65 C169,52 182,40 199,45 C216,50 229,72 242,55 C255,38 268,28 285,32"
+                  fill="none" stroke="#e60023" stroke-width="2" stroke-linejoin="round"/>
+            <!-- Tooltip dot -->
+            <circle cx="242" cy="55" r="4" fill="#e60023"/>
+            <rect x="218" y="36" width="72" height="20" rx="4" fill="white" stroke="#e5e5e5"/>
+            <text x="254" y="50" text-anchor="middle" font-size="9" fill="#333">฿82,400</text>
+          </svg>
+          <div style="font-size:0.7rem;color:var(--muted-foreground);margin-top:0.25rem">
+            <code style="font-family:monospace">import { RevenueLineChart } from "@/components/admin/charts"</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bar Chart -->
+      <div class="ds-card">
+        <div class="ds-card-header">
+          <div class="ds-card-title">HourlyBarChart</div>
+          <div class="ds-card-desc">Bar chart · ผู้เข้าชมรายชั่วโมง (color-coded)</div>
+        </div>
+        <div class="ds-card-content">
+          <svg viewBox="0 0 320 160" width="100%">
+            <!-- Grid -->
+            <line x1="40" y1="20" x2="310" y2="20" stroke="#e5e5e5" stroke-width="1" stroke-dasharray="3 3"/>
+            <line x1="40" y1="57" x2="310" y2="57" stroke="#e5e5e5" stroke-width="1" stroke-dasharray="3 3"/>
+            <line x1="40" y1="93" x2="310" y2="93" stroke="#e5e5e5" stroke-width="1" stroke-dasharray="3 3"/>
+            <line x1="40" y1="125" x2="310" y2="125" stroke="#e5e5e5" stroke-width="1"/>
+            <!-- Y labels -->
+            <text x="35" y="23" text-anchor="end" font-size="9" fill="#737373">200</text>
+            <text x="35" y="60" text-anchor="end" font-size="9" fill="#737373">150</text>
+            <text x="35" y="96" text-anchor="end" font-size="9" fill="#737373">100</text>
+            <!-- Bars (peak hours red, off-peak pink) -->
+            <rect x="48"  y="115" width="14" height="10" rx="3" fill="#fda4af"/>
+            <rect x="68"  y="105" width="14" height="20" rx="3" fill="#fda4af"/>
+            <rect x="88"  y="90"  width="14" height="35" rx="3" fill="#fda4af"/>
+            <rect x="108" y="65"  width="14" height="60" rx="3" fill="#e60023"/>
+            <rect x="128" y="45"  width="14" height="80" rx="3" fill="#e60023"/>
+            <rect x="148" y="35"  width="14" height="90" rx="3" fill="#e60023"/>
+            <rect x="168" y="50"  width="14" height="75" rx="3" fill="#e60023"/>
+            <rect x="188" y="70"  width="14" height="55" rx="3" fill="#e60023"/>
+            <rect x="208" y="95"  width="14" height="30" rx="3" fill="#fda4af"/>
+            <rect x="228" y="108" width="14" height="17" rx="3" fill="#fda4af"/>
+            <rect x="248" y="115" width="14" height="10" rx="3" fill="#fda4af"/>
+            <rect x="268" y="118" width="14" height="7"  rx="3" fill="#fda4af"/>
+            <!-- X labels -->
+            <text x="55"  y="140" text-anchor="middle" font-size="9" fill="#737373">9:00</text>
+            <text x="115" y="140" text-anchor="middle" font-size="9" fill="#737373">12:00</text>
+            <text x="175" y="140" text-anchor="middle" font-size="9" fill="#737373">15:00</text>
+            <text x="235" y="140" text-anchor="middle" font-size="9" fill="#737373">18:00</text>
+            <text x="275" y="140" text-anchor="middle" font-size="9" fill="#737373">21:00</text>
+          </svg>
+          <div style="display:flex;gap:1rem;font-size:0.7rem;margin-top:0.25rem">
+            <span style="display:flex;align-items:center;gap:0.3rem"><span style="width:10px;height:10px;border-radius:2px;background:#e60023;display:inline-block"></span>ชั่วโมงเร่งด่วน (&gt;100)</span>
+            <span style="display:flex;align-items:center;gap:0.3rem"><span style="width:10px;height:10px;border-radius:2px;background:#fda4af;display:inline-block"></span>ปกติ</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stacked Bar Chart -->
+      <div class="ds-card">
+        <div class="ds-card-header">
+          <div class="ds-card-title">AdmissionFbBar</div>
+          <div class="ds-card-desc">Stacked bar · ค่าเข้า vs F&amp;B รายเดือน</div>
+        </div>
+        <div class="ds-card-content">
+          <svg viewBox="0 0 320 160" width="100%">
+            <!-- Grid -->
+            <line x1="40" y1="20" x2="310" y2="20" stroke="#e5e5e5" stroke-width="1" stroke-dasharray="3 3"/>
+            <line x1="40" y1="57" x2="310" y2="57" stroke="#e5e5e5" stroke-width="1" stroke-dasharray="3 3"/>
+            <line x1="40" y1="93" x2="310" y2="93" stroke="#e5e5e5" stroke-width="1" stroke-dasharray="3 3"/>
+            <line x1="40" y1="125" x2="310" y2="125" stroke="#e5e5e5" stroke-width="1"/>
+            <!-- Y labels -->
+            <text x="35" y="23" text-anchor="end" font-size="9" fill="#737373">150k</text>
+            <text x="35" y="60" text-anchor="end" font-size="9" fill="#737373">100k</text>
+            <text x="35" y="96" text-anchor="end" font-size="9" fill="#737373">50k</text>
+            <!-- Stacked bars: bottom=admission(red), top=F&B(orange) -->
+            <!-- Jan -->
+            <rect x="55"  y="75"  width="22" height="50" fill="#e60023"/>
+            <rect x="55"  y="55"  width="22" height="20" rx="3" fill="#fb923c"/>
+            <!-- Feb -->
+            <rect x="100" y="65"  width="22" height="60" fill="#e60023"/>
+            <rect x="100" y="45"  width="22" height="20" rx="3" fill="#fb923c"/>
+            <!-- Mar -->
+            <rect x="145" y="50"  width="22" height="75" fill="#e60023"/>
+            <rect x="145" y="32"  width="22" height="18" rx="3" fill="#fb923c"/>
+            <!-- Apr -->
+            <rect x="190" y="60"  width="22" height="65" fill="#e60023"/>
+            <rect x="190" y="42"  width="22" height="18" rx="3" fill="#fb923c"/>
+            <!-- May -->
+            <rect x="235" y="45"  width="22" height="80" fill="#e60023"/>
+            <rect x="235" y="28"  width="22" height="17" rx="3" fill="#fb923c"/>
+            <!-- X labels -->
+            <text x="66"  y="140" text-anchor="middle" font-size="9" fill="#737373">ม.ค.</text>
+            <text x="111" y="140" text-anchor="middle" font-size="9" fill="#737373">ก.พ.</text>
+            <text x="156" y="140" text-anchor="middle" font-size="9" fill="#737373">มี.ค.</text>
+            <text x="201" y="140" text-anchor="middle" font-size="9" fill="#737373">เม.ย.</text>
+            <text x="246" y="140" text-anchor="middle" font-size="9" fill="#737373">พ.ค.</text>
+            <!-- Legend -->
+            <rect x="42" y="150" width="8" height="8" fill="#e60023"/>
+            <text x="53" y="158" font-size="9" fill="#555">ค่าเข้า</text>
+            <rect x="90" y="150" width="8" height="8" fill="#fb923c"/>
+            <text x="101" y="158" font-size="9" fill="#555">F&amp;B</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Donut Chart -->
+      <div class="ds-card">
+        <div class="ds-card-header">
+          <div class="ds-card-title">DonutChart</div>
+          <div class="ds-card-desc">Pie / Donut · สัดส่วนหมวดหมู่</div>
+        </div>
+        <div class="ds-card-content" style="display:flex;align-items:center;gap:1.5rem">
+          <svg viewBox="0 0 160 160" width="160" style="flex-shrink:0">
+            <!-- Donut slices using stroke-dasharray trick -->
+            <!-- Total circumference for r=55: 2π×55 ≈ 345.6 -->
+            <circle cx="80" cy="80" r="55" fill="none" stroke="#e60023" stroke-width="28"
+                    stroke-dasharray="138 207" stroke-dashoffset="0" transform="rotate(-90 80 80)"/>
+            <circle cx="80" cy="80" r="55" fill="none" stroke="#fb923c" stroke-width="28"
+                    stroke-dasharray="90 256" stroke-dashoffset="-138" transform="rotate(-90 80 80)"/>
+            <circle cx="80" cy="80" r="55" fill="none" stroke="#7c3aed" stroke-width="28"
+                    stroke-dasharray="70 276" stroke-dashoffset="-228" transform="rotate(-90 80 80)"/>
+            <circle cx="80" cy="80" r="55" fill="none" stroke="#0ea5e9" stroke-width="28"
+                    stroke-dasharray="47 299" stroke-dashoffset="-298" transform="rotate(-90 80 80)"/>
+            <!-- Center label -->
+            <text x="80" y="75" text-anchor="middle" font-size="20" font-weight="700" fill="#111">1,248</text>
+            <text x="80" y="90" text-anchor="middle" font-size="10" fill="#737373">ผู้เข้าชม</text>
+          </svg>
+          <div style="font-size:0.75rem;display:flex;flex-direction:column;gap:0.5rem">
+            <div style="display:flex;align-items:center;gap:0.5rem"><span style="width:10px;height:10px;border-radius:2px;background:#e60023;flex-shrink:0"></span><span>ครอบครัว 40%</span></div>
+            <div style="display:flex;align-items:center;gap:0.5rem"><span style="width:10px;height:10px;border-radius:2px;background:#fb923c;flex-shrink:0"></span><span>เด็กเล็ก 26%</span></div>
+            <div style="display:flex;align-items:center;gap:0.5rem"><span style="width:10px;height:10px;border-radius:2px;background:#7c3aed;flex-shrink:0"></span><span>กรุ๊ปทัวร์ 20%</span></div>
+            <div style="display:flex;align-items:center;gap:0.5rem"><span style="width:10px;height:10px;border-radius:2px;background:#0ea5e9;flex-shrink:0"></span><span>อื่นๆ 14%</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Forecast Chart -->
+      <div class="ds-card">
+        <div class="ds-card-header">
+          <div class="ds-card-title">ForecastChart</div>
+          <div class="ds-card-desc">Area + Line · พยากรณ์รายได้ (confidence band)</div>
+        </div>
+        <div class="ds-card-content">
+          <svg viewBox="0 0 320 140" width="100%">
+            <defs>
+              <linearGradient id="fcGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stop-color="#a78bfa" stop-opacity="0.45"/>
+                <stop offset="95%" stop-color="#a78bfa" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <!-- Grid -->
+            <line x1="40" y1="15" x2="305" y2="15" stroke="#e5e5e5" stroke-dasharray="3 3"/>
+            <line x1="40" y1="50" x2="305" y2="50" stroke="#e5e5e5" stroke-dasharray="3 3"/>
+            <line x1="40" y1="85" x2="305" y2="85" stroke="#e5e5e5" stroke-dasharray="3 3"/>
+            <line x1="40" y1="110" x2="305" y2="110" stroke="#e5e5e5"/>
+            <!-- Confidence band (upper) -->
+            <path d="M55,90 C80,75 110,55 140,48 C170,41 200,35 230,28 C255,22 280,18 305,20 L305,110 L55,110 Z"
+                  fill="url(#fcGrad)"/>
+            <!-- Confidence band (lower — white mask) -->
+            <path d="M55,95 C80,88 110,80 140,75 C170,70 200,68 230,65 C255,63 280,62 305,62 L305,110 L55,110 Z"
+                  fill="white"/>
+            <!-- Forecast line -->
+            <path d="M55,92 C80,81 110,67 140,61 C170,55 200,51 230,46 C255,42 280,39 305,40"
+                  fill="none" stroke="#7c3aed" stroke-width="2"/>
+            <!-- Historical dashed (before forecast) -->
+            <path d="M55,92 C45,98 35,102 25,100"
+                  fill="none" stroke="#7c3aed" stroke-width="2" stroke-dasharray="4 3"/>
+            <!-- X labels -->
+            <text x="55"  y="126" text-anchor="middle" font-size="9" fill="#737373">มิ.ย.</text>
+            <text x="140" y="126" text-anchor="middle" font-size="9" fill="#737373">ก.ค.</text>
+            <text x="230" y="126" text-anchor="middle" font-size="9" fill="#737373">ส.ค.</text>
+            <text x="305" y="126" text-anchor="middle" font-size="9" fill="#737373">ก.ย.</text>
+            <!-- Y labels -->
+            <text x="35" y="18"  text-anchor="end" font-size="9" fill="#737373">100k</text>
+            <text x="35" y="53"  text-anchor="end" font-size="9" fill="#737373">75k</text>
+            <text x="35" y="88"  text-anchor="end" font-size="9" fill="#737373">50k</text>
+          </svg>
+          <div style="display:flex;gap:1rem;font-size:0.7rem;margin-top:0.25rem">
+            <span style="display:flex;align-items:center;gap:0.3rem"><span style="width:16px;height:2px;background:#7c3aed;display:inline-block"></span>พยากรณ์</span>
+            <span style="display:flex;align-items:center;gap:0.3rem"><span style="width:12px;height:8px;border-radius:2px;background:#a78bfa;opacity:0.4;display:inline-block"></span>Confidence Band</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mini Line Chart -->
+      <div class="ds-card">
+        <div class="ds-card-header">
+          <div class="ds-card-title">MiniLineChart</div>
+          <div class="ds-card-desc">Sparkline · ใช้ใน stat card</div>
+        </div>
+        <div class="ds-card-content">
+          <div style="display:flex;flex-direction:column;gap:1rem">
+            <!-- Stat card with sparkline -->
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:var(--muted);border-radius:var(--radius-lg)">
+              <div>
+                <div style="font-size:0.7rem;color:var(--muted-foreground)">ผู้เข้าชมวันนี้</div>
+                <div style="font-size:1.5rem;font-weight:700">1,248</div>
+                <span class="badge badge-success" style="font-size:0.6rem">+8.2%</span>
+              </div>
+              <svg viewBox="0 0 80 36" width="80" height="36">
+                <path d="M0,28 C10,24 16,18 24,14 C32,10 38,20 46,16 C54,12 60,6 80,8"
+                      fill="none" stroke="#e60023" stroke-width="2"/>
+              </svg>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:var(--muted);border-radius:var(--radius-lg)">
+              <div>
+                <div style="font-size:0.7rem;color:var(--muted-foreground)">รายได้วันนี้</div>
+                <div style="font-size:1.5rem;font-weight:700">฿84,320</div>
+                <span class="badge badge-success" style="font-size:0.6rem">+12.5%</span>
+              </div>
+              <svg viewBox="0 0 80 36" width="80" height="36">
+                <path d="M0,30 C10,26 16,22 24,16 C32,10 40,14 50,8 C60,4 68,6 80,4"
+                      fill="none" stroke="#e60023" stroke-width="2"/>
+              </svg>
+            </div>
+          </div>
+          <div style="font-size:0.7rem;color:var(--muted-foreground);margin-top:0.75rem">
+            <code style="font-family:monospace">import { MiniLineChart } from "@/components/admin/charts"</code>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </section>
+
+  <!-- ─── CSS VARIABLE TOKENS ────────────────────────────── -->
+  <section class="ds-section" id="tokens">
+    <div class="ds-section-header">
+      <h2>CSS Variables</h2>
+      <span>globals.css</span>
+    </div>
+    <div class="ds-table-wrap">
+      <table class="token-table">
+        <thead><tr><th>Variable</th><th>Value</th><th>Preview</th></tr></thead>
+        <tbody>
+          <tr><td>--background</td><td>oklch(0.99 0 0)</td><td><div class="token-dot" style="background:var(--background);border:1px solid var(--border)"></div></td></tr>
+          <tr><td>--foreground</td><td>oklch(0.145 0 0)</td><td><div class="token-dot" style="background:var(--foreground)"></div></td></tr>
+          <tr><td>--primary</td><td>oklch(0.557 0.241 28.59)</td><td><div class="token-dot" style="background:var(--primary)"></div></td></tr>
+          <tr><td>--primary-foreground</td><td>oklch(0.985 0 0)</td><td><div class="token-dot" style="background:var(--primary-foreground);border:1px solid var(--border)"></div></td></tr>
+          <tr><td>--secondary</td><td>oklch(0.97 0 0)</td><td><div class="token-dot" style="background:var(--secondary)"></div></td></tr>
+          <tr><td>--secondary-foreground</td><td>oklch(0.205 0 0)</td><td><div class="token-dot" style="background:var(--secondary-foreground)"></div></td></tr>
+          <tr><td>--muted</td><td>oklch(0.97 0 0)</td><td><div class="token-dot" style="background:var(--muted)"></div></td></tr>
+          <tr><td>--muted-foreground</td><td>oklch(0.45 0 0)</td><td><div class="token-dot" style="background:var(--muted-foreground)"></div></td></tr>
+          <tr><td>--accent</td><td>oklch(0.97 0.02 25)</td><td><div class="token-dot" style="background:var(--accent)"></div></td></tr>
+          <tr><td>--destructive</td><td>oklch(0.577 0.245 27.325)</td><td><div class="token-dot" style="background:var(--destructive)"></div></td></tr>
+          <tr><td>--border</td><td>oklch(0.92 0 0)</td><td><div class="token-dot" style="background:var(--border)"></div></td></tr>
+          <tr><td>--input</td><td>oklch(0.92 0 0)</td><td><div class="token-dot" style="background:var(--input)"></div></td></tr>
+          <tr><td>--ring</td><td>oklch(0.557 0.241 28.59)</td><td><div class="token-dot" style="background:var(--ring)"></div></td></tr>
+          <tr><td>--radius</td><td>0.75rem (12px)</td><td>—</td></tr>
+          <tr><td>--chart-1</td><td>oklch(0.557 0.241 28.59)</td><td><div class="token-dot" style="background:var(--chart-1)"></div></td></tr>
+          <tr><td>--chart-2</td><td>oklch(0.65 0.16 60)</td><td><div class="token-dot" style="background:var(--chart-2)"></div></td></tr>
+          <tr><td>--chart-3</td><td>oklch(0.55 0.18 240)</td><td><div class="token-dot" style="background:var(--chart-3)"></div></td></tr>
+          <tr><td>--chart-4</td><td>oklch(0.6 0.18 145)</td><td><div class="token-dot" style="background:var(--chart-4)"></div></td></tr>
+          <tr><td>--chart-5</td><td>oklch(0.55 0.2 290)</td><td><div class="token-dot" style="background:var(--chart-5)"></div></td></tr>
+          <tr><td>--brand-50</td><td>#fff1f2</td><td><div class="token-dot" style="background:var(--brand-50)"></div></td></tr>
+          <tr><td>--brand-500</td><td>#e60023</td><td><div class="token-dot" style="background:var(--brand-500)"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  // Highlight active nav on scroll
+  const sections = document.querySelectorAll('.ds-section');
+  const navItems = document.querySelectorAll('.ds-nav-item');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navItems.forEach(n => n.classList.remove('active'));
+        const active = document.querySelector(`.ds-nav-item[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -112,7 +112,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
       },
       pending: {
         label: 'รอชำระ',
-        className: 'bg-amber-100 text-amber-800',
+        className: 'bg-chateau-100 text-chateau-700',
         icon: Clock
       },
       overdue: {
@@ -227,7 +227,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                   daysUntilDue < 0
                     ? 'text-red-600'
                     : daysUntilDue <= 3
-                    ? 'text-amber-600'
+                    ? 'text-chateau'
                     : 'text-green-600'
                 }`}>
                   {daysUntilDue < 0

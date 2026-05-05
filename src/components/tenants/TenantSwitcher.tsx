@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Building2, ChevronDown, Check, Plus, Settings } from 'lucide-react';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { cn } from '@/lib/utils';
@@ -73,7 +73,7 @@ const TenantSwitcher = () => {
                         {userTenant.tenants.name}
                       </p>
                       {userTenant.tenant_id === currentTenant.id && (
-                        <Check className="w-4 h-4 text-indigo-600" />
+                        <Check className="w-4 h-4 text-chateau" />
                       )}
                     </div>
                     <p className="text-sm text-gray-500 capitalize">
@@ -86,7 +86,7 @@ const TenantSwitcher = () => {
 
             {/* Footer */}
             <div className="p-3 border-t border-gray-200 space-y-2">
-              <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+              <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-chateau hover:bg-chateau-50 rounded-lg transition-colors">
                 <Plus className="w-4 h-4" />
                 Create New Organization
               </button>

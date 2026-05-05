@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+﻿import { ReactNode } from 'react';
 import { useTenantPermission } from '@/hooks/useTenantData';
 
 interface RoleBasedNavItem {
@@ -32,7 +32,7 @@ const RoleBasedNav = ({ items, onItemClick, activeItem }: RoleBasedNavProps) => 
           onClick={() => onItemClick(item)}
           className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-left ${
             activeItem === item.href && !item.isLogout
-              ? 'bg-indigo-50 text-indigo-700 border-l-4 border-indigo-700'
+              ? 'bg-chateau-50 text-chateau-600 border-l-4 border-chateau-600'
               : item.isLogout
               ? 'text-red-600 hover:bg-red-50'
               : 'text-gray-700 hover:bg-gray-50'

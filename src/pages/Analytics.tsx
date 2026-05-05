@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { supabase } from '@/lib/supabase';
 import { Card } from '@/components/ui/card';
@@ -190,7 +190,7 @@ const Analytics: React.FC = () => {
       name: statusLabels[status] || status,
       value: count,
       color: {
-        new: '#ca8a04',
+        new: '#e60023',
         contacted: '#f59e0b',
         qualified: '#6b7280',
         converted: '#22c55e',
@@ -219,13 +219,13 @@ const Analytics: React.FC = () => {
   const leadStatusData = processLeadStatusData();
   const kpis = calculateKPIs();
 
-  const luxuryColors = ['#ca8a04', '#6b7280', '#f59e0b', '#22c55e', '#ef4444', '#8b5a2b'];
+  const luxuryColors = ['#e60023', '#6b7280', '#f59e0b', '#22c55e', '#ef4444', '#f97316'];
 
   if (loading) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
         <div className="flex items-center justify-center h-64">
-          <RefreshCw className="w-8 h-8 animate-spin text-amber-600" />
+          <RefreshCw className="w-8 h-8 animate-spin text-chateau" />
           <span className="ml-3 text-lg">กำลังโหลดข้อมูลวิเคราะห์...</span>
         </div>
       </div>
@@ -246,7 +246,7 @@ const Analytics: React.FC = () => {
             <select
               value={dateRange}
               onChange={(e) => setDateRange(e.target.value)}
-              className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+              className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-chateau focus:border-chateau-500"
             >
               <option value="7d">7 วันที่ผ่านมา</option>
               <option value="30d">30 วันที่ผ่านมา</option>
@@ -259,7 +259,7 @@ const Analytics: React.FC = () => {
               รีเฟรช
             </Button>
 
-            <Button className="bg-amber-600 hover:bg-amber-700" size="sm">
+            <Button className="bg-chateau hover:bg-chateau-600" size="sm">
               <Download className="w-4 h-4 mr-2" />
               ส่งออกรายงาน
             </Button>
@@ -274,8 +274,8 @@ const Analytics: React.FC = () => {
                 <p className="text-sm text-gray-600 mb-1">จำนวนลีดทั้งหมด</p>
                 <p className="text-2xl font-bold text-gray-900">{kpis.totalLeads.toLocaleString()}</p>
               </div>
-              <div className="p-3 bg-amber-100 rounded-full">
-                <Users className="w-6 h-6 text-amber-600" />
+              <div className="p-3 bg-chateau-100 rounded-full">
+                <Users className="w-6 h-6 text-chateau" />
               </div>
             </div>
           </Card>
@@ -332,7 +332,7 @@ const Analytics: React.FC = () => {
                   <XAxis dataKey="month" />
                   <YAxis />
                   <Tooltip />
-                  <Bar dataKey="campaigns" fill="#ca8a04" name="แคมเปญ" />
+                  <Bar dataKey="campaigns" fill="#e60023" name="แคมเปญ" />
                   <Bar dataKey="leads" fill="#6b7280" name="ลีด" />
                 </BarChart>
               </ResponsiveContainer>
@@ -392,8 +392,8 @@ const Analytics: React.FC = () => {
                   <Area
                     type="monotone"
                     dataKey="revenue"
-                    stroke="#ca8a04"
-                    fill="#ca8a04"
+                    stroke="#e60023"
+                    fill="#e60023"
                     fillOpacity={0.3}
                   />
                 </AreaChart>
@@ -406,17 +406,17 @@ const Analytics: React.FC = () => {
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold">การวิเคราะห์ขั้นสูง</h3>
-                <Badge className="bg-amber-600 text-white">Enterprise</Badge>
+                <Badge className="bg-chateau text-white">Enterprise</Badge>
               </div>
               <div className="space-y-4">
-                <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg border border-amber-200">
-                  <h4 className="font-semibold text-amber-900 mb-2">🎯 การพยากรณ์ยอดขาย</h4>
-                  <p className="text-sm text-amber-800">
+                <div className="p-4 bg-gradient-to-r from-chateau-50 to-chateau-50 rounded-lg border border-chateau-100">
+                  <h4 className="font-semibold text-chateau-800 mb-2">🎯 การพยากรณ์ยอดขาย</h4>
+                  <p className="text-sm text-chateau-700">
                     ระบบ AI พยากรณ์ยอดขายในเดือนหน้า: {(kpis.totalRevenue * 1.15).toLocaleString()} ฿ (+15%)
                   </p>
                 </div>
 
-                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                <div className="p-4 bg-gradient-to-r from-blue-50 to-blue-50 rounded-lg border border-blue-200">
                   <h4 className="font-semibold text-blue-900 mb-2">📊 Customer Lifetime Value</h4>
                   <p className="text-sm text-blue-800">
                     มูลค่าลูกค้าตลอดชีวิต (CLV): {(kpis.avgDealSize * 12).toLocaleString()} ฿

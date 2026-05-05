@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { supabase } from '@/lib/supabase';
 import { Card } from '@/components/ui/card';
@@ -219,7 +219,7 @@ const ApiManagement: React.FC = () => {
     return (
       <div className="p-6 max-w-7xl mx-auto">
         <div className="flex items-center justify-center h-64">
-          <RefreshCw className="w-8 h-8 animate-spin text-amber-600" />
+          <RefreshCw className="w-8 h-8 animate-spin text-chateau" />
           <span className="ml-3 text-lg">กำลังโหลดข้อมูล API...</span>
         </div>
       </div>
@@ -237,12 +237,12 @@ const ApiManagement: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            <Badge className="bg-amber-600 text-white">
+            <Badge className="bg-chateau text-white">
               แผน {planLabel} - {currentLimit.requests} คำขอ{currentLimit.period}
             </Badge>
             <Button
               onClick={() => setShowCreateForm(true)}
-              className="bg-amber-600 hover:bg-amber-700"
+              className="bg-chateau hover:bg-chateau-600"
             >
               <Plus className="w-4 h-4 mr-2" />
               สร้าง API Key ใหม่
@@ -296,7 +296,7 @@ const ApiManagement: React.FC = () => {
                   value={newKeyName}
                   onChange={(e) => setNewKeyName(e.target.value)}
                   placeholder="เช่น Production API, Development API"
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-chateau focus:border-chateau-500"
                 />
               </div>
 
@@ -327,7 +327,7 @@ const ApiManagement: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-3 pt-4">
-                <Button onClick={handleCreateApiKey} className="bg-amber-600 hover:bg-amber-700">
+                <Button onClick={handleCreateApiKey} className="bg-chateau hover:bg-chateau-600">
                   <Key className="w-4 h-4 mr-2" />
                   สร้าง API Key
                 </Button>
@@ -430,7 +430,7 @@ const ApiManagement: React.FC = () => {
           <Card className="p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">การใช้งาน API วันนี้</h3>
-              <Activity className="w-5 h-5 text-amber-600" />
+              <Activity className="w-5 h-5 text-chateau" />
             </div>
             <div className="space-y-3">
               <div>
@@ -439,7 +439,7 @@ const ApiManagement: React.FC = () => {
                   <span className="font-semibold">1,247</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-                  <div className="bg-amber-600 h-2 rounded-full" style={{ width: '65%' }}></div>
+                  <div className="bg-chateau h-2 rounded-full" style={{ width: '65%' }}></div>
                 </div>
               </div>
               <div className="flex items-center justify-between">
@@ -499,12 +499,12 @@ const ApiManagement: React.FC = () => {
         </div>
 
         {/* Security Notice */}
-        <Card className="p-6 bg-amber-50 border-amber-200">
+        <Card className="p-6 bg-chateau-50 border-chateau-100">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+            <AlertTriangle className="w-5 h-5 text-chateau mt-0.5" />
             <div>
-              <h4 className="font-semibold text-amber-900 mb-2">ข้อควรระวังด้านความปลอดภัย</h4>
-              <ul className="text-sm text-amber-800 space-y-1">
+              <h4 className="font-semibold text-chateau-800 mb-2">ข้อควรระวังด้านความปลอดภัย</h4>
+              <ul className="text-sm text-chateau-700 space-y-1">
                 <li>• เก็บ API Keys ในที่ปลอดภัยและอย่าแชร์กับผู้อื่น</li>
                 <li>• ใช้สิทธิ์ขั้นต่ำที่จำเป็นสำหรับแต่ละ API Key</li>
                 <li>• ตรวจสอบการใช้งานเป็นประจำและลบ Keys ที่ไม่ใช้แล้ว</li>

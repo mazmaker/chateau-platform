@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -137,7 +137,7 @@ const StatusLogModal = ({ invoice, isOpen, onClose, refreshTrigger }: StatusLogM
         return <FileX className="w-4 h-4 text-gray-600" />;
       case 'pending':
       default:
-        return <FileText className="w-4 h-4 text-amber-600" />;
+        return <FileText className="w-4 h-4 text-chateau" />;
     }
   };
 

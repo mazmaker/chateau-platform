@@ -1,13 +1,10 @@
 import {
   LayoutDashboard,
   Building2,
-  Home,
   Users,
-  UserCog,
   Megaphone,
   Settings,
   LogOut,
-  Castle,
   Crown,
   Shield,
   Briefcase,
@@ -17,14 +14,13 @@ import {
   TrendingUp,
   BarChart3,
   Key,
-  Lock
+  Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
-import { AdminGuard, SalesGuard, OwnerGuard, usePermissions } from "@/components/auth/PermissionGuard";
-import { useSubscriptionFeatures } from "@/hooks/useSubscriptionFeatures";
-import { CompanyLogo } from "@/components/company/CompanyLogo";
+import { usePermissions } from "@/components/auth/PermissionGuard";
+import { useSubscriptionFeatures, SubscriptionFeature } from "@/hooks/useSubscriptionFeatures";
 
 interface NavItem {
   icon: React.ElementType;
@@ -32,49 +28,39 @@ interface NavItem {
   href: string;
   isLogout?: boolean;
   requiredRoles?: string[];
-  requiredFeature?: string;
+  requiredFeature?: SubscriptionFeature;
   isPremium?: boolean;
 }
 
+const NAV_GROUPS: { label: string | null; hrefs: string[] }[] = [
+  { label: null, hrefs: ["/", "/owner"] },
+  { label: "บริษัท", hrefs: ["/tenants", "/payments"] },
+  { label: "ธุรกิจ", hrefs: ["/properties", "/leads", "/campaigns", "/analytics", "/api"] },
+  { label: "จัดการ", hrefs: ["/users", "/customization", "/settings"] },
+];
+
 const getAllNavItems = (): NavItem[] => [
   { icon: LayoutDashboard, label: "ภาพรวม", href: "/" },
-  // Owner-only SaaS features
   { icon: TrendingUp, label: "Owner Dashboard", href: "/owner", requiredRoles: ["OWNER"] },
   { icon: Building2, label: "จัดการบริษัท", href: "/tenants", requiredRoles: ["OWNER"] },
-  { icon: CreditCard, label: "จัดการการชำระเงิน", href: "/payments", requiredRoles: ["OWNER"] },
-  // Company features
+  { icon: CreditCard, label: "การชำระเงิน", href: "/payments", requiredRoles: ["OWNER"] },
   { icon: Building2, label: "โครงการ", href: "/properties", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
-  // Premium subscription features
-  { icon: BarChart3, label: "รายงานวิเคราะห์", href: "/analytics", requiredRoles: ["OWNER", "ADMIN"], requiredFeature: "analytics", isPremium: true },
-  { icon: Key, label: "การจัดการ API", href: "/api", requiredRoles: ["OWNER", "ADMIN"], requiredFeature: "api_access", isPremium: true },
-  // Admin features
-  { icon: Users, label: "จัดการผู้ใช้", href: "/users", requiredRoles: ["OWNER", "ADMIN"] },
   { icon: FileText, label: "Leads", href: "/leads", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
   { icon: Megaphone, label: "แคมเปญ", href: "/campaigns", requiredRoles: ["OWNER", "ADMIN"] },
+  { icon: BarChart3, label: "รายงานวิเคราะห์", href: "/analytics", requiredRoles: ["OWNER", "ADMIN"], requiredFeature: "analytics", isPremium: true },
+  { icon: Key, label: "การจัดการ API", href: "/api", requiredRoles: ["OWNER", "ADMIN"], requiredFeature: "api_access", isPremium: true },
+  { icon: Users, label: "จัดการผู้ใช้", href: "/users", requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Palette, label: "ปรับแต่งระบบ", href: "/customization", requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Settings, label: "การตั้งค่า", href: "/settings", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
   { icon: LogOut, label: "ออกจากระบบ", href: "/logout", isLogout: true },
 ];
 
-const getRoleIcon = (userRole: string | null) => {
-  switch (userRole) {
-    case 'owner':
-      return <Crown className="w-4 h-4 text-yellow-600" />;
-    case 'admin':
-      return <Shield className="w-4 h-4 text-blue-600" />;
-    case 'sales':
-      return <Briefcase className="w-4 h-4 text-green-600" />;
-    default:
-      return <Users className="w-4 h-4 text-gray-600" />;
-  }
-};
-
 const getRoleLabel = (userRole: string | null) => {
   switch (userRole) {
-    case 'owner': return 'เจ้าของแพลตฟอร์ม';
-    case 'admin': return 'ผู้ดูแลบริษัท';
-    case 'sales': return 'พนักงานขาย';
-    default: return 'ผู้ใช้';
+    case "owner": return "เจ้าของแพลตฟอร์ม";
+    case "admin": return "ผู้ดูแลบริษัท";
+    case "sales": return "พนักงานขาย";
+    default: return "ผู้ใช้";
   }
 };
 
@@ -86,14 +72,14 @@ interface SidebarProps {
 const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, signOut, currentTenant, userRole, userProfile } = useSimpleAuth();
-  const { isOwner, isAdmin, isSales } = usePermissions();
-  const { hasFeature, currentPlan } = useSubscriptionFeatures();
+  const { user, signOut, userRole, userProfile } = useSimpleAuth();
+  const { isOwner, isAdmin } = usePermissions();
+  const { hasFeature } = useSubscriptionFeatures();
 
   const handleNavClick = async (item: NavItem) => {
     if (item.isLogout) {
       await signOut();
-      navigate('/auth/login');
+      navigate("/auth/login");
     } else {
       navigate(item.href);
       onClose();
@@ -101,193 +87,165 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   };
 
   const isActive = (href: string) => {
-    if (href === '/') {
-      return location.pathname === '/';
-    }
+    if (href === "/") return location.pathname === "/";
     return location.pathname.startsWith(href);
   };
 
   const getUserInitials = () => {
     if (userProfile?.full_name) {
-      return userProfile.full_name.split(' ').map((n: string) => n[0]).join('').toUpperCase();
+      return userProfile.full_name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
     }
-    return user?.email?.split('@')[0].toUpperCase() || 'U';
+    return user?.email?.slice(0, 2).toUpperCase() || "U";
   };
 
-  const getUserName = () => {
-    return userProfile?.full_name || user?.email || 'User';
-  };
+  const getUserName = () => userProfile?.full_name || user?.email || "User";
 
   const getFilteredNavItems = (): NavItem[] => {
-    const allItems = getAllNavItems();
-    return allItems
-      .filter(item => {
-        // Check role-based permissions
-        if (item.requiredRoles && !item.requiredRoles.includes(userRole?.toUpperCase() || '')) {
-          return false;
-        }
-
-        // Check subscription-based permissions
+    return getAllNavItems()
+      .filter((item) => {
+        if (item.isLogout) return true;
+        if (item.requiredRoles && !item.requiredRoles.includes(userRole?.toUpperCase() || "")) return false;
         if (item.requiredFeature && !hasFeature(item.requiredFeature)) {
-          // For owner role, always show premium features (they can see upgrade prompts)
-          if (isOwner) {
-            return true;
-          }
-          return false;
+          return isOwner;
         }
-
         return true;
       })
-      .map(item => {
-        // ADMIN sees "พนักงานขาย" instead of "จัดการผู้ใช้"
-        if (item.href === '/users' && isAdmin && !isOwner) {
-          return { ...item, label: 'พนักงานขาย' };
+      .map((item) => {
+        if (item.href === "/users" && isAdmin && !isOwner) {
+          return { ...item, label: "พนักงานขาย" };
         }
         return item;
       });
   };
 
+  const filteredItems = getFilteredNavItems();
+  const logoutItem = filteredItems.find((i) => i.isLogout);
+  const mainItems = filteredItems.filter((i) => !i.isLogout);
+
   return (
     <>
-      {/* Mobile Overlay */}
+      {/* Mobile overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={onClose}
         />
       )}
 
-      {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 h-full w-[260px] bg-luxury-white border-r border-border z-50",
+          "light-sidebar",
+          "fixed left-0 top-0 h-full w-[260px] z-50",
           "flex flex-col transition-transform duration-300 ease-in-out",
-          "shadow-soft-lg backdrop-blur-sm",
           "lg:translate-x-0",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         {/* Logo */}
-        <div className="p-6 border-b border-border bg-luxury-white">
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid #e5e7eb" }}>
           <div className="flex items-center gap-3">
-            {/* Company Logo */}
-            <CompanyLogo size="2xl" />
-
-            <div>
-              <h1 className="text-xl font-bold text-charcoal">CHATEAU</h1>
-              <p className="text-xs text-luxury-gray truncate font-medium">PLATFORM</p>
+            <div className="sidebar-logo-icon w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0">
+              <span className="font-bold text-base leading-none">C</span>
+            </div>
+            <div className="min-w-0">
+              <p className="sidebar-logo-text font-semibold text-sm leading-tight">CHATEAU</p>
+              <p className="sidebar-logo-sub text-xs leading-tight truncate">
+                {userRole === "owner" ? "Platform Owner" : userRole === "admin" ? "Admin Portal" : "Sales Portal"}
+              </p>
             </div>
           </div>
         </div>
 
-        {/* User Profile Card */}
-        <div className="p-4">
-          <div className="gradient-card rounded-xl p-4 gradient-card-hover">
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className="w-10 h-10 rounded-full overflow-hidden gradient-charcoal flex items-center justify-center shadow-soft">
-                  {userProfile?.avatar_url ? (
-                    <img src={userProfile.avatar_url} alt={getUserName()} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-luxury-white text-sm font-semibold ">
-                      {getUserInitials()}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-charcoal truncate ">{getUserName()}</p>
-                <p className="text-xs text-luxury-gray capitalize ">{userRole || 'User'}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Role-Based Navigation */}
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto bg-luxury-white rounded-xl mx-4 my-2 shadow-soft">
-          {getFilteredNavItems().map((item) => {
-            const hasRequiredFeature = item.requiredFeature ? hasFeature(item.requiredFeature) : true;
-            const isLocked = item.requiredFeature && !hasRequiredFeature;
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto" style={{ padding: "12px" }}>
+          {NAV_GROUPS.map((group) => {
+            const groupItems = mainItems.filter((item) => group.hrefs.includes(item.href));
+            if (groupItems.length === 0) return null;
 
             return (
-              <button
-                key={item.label}
-                onClick={() => handleNavClick(item)}
-                className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ",
-                  "hover:bg-muted group text-left relative",
-                  isActive(item.href) && !item.isLogout && "gradient-card shadow-soft bg-royal-gold/5 border border-royal-gold/20",
-                  !isActive(item.href) && !item.isLogout && "text-luxury-gray group-hover:text-charcoal",
-                  item.isLogout && "text-luxury-gray group-hover:text-red-600",
-                  isLocked && "opacity-75"
+              <div key={group.label ?? "overview"} style={{ marginBottom: "4px" }}>
+                {group.label && (
+                  <p
+                    className="sidebar-section-label font-semibold uppercase"
+                    style={{ padding: "16px 12px 6px", fontSize: "10px", letterSpacing: "0.1em" }}
+                  >
+                    {group.label}
+                  </p>
                 )}
-                disabled={isLocked}
-              >
-                <item.icon className={cn(
-                  "w-5 h-5 transition-colors",
-                  isActive(item.href) && !item.isLogout && "text-royal-gold",
-                  !isActive(item.href) && !item.isLogout && "text-luxury-gray group-hover:text-charcoal",
-                  item.isLogout && "text-luxury-gray group-hover:text-red-600",
-                  isLocked && "text-amber-600"
-                )} />
-                <span className={cn(
-                  "font-medium flex-1",
-                  isActive(item.href) && !item.isLogout && "text-charcoal font-semibold",
-                  !isActive(item.href) && !item.isLogout && "text-luxury-gray group-hover:text-charcoal",
-                  item.isLogout && "text-luxury-gray group-hover:text-red-600",
-                  isLocked && "text-amber-700"
-                )}>
-                  {item.label}
-                </span>
+                {groupItems.map((item) => {
+                  const hasRequiredFeature = item.requiredFeature ? hasFeature(item.requiredFeature) : true;
+                  const isLocked = item.requiredFeature && !hasRequiredFeature;
+                  const active = isActive(item.href);
 
-                <div className="ml-auto flex items-center gap-1">
-                  {/* Premium feature indicators */}
-                  {item.isPremium && isLocked && (
-                    <Lock className="w-3 h-3 text-amber-600" />
-                  )}
-                  {item.isPremium && hasRequiredFeature && (
-                    <Crown className="w-3 h-3 text-amber-600" />
-                  )}
-
-                  {/* Role indicators */}
-                  {item.requiredRoles && (
-                    <>
-                      {isSales && <Briefcase className="w-4 h-4 text-emerald-600 opacity-70" />}
-                      {isAdmin && <Shield className="w-4 h-4 text-luxury-gray-dark opacity-70" />}
-                      {isOwner && <Crown className="w-4 h-4 text-royal-gold opacity-70" />}
-                    </>
-                  )}
-                </div>
-              </button>
+                  return (
+                    <button
+                      key={item.href}
+                      onClick={() => handleNavClick(item)}
+                      disabled={!!isLocked}
+                      className={cn(
+                        "sidebar-nav-item",
+                        active && "active",
+                        "w-full flex items-center gap-3 text-left rounded-lg transition-all duration-150",
+                        isLocked && "opacity-50 cursor-not-allowed"
+                      )}
+                      style={{ padding: "10px 12px", marginBottom: "2px" }}
+                    >
+                      <item.icon
+                        className={cn("nav-icon flex-shrink-0", active && "text-white")}
+                        size={18}
+                      />
+                      <span className="text-sm font-medium flex-1 truncate">{item.label}</span>
+                      {item.isPremium && isLocked && (
+                        <Lock size={12} style={{ color: "#52525b" }} />
+                      )}
+                      {item.isPremium && hasRequiredFeature && (
+                        <Crown size={12} style={{ color: "rgba(245,158,11,0.7)" }} />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             );
           })}
         </nav>
 
-        {/* Role Info Banner */}
-        <div className="p-4 border-t border-border">
-          <div className={cn(
-            "rounded-lg p-3 text-xs gradient-card ",
-            isOwner && "border border-royal-gold/30 bg-royal-gold/5 text-royal-gold-light",
-            isAdmin && "border border-luxury-gray/30 bg-luxury-gray/5 text-luxury-gray-dark",
-            isSales && "border border-emerald-500/30 bg-emerald-500/5 text-emerald-700"
-          )}>
-            <div className="flex items-center gap-2 font-medium mb-1">
-              {getRoleIcon(userRole)}
-              <span>สิทธิ์: {getRoleLabel(userRole)}</span>
+        {/* Logout */}
+        {logoutItem && (
+          <div style={{ padding: "0 12px 8px" }}>
+            <button
+              onClick={() => handleNavClick(logoutItem)}
+              className="sidebar-logout-btn w-full flex items-center gap-3 text-left rounded-lg transition-all duration-150"
+              style={{ padding: "10px 12px" }}
+            >
+              <LogOut size={18} className="flex-shrink-0" />
+              <span className="text-sm font-medium">{logoutItem.label}</span>
+            </button>
+          </div>
+        )}
+
+        {/* User profile */}
+        <div style={{ padding: "16px", borderTop: "1px solid #e5e7eb" }}>
+          <div className="flex items-center gap-3">
+            <div
+              className="sidebar-user-avatar w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden"
+              style={{ border: "1px solid" }}
+            >
+              {userProfile?.avatar_url ? (
+                <img src={userProfile.avatar_url} alt={getUserName()} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-xs font-semibold">{getUserInitials()}</span>
+              )}
             </div>
-            <div className="space-y-1 opacity-90">
-              {isSales && <p>• จัดการลูกค้าและ Leads</p>}
-              {isAdmin && <p>• จัดการบริษัท, โครงการ, ผู้ใช้</p>}
-              {isOwner && <p>• จัดการทั้งระบบ SaaS, Billing, Tenants</p>}
+            <div className="min-w-0 flex-1">
+              <p className="sidebar-user-name text-sm font-medium truncate leading-tight">{getUserName()}</p>
+              <p className="sidebar-user-role text-xs truncate leading-tight">{getRoleLabel(userRole)}</p>
+            </div>
+            <div className="flex-shrink-0">
+              {userRole === "owner" && <Crown size={14} style={{ color: "#e60023" }} />}
+              {userRole === "admin" && <Shield size={14} style={{ color: "#6b7280" }} />}
+              {userRole === "sales" && <Briefcase size={14} style={{ color: "#6b7280" }} />}
             </div>
           </div>
-        </div>
-
-        {/* Footer */}
-        <div className="p-4 border-t border-border">
-          <p className="text-xs text-luxury-gray text-center ">
-            © 2024 Chateau PropTech
-          </p>
         </div>
       </aside>
     </>

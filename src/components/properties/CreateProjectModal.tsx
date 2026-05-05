@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import {
   X,
   Save,
@@ -616,9 +616,9 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-[#676AF1]/10 via-[#8B5CF6]/10 to-[#676AF1]/10">
+        <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-[#e60023]/10 via-[#8B5CF6]/10 to-[#e60023]/10">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-[#676AF1] to-[#8B5CF6] rounded-xl shadow-md">
+            <div className="p-2 bg-gradient-to-br from-[#e60023] to-[#8B5CF6] rounded-xl shadow-md">
               <Building2 className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -1130,7 +1130,7 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
             type="submit"
             onClick={handleSubmit}
             disabled={loading}
-            className="flex-1 bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] hover:opacity-90"
+            className="flex-1 bg-gradient-to-r from-[#e60023] to-[#8B5CF6] hover:opacity-90"
           >
             {loading ? (
               <div className="flex items-center justify-center">

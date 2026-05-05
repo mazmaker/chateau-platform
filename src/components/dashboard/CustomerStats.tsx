@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { Users, TrendingUp, UserCheck, Funnel, Activity } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -173,8 +173,8 @@ const CustomerStats = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="text-center">
-            <div className="flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-lg mx-auto mb-3">
-              <Users className="w-6 h-6 text-indigo-600" />
+            <div className="flex items-center justify-center w-12 h-12 bg-chateau-100 rounded-lg mx-auto mb-3">
+              <Users className="w-6 h-6 text-chateau" />
             </div>
             <p className="text-2xl font-bold text-gray-900">{totalLeads}</p>
             <p className="text-xs text-gray-600 mt-1">Leads ทั้งหมด</p>

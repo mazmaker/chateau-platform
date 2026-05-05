@@ -1,4 +1,4 @@
-
+﻿
 
 /* CHATEAU Platform - Luxury Design System with Noto Sans Thai */
 
@@ -125,31 +125,31 @@ code {
 }
 
 :root {
-  /* CHATEAU Platform - Luxury Design System */
+  /* CHATEAU Platform — Kids Kingdom Design System */
   --background: #F9FAFB;
   --foreground: #1c1917;
   --card: #FFFFFF;
   --card-foreground: #1c1917;
   --popover: #FFFFFF;
   --popover-foreground: #1c1917;
-  --primary: #ca8a04;
+  --primary: #e60023;
   --primary-foreground: #FFFFFF;
   --secondary: #4B5563;
   --secondary-foreground: #FFFFFF;
   --muted: #F9FAFB;
   --muted-foreground: #6B7280;
-  --accent: #8b5a2b;
-  --accent-foreground: #FFFFFF;
+  --accent: #fff1f2;
+  --accent-foreground: #e60023;
   --destructive: #ef4444;
   --destructive-foreground: #FFFFFF;
   --border: #e5e7eb;
   --input: #e5e7eb;
-  --ring: #ca8a04;
-  --chart-1: #ca8a04;
-  --chart-2: #8b5a2b;
+  --ring: #e60023;
+  --chart-1: #e60023;
+  --chart-2: #f97316;
   --chart-3: #10b981;
-  --chart-4: #d97706;
-  --chart-5: #ef4444;
+  --chart-4: #3b82f6;
+  --chart-5: #8b5cf6;
   --radius: 0.75rem;
 }
 
@@ -260,13 +260,13 @@ code {
   }
 }
 
-/* Luxury Design System - Gradients */
+/* Kids Kingdom Design System - Gradients */
 .gradient-primary {
-  background: linear-gradient(135deg, #ca8a04 0%, #d97706 50%, #8b5a2b 100%);
+  background: linear-gradient(135deg, #e60023 0%, #b30019 100%);
 }
 
 .gradient-primary-text {
-  background: linear-gradient(135deg, #ca8a04 0%, #d97706 100%);
+  background: linear-gradient(135deg, #e60023 0%, #b30019 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -293,7 +293,7 @@ code {
 .gradient-card-hover:hover {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 10px 15px rgba(0, 0, 0, 0.08);
   transform: translateY(-1px);
-  border-color: rgba(202, 138, 4, 0.2);
+  border-color: rgba(230, 0, 35, 0.2);
 }
 
 /* Glass morphism for modern feel */
@@ -304,18 +304,18 @@ code {
   border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
-/* Luxury Button System */
+/* Primary Button */
 .btn-primary {
-  background: linear-gradient(135deg, #ca8a04 0%, #d97706 100%);
+  background: #e60023;
   color: #ffffff;
-  box-shadow: 0 2px 4px rgba(202, 138, 4, 0.2);
+  box-shadow: 0 2px 4px rgba(230, 0, 35, 0.2);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   border: none;
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, #b8790a 0%, #c2750b 100%);
-  box-shadow: 0 4px 8px rgba(202, 138, 4, 0.3);
+  background: #b30019;
+  box-shadow: 0 4px 8px rgba(230, 0, 35, 0.3);
   transform: translateY(-1px);
 }
 
@@ -359,7 +359,7 @@ code {
 
 .stat-card:hover {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 10px 15px rgba(0, 0, 0, 0.08);
-  border-color: rgba(202, 138, 4, 0.2);
+  border-color: rgba(230, 0, 35, 0.2);
 }
 
 .stat-card::before {
@@ -369,11 +369,11 @@ code {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #ca8a04, #d97706, #8b5a2b);
+  background: linear-gradient(90deg, #e60023, #d97706, #f97316);
 }
 
 .stat-card-gold::before {
-  background: linear-gradient(90deg, #ca8a04, #d97706);
+  background: linear-gradient(90deg, #e60023, #d97706);
 }
 
 .stat-card-charcoal::before {
@@ -486,8 +486,8 @@ code {
 
 .input-luxury:focus {
   outline: none;
-  border-color: #ca8a04;
-  box-shadow: 0 0 0 3px rgba(202, 138, 4, 0.1);
+  border-color: #e60023;
+  box-shadow: 0 0 0 3px rgba(230, 0, 35, 0.1);
 }
 
 .input-luxury:hover {
@@ -497,8 +497,8 @@ code {
 /* Luxury Badge System */
 .badge-luxury {
   background: #FFFFFF;
-  border: 1px solid rgba(202, 138, 4, 0.2);
-  color: #ca8a04;
+  border: 1px solid rgba(230, 0, 35, 0.2);
+  color: #e60023;
   padding: 0.25rem 0.75rem;
   border-radius: 9999px;
   font-size: 0.75rem;
@@ -508,9 +508,9 @@ code {
 }
 
 .badge-gold {
-  background: rgba(202, 138, 4, 0.1);
-  border-color: rgba(202, 138, 4, 0.3);
-  color: #ca8a04;
+  background: rgba(230, 0, 35, 0.1);
+  border-color: rgba(230, 0, 35, 0.3);
+  color: #e60023;
 }
 
 .badge-charcoal {
@@ -526,15 +526,15 @@ code {
 }
 
 /* Enhanced KPI and Chart Color System */
-.chart-color-gold { color: #ca8a04; }
-.chart-color-brown { color: #8b5a2b; }
+.chart-color-gold { color: #e60023; }
+.chart-color-brown { color: #f97316; }
 .chart-color-charcoal { color: #1c1917; }
 .chart-color-gray { color: #4B5563; }
 .chart-color-success { color: #22c55e; }
 .chart-color-warning { color: #f97316; }
 .chart-color-danger { color: #ef4444; }
 
-.bg-chart-gold { background-color: rgba(202, 138, 4, 0.1); }
+.bg-chart-gold { background-color: rgba(230, 0, 35, 0.1); }
 .bg-chart-brown { background-color: rgba(139, 90, 43, 0.1); }
 .bg-chart-charcoal { background-color: rgba(28, 25, 23, 0.1); }
 .bg-chart-gray { background-color: rgba(75, 85, 99, 0.1); }
@@ -548,7 +548,7 @@ code {
 }
 
 .text-shadow-gold {
-  text-shadow: 0 1px 3px rgba(202, 138, 4, 0.2);
+  text-shadow: 0 1px 3px rgba(230, 0, 35, 0.2);
 }
 
 /* Advanced Gradient Backgrounds */
@@ -577,4 +577,95 @@ code {
 .luxury-interactive:active {
   transform: translateY(0);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* ─── Light Sidebar (Kids Kingdom style) ──────────────────────────────────
+   Outside @layer so these beat all layered Tailwind utilities.
+─────────────────────────────────────────────────────────────────────────── */
+aside.light-sidebar,
+aside.light-sidebar * {
+  box-sizing: border-box;
+}
+
+aside.light-sidebar {
+  background-color: #ffffff !important;
+  border-right: 1px solid #e5e7eb !important;
+  color: #374151 !important;
+}
+
+aside.light-sidebar p,
+aside.light-sidebar span,
+aside.light-sidebar h1,
+aside.light-sidebar h2,
+aside.light-sidebar h3 {
+  color: inherit !important;
+  line-height: inherit !important;
+}
+
+aside.light-sidebar .sidebar-logo-text {
+  color: #e60023 !important;
+}
+
+aside.light-sidebar .sidebar-logo-sub {
+  color: #9ca3af !important;
+}
+
+aside.light-sidebar .sidebar-logo-icon {
+  background-color: #e60023 !important;
+}
+
+aside.light-sidebar .sidebar-logo-icon span {
+  color: #ffffff !important;
+}
+
+aside.light-sidebar .sidebar-section-label {
+  color: #9ca3af !important;
+}
+
+aside.light-sidebar .sidebar-nav-item {
+  color: #374151 !important;
+  background-color: transparent !important;
+}
+
+aside.light-sidebar .sidebar-nav-item:hover {
+  color: #111827 !important;
+  background-color: #f3f4f6 !important;
+}
+
+aside.light-sidebar .sidebar-nav-item.active {
+  color: #e60023 !important;
+  background-color: #fff1f2 !important;
+  font-weight: 600;
+}
+
+aside.light-sidebar .sidebar-nav-item.active .nav-icon,
+aside.light-sidebar .sidebar-nav-item.active span {
+  color: #e60023 !important;
+}
+
+aside.light-sidebar .sidebar-nav-item .nav-icon {
+  color: #6b7280 !important;
+}
+
+aside.light-sidebar .sidebar-logout-btn {
+  color: #6b7280 !important;
+}
+
+aside.light-sidebar .sidebar-logout-btn:hover {
+  color: #dc2626 !important;
+  background-color: #fef2f2 !important;
+}
+
+aside.light-sidebar .sidebar-user-name {
+  color: #111827 !important;
+}
+
+aside.light-sidebar .sidebar-user-role {
+  color: #6b7280 !important;
+}
+
+aside.light-sidebar .sidebar-user-avatar {
+  background-color: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+  color: #e60023 !important;
 }

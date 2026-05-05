@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -388,7 +388,7 @@ const PaymentModal = ({ isOpen, onClose, leadId, leadName }: PaymentModalProps) 
                 <Button
                   onClick={handleAddPayment}
                   disabled={loading || !formData.amount}
-                  className="bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] hover:opacity-90"
+                  className="bg-gradient-to-r from-[#e60023] to-[#8B5CF6] hover:opacity-90"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   บันทึกการชำระเงิน
@@ -409,7 +409,7 @@ const PaymentModal = ({ isOpen, onClose, leadId, leadName }: PaymentModalProps) 
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
-                      <TableRow className="bg-gradient-to-r from-[#676AF1]/10 to-[#8B5CF6]/10">
+                      <TableRow className="bg-gradient-to-r from-[#e60023]/10 to-[#8B5CF6]/10">
                         <TableHead className="font-semibold">วันที่ชำระ</TableHead>
                         <TableHead className="font-semibold text-right">จำนวนเงิน</TableHead>
                         <TableHead className="font-semibold">หมายเหตุ</TableHead>

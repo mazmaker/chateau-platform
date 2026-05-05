@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Eye, EyeOff, Lock, Mail, User, Building2, Phone, Check } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -103,13 +103,13 @@ const RegisterForm = () => {
           <div className="flex items-center justify-center mb-8">
             <div className="flex items-center space-x-2">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                step >= 1 ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-600'
+                step >= 1 ? 'bg-chateau text-white' : 'bg-gray-200 text-gray-600'
               }`}>
                 1
               </div>
-              <div className={`w-8 h-0.5 ${step >= 2 ? 'bg-indigo-600' : 'bg-gray-200'}`}></div>
+              <div className={`w-8 h-0.5 ${step >= 2 ? 'bg-chateau' : 'bg-gray-200'}`}></div>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                step >= 2 ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-600'
+                step >= 2 ? 'bg-chateau text-white' : 'bg-gray-200 text-gray-600'
               }`}>
                 2
               </div>
@@ -149,7 +149,7 @@ const RegisterForm = () => {
                       name="fullName"
                       type="text"
                       required
-                      className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau focus:border-transparent"
                       placeholder="John Doe"
                       value={formData.fullName}
                       onChange={handleChange}
@@ -172,7 +172,7 @@ const RegisterForm = () => {
                       type="email"
                       autoComplete="email"
                       required
-                      className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau focus:border-transparent"
                       placeholder="you@example.com"
                       value={formData.email}
                       onChange={handleChange}
@@ -193,7 +193,7 @@ const RegisterForm = () => {
                       id="phone"
                       name="phone"
                       type="tel"
-                      className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau focus:border-transparent"
                       placeholder="+1 (555) 000-0000"
                       value={formData.phone}
                       onChange={handleChange}
@@ -215,7 +215,7 @@ const RegisterForm = () => {
                       name="password"
                       type={showPassword ? 'text' : 'password'}
                       required
-                      className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau focus:border-transparent"
                       placeholder="Create a strong password"
                       value={formData.password}
                       onChange={handleChange}
@@ -249,7 +249,7 @@ const RegisterForm = () => {
                       name="confirmPassword"
                       type={showConfirmPassword ? 'text' : 'password'}
                       required
-                      className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau focus:border-transparent"
                       placeholder="Confirm your password"
                       value={formData.confirmPassword}
                       onChange={handleChange}
@@ -284,7 +284,7 @@ const RegisterForm = () => {
                       id="companyName"
                       name="companyName"
                       type="text"
-                      className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau focus:border-transparent"
                       placeholder="Your Company Inc."
                       value={formData.companyName}
                       onChange={handleChange}
@@ -301,12 +301,12 @@ const RegisterForm = () => {
                       type="checkbox"
                       checked={formData.agreeTerms}
                       onChange={handleChange}
-                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded mt-0.5"
+                      className="h-4 w-4 text-chateau focus:ring-chateau border-gray-300 rounded mt-0.5"
                       required
                     />
                     <span className="ml-2 text-sm text-gray-700">
                       I agree to the{' '}
-                      <a href="#" className="text-indigo-600 hover:text-indigo-500 font-medium">
+                      <a href="#" className="text-chateau hover:text-chateau font-medium">
                         Terms of Service
                       </a>
                     </span>
@@ -319,12 +319,12 @@ const RegisterForm = () => {
                       type="checkbox"
                       checked={formData.agreePrivacy}
                       onChange={handleChange}
-                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded mt-0.5"
+                      className="h-4 w-4 text-chateau focus:ring-chateau border-gray-300 rounded mt-0.5"
                       required
                     />
                     <span className="ml-2 text-sm text-gray-700">
                       I acknowledge that I have read and understood the{' '}
-                      <a href="#" className="text-indigo-600 hover:text-indigo-500 font-medium">
+                      <a href="#" className="text-chateau hover:text-chateau font-medium">
                         Privacy Policy
                       </a>
                     </span>
@@ -339,7 +339,7 @@ const RegisterForm = () => {
                 <button
                   type="button"
                   onClick={prevStep}
-                  className="flex-1 py-3 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200"
+                  className="flex-1 py-3 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-chateau transition-all duration-200"
                 >
                   Back
                 </button>
@@ -347,7 +347,7 @@ const RegisterForm = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gray-900 hover:bg-black text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                className="flex-1 flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gray-900 hover:bg-black text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-chateau disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
               >
                 {loading ? (
                   <div className="flex items-center">
@@ -366,7 +366,7 @@ const RegisterForm = () => {
           {/* Sign In Link */}
           <p className="text-center text-sm text-gray-600 mt-6">
             Already have an account?{' '}
-            <a href="/auth/login" className="font-medium text-indigo-600 hover:text-indigo-500">
+            <a href="/auth/login" className="font-medium text-chateau hover:text-chateau">
               Sign in
             </a>
           </p>
@@ -376,9 +376,9 @@ const RegisterForm = () => {
         <div className="mt-8 text-center">
           <p className="text-xs text-gray-500">
             By creating an account, you agree to our{' '}
-            <a href="#" className="text-indigo-600 hover:text-indigo-500">Terms</a>{' '}
+            <a href="#" className="text-chateau hover:text-chateau">Terms</a>{' '}
             and{' '}
-            <a href="#" className="text-indigo-600 hover:text-indigo-500">Privacy Policy</a>
+            <a href="#" className="text-chateau hover:text-chateau">Privacy Policy</a>
           </p>
         </div>
       </div>

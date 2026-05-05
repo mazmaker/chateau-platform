@@ -1,4 +1,4 @@
-import { Star, MapPin, TrendingUp } from 'lucide-react';
+﻿import { Star, MapPin, TrendingUp } from 'lucide-react';
 
 const propertiesData = [
   {
@@ -47,7 +47,7 @@ const TopProperties = () => {
     <div className="bg-white rounded-lg border border-[#e2e8f0] p-6">
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-base font-semibold text-gray-900">Top Properties</h3>
-        <button className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+        <button className="text-sm text-chateau hover:text-chateau-700 font-medium">
           View all
         </button>
       </div>
@@ -60,7 +60,7 @@ const TopProperties = () => {
                 alt={property.name}
                 className="w-12 h-12 rounded-lg object-cover"
               />
-              <div className="absolute -top-1 -left-1 w-4 h-4 bg-indigo-600 text-white text-xs font-bold rounded-full flex items-center justify-center">
+              <div className="absolute -top-1 -left-1 w-4 h-4 bg-chateau text-white text-xs font-bold rounded-full flex items-center justify-center">
                 {index + 1}
               </div>
             </div>

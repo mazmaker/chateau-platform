@@ -18,11 +18,8 @@ import {
   CheckCircle,
   Clock,
   Home,
-  Calendar,
   UserCheck,
-  UserX,
   ShoppingCart,
-  XCircle,
   Loader2,
 } from "lucide-react";
 import {
@@ -36,36 +33,51 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   BarChart,
   Bar,
 } from "recharts";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getDashboardStatistics, getSalesChartData, DashboardStats, SalesChartData } from "@/lib/api/dashboard";
 import { testDashboardData, getSimpleDashboardStats, getRealisticChartData } from "@/lib/api/dashboard-test";
 
-// Mock Data with Luxury Color Palette
+// Kids Kingdom Color Palette
+const KK = {
+  red:       '#e60023',
+  redLight:  '#fff1f2',
+  orange:    '#f97316',
+  orangeLight: '#fff7ed',
+  green:     '#10b981',
+  greenLight: '#f0fdf4',
+  blue:      '#3b82f6',
+  blueLight: '#eff6ff',
+  purple:    '#8b5cf6',
+  purpleLight: '#f5f3ff',
+  gray:      '#6b7280',
+  grayLight: '#f3f4f6',
+  border:    '#e5e7eb',
+};
+
 const MOCK_UNIT_DATA = [
-  { name: 'ว่าง', value: 75, color: '#6b7280' },      // Luxury Gray
-  { name: 'จอง', value: 69, color: '#8b5a2b' },      // Warm Brown
-  { name: 'ขาย', value: 90, color: '#ca8a04' },      // Royal Gold
-  { name: 'ยกเลิก', value: 25, color: '#1c1917' },  // Charcoal Gray
+  { name: 'ว่าง',    value: 75, color: KK.gray },
+  { name: 'จอง',    value: 69, color: KK.blue },
+  { name: 'ขาย',    value: 90, color: KK.red },
+  { name: 'ยกเลิก', value: 25, color: KK.orange },
 ];
 
 const MOCK_PAYMENT_DATA = [
-  { name: 'ชำระแล้ว', value: 56, color: '#ca8a04' },  // Royal Gold
-  { name: 'ค้างชำระ', value: 44, color: '#6b7280' },  // Luxury Gray
+  { name: 'ชำระแล้ว', value: 56, color: KK.green },
+  { name: 'ค้างชำระ', value: 44, color: KK.grayLight },
 ];
 
 const MOCK_CUSTOMER_STATUS_DATA = [
-  { status: 'SALES 001-01', value: 90, color: '#ca8a04' },  // Royal Gold
-  { status: 'SALES 002-02', value: 85, color: '#1c1917' },  // Charcoal Gray
-  { status: 'SALES 003-03', value: 75, color: '#8b5a2b' },  // Warm Brown
-  { status: 'SALES 004-04', value: 70, color: '#6b7280' },  // Luxury Gray
-  { status: 'SALES 005-05', value: 65, color: '#ca8a04' },  // Royal Gold
-  { status: 'SALES 006-06', value: 60, color: '#1c1917' },  // Charcoal Gray
-  { status: 'SALES 007-07', value: 50, color: '#8b5a2b' },  // Warm Brown
+  { status: 'SALES 001-01', value: 90, color: KK.red },
+  { status: 'SALES 002-02', value: 85, color: KK.orange },
+  { status: 'SALES 003-03', value: 75, color: KK.blue },
+  { status: 'SALES 004-04', value: 70, color: KK.green },
+  { status: 'SALES 005-05', value: 65, color: KK.purple },
+  { status: 'SALES 006-06', value: 60, color: KK.gray },
+  { status: 'SALES 007-07', value: 50, color: KK.red },
 ];
 
 const MOCK_MONTHLY_CUSTOMER_DATA = [
@@ -83,139 +95,95 @@ const MOCK_MONTHLY_CUSTOMER_DATA = [
   { month: 'ธ.ค.', customer: 105, conversion: 85, leads: 120 },
 ];
 
-const MOCK_BOOKING_DATA = [
-  { month: 'ม.ค.', booking: 50, cancel: 10 },
-  { month: 'ก.พ.', booking: 55, cancel: 12 },
-  { month: 'มี.ค.', booking: 60, cancel: 15 },
-  { month: 'เม.ย.', booking: 65, cancel: 18 },
-  { month: 'พ.ค.', booking: 58, cancel: 14 },
-  { month: 'มิ.ย.', booking: 70, cancel: 20 },
-  { month: 'ก.ค.', booking: 75, cancel: 22 },
-  { month: 'ส.ค.', booking: 72, cancel: 19 },
-  { month: 'ก.ย.', booking: 80, cancel: 25 },
-  { month: 'ต.ค.', booking: 85, cancel: 28 },
-  { month: 'พ.ย.', booking: 82, cancel: 24 },
-  { month: 'ธ.ค.', booking: 90, cancel: 30 },
-];
-
 const MOCK_SALES_TABLE_DATA = [
   { id: 1, buyer: 'คุณวิน ศรีธนพล', project: 'BAAN ISSARA', unit: '24/33', amount: 26432992, paid: 26000250, date: '04-03-24' },
   { id: 2, buyer: 'คุณวิน ศรีธนพล', project: 'BAAN ISSARA', unit: '90/38', amount: 27000000, paid: 24000000, date: '04-03-24' },
-  { id: 3, buyer: 'คุณวิน ศรีธนพล', project: 'BAAN ISSARA', unit: '29/7', amount: 28356321, paid: 20000000, date: '04-02-24' },
-  { id: 4, buyer: 'คุณวิน ศรีธนพล', project: 'BAAN ISSARA', unit: '28/7', amount: 10000000, paid: 17990000, date: '29-01-24' },
-  { id: 5, buyer: 'คุณวิน ศรีธนพล', project: 'BAAN ISSARA', unit: '28/7', amount: 8500000, paid: 8000000, date: '28-01-24' },
+  { id: 3, buyer: 'คุณวิน ศรีธนพล', project: 'BAAN ISSARA', unit: '29/7',  amount: 28356321, paid: 20000000, date: '04-02-24' },
+  { id: 4, buyer: 'คุณวิน ศรีธนพล', project: 'BAAN ISSARA', unit: '28/7',  amount: 10000000, paid: 17990000, date: '29-01-24' },
+  { id: 5, buyer: 'คุณวิน ศรีธนพล', project: 'BAAN ISSARA', unit: '28/7',  amount: 8500000,  paid: 8000000,  date: '28-01-24' },
 ];
 
 const MOCK_PURPOSE_DATA = [
-  { name: 'อยู่อาศัย', value: 31, color: '#ca8a04' },     // Royal Gold
-  { name: 'เก็งกำไร', value: 23, color: '#1c1917' },     // Charcoal Gray
-  { name: 'ปล่อยเช่ารายเดือน', value: 33, color: '#8b5a2b' },  // Warm Brown
-  { name: 'ปล่อยเช่ารายวัน', value: 12, color: '#6b7280' },   // Luxury Gray
-  { name: 'ซ่อมแล้วขาย', value: 17, color: '#ca8a04' },  // Royal Gold
-  { name: 'อื่นๆ', value: 17, color: '#8b5a2b' },        // Warm Brown
+  { name: 'อยู่อาศัย',         value: 31, color: KK.red },
+  { name: 'เก็งกำไร',         value: 23, color: KK.blue },
+  { name: 'ปล่อยเช่ารายเดือน', value: 33, color: KK.orange },
+  { name: 'ปล่อยเช่ารายวัน',   value: 12, color: KK.green },
+  { name: 'ซ่อมแล้วขาย',      value: 17, color: KK.purple },
+  { name: 'อื่นๆ',             value: 17, color: KK.gray },
 ];
 
 const MOCK_SOURCE_DATA = [
-  { name: 'ออนไลน์', value: 50, color: '#ca8a04' },     // Royal Gold
-  { name: 'ออฟไลน์', value: 33, color: '#1c1917' },     // Charcoal Gray
-  { name: 'อื่นๆ', value: 17, color: '#6b7280' },       // Luxury Gray
+  { name: 'ออนไลน์', value: 50, color: KK.red },
+  { name: 'ออฟไลน์', value: 33, color: KK.blue },
+  { name: 'อื่นๆ',   value: 17, color: KK.gray },
 ];
 
 const MOCK_ONLINE_MEDIA_DATA = [
-  { name: 'Google', value: 8, color: '#ca8a04' },      // Royal Gold
-  { name: 'YouTube', value: 7, color: '#1c1917' },     // Charcoal Gray
-  { name: 'Instagram', value: 6, color: '#8b5a2b' },   // Warm Brown
-  { name: 'LINE', value: 5, color: '#6b7280' },        // Luxury Gray
-  { name: 'TikTok', value: 5, color: '#ca8a04' },      // Royal Gold
-  { name: 'Facebook', value: 5, color: '#1c1917' },    // Charcoal Gray
-  { name: 'Twitter', value: 4, color: '#8b5a2b' },     // Warm Brown
-  { name: 'เว็บไซต์', value: 3, color: '#6b7280' },     // Luxury Gray
-  { name: 'อื่นๆ', value: 2, color: '#ca8a04' },        // Royal Gold
+  { name: 'Google',    value: 8 },
+  { name: 'YouTube',   value: 7 },
+  { name: 'Instagram', value: 6 },
+  { name: 'LINE',      value: 5 },
+  { name: 'TikTok',   value: 5 },
+  { name: 'Facebook',  value: 5 },
+  { name: 'Twitter',   value: 4 },
+  { name: 'เว็บไซต์',  value: 3 },
+  { name: 'อื่นๆ',     value: 2 },
 ];
 
 const MOCK_OFFLINE_MEDIA_DATA = [
-  { name: 'ป้ายโฆษณา', value: 8, color: '#ca8a04' },    // Royal Gold
-  { name: 'แผ่นพับ', value: 7, color: '#1c1917' },      // Charcoal Gray
-  { name: 'สื่อสิ่งพิมพ์', value: 6, color: '#8b5a2b' }, // Warm Brown
-  { name: 'ใบปลิว', value: 5, color: '#6b7280' },       // Luxury Gray
-  { name: 'โทรทัศน์/วิทยุ', value: 5, color: '#ca8a04' }, // Royal Gold
-  { name: 'เพื่อนแนะนำ', value: 4, color: '#1c1917' },  // Charcoal Gray
-  { name: 'อื่นๆ', value: 2, color: '#8b5a2b' },         // Warm Brown
+  { name: 'ป้ายโฆษณา',    value: 8 },
+  { name: 'แผ่นพับ',      value: 7 },
+  { name: 'สื่อสิ่งพิมพ์', value: 6 },
+  { name: 'ใบปลิว',       value: 5 },
+  { name: 'โทรทัศน์/วิทยุ', value: 5 },
+  { name: 'เพื่อนแนะนำ',  value: 4 },
+  { name: 'อื่นๆ',         value: 2 },
 ];
 
 const MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
                 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
 
+const tooltipStyle = {
+  backgroundColor: 'white',
+  border: `1px solid ${KK.border}`,
+  borderRadius: '8px',
+  boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+  fontSize: '12px',
+};
+
 const Index = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState('all');
-  const [selectedMonth, setSelectedMonth] = useState('มกราคม');
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [salesChartData, setSalesChartData] = useState<SalesChartData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load dashboard data
   useEffect(() => {
     const loadDashboardData = async () => {
       try {
         setIsLoading(true);
-
-        console.log('🔄 Loading real dashboard data...');
-
-        // Use real API functions to get data from database
         const [stats, chartData] = await Promise.all([
           getDashboardStatistics(),
           getSalesChartData(),
         ]);
-
-        console.log('✅ Dashboard data loaded successfully');
-
         setDashboardStats(stats);
         setSalesChartData(chartData);
-
-      } catch (error) {
-        console.error('❌ Error loading dashboard data:', error);
-
-        // If real data fails, use test functions as fallback
-        console.log('🔄 Trying fallback methods...');
-
+      } catch {
         try {
           await testDashboardData();
           const stats = await getSimpleDashboardStats();
           const chartData = await getRealisticChartData();
-
-          const dashboardStats: DashboardStats = {
-            projects: stats.projects,
-            units: stats.units,
-            leads: stats.leads,
-          };
-
-          setDashboardStats(dashboardStats);
+          setDashboardStats({ projects: stats.projects, units: stats.units, leads: stats.leads });
           setSalesChartData(chartData);
-
-          console.log('⚠️ Using fallback data due to:', error.message);
-
-        } catch (fallbackError) {
-          console.error('❌ Fallback also failed:', fallbackError);
-
-          // Ultimate fallback with realistic data
+        } catch {
           setDashboardStats({
             projects: { total: 20, completed: 5, inProgress: 15 },
             units: { reserved: 69, sold: 90, available: 75, conversionRate: 67.8 },
             leads: { newLeads: 42, convertedToCustomers: 18, totalLeads: 167 },
           });
-
           setSalesChartData({
-            unitDistribution: [
-              { name: 'ว่าง', value: 75, color: '#6b7280' },
-              { name: 'จอง', value: 69, color: '#8b5a2b' },
-              { name: 'ขาย', value: 90, color: '#ca8a04' },
-              { name: 'ไม่พร้อมขาย', value: 0, color: '#1c1917' },
-            ],
-            paymentStatus: [
-              { name: 'ชำระแล้ว', value: 108, color: '#ca8a04' },
-              { name: 'ค้างชำระ', value: 51, color: '#6b7280' },
-            ],
+            unitDistribution: MOCK_UNIT_DATA,
+            paymentStatus: MOCK_PAYMENT_DATA,
             customerStatus: [],
             monthlyData: [],
           });
@@ -224,7 +192,6 @@ const Index = () => {
         setIsLoading(false);
       }
     };
-
     loadDashboardData();
   }, []);
 
@@ -235,150 +202,102 @@ const Index = () => {
       <div className="lg:pl-[260px]">
         <Header onMenuClick={() => setSidebarOpen(true)} />
 
-        <main className="p-4 lg:p-6 space-y-4 lg:space-y-6 bg-background">
+        <main className="p-4 lg:p-6 space-y-4 lg:space-y-6">
+
           {/* Page Title */}
-          <Card className="bg-white border border-gray-200 hover:shadow-lg transition-shadow duration-300" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderRadius: '12px' }}>
-            <CardContent className="p-4 lg:p-8">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl flex items-center justify-center shadow-xl">
-                    <TrendingUp className="w-6 h-6 text-white" strokeWidth={2} />
-                  </div>
-                  <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Overview Dashboard</h1>
-                    <p className="text-sm text-gray-600 font-medium">ภาพรวมระบบ</p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">Overview Dashboard</h1>
+              <p className="text-sm text-gray-500 mt-0.5">ภาพรวมระบบ CHATEAU Platform</p>
+            </div>
+            <Button style={{ backgroundColor: KK.red, color: '#fff', border: 'none' }} className="rounded-lg text-sm">
+              + เพิ่มข้อมูล
+            </Button>
+          </div>
 
           {/* Filters */}
-          <Card className="bg-white border border-gray-200 hover:shadow-lg transition-shadow duration-300" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderRadius: '12px' }}>
-            <CardContent className="p-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6">
+          <Card className="bg-white border border-gray-200 rounded-xl shadow-soft">
+            <CardContent className="p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <Label className="text-sm font-medium text-gray-700 mb-2 block">โครงการ</Label>
+                  <Label className="text-xs font-medium text-gray-600 mb-1.5 block">โครงการ</Label>
                   <Select value={selectedProject} onValueChange={setSelectedProject}>
-                    <SelectTrigger className="w-full h-12 px-4 bg-white border border-gray-300 rounded-xl text-gray-900 focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 hover:border-gray-400 transition-all duration-200">
-                      <SelectValue placeholder="เลือกโครงการ" className="text-gray-900" />
+                    <SelectTrigger className="h-9 rounded-lg border-gray-200 text-sm focus:ring-2 focus:border-transparent" style={{ '--tw-ring-color': KK.red + '33' } as React.CSSProperties}>
+                      <SelectValue placeholder="เลือกโครงการ" />
                     </SelectTrigger>
-                    <SelectContent className="bg-white border border-gray-200 rounded-xl shadow-xl z-50">
-                      <SelectItem value="all" className="text-gray-900 hover:bg-gray-50 focus:bg-amber-50 focus:text-amber-900 rounded-lg mx-1 my-1">ทั้งหมด</SelectItem>
-                      <SelectItem value="baan-issara" className="text-gray-900 hover:bg-gray-50 focus:bg-amber-50 focus:text-amber-900 rounded-lg mx-1 my-1">BAAN ISSARA</SelectItem>
-                      <SelectItem value="project-2" className="text-gray-900 hover:bg-gray-50 focus:bg-amber-50 focus:text-amber-900 rounded-lg mx-1 my-1">Project 2</SelectItem>
+                    <SelectContent className="rounded-xl border-gray-200 shadow-soft-lg">
+                      <SelectItem value="all">ทั้งหมด</SelectItem>
+                      <SelectItem value="baan-issara">BAAN ISSARA</SelectItem>
+                      <SelectItem value="project-2">Project 2</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-700 mb-2 block">วันที่เริ่มต้น</Label>
+                  <Label className="text-xs font-medium text-gray-600 mb-1.5 block">วันที่เริ่มต้น</Label>
                   <input
                     type="date"
-                    className="w-full h-12 px-4 bg-white border border-gray-300 rounded-xl text-gray-900 focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 hover:border-gray-400 transition-all duration-200"
                     defaultValue="2024-01-01"
+                    className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:border-transparent transition-colors"
+                    style={{ '--tw-ring-color': KK.red + '33' } as React.CSSProperties}
                   />
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-700 mb-2 block">วันที่สิ้นสุด</Label>
+                  <Label className="text-xs font-medium text-gray-600 mb-1.5 block">วันที่สิ้นสุด</Label>
                   <input
                     type="date"
-                    className="w-full h-12 px-4 bg-white border border-gray-300 rounded-xl text-gray-900 focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 hover:border-gray-400 transition-all duration-200"
                     defaultValue="2024-12-31"
+                    className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:border-transparent transition-colors"
+                    style={{ '--tw-ring-color': KK.red + '33' } as React.CSSProperties}
                   />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* === Dashboard Statistics === */}
+          {/* === KPI Stats === */}
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
-              <span className="ml-2 text-gray-600">กำลังโหลดข้อมูล...</span>
+              <Loader2 className="w-6 h-6 animate-spin" style={{ color: KK.red }} />
+              <span className="ml-2 text-sm text-gray-500">กำลังโหลดข้อมูล...</span>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6">
-              {/* Project Overview */}
+              {/* โครงการ */}
               <div>
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <Building2 className="w-5 h-5" style={{ color: '#1c1917' }} />
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
+                  <Building2 className="w-4 h-4" style={{ color: KK.red }} />
                   สถิติโครงการอสังหา
                 </h3>
-                <div className="space-y-3">
-                  <LuxuryKPICard
-                    icon={Building2}
-                    label="โครงการทั้งหมด"
-                    value={dashboardStats?.projects.total.toString() || "0"}
-                    iconColor="#1c1917"
-                  />
-                  <LuxuryKPICard
-                    icon={CheckCircle}
-                    label="เสร็จสิ้นแล้ว"
-                    value={dashboardStats?.projects.completed.toString() || "0"}
-                    iconColor="#ca8a04"
-                  />
-                  <LuxuryKPICard
-                    icon={Clock}
-                    label="กำลังดำเนินการ"
-                    value={dashboardStats?.projects.inProgress.toString() || "0"}
-                    iconColor="#6b7280"
-                  />
+                <div className="space-y-2.5">
+                  <KPICard icon={Building2} label="โครงการทั้งหมด"   value={dashboardStats?.projects.total.toString() || "0"}      bg={KK.redLight}    color={KK.red} />
+                  <KPICard icon={CheckCircle} label="เสร็จสิ้นแล้ว"  value={dashboardStats?.projects.completed.toString() || "0"}   bg={KK.greenLight}  color={KK.green} />
+                  <KPICard icon={Clock}       label="กำลังดำเนินการ" value={dashboardStats?.projects.inProgress.toString() || "0"}  bg={KK.orangeLight} color={KK.orange} />
                 </div>
               </div>
 
-              {/* Sales & Units */}
+              {/* ยูนิตและการขาย */}
               <div>
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <Home className="w-5 h-5" style={{ color: '#8b5a2b' }} />
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
+                  <Home className="w-4 h-4" style={{ color: KK.blue }} />
                   สถานะยูนิตและการขาย
                 </h3>
-                <div className="space-y-3">
-                  <LuxuryKPICard
-                    icon={ShoppingCart}
-                    label="ยูนิตจอง"
-                    value={dashboardStats?.units.reserved.toString() || "0"}
-                    iconColor="#8b5a2b"
-                  />
-                  <LuxuryKPICard
-                    icon={CheckCircle}
-                    label="ยูนิตขาย"
-                    value={dashboardStats?.units.sold.toString() || "0"}
-                    iconColor="#ca8a04"
-                  />
-                  <LuxuryKPICard
-                    icon={Home}
-                    label="ยูนิตว่าง"
-                    value={dashboardStats?.units.available.toString() || "0"}
-                    iconColor="#6b7280"
-                  />
-                  <LuxuryKPICard
-                    icon={TrendingUp}
-                    label="อัตราแปลง"
-                    value={`${dashboardStats?.units.conversionRate || 0}%`}
-                    iconColor="#1c1917"
-                  />
+                <div className="space-y-2.5">
+                  <KPICard icon={ShoppingCart} label="ยูนิตจอง"   value={dashboardStats?.units.reserved.toString() || "0"}                 bg={KK.blueLight}   color={KK.blue} />
+                  <KPICard icon={CheckCircle}  label="ยูนิตขาย"   value={dashboardStats?.units.sold.toString() || "0"}                      bg={KK.redLight}    color={KK.red} />
+                  <KPICard icon={Home}         label="ยูนิตว่าง"   value={dashboardStats?.units.available.toString() || "0"}                 bg={KK.grayLight}   color={KK.gray} />
+                  <KPICard icon={TrendingUp}   label="อัตราแปลง"  value={`${dashboardStats?.units.conversionRate || 0}%`}                   bg={KK.purpleLight} color={KK.purple} />
                 </div>
               </div>
 
-              {/* Customer & Leads */}
+              {/* ลูกค้าและ Leads */}
               <div>
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <Users className="w-5 h-5" style={{ color: '#ca8a04' }} />
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
+                  <Users className="w-4 h-4" style={{ color: KK.orange }} />
                   ลูกค้าและ Leads
                 </h3>
-                <div className="space-y-3">
-                  <LuxuryKPICard
-                    icon={Users}
-                    label="Leads ใหม่"
-                    value={dashboardStats?.leads.newLeads.toString() || "0"}
-                    iconColor="#ca8a04"
-                  />
-                  <LuxuryKPICard
-                    icon={UserCheck}
-                    label="แปลงเป็นลูกค้า"
-                    value={dashboardStats?.leads.convertedToCustomers.toString() || "0"}
-                    iconColor="#1c1917"
-                  />
+                <div className="space-y-2.5">
+                  <KPICard icon={Users}     label="Leads ใหม่"       value={dashboardStats?.leads.newLeads.toString() || "0"}              bg={KK.redLight}   color={KK.red} />
+                  <KPICard icon={UserCheck} label="แปลงเป็นลูกค้า"  value={dashboardStats?.leads.convertedToCustomers.toString() || "0"}  bg={KK.greenLight} color={KK.green} />
                 </div>
               </div>
             </div>
@@ -386,257 +305,201 @@ const Index = () => {
 
           {/* รายงานการขาย */}
           <div>
-            <h2 className="text-lg font-semibold mb-6 text-gray-900">รายงานการขาย</h2>
+            <h2 className="text-sm font-semibold text-gray-700 mb-3">รายงานการขาย</h2>
             {isLoading ? (
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
                 {[1, 2, 3].map(i => (
-                  <Card key={i} className="w-full bg-white animate-pulse" style={{ borderRadius: '12px' }}>
+                  <Card key={i} className="w-full bg-white animate-pulse rounded-xl">
                     <CardContent className="p-6">
-                      <div className="h-4 bg-gray-200 rounded mb-4"></div>
-                      <div className="h-32 bg-gray-200 rounded"></div>
+                      <div className="h-4 bg-gray-100 rounded mb-4 w-1/2" />
+                      <div className="h-40 bg-gray-100 rounded" />
                     </CardContent>
                   </Card>
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
 
-              {/* สัดส่วนยูนิต */}
-              <Card className="w-full bg-white" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderRadius: '12px' }}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base font-semibold text-gray-900">สัดส่วนยูนิต</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <PieChart>
-                      <Pie
-                        data={salesChartData?.unitDistribution || []}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={3}
-                        dataKey="value"
-                      >
-                        {(salesChartData?.unitDistribution || []).map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'white',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="text-center mt-2">
-                    <div className="text-2xl font-bold text-gray-900">
-                      {(salesChartData?.unitDistribution || []).reduce((sum, item) => sum + item.value, 0)}
-                    </div>
-                    <div className="text-xs text-gray-600">ยูนิตทั้งหมด</div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 mt-4 text-xs">
-                    {(salesChartData?.unitDistribution || []).map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                        <span className="text-gray-700">{item.name}: {item.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* สถานะลูกค้า */}
-              <Card className="w-full bg-white" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderRadius: '12px' }}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base font-semibold text-gray-900">สถานะลูกค้า</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {(salesChartData?.customerStatus || []).map((item, index) => (
-                      <div key={index} className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-gray-700">{item.status}</span>
-                        <div className="flex items-center gap-2 flex-1 ml-3">
-                          <div className="flex-1 bg-gray-200 rounded-full h-2">
-                            <div
-                              className="h-2 rounded-full transition-all duration-300"
-                              style={{
-                                width: `${item.value}%`,
-                                backgroundColor: item.color
-                              }}
-                            />
-                          </div>
-                          <span className="text-xs font-bold w-8 text-right text-gray-900">{item.value}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* % ยอดชำระ */}
-              <Card className="w-full bg-white" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderRadius: '12px' }}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base font-semibold text-gray-900">% ยอดชำระ</CardTitle>
-                </CardHeader>
-                  <CardContent>
-                    <ResponsiveContainer width="100%" height={200}>
+                {/* สัดส่วนยูนิต */}
+                <Card className="bg-white border border-gray-100 rounded-xl shadow-soft">
+                  <CardHeader className="pb-1 pt-4 px-5">
+                    <CardTitle className="text-sm font-semibold text-gray-800">สัดส่วนยูนิต</CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-5 pb-4">
+                    <ResponsiveContainer width="100%" height={180}>
                       <PieChart>
-                        <Pie
-                          data={salesChartData?.paymentStatus || []}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={80}
-                          paddingAngle={3}
-                          dataKey="value"
-                        >
-                          {(salesChartData?.paymentStatus || []).map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
+                        <Pie data={salesChartData?.unitDistribution || MOCK_UNIT_DATA} cx="50%" cy="50%" innerRadius={55} outerRadius={78} paddingAngle={3} dataKey="value">
+                          {(salesChartData?.unitDistribution || MOCK_UNIT_DATA).map((entry, i) => (
+                            <Cell key={i} fill={entry.color} />
                           ))}
                         </Pie>
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'white',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '8px',
-                            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-                          }}
-                        />
+                        <Tooltip contentStyle={tooltipStyle} />
                       </PieChart>
                     </ResponsiveContainer>
-                    <div className="text-center mt-2">
-                      <div className="text-2xl font-bold text-gray-900">
-                        {salesChartData?.paymentStatus?.[0]?.value || 0}%
-                      </div>
-                      <div className="text-xs text-gray-600">ชำระแล้ว</div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 mt-4 text-xs">
-                      {(salesChartData?.paymentStatus || []).map((item, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                          <span className="text-gray-700">{item.name}: {item.value}%</span>
+                    <div className="grid grid-cols-2 gap-1.5 mt-2">
+                      {(salesChartData?.unitDistribution || MOCK_UNIT_DATA).map((item, i) => (
+                        <div key={i} className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
+                          <span className="text-xs text-gray-600">{item.name}: {item.value}</span>
                         </div>
                       ))}
                     </div>
                   </CardContent>
                 </Card>
 
-              {/* Customer / Lead */}
-              <Card className="w-full bg-white" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderRadius: '12px' }}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base font-semibold text-gray-900">Customer / Lead</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={180}>
-                    <AreaChart data={salesChartData?.monthlyData || []}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis
-                        dataKey="month"
-                        tick={{ fontSize: 10, fill: '#6b7280' }}
-                        axisLine={{ stroke: '#e5e7eb' }}
-                      />
-                      <YAxis
-                        tick={{ fontSize: 10, fill: '#6b7280' }}
-                        axisLine={{ stroke: '#e5e7eb' }}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'white',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-                        }}
-                      />
-                      <Area type="monotone" dataKey="customer" stackId="1" stroke="#1c1917" fill="#1c1917" fillOpacity={0.8} />
-                      <Area type="monotone" dataKey="leads" stackId="1" stroke="#ca8a04" fill="#ca8a04" fillOpacity={0.6} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+                {/* สถานะลูกค้า */}
+                <Card className="bg-white border border-gray-100 rounded-xl shadow-soft">
+                  <CardHeader className="pb-1 pt-4 px-5">
+                    <CardTitle className="text-sm font-semibold text-gray-800">สถานะลูกค้า</CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-5 pb-4">
+                    <div className="space-y-2.5">
+                      {(salesChartData?.customerStatus || MOCK_CUSTOMER_STATUS_DATA).map((item, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="text-xs text-gray-600 w-24 flex-shrink-0">{item.status}</span>
+                          <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                            <div className="h-1.5 rounded-full" style={{ width: `${item.value}%`, backgroundColor: item.color }} />
+                          </div>
+                          <span className="text-xs font-semibold text-gray-800 w-6 text-right">{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
 
-              {/* การจอง / ยกเลิก */}
-              <Card className="w-full bg-white" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderRadius: '12px' }}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base font-semibold text-gray-900">การจอง / ยกเลิก</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={180}>
-                    <AreaChart data={salesChartData?.monthlyData || []}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis
-                        dataKey="month"
-                        tick={{ fontSize: 10, fill: '#6b7280' }}
-                        axisLine={{ stroke: '#e5e7eb' }}
-                      />
-                      <YAxis
-                        tick={{ fontSize: 10, fill: '#6b7280' }}
-                        axisLine={{ stroke: '#e5e7eb' }}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'white',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-                        }}
-                      />
-                      <Area type="monotone" dataKey="booking" stackId="1" stroke="#ca8a04" fill="#ca8a04" fillOpacity={0.8} />
-                      <Area type="monotone" dataKey="cancel" stackId="1" stroke="#6b7280" fill="#6b7280" fillOpacity={0.6} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+                {/* % ยอดชำระ */}
+                <Card className="bg-white border border-gray-100 rounded-xl shadow-soft">
+                  <CardHeader className="pb-1 pt-4 px-5">
+                    <CardTitle className="text-sm font-semibold text-gray-800">% ยอดชำระ</CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-5 pb-4">
+                    <ResponsiveContainer width="100%" height={180}>
+                      <PieChart>
+                        <Pie data={salesChartData?.paymentStatus || MOCK_PAYMENT_DATA} cx="50%" cy="50%" innerRadius={55} outerRadius={78} paddingAngle={3} dataKey="value">
+                          {(salesChartData?.paymentStatus || MOCK_PAYMENT_DATA).map((entry, i) => (
+                            <Cell key={i} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={tooltipStyle} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="flex justify-center gap-4 mt-2">
+                      {(salesChartData?.paymentStatus || MOCK_PAYMENT_DATA).map((item, i) => (
+                        <div key={i} className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                          <span className="text-xs text-gray-600">{item.name}: {item.value}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Customer / Lead */}
+                <Card className="bg-white border border-gray-100 rounded-xl shadow-soft">
+                  <CardHeader className="pb-1 pt-4 px-5">
+                    <CardTitle className="text-sm font-semibold text-gray-800">Customer / Lead</CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-5 pb-4">
+                    <ResponsiveContainer width="100%" height={180}>
+                      <AreaChart data={salesChartData?.monthlyData?.length ? salesChartData.monthlyData : MOCK_MONTHLY_CUSTOMER_DATA}>
+                        <defs>
+                          <linearGradient id="gradRed" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%"  stopColor={KK.red}    stopOpacity={0.15} />
+                            <stop offset="95%" stopColor={KK.red}    stopOpacity={0} />
+                          </linearGradient>
+                          <linearGradient id="gradOrange" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%"  stopColor={KK.orange} stopOpacity={0.15} />
+                            <stop offset="95%" stopColor={KK.orange} stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                        <Tooltip contentStyle={tooltipStyle} />
+                        <Area type="monotone" dataKey="customer" stroke={KK.red}    strokeWidth={2} fill="url(#gradRed)"    dot={false} />
+                        <Area type="monotone" dataKey="leads"    stroke={KK.orange} strokeWidth={2} fill="url(#gradOrange)" dot={false} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                    <div className="flex gap-4 mt-1">
+                      <div className="flex items-center gap-1.5"><div className="w-2.5 h-0.5 rounded" style={{ backgroundColor: KK.red }} /><span className="text-xs text-gray-500">Customer</span></div>
+                      <div className="flex items-center gap-1.5"><div className="w-2.5 h-0.5 rounded" style={{ backgroundColor: KK.orange }} /><span className="text-xs text-gray-500">Leads</span></div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* การจอง / ยกเลิก */}
+                <Card className="bg-white border border-gray-100 rounded-xl shadow-soft">
+                  <CardHeader className="pb-1 pt-4 px-5">
+                    <CardTitle className="text-sm font-semibold text-gray-800">การจอง / ยกเลิก</CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-5 pb-4">
+                    <ResponsiveContainer width="100%" height={180}>
+                      <AreaChart data={salesChartData?.monthlyData?.length ? salesChartData.monthlyData : MOCK_MONTHLY_CUSTOMER_DATA}>
+                        <defs>
+                          <linearGradient id="gradGreen" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%"  stopColor={KK.green} stopOpacity={0.15} />
+                            <stop offset="95%" stopColor={KK.green} stopOpacity={0} />
+                          </linearGradient>
+                          <linearGradient id="gradGray" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%"  stopColor={KK.gray} stopOpacity={0.15} />
+                            <stop offset="95%" stopColor={KK.gray} stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                        <Tooltip contentStyle={tooltipStyle} />
+                        <Area type="monotone" dataKey="booking" stroke={KK.green} strokeWidth={2} fill="url(#gradGreen)" dot={false} />
+                        <Area type="monotone" dataKey="cancel"  stroke={KK.gray}  strokeWidth={2} fill="url(#gradGray)"  dot={false} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                    <div className="flex gap-4 mt-1">
+                      <div className="flex items-center gap-1.5"><div className="w-2.5 h-0.5 rounded" style={{ backgroundColor: KK.green }} /><span className="text-xs text-gray-500">จอง</span></div>
+                      <div className="flex items-center gap-1.5"><div className="w-2.5 h-0.5 rounded" style={{ backgroundColor: KK.gray }} /><span className="text-xs text-gray-500">ยกเลิก</span></div>
+                    </div>
+                  </CardContent>
+                </Card>
+
               </div>
             )}
           </div>
 
           {/* Sales Table */}
-          <Card className="bg-white" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderRadius: '12px' }}>
-            <CardHeader>
-              <CardTitle className="text-gray-900">รายการขาย</CardTitle>
+          <Card className="bg-white border border-gray-100 rounded-xl shadow-soft">
+            <CardHeader className="pb-2 pt-4 px-5">
+              <CardTitle className="text-sm font-semibold text-gray-800">รายการขาย</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-0 pb-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b-2 border-gray-100">
-                    <tr>
-                      <th className="px-6 py-4 text-left font-semibold text-gray-900">ผู้ซื้อ</th>
-                      <th className="px-6 py-4 text-left font-semibold text-gray-900">โครงการ</th>
-                      <th className="px-6 py-4 text-left font-semibold text-gray-900">ยูนิต</th>
-                      <th className="px-6 py-4 text-right font-semibold text-gray-900">ยอดขาย</th>
-                      <th className="px-6 py-4 text-right font-semibold text-gray-900">ชำระแล้ว</th>
-                      <th className="px-6 py-4 text-center font-semibold text-gray-900">วันที่</th>
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">ผู้ซื้อ</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">โครงการ</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">ยูนิต</th>
+                      <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">ยอดขาย</th>
+                      <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">ชำระแล้ว</th>
+                      <th className="px-5 py-3 text-center text-xs font-semibold text-gray-500">วันที่</th>
                     </tr>
                   </thead>
                   <tbody>
                     {MOCK_SALES_TABLE_DATA.map((row) => (
-                      <tr key={row.id} className="border-t border-gray-100 hover:bg-gray-50/50 transition-colors duration-300">
-                        <td className="px-6 py-4">
+                      <tr key={row.id} className="border-t border-gray-50 hover:bg-gray-50/70 transition-colors">
+                        <td className="px-5 py-3">
                           <div className="flex items-center gap-2">
-                            <Avatar className="w-8 h-8">
-                              <AvatarFallback
-                                className="text-white font-medium"
-                                style={{ backgroundColor: '#ca8a04' }}
-                              >
+                            <Avatar className="w-7 h-7">
+                              <AvatarFallback className="text-white text-xs font-semibold" style={{ backgroundColor: KK.red }}>
                                 {row.buyer[2]}
                               </AvatarFallback>
                             </Avatar>
-                            <span className="text-gray-900">{row.buyer}</span>
+                            <span className="text-gray-800 text-xs">{row.buyer}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 font-medium" style={{ color: '#1c1917' }}>{row.project}</td>
-                        <td className="px-6 py-4 text-gray-700">{row.unit}</td>
-                        <td className="px-6 py-4 text-right font-semibold text-gray-900">
-                          {row.amount.toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 text-right font-medium" style={{ color: '#ca8a04' }}>
-                          {row.paid.toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 text-center text-gray-500">{row.date}</td>
+                        <td className="px-5 py-3 text-xs font-medium text-gray-700">{row.project}</td>
+                        <td className="px-5 py-3 text-xs text-gray-600">{row.unit}</td>
+                        <td className="px-5 py-3 text-right text-xs font-semibold text-gray-900">{row.amount.toLocaleString()}</td>
+                        <td className="px-5 py-3 text-right text-xs font-semibold" style={{ color: KK.green }}>{row.paid.toLocaleString()}</td>
+                        <td className="px-5 py-3 text-center text-xs text-gray-500">{row.date}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -645,38 +508,34 @@ const Index = () => {
             </CardContent>
           </Card>
 
-          {/* Purpose & Source Statistics */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 lg:gap-6">
-            <Card className="bg-white" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderRadius: '12px' }}>
-              <CardHeader>
-                <CardTitle className="text-gray-900">วัตถุประสงค์การซื้อ</CardTitle>
+          {/* Purpose & Source */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <Card className="bg-white border border-gray-100 rounded-xl shadow-soft">
+              <CardHeader className="pb-2 pt-4 px-5">
+                <CardTitle className="text-sm font-semibold text-gray-800">วัตถุประสงค์การซื้อ</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
-                  {MOCK_PURPOSE_DATA.map((item, idx) => (
-                    <div key={idx} className="text-center p-3 border border-gray-200 rounded-lg hover:shadow-sm transition-shadow">
-                      <div className="text-2xl font-bold text-gray-900" style={{ color: item.color }}>
-                        {item.value}
-                      </div>
-                      <div className="text-xs text-gray-600 mt-1">{item.name}</div>
+              <CardContent className="px-5 pb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  {MOCK_PURPOSE_DATA.map((item, i) => (
+                    <div key={i} className="text-center p-3 border border-gray-100 rounded-xl hover:shadow-soft transition-shadow" style={{ borderLeftColor: item.color, borderLeftWidth: 3 }}>
+                      <div className="text-xl font-bold" style={{ color: item.color }}>{item.value}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">{item.name}</div>
                     </div>
                   ))}
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="bg-white" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderRadius: '12px' }}>
-              <CardHeader>
-                <CardTitle className="text-gray-900">แหล่งที่มาของลูกค้า</CardTitle>
+            <Card className="bg-white border border-gray-100 rounded-xl shadow-soft">
+              <CardHeader className="pb-2 pt-4 px-5">
+                <CardTitle className="text-sm font-semibold text-gray-800">แหล่งที่มาของลูกค้า</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:gap-4">
-                  {MOCK_SOURCE_DATA.map((item, idx) => (
-                    <div key={idx} className="text-center p-3 border border-gray-200 rounded-lg hover:shadow-sm transition-shadow">
-                      <div className="text-2xl font-bold text-gray-900" style={{ color: item.color }}>
-                        {item.value}
-                      </div>
-                      <div className="text-xs text-gray-600 mt-1">{item.name}</div>
+              <CardContent className="px-5 pb-4">
+                <div className="grid grid-cols-3 gap-2.5">
+                  {MOCK_SOURCE_DATA.map((item, i) => (
+                    <div key={i} className="text-center p-3 border border-gray-100 rounded-xl" style={{ borderLeftColor: item.color, borderLeftWidth: 3 }}>
+                      <div className="text-xl font-bold" style={{ color: item.color }}>{item.value}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">{item.name}</div>
                     </div>
                   ))}
                 </div>
@@ -684,265 +543,143 @@ const Index = () => {
             </Card>
           </div>
 
-          {/* Monthly Analysis Tabs */}
-          <Card className="bg-white" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderRadius: '12px' }}>
-            <CardHeader>
-              <CardTitle className="text-gray-900">วิเคราะห์รายเดือน</CardTitle>
+          {/* Monthly Analysis */}
+          <Card className="bg-white border border-gray-100 rounded-xl shadow-soft">
+            <CardHeader className="pb-2 pt-4 px-5">
+              <CardTitle className="text-sm font-semibold text-gray-800">วิเคราะห์รายเดือน</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-5 pb-5">
               <Tabs defaultValue={MONTHS[0]} className="w-full">
-                <TabsList className="grid grid-cols-6 md:grid-cols-12 gap-1 h-auto">
+                <TabsList className="grid grid-cols-6 md:grid-cols-12 h-auto gap-0.5 bg-gray-100 p-0.5 rounded-lg">
                   {MONTHS.map((month) => (
-                    <TabsTrigger key={month} value={month} className="text-xs px-2 py-1">
+                    <TabsTrigger key={month} value={month} className="text-xs px-1 py-1 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm">
                       {month.substring(0, 3)}
                     </TabsTrigger>
                   ))}
                 </TabsList>
 
                 {MONTHS.map((month) => (
-                  <TabsContent key={month} value={month} className="space-y-6 mt-4">
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 lg:gap-6">
-                      {/* Purpose Pie Chart */}
-                      <Card className="bg-white" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderRadius: '12px' }}>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base font-semibold text-gray-900">วัตถุประสงค์การซื้อ</CardTitle>
+                  <TabsContent key={month} value={month} className="space-y-4 mt-4">
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+
+                      {/* Purpose Pie */}
+                      <Card className="bg-white border border-gray-100 rounded-xl shadow-soft">
+                        <CardHeader className="pb-1 pt-4 px-5">
+                          <CardTitle className="text-sm font-semibold text-gray-800">วัตถุประสงค์การซื้อ</CardTitle>
                         </CardHeader>
-                        <CardContent>
-                          <ResponsiveContainer width="100%" height={250}>
+                        <CardContent className="px-5 pb-4">
+                          <ResponsiveContainer width="100%" height={220}>
                             <PieChart>
-                              <Pie
-                                data={MOCK_PURPOSE_DATA}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={70}
-                                outerRadius={100}
-                                paddingAngle={3}
-                                dataKey="value"
-                                label
-                              >
-                                {MOCK_PURPOSE_DATA.map((entry, index) => (
-                                  <Cell key={`cell-${index}`} fill={entry.color} />
-                                ))}
+                              <Pie data={MOCK_PURPOSE_DATA} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={3} dataKey="value">
+                                {MOCK_PURPOSE_DATA.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                               </Pie>
-                              <Tooltip
-                                contentStyle={{
-                                  backgroundColor: 'white',
-                                  border: '1px solid #e5e7eb',
-                                  borderRadius: '8px',
-                                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-                                }}
-                              />
+                              <Tooltip contentStyle={tooltipStyle} />
                             </PieChart>
                           </ResponsiveContainer>
+                          <div className="grid grid-cols-2 gap-1.5 mt-2">
+                            {MOCK_PURPOSE_DATA.map((item, i) => (
+                              <div key={i} className="flex items-center gap-1.5">
+                                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
+                                <span className="text-xs text-gray-600 truncate">{item.name}</span>
+                              </div>
+                            ))}
+                          </div>
                         </CardContent>
                       </Card>
 
-                      {/* Source Pie Chart */}
-                      <Card className="bg-white" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderRadius: '12px' }}>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base font-semibold text-gray-900">แหล่งที่มาของลูกค้า</CardTitle>
+                      {/* Source Pie */}
+                      <Card className="bg-white border border-gray-100 rounded-xl shadow-soft">
+                        <CardHeader className="pb-1 pt-4 px-5">
+                          <CardTitle className="text-sm font-semibold text-gray-800">แหล่งที่มาของลูกค้า</CardTitle>
                         </CardHeader>
-                        <CardContent>
-                          <ResponsiveContainer width="100%" height={250}>
+                        <CardContent className="px-5 pb-4">
+                          <ResponsiveContainer width="100%" height={220}>
                             <PieChart>
-                              <Pie
-                                data={MOCK_SOURCE_DATA}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={70}
-                                outerRadius={100}
-                                paddingAngle={3}
-                                dataKey="value"
-                                label
-                              >
-                                {MOCK_SOURCE_DATA.map((entry, index) => (
-                                  <Cell key={`cell-${index}`} fill={entry.color} />
-                                ))}
+                              <Pie data={MOCK_SOURCE_DATA} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={3} dataKey="value">
+                                {MOCK_SOURCE_DATA.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                               </Pie>
-                              <Tooltip
-                                contentStyle={{
-                                  backgroundColor: 'white',
-                                  border: '1px solid #e5e7eb',
-                                  borderRadius: '8px',
-                                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-                                }}
-                              />
+                              <Tooltip contentStyle={tooltipStyle} />
                             </PieChart>
                           </ResponsiveContainer>
+                          <div className="flex justify-center gap-4 mt-2">
+                            {MOCK_SOURCE_DATA.map((item, i) => (
+                              <div key={i} className="flex items-center gap-1.5">
+                                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                                <span className="text-xs text-gray-600">{item.name}</span>
+                              </div>
+                            ))}
+                          </div>
                         </CardContent>
                       </Card>
 
-                      {/* Online Media Bar Chart */}
-                      <Card className="bg-white" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderRadius: '12px' }}>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base font-semibold text-gray-900">สื่อออนไลน์</CardTitle>
+                      {/* Online Media Bar */}
+                      <Card className="bg-white border border-gray-100 rounded-xl shadow-soft">
+                        <CardHeader className="pb-1 pt-4 px-5">
+                          <CardTitle className="text-sm font-semibold text-gray-800">สื่อออนไลน์</CardTitle>
                         </CardHeader>
-                        <CardContent>
-                          <ResponsiveContainer width="100%" height={300}>
+                        <CardContent className="px-5 pb-4">
+                          <ResponsiveContainer width="100%" height={260}>
                             <BarChart data={MOCK_ONLINE_MEDIA_DATA}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                              <XAxis
-                                dataKey="name"
-                                tick={{ fontSize: 10, fill: '#6b7280' }}
-                                angle={-45}
-                                textAnchor="end"
-                                height={80}
-                                axisLine={{ stroke: '#e5e7eb' }}
-                              />
-                              <YAxis
-                                tick={{ fontSize: 10, fill: '#6b7280' }}
-                                axisLine={{ stroke: '#e5e7eb' }}
-                              />
-                              <Tooltip
-                                contentStyle={{
-                                  backgroundColor: 'white',
-                                  border: '1px solid #e5e7eb',
-                                  borderRadius: '8px',
-                                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-                                }}
-                              />
-                              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                                {MOCK_ONLINE_MEDIA_DATA.map((entry, index) => (
-                                  <Cell key={`cell-${index}`} fill={entry.color} />
-                                ))}
-                              </Bar>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                              <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} angle={-40} textAnchor="end" height={72} axisLine={false} tickLine={false} />
+                              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={tooltipStyle} />
+                              <Bar dataKey="value" fill={KK.red} radius={[4, 4, 0, 0]} />
                             </BarChart>
                           </ResponsiveContainer>
                         </CardContent>
                       </Card>
 
-                      {/* Offline Media Bar Chart */}
-                      <Card className="bg-white" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderRadius: '12px' }}>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base font-semibold text-gray-900">สื่อออฟไลน์</CardTitle>
+                      {/* Offline Media Bar */}
+                      <Card className="bg-white border border-gray-100 rounded-xl shadow-soft">
+                        <CardHeader className="pb-1 pt-4 px-5">
+                          <CardTitle className="text-sm font-semibold text-gray-800">สื่อออฟไลน์</CardTitle>
                         </CardHeader>
-                        <CardContent>
-                          <ResponsiveContainer width="100%" height={300}>
+                        <CardContent className="px-5 pb-4">
+                          <ResponsiveContainer width="100%" height={260}>
                             <BarChart data={MOCK_OFFLINE_MEDIA_DATA}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                              <XAxis
-                                dataKey="name"
-                                tick={{ fontSize: 10, fill: '#6b7280' }}
-                                angle={-45}
-                                textAnchor="end"
-                                height={80}
-                                axisLine={{ stroke: '#e5e7eb' }}
-                              />
-                              <YAxis
-                                tick={{ fontSize: 10, fill: '#6b7280' }}
-                                axisLine={{ stroke: '#e5e7eb' }}
-                              />
-                              <Tooltip
-                                contentStyle={{
-                                  backgroundColor: 'white',
-                                  border: '1px solid #e5e7eb',
-                                  borderRadius: '8px',
-                                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-                                }}
-                              />
-                              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                                {MOCK_OFFLINE_MEDIA_DATA.map((entry, index) => (
-                                  <Cell key={`cell-${index}`} fill={entry.color} />
-                                ))}
-                              </Bar>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                              <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} angle={-40} textAnchor="end" height={72} axisLine={false} tickLine={false} />
+                              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={tooltipStyle} />
+                              <Bar dataKey="value" fill={KK.blue} radius={[4, 4, 0, 0]} />
                             </BarChart>
                           </ResponsiveContainer>
                         </CardContent>
                       </Card>
+
                     </div>
                   </TabsContent>
                 ))}
               </Tabs>
             </CardContent>
           </Card>
+
         </main>
       </div>
     </div>
   );
 };
 
-// Luxury KPI Card Component
-interface LuxuryKPICardProps {
-  icon: any;
+// KPI Card — Kids Kingdom style
+interface KPICardProps {
+  icon: React.ElementType;
   label: string;
   value: string;
-  iconColor: string;
+  bg: string;
+  color: string;
 }
 
-const LuxuryKPICard = ({ icon: Icon, label, value, iconColor }: LuxuryKPICardProps) => {
-  // Function to get the appropriate gradient background based on color category
-  const getGradientBackground = (color: string) => {
-    switch (color) {
-      case '#ca8a04': // Royal Gold/Success stats
-        return 'bg-gradient-to-br from-amber-600 to-amber-700';
-      case '#6b7280': // Luxury Gray/Neutral stats
-        return 'bg-gradient-to-br from-gray-600 to-gray-700';
-      case '#8b5a2b': // Warm Brown/Secondary stats
-        return 'bg-gradient-to-br from-amber-800 to-amber-900';
-      case '#1c1917': // Charcoal/Primary stats
-      default:
-        return 'bg-gradient-to-br from-gray-800 to-gray-900';
-    }
-  };
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-lg transition-shadow duration-300" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-      <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shadow-lg ${getGradientBackground(iconColor)}`}>
-          <Icon
-            className="w-5 h-5 text-white"
-            strokeWidth={2}
-          />
-        </div>
-        <div>
-          <div className="text-2xl font-bold text-gray-900">{value}</div>
-          <div className="text-xs text-gray-600">{label}</div>
-        </div>
-      </div>
+const KPICard = ({ icon: Icon, label, value, bg, color }: KPICardProps) => (
+  <div className="bg-white border border-gray-100 rounded-xl p-3.5 shadow-soft flex items-center gap-3 hover:shadow-soft-lg transition-shadow">
+    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: bg }}>
+      <Icon className="w-4 h-4" style={{ color }} strokeWidth={2} />
     </div>
-  );
-};
-
-// Compact KPI Card Component for smaller cards
-interface CompactKPICardProps {
-  icon: any;
-  label: string;
-  value: string;
-  iconColor: string;
-}
-
-const CompactKPICard = ({ icon: Icon, label, value, iconColor }: CompactKPICardProps) => {
-  // Function to get the appropriate gradient background based on color category
-  const getGradientBackground = (color: string) => {
-    switch (color) {
-      case '#ca8a04': // Royal Gold/Success stats
-        return 'bg-gradient-to-br from-amber-600 to-amber-700';
-      case '#6b7280': // Luxury Gray/Neutral stats
-        return 'bg-gradient-to-br from-gray-600 to-gray-700';
-      case '#8b5a2b': // Warm Brown/Secondary stats
-        return 'bg-gradient-to-br from-amber-800 to-amber-900';
-      case '#1c1917': // Charcoal/Primary stats
-      default:
-        return 'bg-gradient-to-br from-gray-800 to-gray-900';
-    }
-  };
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-lg transition-shadow duration-300" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-      <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shadow-lg ${getGradientBackground(iconColor)}`}>
-          <Icon
-            className="w-5 h-5 text-white"
-            strokeWidth={2}
-          />
-        </div>
-        <div className="min-w-0">
-          <div className="text-xl font-bold text-gray-900 truncate">{value}</div>
-          <div className="text-xs text-gray-600 truncate">{label}</div>
-        </div>
-      </div>
+    <div className="min-w-0">
+      <div className="text-xl font-bold text-gray-900 leading-tight">{value}</div>
+      <div className="text-xs text-gray-500 truncate">{label}</div>
     </div>
-  );
-};
+  </div>
+);
 
 export default Index;

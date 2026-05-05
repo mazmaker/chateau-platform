@@ -1,4 +1,4 @@
-// Lead Interest types for tracking multiple unit interests per lead
+﻿// Lead Interest types for tracking multiple unit interests per lead
 
 export type InterestStatus =
   | 'interested'
@@ -45,7 +45,7 @@ export const INTEREST_STATUS_OPTIONS: { value: InterestStatus; label: string; ic
   { value: 'viewing_scheduled', label: 'นัดดูห้อง', icon: '📅', color: 'bg-purple-100 text-purple-800' },
   { value: 'viewed', label: 'ดูแล้ว', icon: '👁️', color: 'bg-cyan-100 text-cyan-800' },
   { value: 'negotiating', label: 'กำลังเจรจา', icon: '🤝', color: 'bg-orange-100 text-orange-800' },
-  { value: 'reserved', label: 'จอง', icon: '🔒', color: 'bg-indigo-100 text-indigo-800' },
+  { value: 'reserved', label: 'จอง', icon: '🔒', color: 'bg-chateau-100 text-chateau-700' },
   { value: 'won', label: 'ปิดการขาย', icon: '🎉', color: 'bg-green-100 text-green-800' },
   { value: 'lost', label: 'ไม่สำเร็จ', icon: '❌', color: 'bg-red-100 text-red-800' },
   { value: 'dropped', label: 'ไม่สนใจแล้ว', icon: '❄️', color: 'bg-gray-100 text-gray-800' },

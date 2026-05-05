@@ -1,4 +1,4 @@
-import { LucideIcon, TrendingUp, TrendingDown } from "lucide-react";
+﻿import { LucideIcon, TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface KPICardProps {
@@ -14,10 +14,10 @@ interface KPICardProps {
 }
 
 const variantStyles = {
-  gold: "bg-gradient-to-br from-amber-600 to-amber-700 shadow-xl",
+  gold: "bg-gradient-to-br from-chateau to-chateau-600 shadow-xl",
   charcoal: "bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl",
   gray: "bg-gradient-to-br from-gray-600 to-gray-700 shadow-xl",
-  brown: "bg-gradient-to-br from-amber-800 to-amber-900 shadow-xl",
+  brown: "bg-gradient-to-br from-chateau-700 to-chateau-800 shadow-xl",
 };
 
 export const KPICard = ({ title, value, icon: Icon, trend, variant }: KPICardProps) => {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { X, Shield, User, Mail, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -261,8 +261,8 @@ const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess, currentUserRole
 
           {/* Warning - only show for non-admin when role changes */}
           {!isAdmin && role.toLowerCase() !== (typeof user.role === 'string' ? user.role.toLowerCase() : user.role) && (
-            <div className="mb-6 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-sm text-amber-800">
+            <div className="mb-6 p-3 bg-chateau-50 border border-chateau-100 rounded-lg">
+              <p className="text-sm text-chateau-700">
                 <strong>คำเตือน:</strong> การเปลี่ยนตำแหน่งอาจส่งผลต่อสิทธิ์การเข้าถึงฟีเจอร์ต่างๆ
               </p>
             </div>

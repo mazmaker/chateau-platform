@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { Eye, EyeOff, Lock, Mail, Building2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -71,7 +71,7 @@ const LoginForm = () => {
                 type="email"
                 autoComplete="email"
                 required
-                className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau focus:border-transparent"
                 placeholder="you@example.com"
                 value={formData.email}
                 onChange={handleChange}
@@ -94,7 +94,7 @@ const LoginForm = () => {
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
                 required
-                className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau focus:border-transparent"
                 placeholder="Enter your password"
                 value={formData.password}
                 onChange={handleChange}
@@ -122,11 +122,11 @@ const LoginForm = () => {
                 type="checkbox"
                 checked={formData.rememberMe}
                 onChange={handleChange}
-                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                className="h-4 w-4 text-chateau focus:ring-chateau border-gray-300 rounded"
               />
               <span className="ml-2 text-sm text-gray-700">Remember me</span>
             </label>
-            <a href="#" className="text-sm text-indigo-600 hover:text-indigo-500 font-medium">
+            <a href="#" className="text-sm text-chateau hover:text-chateau font-medium">
               Forgot password?
             </a>
           </div>
@@ -135,7 +135,7 @@ const LoginForm = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gray-900 hover:bg-black text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gray-900 hover:bg-black text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-chateau disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
           >
             {loading ? (
               <div className="flex items-center">
@@ -149,8 +149,8 @@ const LoginForm = () => {
         </form>
 
         {/* Admin Contact */}
-        <div className="mt-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
-          <p className="text-center text-sm text-indigo-700">
+        <div className="mt-6 p-4 bg-chateau-50 border border-chateau-100 rounded-lg">
+          <p className="text-center text-sm text-chateau-600">
             <strong>Need an account?</strong><br />
             Contact your system administrator to create your user account
           </p>
@@ -160,9 +160,9 @@ const LoginForm = () => {
         <div className="mt-8 text-center">
           <p className="text-xs text-gray-500">
             By signing in, you agree to our{' '}
-            <a href="#" className="text-indigo-600 hover:text-indigo-500">Terms</a>{' '}
+            <a href="#" className="text-chateau hover:text-chateau">Terms</a>{' '}
             and{' '}
-            <a href="#" className="text-indigo-600 hover:text-indigo-500">Privacy Policy</a>
+            <a href="#" className="text-chateau hover:text-chateau">Privacy Policy</a>
           </p>
         </div>
       </div>

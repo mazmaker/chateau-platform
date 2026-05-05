@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { X, Save, User, UserCircle, Briefcase, MapPin, Megaphone, Target, ShieldCheck, FileText, Building2, CalendarDays, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -649,9 +649,9 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
       <Dialog open={isOpen} onOpenChange={handleClose}>
         <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-hidden p-0 flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-[#676AF1]/10 via-[#8B5CF6]/10 to-[#676AF1]/10 flex-shrink-0">
+          <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-[#e60023]/10 via-[#8B5CF6]/10 to-[#e60023]/10 flex-shrink-0">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-br from-[#676AF1] to-[#8B5CF6] rounded-xl shadow-md">
+              <div className="p-2 bg-gradient-to-br from-[#e60023] to-[#8B5CF6] rounded-xl shadow-md">
                 <UserCog className="w-5 h-5 text-white" />
               </div>
               <div>
@@ -798,15 +798,15 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
 
                   {/* Section 2: Units of Interest */}
                   {lead && (
-                    <Card className="border-2 border-indigo-100 shadow-sm">
+                    <Card className="border-2 border-chateau-50 shadow-sm">
                       <CardContent className="p-0">
-                        <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-indigo-100/50 border-b border-indigo-100">
-                          <div className="p-1.5 bg-indigo-500 rounded-lg">
+                        <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-chateau-50 to-chateau-100/50 border-b border-chateau-50">
+                          <div className="p-1.5 bg-chateau-500 rounded-lg">
                             <Building2 className="w-3.5 h-3.5 text-white" />
                           </div>
                           <div>
-                            <h3 className="font-semibold text-indigo-900 text-sm">ยูนิตที่สนใจ</h3>
-                            <p className="text-xs text-indigo-600">รายการยูนิตที่ลูกค้าสนใจ</p>
+                            <h3 className="font-semibold text-chateau-800 text-sm">ยูนิตที่สนใจ</h3>
+                            <p className="text-xs text-chateau">รายการยูนิตที่ลูกค้าสนใจ</p>
                           </div>
                         </div>
                         <div className="p-4">
@@ -1240,15 +1240,15 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                   </Card>
 
                   {/* Section 7: Purchase Purpose - Indigo */}
-                  <Card className="border-2 border-indigo-100 shadow-sm">
+                  <Card className="border-2 border-chateau-50 shadow-sm">
                     <CardContent className="p-0">
-                      <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-indigo-100/50 border-b border-indigo-100">
-                        <div className="p-1.5 bg-indigo-500 rounded-lg">
+                      <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-chateau-50 to-chateau-100/50 border-b border-chateau-50">
+                        <div className="p-1.5 bg-chateau-500 rounded-lg">
                           <Target className="w-3.5 h-3.5 text-white" />
                         </div>
                         <div>
-                          <h3 className="font-semibold text-indigo-900 text-sm">จุดประสงค์การซื้อ</h3>
-                          <p className="text-xs text-indigo-600">เหตุผลในการซื้ออสังหาริมทรัพย์</p>
+                          <h3 className="font-semibold text-chateau-800 text-sm">จุดประสงค์การซื้อ</h3>
+                          <p className="text-xs text-chateau">เหตุผลในการซื้ออสังหาริมทรัพย์</p>
                         </div>
                       </div>
                       <div className="p-4">
@@ -1266,7 +1266,7 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                                   purchase_purpose: e.target.value,
                                   purchase_purpose_other: ""
                                 }))}
-                                className="w-4 h-4 text-indigo-600"
+                                className="w-4 h-4 text-chateau"
                                 disabled={loading}
                               />
                               <Label htmlFor={`edit_purchase_purpose_${purpose.value}`} className="font-normal cursor-pointer">
@@ -1416,7 +1416,7 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                   type="submit"
                   onClick={handleSubmit}
                   disabled={loading}
-                  className="flex-1 bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] hover:opacity-90"
+                  className="flex-1 bg-gradient-to-r from-[#e60023] to-[#8B5CF6] hover:opacity-90"
                 >
                   {loading ? (
                     <div className="flex items-center justify-center">
@@ -1465,7 +1465,7 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
             <Button variant="outline" onClick={() => setShowPolicyDialog(false)}>
               ปิด
             </Button>
-            <Button onClick={handleAcceptPolicy} className="bg-gradient-to-r from-[#676AF1] to-[#8B5CF6]">
+            <Button onClick={handleAcceptPolicy} className="bg-gradient-to-r from-[#e60023] to-[#8B5CF6]">
               ยอมรับและดำเนินการต่อ
             </Button>
           </DialogFooter>

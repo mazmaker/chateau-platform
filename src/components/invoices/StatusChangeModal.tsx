@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -195,8 +195,8 @@ const StatusChangeModal = ({
     },
     pending: {
       title: 'เปลี่ยนเป็นรอดำเนินการ',
-      icon: <Clock className="w-5 h-5 text-amber-600" />,
-      badgeClass: 'bg-amber-100 text-amber-800',
+      icon: <Clock className="w-5 h-5 text-chateau" />,
+      badgeClass: 'bg-chateau-100 text-chateau-700',
       alertType: 'default',
       alertMessage: 'สถานะจะเปลี่ยนกลับเป็นรอดำเนินการ'
     }

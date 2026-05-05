@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSimpleAuth } from '@/contexts/AuthContextSimple'
 import { Eye, EyeOff, Lock, Mail, Loader2 } from 'lucide-react'
@@ -166,7 +166,7 @@ export function LoginFormSimple() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex justify-center items-center py-3.5 px-4 bg-amber-800 hover:bg-amber-900 text-white rounded-xl text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+            className="w-full flex justify-center items-center py-3.5 px-4 bg-chateau-700 hover:bg-chateau-700 text-white rounded-xl text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
           >
             {loading ? (
               <>

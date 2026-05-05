@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Calendar, Building, Filter, Search } from 'lucide-react';
 
 const GlobalFilters = () => {
@@ -49,7 +49,7 @@ const GlobalFilters = () => {
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
-            className="px-3 py-2 text-sm border border-[#e2e8f0] rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="px-3 py-2 text-sm border border-[#e2e8f0] rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau"
           >
             {dateRanges.map(range => (
               <option key={range.id} value={range.id}>
@@ -68,7 +68,7 @@ const GlobalFilters = () => {
           <select
             value={selectedProject}
             onChange={(e) => setSelectedProject(e.target.value)}
-            className="px-3 py-2 text-sm border border-[#e2e8f0] rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="px-3 py-2 text-sm border border-[#e2e8f0] rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau"
           >
             {projects.map(project => (
               <option key={project.id} value={project.id}>
@@ -84,7 +84,7 @@ const GlobalFilters = () => {
           <select
             value={propertyType}
             onChange={(e) => setPropertyType(e.target.value)}
-            className="px-3 py-2 text-sm border border-[#e2e8f0] rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="px-3 py-2 text-sm border border-[#e2e8f0] rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau"
           >
             {propertyTypes.map(type => (
               <option key={type.id} value={type.id}>
@@ -102,7 +102,7 @@ const GlobalFilters = () => {
             <input
               type="text"
               placeholder="ค้นหาลูกค้า, โครงการ..."
-              className="w-full pl-10 pr-3 py-2 text-sm border border-[#e2e8f0] rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full pl-10 pr-3 py-2 text-sm border border-[#e2e8f0] rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau"
             />
           </div>
         </div>
@@ -112,7 +112,7 @@ const GlobalFilters = () => {
       <div className="flex items-center gap-2 mt-4 pt-4 border-t border-[#e2e8f0]">
         <span className="text-xs text-gray-600">ตัวกรองที่เลือก:</span>
         <div className="flex gap-2">
-          <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-800 rounded-full">
+          <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-chateau-100 text-chateau-700 rounded-full">
             {dateRanges.find(r => r.id === dateRange)?.name}
           </span>
           {selectedProject !== 'all' && (

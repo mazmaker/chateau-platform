@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Lock, Check, X, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -121,13 +121,13 @@ const ForcePasswordChange = () => {
 
           <CardContent className="space-y-4">
             {/* Security Notice */}
-            <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-              <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+            <div className="flex items-start gap-3 p-4 bg-chateau-50 border border-chateau-100 rounded-lg">
+              <AlertTriangle className="w-5 h-5 text-chateau mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-sm font-medium text-amber-800">
+                <p className="text-sm font-medium text-chateau-700">
                   ข้อกำหนดความปลอดภัย
                 </p>
-                <p className="text-sm text-amber-700 mt-1">
+                <p className="text-sm text-chateau-600 mt-1">
                   เพื่อความปลอดภัย คุณต้องเปลี่ยนรหัสผ่านชั่วคราวก่อนเข้าใช้งานระบบครั้งแรก
                 </p>
               </div>

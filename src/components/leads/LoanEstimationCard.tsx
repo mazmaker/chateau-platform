@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Loan Estimation Card Component
  *
  * Purpose: Display loan estimation with affordability analysis
@@ -250,10 +250,10 @@ export function LoanEstimationCard({ estimation, loading }: LoanEstimationCardPr
 
       {/* Approval Factors */}
       {estimation.approval_factors && estimation.approval_factors.length > 0 && (
-        <Card className="border-l-4 border-l-indigo-500">
+        <Card className="border-l-4 border-l-chateau">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-indigo-600" />
+              <DollarSign className="w-5 h-5 text-chateau" />
               ปัจจัยการอนุมัติ
             </CardTitle>
           </CardHeader>

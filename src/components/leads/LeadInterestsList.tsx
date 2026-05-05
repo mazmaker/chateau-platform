@@ -1,4 +1,4 @@
-import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
+﻿import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import { Plus, Edit2, Trash2, Building2, Calendar, ChevronDown, ChevronUp, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -664,9 +664,9 @@ const LeadInterestsList = forwardRef<LeadInterestsListRef, LeadInterestsListProp
                       <div key={interest.id}>
                         {editingInterestId === interest.id ? (
                           // Inline Edit Form
-                          <div className="p-4 bg-amber-50 border-l-4 border-amber-400 space-y-3">
+                          <div className="p-4 bg-chateau-50 border-l-4 border-chateau-300 space-y-3">
                             <div className="flex items-center justify-between">
-                              <h4 className="font-medium text-amber-800 flex items-center gap-2">
+                              <h4 className="font-medium text-chateau-700 flex items-center gap-2">
                                 <Edit2 className="w-4 h-4" />
                                 แก้ไข: ยูนิต {interest.unit?.unit_number}
                               </h4>

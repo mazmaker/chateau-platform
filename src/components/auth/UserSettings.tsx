@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { User, Mail, Phone, Building2, Lock, Bell, CreditCard, LogOut, Camera } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -123,7 +123,7 @@ const UserSettings = () => {
                 type="text"
                 value={profileData.fullName}
                 onChange={(e) => setProfileData({ ...profileData, fullName: e.target.value })}
-                className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau"
               />
             </div>
           </div>
@@ -149,7 +149,7 @@ const UserSettings = () => {
                 type="tel"
                 value={profileData.phone}
                 onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau"
                 placeholder="+1 (555) 000-0000"
               />
             </div>
@@ -179,7 +179,7 @@ const UserSettings = () => {
               type="password"
               value={passwordData.currentPassword}
               onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-              className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau"
             />
           </div>
 
@@ -189,7 +189,7 @@ const UserSettings = () => {
               type="password"
               value={passwordData.newPassword}
               onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-              className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau"
               minLength={8}
             />
           </div>
@@ -200,7 +200,7 @@ const UserSettings = () => {
               type="password"
               value={passwordData.confirmPassword}
               onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-              className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau"
               minLength={8}
             />
           </div>
@@ -249,7 +249,7 @@ const UserSettings = () => {
             <button
               onClick={() => setNotifications({ ...notifications, [item.key]: !notifications[item.key as keyof typeof notifications] })}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                notifications[item.key as keyof typeof notifications] ? 'bg-indigo-600' : 'bg-gray-200'
+                notifications[item.key as keyof typeof notifications] ? 'bg-chateau' : 'bg-gray-200'
               }`}
             >
               <span
@@ -286,13 +286,13 @@ const UserSettings = () => {
               <input
                 type="text"
                 defaultValue={currentTenant.name}
-                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Industry</label>
-              <select className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <select className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau">
                 <option>Real Estate</option>
                 <option>Property Management</option>
                 <option>Construction</option>
@@ -304,7 +304,7 @@ const UserSettings = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">Company Description</label>
               <textarea
                 rows={4}
-                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau"
                 placeholder="Describe your company..."
               />
             </div>
@@ -343,7 +343,7 @@ const UserSettings = () => {
           <div className="text-2xl font-bold text-gray-900">3</div>
           <div className="text-sm text-gray-500">Active Users</div>
           <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-            <div className="bg-indigo-600 h-2 rounded-full" style={{ width: '60%' }}></div>
+            <div className="bg-chateau h-2 rounded-full" style={{ width: '60%' }}></div>
           </div>
         </div>
 
@@ -351,7 +351,7 @@ const UserSettings = () => {
           <div className="text-2xl font-bold text-gray-900">1,234</div>
           <div className="text-sm text-gray-500">Properties</div>
           <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-            <div className="bg-indigo-600 h-2 rounded-full" style={{ width: '40%' }}></div>
+            <div className="bg-chateau h-2 rounded-full" style={{ width: '40%' }}></div>
           </div>
         </div>
 
@@ -359,7 +359,7 @@ const UserSettings = () => {
           <div className="text-2xl font-bold text-gray-900">85GB</div>
           <div className="text-sm text-gray-500">Storage Used</div>
           <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-            <div className="bg-indigo-600 h-2 rounded-full" style={{ width: '85%' }}></div>
+            <div className="bg-chateau h-2 rounded-full" style={{ width: '85%' }}></div>
           </div>
         </div>
       </div>
@@ -422,7 +422,7 @@ const UserSettings = () => {
                     onClick={() => setActiveTab(tab.id)}
                     className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
                       activeTab === tab.id
-                        ? 'bg-indigo-50 text-indigo-700 border-l-4 border-indigo-700'
+                        ? 'bg-chateau-50 text-chateau-600 border-l-4 border-chateau-600'
                         : 'text-gray-700 hover:bg-gray-50'
                     }`}
                   >

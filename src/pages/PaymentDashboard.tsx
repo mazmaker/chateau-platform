@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -1611,7 +1611,7 @@ const PaymentDashboard = () => {
       },
       pending: {
         label: 'รอชำระ',
-        className: 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200',
+        className: 'bg-chateau-100 text-chateau-700 border-chateau-100 hover:bg-chateau-100',
         icon: Clock
       },
       overdue: {
@@ -1644,7 +1644,7 @@ const PaymentDashboard = () => {
       },
       pending: {
         label: 'รอดำเนินการ',
-        className: 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200',
+        className: 'bg-chateau-100 text-chateau-700 border-chateau-100 hover:bg-chateau-100',
         icon: Clock
       },
       failed: {
@@ -1708,10 +1708,10 @@ const PaymentDashboard = () => {
                 </span>
               </div>
             </div>
-            <div className="bg-amber-50 p-3 sm:p-4 rounded-lg border border-amber-200">
+            <div className="bg-chateau-50 p-3 sm:p-4 rounded-lg border border-chateau-100">
               <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-amber-600" />
-                <span className="text-amber-800 font-medium">
+                <Clock className="w-5 h-5 text-chateau" />
+                <span className="text-chateau-700 font-medium">
                   รอดำเนินการ: {allPayments.filter(p => p.payment_status === 'pending').length}
                 </span>
               </div>
@@ -2312,7 +2312,7 @@ const PaymentDashboard = () => {
         <Card>
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-amber-600 to-amber-700 rounded-xl flex items-center justify-center shadow-xl">
+              <div className="w-12 h-12 bg-gradient-to-br from-chateau to-chateau-600 rounded-xl flex items-center justify-center shadow-xl">
                 <DollarSign className="w-6 h-6 text-white" strokeWidth={2} />
               </div>
               <div>
@@ -2354,7 +2354,7 @@ const PaymentDashboard = () => {
         <Card>
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-amber-800 to-amber-900 rounded-xl flex items-center justify-center shadow-xl">
+              <div className="w-12 h-12 bg-gradient-to-br from-chateau-700 to-chateau-800 rounded-xl flex items-center justify-center shadow-xl">
                 <Users className="w-6 h-6 text-white" strokeWidth={2} />
               </div>
               <div>
@@ -2568,7 +2568,7 @@ const PaymentDashboard = () => {
             {selectedPayment && (
               <div className="space-y-6 py-4">
                 {/* Payment Overview */}
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 sm:p-6 rounded-lg border border-blue-200">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-50 p-4 sm:p-6 rounded-lg border border-blue-200">
                   <div className="grid grid-cols-2 gap-6">
                     <div>
                       <div className="text-sm text-blue-700 mb-1">จำนวนเงิน</div>
@@ -2772,7 +2772,7 @@ const PaymentDashboard = () => {
                 <div className={`p-4 rounded-lg border-l-4 ${
                   selectedCalendarEvent.type === 'overdue' ? 'bg-red-50 border-l-red-500' :
                   selectedCalendarEvent.type === 'due' ? 'bg-orange-50 border-l-orange-500' :
-                  selectedCalendarEvent.type === 'reminder' ? 'bg-amber-50 border-l-amber-500' :
+                  selectedCalendarEvent.type === 'reminder' ? 'bg-chateau-50 border-l-chateau' :
                   'bg-gray-50 border-l-gray-500'
                 }`}>
                   <div className="flex items-start justify-between">
@@ -2819,7 +2819,7 @@ const PaymentDashboard = () => {
                           <span className="text-gray-600">สถานะ:</span>
                           <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
                             selectedCalendarEvent.invoice_detail.status === 'paid' ? 'bg-green-100 text-green-800' :
-                            selectedCalendarEvent.invoice_detail.status === 'pending' ? 'bg-amber-100 text-amber-800' :
+                            selectedCalendarEvent.invoice_detail.status === 'pending' ? 'bg-chateau-100 text-chateau-700' :
                             selectedCalendarEvent.invoice_detail.status === 'overdue' ? 'bg-red-100 text-red-800' :
                             'bg-gray-100 text-gray-800'
                           }`}>

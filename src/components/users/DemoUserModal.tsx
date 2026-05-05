@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { X, UserPlus, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserRole } from "@/lib/database-types";
@@ -204,13 +204,13 @@ const DemoUserModal = ({ isOpen, onClose, onSuccess }: DemoUserModalProps) => {
 
         <div className="p-6 overflow-y-auto max-h-[60vh]">
           {/* Info Box */}
-          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+          <div className="mb-6 p-4 bg-chateau-50 border border-chateau-100 rounded-xl">
             <div className="flex gap-3">
-              <Sparkles className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <Sparkles className="w-5 h-5 text-chateau flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-amber-800">บัญชีทดสอบสำหรับการพัฒนา</p>
-                <p className="text-xs text-amber-700 mt-1">
-                  บัญชีเหล่านี้สร้างขึ้นโดยอัตโนมัติ ใช้รหัสผ่าน: <code className="bg-amber-100 px-1 rounded">Demo123456!</code>
+                <p className="text-sm font-medium text-chateau-700">บัญชีทดสอบสำหรับการพัฒนา</p>
+                <p className="text-xs text-chateau-600 mt-1">
+                  บัญชีเหล่านี้สร้างขึ้นโดยอัตโนมัติ ใช้รหัสผ่าน: <code className="bg-chateau-100 px-1 rounded">Demo123456!</code>
                 </p>
               </div>
             </div>

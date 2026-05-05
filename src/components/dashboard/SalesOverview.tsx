@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { TrendingUp, TrendingDown, DollarSign, Home, Users, Target } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -129,7 +129,7 @@ const SalesOverview = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {/* Total Revenue */}
           <div className="text-center">
-            <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-amber-600 to-amber-700 rounded-xl mx-auto mb-3 shadow-xl">
+            <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-chateau to-chateau-600 rounded-xl mx-auto mb-3 shadow-xl">
               <DollarSign className="w-6 h-6 text-white" strokeWidth={2} />
             </div>
             <p className="text-2xl font-bold text-gray-900">
@@ -169,7 +169,7 @@ const SalesOverview = () => {
 
           {/* Conversion Rate */}
           <div className="text-center">
-            <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-amber-800 to-amber-900 rounded-xl mx-auto mb-3 shadow-xl">
+            <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-chateau-700 to-chateau-800 rounded-xl mx-auto mb-3 shadow-xl">
               <Users className="w-6 h-6 text-white" strokeWidth={2} />
             </div>
             <p className="text-2xl font-bold text-gray-900">{avgConversionRate}%</p>

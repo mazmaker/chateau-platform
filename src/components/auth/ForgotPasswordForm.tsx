@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Mail, ArrowLeft, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -47,7 +47,7 @@ const ForgotPasswordForm = () => {
             <div className="space-y-3">
               <button
                 onClick={() => window.location.href = '/auth/login'}
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gray-900 hover:bg-black text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200"
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gray-900 hover:bg-black text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-chateau transition-all duration-200"
               >
                 Return to Sign In
               </button>
@@ -57,7 +57,7 @@ const ForgotPasswordForm = () => {
                   setSuccess(false);
                   setEmail('');
                 }}
-                className="w-full py-3 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200"
+                className="w-full py-3 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-chateau transition-all duration-200"
               >
                 Send to another email
               </button>
@@ -117,7 +117,7 @@ const ForgotPasswordForm = () => {
                   type="email"
                   autoComplete="email"
                   required
-                  className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-chateau focus:border-transparent"
                   placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -129,7 +129,7 @@ const ForgotPasswordForm = () => {
             <button
               type="submit"
               disabled={loading || !email}
-              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gray-900 hover:bg-black text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gray-900 hover:bg-black text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-chateau disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
             >
               {loading ? (
                 <div className="flex items-center">
@@ -145,7 +145,7 @@ const ForgotPasswordForm = () => {
           {/* Sign In Link */}
           <p className="text-center text-sm text-gray-600 mt-6">
             Remember your password?{' '}
-            <a href="/auth/login" className="font-medium text-indigo-600 hover:text-indigo-500">
+            <a href="/auth/login" className="font-medium text-chateau hover:text-chateau">
               Sign in
             </a>
           </p>
@@ -155,7 +155,7 @@ const ForgotPasswordForm = () => {
         <div className="mt-8 text-center">
           <p className="text-xs text-gray-500">
             Need help?{' '}
-            <a href="#" className="text-indigo-600 hover:text-indigo-500">Contact Support</a>
+            <a href="#" className="text-chateau hover:text-chateau">Contact Support</a>
           </p>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+﻿import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, Lock } from 'lucide-react';
@@ -24,7 +24,7 @@ const ProtectedRoute = ({
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto mb-4" />
+          <Loader2 className="w-8 h-8 animate-spin text-chateau mx-auto mb-4" />
           <p className="text-gray-600">Loading...</p>
         </div>
       </div>
@@ -50,7 +50,7 @@ const ProtectedRoute = ({
               </p>
               <button
                 onClick={() => window.location.href = '/'}
-                className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                className="w-full px-4 py-2 bg-chateau text-white rounded-lg hover:bg-chateau-600 transition-colors"
               >
                 กลับสู่แดชบอร์ด
               </button>

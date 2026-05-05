@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
@@ -418,7 +418,7 @@ const OwnerDashboard = () => {
       tenant_deleted: <Trash2 className="w-4 h-4 text-red-600" />,
       tenant_suspended: <Ban className="w-4 h-4 text-orange-600" />,
       subscription_renewed: <RefreshCw className="w-4 h-4 text-purple-600" />,
-      plan_upgraded: <Star className="w-4 h-4 text-amber-600" />
+      plan_upgraded: <Star className="w-4 h-4 text-chateau" />
     };
     return icons[type] || <Activity className="w-4 h-4 text-gray-600" />;
   };
@@ -492,7 +492,7 @@ const OwnerDashboard = () => {
           <Card className="border-l-4 border-l-cyan-500">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-to-br from-amber-600 to-amber-700 rounded-xl flex items-center justify-center shadow-xl">
+                <div className="w-12 h-12 bg-gradient-to-br from-chateau to-chateau-600 rounded-xl flex items-center justify-center shadow-xl">
                   <DollarSign className="w-6 h-6 text-white" strokeWidth={2} />
                 </div>
                 <div>
@@ -549,7 +549,7 @@ const OwnerDashboard = () => {
           <Card className="border-l-4 border-l-orange-500">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-to-br from-amber-800 to-amber-900 rounded-xl flex items-center justify-center shadow-xl">
+                <div className="w-12 h-12 bg-gradient-to-br from-chateau-700 to-chateau-800 rounded-xl flex items-center justify-center shadow-xl">
                   <Users className="w-6 h-6 text-white" strokeWidth={2} />
                 </div>
                 <div>
@@ -769,7 +769,7 @@ const OwnerDashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2">
-                    <Star className="w-5 h-5 text-amber-500" />
+                    <Star className="w-5 h-5 text-chateau-500" />
                     บริษัทยอดนิยม
                   </CardTitle>
                   <CardDescription>เรียงตามรายได้สูงสุด</CardDescription>
@@ -795,7 +795,7 @@ const OwnerDashboard = () => {
                     >
                       <div className="flex items-center gap-3">
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                          index === 0 ? 'bg-amber-100 text-amber-700' :
+                          index === 0 ? 'bg-chateau-100 text-chateau-600' :
                           index === 1 ? 'bg-gray-100 text-gray-700' :
                           index === 2 ? 'bg-orange-100 text-orange-700' :
                           'bg-gray-50 text-gray-600'

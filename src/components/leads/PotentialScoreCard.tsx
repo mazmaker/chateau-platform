@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Lead Potential Score Card Component
  *
  * Purpose: Display AI-calculated lead potential score with detailed breakdown
@@ -252,10 +252,10 @@ export function PotentialScoreCard({ score, loading }: PotentialScoreCardProps) 
       </Card>
 
       {/* Next Best Actions Card */}
-      <Card className="border-l-4 border-l-indigo-500">
+      <Card className="border-l-4 border-l-chateau">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Target className="w-5 h-5 text-indigo-600" />
+            <Target className="w-5 h-5 text-chateau" />
             แผนการดำเนินการต่อไป
           </CardTitle>
         </CardHeader>
@@ -264,9 +264,9 @@ export function PotentialScoreCard({ score, loading }: PotentialScoreCardProps) 
             {score.next_best_actions.map((action, index) => (
               <div
                 key={index}
-                className="flex items-center gap-3 p-3 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition-colors"
+                className="flex items-center gap-3 p-3 rounded-lg bg-chateau-50 hover:bg-chateau-100 transition-colors"
               >
-                <div className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-semibold">
+                <div className="w-6 h-6 rounded-full bg-chateau text-white flex items-center justify-center text-xs font-semibold">
                   {index + 1}
                 </div>
                 <span className="text-sm font-medium">{action}</span>

@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from 'react'
+﻿import { ReactNode, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSimpleAuth } from '@/contexts/AuthContextSimple'
 import { Building2, Loader2 } from 'lucide-react'
@@ -53,10 +53,10 @@ export const ProtectedRouteSimple = ({
     if (passwordResetRequired && !window.location.pathname.includes('/auth/change-password')) {
       return (
         <div className="min-h-screen bg-white flex items-center justify-center px-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-amber-200 p-8 max-w-md">
+          <div className="bg-white rounded-2xl shadow-2xl border border-chateau-100 p-8 max-w-md">
             <div className="text-center">
-              <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-16 h-16 bg-chateau-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-chateau" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0-4h.01m-4.938 9h9.876c.54 0 .98-.48.98-1.07a.816.816 0 0 0-.054-.288L13.618 4.15a.81.81 0 0 0-1.317-.054c-.03.03-.06.064-.081.1L7.984 15.85a.816.816 0 0 0 .747 1.15Z" />
                 </svg>
               </div>
@@ -111,7 +111,7 @@ export const ProtectedRouteSimple = ({
           <div className="flex items-center justify-center w-20 h-20 bg-gray-900 text-white shadow-lg rounded-2xl mb-6 shadow-lg">
             <Building2 className="w-10 h-10 text-white" />
           </div>
-          <Loader2 className="w-8 h-8 text-indigo-600 mx-auto animate-spin mb-4" />
+          <Loader2 className="w-8 h-8 text-chateau mx-auto animate-spin mb-4" />
           <p className="text-gray-600 text-lg">กำลังโหลด...</p>
         </div>
       </div>

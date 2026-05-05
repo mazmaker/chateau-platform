@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
@@ -174,7 +174,7 @@ const BillingManagement = () => {
       },
       pending: {
         label: 'รอชำระ',
-        className: 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200',
+        className: 'bg-chateau-100 text-chateau-700 border-chateau-100 hover:bg-chateau-100',
         icon: Clock
       },
       overdue: {

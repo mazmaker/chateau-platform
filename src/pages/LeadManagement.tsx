@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { SalesGuard } from '@/components/auth/PermissionGuard';
@@ -1097,7 +1097,7 @@ const LeadManagement = () => {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => navigate(`/leads/${lead.id}/cdp`)}>
-                              <Target className="w-4 h-4 mr-2 text-indigo-600" />
+                              <Target className="w-4 h-4 mr-2 text-chateau" />
                               CDP
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => {
@@ -1162,7 +1162,7 @@ const LeadManagement = () => {
               return (
                 <div className="space-y-6">
                   {/* Header with Photo and Basic Info */}
-                  <div className="flex gap-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl">
+                  <div className="flex gap-6 p-4 bg-gradient-to-r from-blue-50 to-blue-50 rounded-xl">
                     {/* Profile Image */}
                     <div className="flex-shrink-0">
                       {prefs.profile_image ? (
@@ -1489,7 +1489,7 @@ const LeadManagement = () => {
         <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
           <DialogContent className="p-0 overflow-hidden max-w-md">
             {/* Header */}
-            <div className="bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] px-6 py-4">
+            <div className="bg-gradient-to-r from-[#e60023] to-[#8B5CF6] px-6 py-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
                   <AlertTriangle className="w-6 h-6 text-white" />
@@ -1510,7 +1510,7 @@ const LeadManagement = () => {
               {/* Lead Info Card */}
               <Card className="border-2 border-purple-100 shadow-sm">
                 <CardContent className="p-0">
-                  <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-50 to-blue-50 border-b border-purple-100">
                     <div className="p-1.5 bg-purple-500 rounded-lg">
                       <Users className="w-4 h-4 text-white" />
                     </div>

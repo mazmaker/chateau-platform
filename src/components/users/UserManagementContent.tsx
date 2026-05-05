@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import { Search, Plus, User, Shield, ToggleLeft, ToggleRight, Trash2, Edit, UserPlus, Sparkles, Paperclip, Key } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -315,7 +315,7 @@ const UserManagementContent = () => {
   const getPasswordStatus = (user: UserData) => {
     if (hasTemporaryPassword(user)) {
       return (
-        <Badge className="bg-amber-100 text-amber-800 border-amber-300 border">
+        <Badge className="bg-chateau-100 text-chateau-700 border-chateau-200 border">
           🔑 รหัสผ่านชั่วคราว
         </Badge>
       );
@@ -368,7 +368,7 @@ const UserManagementContent = () => {
               <Button
                 onClick={() => setShowDemoModal(true)}
                 variant="outline"
-                className="flex items-center gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
+                className="flex items-center gap-2 border-chateau-200 text-chateau-600 hover:bg-chateau-50"
               >
                 <Sparkles className="w-4 h-4" />
                 ทดสอบ
@@ -760,9 +760,9 @@ const UserManagementContent = () => {
               </ul>
             </div>
 
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-              <h4 className="font-medium text-amber-800 mb-2">⚠️ สิ่งที่จะถูกลบ:</h4>
-              <ul className="text-sm text-amber-700 space-y-1 list-disc list-inside">
+            <div className="bg-chateau-50 border border-chateau-100 rounded-lg p-4">
+              <h4 className="font-medium text-chateau-700 mb-2">⚠️ สิ่งที่จะถูกลบ:</h4>
+              <ul className="text-sm text-chateau-600 space-y-1 list-disc list-inside">
                 <li><strong>บัญชีเข้าสู่ระบบเท่านั้น</strong></li>
                 <li>ผู้ใช้จะไม่สามารถล็อกอินได้</li>
                 <li>สิทธิ์การเข้าถึงระบบจะหมดอายุ</li>

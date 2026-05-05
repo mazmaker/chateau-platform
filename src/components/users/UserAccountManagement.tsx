@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { User, Clock, Shield, Key, Copy, CheckCircle, XCircle, RefreshCw, Send, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -398,7 +398,7 @@ const UserAccountManagement = ({ userId, initialData, onClose }: UserAccountMana
               onClick={resetPassword}
               disabled={loading}
               variant="outline"
-              className="flex-1 border-amber-300 text-amber-700 hover:bg-amber-50"
+              className="flex-1 border-chateau-200 text-chateau-600 hover:bg-chateau-50"
             >
               {loading ? (
                 <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
@@ -426,13 +426,13 @@ const UserAccountManagement = ({ userId, initialData, onClose }: UserAccountMana
 
         {/* Temporary Password Section */}
         {(tempPassword || hasTempPassword) && (
-          <Alert className="bg-amber-50 border-amber-200">
+          <Alert className="bg-chateau-50 border-chateau-100">
             <div className="flex items-start gap-3">
-              <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+              <div className="w-8 h-8 bg-chateau-500 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
                 <Key className="w-4 h-4 text-white" />
               </div>
               <div className="flex-1 space-y-3">
-                <p className="font-medium text-amber-800 text-lg">
+                <p className="font-medium text-chateau-700 text-lg">
                   {tempPassword ? "รหัสผ่านชั่วคราวปัจจุบัน" : "มีรหัสผ่านชั่วคราวแล้ว"}
                 </p>
 
@@ -444,14 +444,14 @@ const UserAccountManagement = ({ userId, initialData, onClose }: UserAccountMana
                           type={showPassword ? "text" : "password"}
                           value={tempPassword}
                           readOnly
-                          className="bg-white border-amber-300 font-mono text-lg tracking-wider pr-10"
+                          className="bg-white border-chateau-200 font-mono text-lg tracking-wider pr-10"
                           style={{ fontSize: '16px', letterSpacing: '3px' }}
                         />
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="absolute right-0 top-0 h-full px-3 text-amber-600 hover:bg-amber-100"
+                          className="absolute right-0 top-0 h-full px-3 text-chateau hover:bg-chateau-100"
                           onClick={() => setShowPassword(!showPassword)}
                         >
                           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -461,25 +461,25 @@ const UserAccountManagement = ({ userId, initialData, onClose }: UserAccountMana
                         onClick={copyTempPassword}
                         size="sm"
                         variant="outline"
-                        className="border-amber-300 text-amber-700 hover:bg-amber-100 px-4"
+                        className="border-chateau-200 text-chateau-600 hover:bg-chateau-100 px-4"
                       >
                         <Copy className="w-4 h-4 mr-2" />
                         คัดลอก
                       </Button>
                     </div>
 
-                    <div className="space-y-2 text-sm text-amber-700">
+                    <div className="space-y-2 text-sm text-chateau-600">
                       <p>• <strong>สำหรับบัญชีผู้ใช้:</strong> ใช้อีเมลและรหัสผ่านนี้ในการเข้าสู่ระบบครั้งแรก</p>
                       <p>• <strong>อีเมลสำหรับเข้าสู่ระบบ:</strong> {email}</p>
                       <p>• <strong>โรงแรมต้องเตรียม:</strong> รหัสผ่านในการเข้าสู่ระบบครั้งแรกให้พนักงาน</p>
                     </div>
                   </>
                 ) : (
-                  <div className="space-y-2 text-sm text-amber-700">
+                  <div className="space-y-2 text-sm text-chateau-600">
                     <p>• <strong>สถานะ:</strong> ผู้ใช้มีรหัสผ่านชั่วคราวแล้ว</p>
                     <p>• <strong>อีเมลสำหรับเข้าสู่ระบบ:</strong> {email}</p>
                     <p>• <strong>หากต้องการดูรหัสผ่าน:</strong> กดปุ่มรีเซ็ตรหัสผ่านเพื่อสร้างใหม่</p>
-                    <p className="text-amber-600 font-medium">⚠️ รหัสผ่านเดิมจะไม่สามารถแสดงได้เพื่อความปลอดภัย</p>
+                    <p className="text-chateau font-medium">⚠️ รหัสผ่านเดิมจะไม่สามารถแสดงได้เพื่อความปลอดภัย</p>
                   </div>
                 )}
               </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import {
   X, Save, User, Plus, Trash2, Building2,
   UserCircle, Briefcase, MapPin, Megaphone, Target, ShieldCheck, Users
@@ -1054,9 +1054,9 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
           </DialogHeader>
 
           {/* Visual Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-[#676AF1]/10 via-[#8B5CF6]/10 to-[#676AF1]/10 flex-shrink-0">
+          <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-[#e60023]/10 via-[#8B5CF6]/10 to-[#e60023]/10 flex-shrink-0">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-br from-[#676AF1] to-[#8B5CF6] rounded-xl shadow-md">
+              <div className="p-2 bg-gradient-to-br from-[#e60023] to-[#8B5CF6] rounded-xl shadow-md">
                 <Users className="w-5 h-5 text-white" />
               </div>
               <div>
@@ -1874,15 +1874,15 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
               </Card>
 
               {/* Section 6: Purchase Purpose - Indigo */}
-              <Card className="border-2 border-indigo-100 shadow-sm">
+              <Card className="border-2 border-chateau-50 shadow-sm">
                 <CardContent className="p-0">
-                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-indigo-100/50 border-b border-indigo-100">
-                    <div className="p-1.5 bg-indigo-500 rounded-lg">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-chateau-50 to-chateau-100/50 border-b border-chateau-50">
+                    <div className="p-1.5 bg-chateau-500 rounded-lg">
                       <Target className="w-3.5 h-3.5 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-indigo-900 text-sm">จุดประสงค์การซื้อ <span className="text-red-500">*</span></h3>
-                      <p className="text-xs text-indigo-600">เหตุผลในการซื้ออสังหาริมทรัพย์</p>
+                      <h3 className="font-semibold text-chateau-800 text-sm">จุดประสงค์การซื้อ <span className="text-red-500">*</span></h3>
+                      <p className="text-xs text-chateau">เหตุผลในการซื้ออสังหาริมทรัพย์</p>
                     </div>
                   </div>
                   <div className="p-4">
@@ -1900,7 +1900,7 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
                               purchase_purpose: e.target.value,
                               purchase_purpose_other: ""
                             }))}
-                            className="w-4 h-4 text-indigo-600"
+                            className="w-4 h-4 text-chateau"
                             disabled={loading}
                           />
                           <Label htmlFor={`purchase_purpose_${purpose.value}`} className="font-normal cursor-pointer">
@@ -2015,7 +2015,7 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
               type="submit"
               onClick={handleSubmit}
               disabled={loading}
-              className="flex-1 bg-gradient-to-r from-[#676AF1] to-[#8B5CF6] hover:opacity-90"
+              className="flex-1 bg-gradient-to-r from-[#e60023] to-[#8B5CF6] hover:opacity-90"
             >
               {loading ? (
                 <div className="flex items-center justify-center">
