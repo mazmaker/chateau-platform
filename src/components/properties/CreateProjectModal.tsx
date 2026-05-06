@@ -616,9 +616,9 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-[#e60023]/10 via-[#8B5CF6]/10 to-[#e60023]/10">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-[#e60023] to-[#8B5CF6] rounded-xl shadow-md">
+            <div className="p-2 bg-gradient-to-br from-chateau to-chateau-600 rounded-xl shadow-md">
               <Building2 className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -642,15 +642,15 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
           <div className="p-6 space-y-6">
 
             {/* Section 1: ข้อมูลพื้นฐาน */}
-            <Card className="border-2 border-blue-100 shadow-sm">
+            <Card className="border border-gray-200 shadow-sm">
               <CardContent className="p-0">
-                <div className="flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-blue-50 to-blue-100/50 border-b border-blue-100">
+                <div className="flex items-center gap-3 px-5 py-3 bg-gray-50 border-b border-gray-100">
                   <div className="p-2 bg-blue-500 rounded-lg">
                     <Building2 className="w-4 h-4 text-white" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-blue-900">ข้อมูลพื้นฐาน</h3>
-                    <p className="text-xs text-blue-600">ชื่อโครงการ ประเภท และรายละเอียดทั่วไป</p>
+                    <h3 className="font-semibold text-gray-900">ข้อมูลพื้นฐาน</h3>
+                    <p className="text-xs text-gray-500">ชื่อโครงการ ประเภท และรายละเอียดทั่วไป</p>
                   </div>
                 </div>
                 <div className="p-5">
@@ -751,15 +751,15 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
             </Card>
 
             {/* Section 2: รูปภาพ */}
-            <Card className="border-2 border-purple-100 shadow-sm">
+            <Card className="border border-gray-200 shadow-sm">
               <CardContent className="p-0">
-                <div className="flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-purple-50 to-purple-100/50 border-b border-purple-100">
+                <div className="flex items-center gap-3 px-5 py-3 bg-gray-50 border-b border-gray-100">
                   <div className="p-2 bg-purple-500 rounded-lg">
                     <ImageIcon className="w-4 h-4 text-white" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-purple-900">รูปภาพโครงการ</h3>
-                    <p className="text-xs text-purple-600">รูป Thumbnail และ Gallery สำหรับแสดงในระบบ</p>
+                    <h3 className="font-semibold text-gray-900">รูปภาพโครงการ</h3>
+                    <p className="text-xs text-gray-500">รูป Thumbnail และ Gallery สำหรับแสดงในระบบ</p>
                   </div>
                 </div>
                 <div className="p-5 space-y-5">

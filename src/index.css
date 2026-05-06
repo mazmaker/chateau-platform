@@ -7,12 +7,13 @@
 @tailwind utilities;
 
 html {
-  background-color: #F9FAFB !important;
+  background: linear-gradient(180deg, #fafbfc 0%, #f5f6f8 100%) !important;
+  background-attachment: fixed;
 }
 
 body {
   margin: 0;
-  background-color: #F9FAFB !important;
+  background: transparent !important;
   font-family: 'Noto Sans Thai', 'Noto Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
@@ -24,7 +25,7 @@ body {
 }
 
 #root {
-  background-color: #F9FAFB !important;
+  background: transparent !important;
   min-height: 100vh;
 }
 
@@ -611,7 +612,11 @@ aside.light-sidebar .sidebar-logo-sub {
 }
 
 aside.light-sidebar .sidebar-logo-icon {
-  background-color: #e60023 !important;
+  background: #e60023 !important;
+  box-shadow:
+    0 1px 2px rgba(230, 0, 35, 0.2),
+    0 3px 6px rgba(230, 0, 35, 0.18) !important;
+  border: none;
 }
 
 aside.light-sidebar .sidebar-logo-icon span {
@@ -620,6 +625,35 @@ aside.light-sidebar .sidebar-logo-icon span {
 
 aside.light-sidebar .sidebar-section-label {
   color: #9ca3af !important;
+}
+
+/* Collapsible group header (KK style) */
+aside.light-sidebar .sidebar-group-header {
+  position: relative;
+  background-color: transparent !important;
+  cursor: pointer;
+}
+
+aside.light-sidebar .sidebar-group-header:hover {
+  background-color: #f9fafb !important;
+}
+
+aside.light-sidebar .sidebar-group-icon {
+  color: #6b7280 !important;
+}
+
+aside.light-sidebar .sidebar-group-label {
+  color: #6b7280 !important;
+}
+
+aside.light-sidebar .sidebar-group-chevron {
+  color: #9ca3af !important;
+}
+
+aside.light-sidebar .sidebar-group-header:hover .sidebar-group-icon,
+aside.light-sidebar .sidebar-group-header:hover .sidebar-group-label,
+aside.light-sidebar .sidebar-group-header:hover .sidebar-group-chevron {
+  color: #111827 !important;
 }
 
 aside.light-sidebar .sidebar-nav-item {
@@ -633,14 +667,26 @@ aside.light-sidebar .sidebar-nav-item:hover {
 }
 
 aside.light-sidebar .sidebar-nav-item.active {
-  color: #e60023 !important;
-  background-color: #fff1f2 !important;
+  color: #ffffff !important;
+  background: #e60023 !important;
   font-weight: 600;
+  box-shadow:
+    0 1px 2px rgba(230, 0, 35, 0.18),
+    0 4px 10px rgba(230, 0, 35, 0.22) !important;
+  border: none;
+  transform: translateY(0);
+}
+
+aside.light-sidebar .sidebar-nav-item.active:hover {
+  background: #d40020 !important;
+  box-shadow:
+    0 2px 4px rgba(230, 0, 35, 0.2),
+    0 6px 14px rgba(230, 0, 35, 0.28) !important;
 }
 
 aside.light-sidebar .sidebar-nav-item.active .nav-icon,
 aside.light-sidebar .sidebar-nav-item.active span {
-  color: #e60023 !important;
+  color: #ffffff !important;
 }
 
 aside.light-sidebar .sidebar-nav-item .nav-icon {
@@ -665,7 +711,76 @@ aside.light-sidebar .sidebar-user-role {
 }
 
 aside.light-sidebar .sidebar-user-avatar {
-  background-color: #fff1f2 !important;
+  background: linear-gradient(135deg, #fff5f6 0%, #ffe4e7 100%) !important;
   border-color: #fecdd3 !important;
   color: #e60023 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 1px 2px rgba(230, 0, 35, 0.08);
+}
+
+/* ─── Premium Card Depth (KK style) ─────────────────────────────────────── */
+/* Subtle gradient background for white cards to give depth */
+.shadow-soft.bg-white,
+.shadow-soft-md.bg-white,
+.shadow-soft-lg.bg-white {
+  background: linear-gradient(180deg, #ffffff 0%, #fdfdfe 100%) !important;
+  box-shadow:
+    0 0 0 1px rgba(16, 24, 40, 0.04),
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 1px 3px rgba(16, 24, 40, 0.03) !important;
+}
+
+.shadow-soft-md.bg-white {
+  box-shadow:
+    0 0 0 1px rgba(16, 24, 40, 0.04),
+    0 1px 2px rgba(16, 24, 40, 0.05),
+    0 4px 8px rgba(16, 24, 40, 0.04),
+    0 8px 16px rgba(16, 24, 40, 0.03) !important;
+}
+
+/* KPI / chart card hover lift */
+.shadow-soft.bg-white:hover {
+  box-shadow:
+    0 0 0 1px rgba(16, 24, 40, 0.05),
+    0 2px 4px rgba(16, 24, 40, 0.06),
+    0 8px 16px rgba(16, 24, 40, 0.06),
+    0 16px 32px rgba(16, 24, 40, 0.04) !important;
+}
+
+/* Red button — flat color with soft depth shadow */
+button[style*="background-color: rgb(230, 0, 35)"],
+button[style*="backgroundColor: \"#e60023\""],
+button[style*="background-color:#e60023"] {
+  background: #e60023 !important;
+  box-shadow:
+    0 1px 2px rgba(230, 0, 35, 0.18),
+    0 4px 10px rgba(230, 0, 35, 0.22) !important;
+  border: none !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+button[style*="background-color: rgb(230, 0, 35)"]:hover,
+button[style*="backgroundColor: \"#e60023\""]:hover,
+button[style*="background-color:#e60023"]:hover {
+  background: #d40020 !important;
+  transform: translateY(-1px);
+  box-shadow:
+    0 2px 4px rgba(230, 0, 35, 0.22),
+    0 8px 18px rgba(230, 0, 35, 0.3) !important;
+}
+
+button[style*="background-color: rgb(230, 0, 35)"]:active,
+button[style*="backgroundColor: \"#e60023\""]:active,
+button[style*="background-color:#e60023"]:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(230, 0, 35, 0.18) !important;
+}
+
+/* Premium tinted KPI icon containers — subtle gradient + inner highlight */
+.kpi-icon-bg {
+  position: relative;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.03);
 }

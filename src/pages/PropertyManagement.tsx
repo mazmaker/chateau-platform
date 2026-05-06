@@ -834,7 +834,7 @@ const PropertyManagement = () => {
                 <CardContent className="pt-6">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
+                      <div className="w-12 h-12 bg-gradient-to-br from-chateau to-chateau-600 shadow-xl rounded-xl flex items-center justify-center">
                         <Building2 className="w-6 h-6 text-white" />
                       </div>
                       <div>
@@ -1275,9 +1275,9 @@ const PropertyManagement = () => {
         <Dialog open={showUnitDialog} onOpenChange={setShowUnitDialog}>
           <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-hidden p-0 flex flex-col">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-[#e60023]/10 via-[#8B5CF6]/10 to-[#e60023]/10 flex-shrink-0">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50 flex-shrink-0">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-gradient-to-br from-[#e60023] to-[#8B5CF6] rounded-xl shadow-md">
+                <div className="p-2 bg-gradient-to-br from-chateau to-chateau-600 rounded-xl shadow-md">
                   <Home className="w-5 h-5 text-white" />
                 </div>
                 <div>
@@ -1293,15 +1293,15 @@ const PropertyManagement = () => {
             <div className="flex-1 overflow-y-auto p-6 space-y-5">
 
               {/* Section 1: ข้อมูลพื้นฐาน */}
-              <Card className="border-2 border-blue-100 shadow-sm">
+              <Card className="border border-gray-200 shadow-sm">
                 <CardContent className="p-0">
-                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-blue-100/50 border-b border-blue-100">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border-b border-gray-100">
                     <div className="p-1.5 bg-blue-500 rounded-lg">
                       <Home className="w-3.5 h-3.5 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-blue-900 text-sm">ข้อมูลพื้นฐาน</h3>
-                      <p className="text-xs text-blue-600">เลขที่ยูนิต ชั้น และราคา</p>
+                      <h3 className="font-semibold text-gray-900 text-sm">ข้อมูลพื้นฐาน</h3>
+                      <p className="text-xs text-gray-500">เลขที่ยูนิต ชั้น และราคา</p>
                     </div>
                   </div>
                   <div className="p-4">
@@ -1346,15 +1346,15 @@ const PropertyManagement = () => {
               </Card>
 
               {/* Section 2: รูปภาพ */}
-              <Card className="border-2 border-purple-100 shadow-sm">
+              <Card className="border border-gray-200 shadow-sm">
                 <CardContent className="p-0">
-                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-purple-50 to-purple-100/50 border-b border-purple-100">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border-b border-gray-100">
                     <div className="p-1.5 bg-purple-500 rounded-lg">
                       <ImageIcon className="w-3.5 h-3.5 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-purple-900 text-sm">รูปภาพยูนิต</h3>
-                      <p className="text-xs text-purple-600">รูป Thumbnail และ Gallery</p>
+                      <h3 className="font-semibold text-gray-900 text-sm">รูปภาพยูนิต</h3>
+                      <p className="text-xs text-gray-500">รูป Thumbnail และ Gallery</p>
                     </div>
                   </div>
                   <div className="p-4 space-y-4">
@@ -1666,14 +1666,14 @@ const PropertyManagement = () => {
 
             {/* Content */}
             <div className="p-6">
-              <Card className="border-2 border-purple-100 shadow-sm">
+              <Card className="border border-gray-200 shadow-sm">
                 <CardContent className="p-0">
-                  <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-50 to-blue-50 border-b border-purple-100">
-                    <div className="p-1.5 bg-purple-500 rounded-lg">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">
+                    <div className="p-1.5 bg-chateau rounded-lg">
                       <Building2 className="w-4 h-4 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-purple-900 text-sm">โครงการที่จะลบ</h3>
+                      <h3 className="font-semibold text-gray-900 text-sm">โครงการที่จะลบ</h3>
                     </div>
                   </div>
                   <div className="p-4">
@@ -1735,9 +1735,9 @@ const PropertyManagement = () => {
               <div className="space-y-5 py-2">
                 {/* Images */}
                 {viewingUnit.images && viewingUnit.images.length > 0 && (
-                  <Card className="overflow-hidden border-2">
-                    <CardHeader className="bg-gradient-to-r from-blue-50 to-purple-50 pb-3">
-                      <CardTitle className="text-base font-semibold text-[#e60023]">
+                  <Card className="overflow-hidden border border-gray-200">
+                    <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
+                      <CardTitle className="text-base font-semibold text-gray-900">
                         รูปภาพยูนิต
                       </CardTitle>
                     </CardHeader>
@@ -1757,70 +1757,70 @@ const PropertyManagement = () => {
                 )}
 
                 {/* Basic Information */}
-                <Card className="border-2">
-                  <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 pb-3">
-                    <CardTitle className="text-base font-semibold text-green-700 flex items-center gap-2">
-                      <Building2 className="w-5 h-5" />
+                <Card className="border border-gray-200">
+                  <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
+                    <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-chateau" />
                       ข้อมูลพื้นฐาน
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-4">
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="p-3 bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-lg">
-                        <p className="text-xs font-medium text-blue-700 mb-1">เลขที่ยูนิต</p>
-                        <p className="text-xl font-bold text-blue-900">{viewingUnit.unit_number}</p>
+                      <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <p className="text-xs font-medium text-gray-500 mb-1">เลขที่ยูนิต</p>
+                        <p className="text-xl font-bold text-gray-900">{viewingUnit.unit_number}</p>
                       </div>
-                      <div className="p-3 bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-lg">
-                        <p className="text-xs font-medium text-purple-700 mb-1">ชั้น</p>
-                        <p className="text-xl font-bold text-purple-900">{viewingUnit.floor_number || '-'}</p>
+                      <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <p className="text-xs font-medium text-gray-500 mb-1">ชั้น</p>
+                        <p className="text-xl font-bold text-gray-900">{viewingUnit.floor_number || '-'}</p>
                       </div>
-                      <div className="p-3 bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-lg">
-                        <p className="text-xs font-medium text-orange-700 mb-1">พื้นที่ใช้สอย</p>
-                        <p className="text-xl font-bold text-orange-900">{viewingUnit.area_sqm ? `${viewingUnit.area_sqm} ตร.ม.` : '-'}</p>
+                      <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <p className="text-xs font-medium text-gray-500 mb-1">พื้นที่ใช้สอย</p>
+                        <p className="text-xl font-bold text-gray-900">{viewingUnit.area_sqm ? `${viewingUnit.area_sqm} ตร.ม.` : '-'}</p>
                       </div>
-                      <div className="p-3 bg-gradient-to-br from-green-50 to-green-100/50 rounded-lg">
-                        <p className="text-xs font-medium text-green-700 mb-1">ราคา</p>
-                        <p className="text-xl font-bold text-green-900">{formatCurrency(viewingUnit.price)}</p>
+                      <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <p className="text-xs font-medium text-gray-500 mb-1">ราคา</p>
+                        <p className="text-xl font-bold text-chateau">{formatCurrency(viewingUnit.price)}</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Room Details */}
-                <Card className="border-2">
-                  <CardHeader className="bg-gradient-to-r from-chateau-50 to-blue-50 pb-3">
-                    <CardTitle className="text-base font-semibold text-chateau-600 flex items-center gap-2">
-                      <Home className="w-5 h-5" />
+                <Card className="border border-gray-200">
+                  <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
+                    <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                      <Home className="w-5 h-5 text-chateau" />
                       รายละเอียดห้อง
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-4">
                     <div className="grid grid-cols-3 gap-3">
-                      <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-pink-50 to-pink-100/50 rounded-lg border border-pink-200">
-                        <div className="p-2 bg-white rounded-lg">
-                          <Bed className="w-6 h-6 text-pink-600" />
+                      <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                        <div className="p-2 bg-white rounded-lg shadow-sm">
+                          <Bed className="w-6 h-6 text-chateau" />
                         </div>
                         <div>
-                          <p className="text-xs font-medium text-pink-700">ห้องนอน</p>
-                          <p className="text-2xl font-bold text-pink-900">{viewingUnit.bedrooms}</p>
+                          <p className="text-xs font-medium text-gray-500">ห้องนอน</p>
+                          <p className="text-2xl font-bold text-gray-900">{viewingUnit.bedrooms}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-cyan-50 to-cyan-100/50 rounded-lg border border-cyan-200">
-                        <div className="p-2 bg-white rounded-lg">
-                          <Bath className="w-6 h-6 text-cyan-600" />
+                      <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                        <div className="p-2 bg-white rounded-lg shadow-sm">
+                          <Bath className="w-6 h-6 text-chateau" />
                         </div>
                         <div>
-                          <p className="text-xs font-medium text-cyan-700">ห้องน้ำ</p>
-                          <p className="text-2xl font-bold text-cyan-900">{viewingUnit.bathrooms}</p>
+                          <p className="text-xs font-medium text-gray-500">ห้องน้ำ</p>
+                          <p className="text-2xl font-bold text-gray-900">{viewingUnit.bathrooms}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-chateau-50 to-chateau-100/50 rounded-lg border border-chateau-100">
-                        <div className="p-2 bg-white rounded-lg">
+                      <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                        <div className="p-2 bg-white rounded-lg shadow-sm">
                           <Square className="w-6 h-6 text-chateau" />
                         </div>
                         <div>
-                          <p className="text-xs font-medium text-chateau-600">ราคา/ตร.ม.</p>
-                          <p className="text-lg font-bold text-chateau-800">{viewingUnit.price_per_sqm ? formatCurrency(viewingUnit.price_per_sqm) : '-'}</p>
+                          <p className="text-xs font-medium text-gray-500">ราคา/ตร.ม.</p>
+                          <p className="text-lg font-bold text-gray-900">{viewingUnit.price_per_sqm ? formatCurrency(viewingUnit.price_per_sqm) : '-'}</p>
                         </div>
                       </div>
                     </div>
@@ -1860,14 +1860,14 @@ const PropertyManagement = () => {
                 </Card>
 
                 {/* Leads Interested in This Unit */}
-                <Card className="border-2">
-                  <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 pb-3">
+                <Card className="border border-gray-200">
+                  <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-base font-semibold text-purple-700 flex items-center gap-2">
-                        <Users className="w-5 h-5" />
+                      <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                        <Users className="w-5 h-5 text-chateau" />
                         Leads ที่สนใจยูนิตนี้
                       </CardTitle>
-                      <Badge variant="secondary" className="bg-purple-100 text-purple-800">
+                      <Badge variant="secondary" className="bg-chateau-50 text-chateau border border-chateau-100">
                         {unitLeads.length} รายการ
                       </Badge>
                     </div>

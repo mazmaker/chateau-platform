@@ -15,6 +15,9 @@ import PropertyManagement from "./pages/PropertyManagement";
 import LeadManagement from "./pages/LeadManagement";
 import LeadCDP from "./pages/LeadCDP";
 import CampaignManagement from "./pages/CampaignManagement";
+import CampaignBuilderWizard from "./pages/CampaignBuilderWizard";
+import Triggers from "./pages/Triggers";
+import MarketingAnalytics from "./pages/MarketingAnalytics";
 import AdminCustomization from "./pages/AdminCustomization";
 import Analytics from "./pages/Analytics";
 import ApiManagement from "./pages/ApiManagement";
@@ -300,6 +303,30 @@ const App = () => (
             >
               <ProtectedRouteSimple>
                 <CampaignManagement />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/builder" element={
+            <ErrorBoundary showRetry showHome errorMessage="ไม่สามารถโหลด Builder Wizard ได้" context={{ page: 'campaign-builder' }}>
+              <ProtectedRouteSimple>
+                <CampaignBuilderWizard />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/triggers" element={
+            <ErrorBoundary showRetry showHome errorMessage="ไม่สามารถโหลด Triggers ได้" context={{ page: 'triggers' }}>
+              <ProtectedRouteSimple>
+                <Triggers />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/marketing-analytics" element={
+            <ErrorBoundary showRetry showHome errorMessage="ไม่สามารถโหลด Marketing Analytics ได้" context={{ page: 'marketing-analytics' }}>
+              <ProtectedRouteSimple>
+                <MarketingAnalytics />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />

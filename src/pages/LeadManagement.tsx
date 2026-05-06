@@ -788,7 +788,7 @@ const LeadManagement = () => {
                 <CardContent className="pt-6">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
+                      <div className="w-12 h-12 bg-gradient-to-br from-chateau to-chateau-600 shadow-xl rounded-xl flex items-center justify-center">
                         <Users className="w-6 h-6 text-white" />
                       </div>
                       <div>
@@ -1160,45 +1160,47 @@ const LeadManagement = () => {
               const customer = getCustomerData(selectedLead.customer_id);
               const prefs = customer?.preferences || {};
               return (
-                <div className="space-y-6">
-                  {/* Header with Photo and Basic Info */}
-                  <div className="flex gap-6 p-4 bg-gradient-to-r from-blue-50 to-blue-50 rounded-xl">
+                <div className="space-y-4">
+                  {/* Header — white card with subtle red accent ring */}
+                  <div className="flex gap-5 p-5 bg-white border border-gray-100 rounded-xl">
                     {/* Profile Image */}
                     <div className="flex-shrink-0">
                       {prefs.profile_image ? (
                         <img
                           src={prefs.profile_image}
                           alt="รูปโปรไฟล์"
-                          className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-lg"
+                          className="w-20 h-20 rounded-full object-cover ring-2 ring-offset-2"
+                          style={{ '--tw-ring-color': '#fecdd3' } as React.CSSProperties}
                         />
                       ) : (
-                        <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center border-4 border-white shadow-lg">
-                          <Users className="w-10 h-10 text-gray-400" />
+                        <div className="w-20 h-20 rounded-full flex items-center justify-center ring-2 ring-offset-2"
+                          style={{ backgroundColor: '#fff1f2', '--tw-ring-color': '#fecdd3' } as React.CSSProperties}>
+                          <Users className="w-8 h-8" style={{ color: '#e60023' }} />
                         </div>
                       )}
                     </div>
                     {/* Basic Info */}
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h2 className="text-2xl font-bold text-gray-800">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <h2 className="text-xl font-bold text-gray-900 truncate">
                             {prefs.first_name || ''} {prefs.last_name || customer?.name || '-'}
                           </h2>
                           <div className="mt-2 space-y-1">
-                            <div className="flex items-center gap-2 text-gray-600">
-                              <Phone className="w-4 h-4" />
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                              <Phone className="w-3.5 h-3.5" style={{ color: '#e60023' }} />
                               <span>{customer?.phone || '-'}</span>
                             </div>
-                            <div className="flex items-center gap-2 text-gray-600">
-                              <Mail className="w-4 h-4" />
-                              <span>{customer?.email || '-'}</span>
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                              <Mail className="w-3.5 h-3.5" style={{ color: '#e60023' }} />
+                              <span className="truncate">{customer?.email || '-'}</span>
                             </div>
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right flex-shrink-0">
                           {getStatusBadge(selectedLead.status)}
-                          <p className="text-xs text-gray-500 mt-2">
-                            สร้างเมื่อ {new Date(selectedLead.created_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
+                          <p className="text-[11px] text-gray-400 mt-2">
+                            สร้างเมื่อ {new Date(selectedLead.created_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })}
                           </p>
                         </div>
                       </div>
@@ -1206,62 +1208,51 @@ const LeadManagement = () => {
                   </div>
 
                   {/* Project Interest Section */}
-                  <div className="bg-white border rounded-xl p-4">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                      <Building2 className="w-5 h-5 text-cyan-600" />
+                  <div className="bg-white border border-gray-100 rounded-xl p-5">
+                    <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-gray-500" />
                       ยูนิตที่สนใจ
-                      <Badge variant="secondary" className="ml-2">
-                        {loadingInterests ? '...' : selectedLeadInterests.length > 0 ? selectedLeadInterests.length : 1} รายการ
-                      </Badge>
+                      <span className="text-xs font-normal text-gray-400 ml-1">
+                        ({loadingInterests ? '...' : selectedLeadInterests.length > 0 ? selectedLeadInterests.length : 1} รายการ)
+                      </span>
                     </h3>
 
                     {loadingInterests ? (
                       <div className="flex items-center justify-center py-6">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-600"></div>
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2" style={{ borderColor: '#3b82f6' }}></div>
                       </div>
                     ) : selectedLeadInterests.length > 0 ? (
-                      <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto">
                         {selectedLeadInterests.map((interest) => {
                           const statusOption = INTEREST_STATUS_OPTIONS.find(o => o.value === interest.status);
                           const levelOption = INTEREST_LEVEL_OPTIONS.find(o => o.value === interest.interest_level);
                           return (
-                            <div key={interest.id} className="p-3 border rounded-lg bg-gradient-to-r from-cyan-50 to-blue-50 hover:shadow-md transition-shadow">
+                            <div key={interest.id} className="p-3 border border-gray-100 rounded-lg bg-gray-50/40 hover:bg-gray-50 transition-colors">
                               <div className="flex items-start gap-3">
-                                <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                                  <Building2 className="w-5 h-5 text-cyan-700" />
+                                <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-white border border-gray-200">
+                                  <Building2 className="w-4 h-4 text-gray-500" />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between mb-1">
-                                    <p className="font-semibold text-gray-800 truncate">
+                                  <div className="flex items-center justify-between mb-1 gap-2">
+                                    <p className="text-sm font-semibold text-gray-900 truncate">
                                       {interest.property?.name || 'โครงการ'}
                                     </p>
-                                    <div className="flex items-center gap-2 flex-shrink-0">
-                                      <Badge className={statusOption?.color || 'bg-gray-100'}>
-                                        {statusOption?.icon} {statusOption?.label || interest.status}
-                                      </Badge>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-4 text-sm">
-                                    <span className="text-gray-600">
-                                      ยูนิต <strong className="text-gray-800">{interest.unit?.unit_number || '-'}</strong>
+                                    <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white border border-gray-200 text-gray-700 flex-shrink-0">
+                                      {statusOption?.label || interest.status}
                                     </span>
+                                  </div>
+                                  <div className="flex items-center gap-3 text-xs text-gray-600">
+                                    <span>ยูนิต <span className="font-semibold text-gray-800">{interest.unit?.unit_number || '-'}</span></span>
                                     {interest.unit?.price && (
-                                      <span className="font-semibold text-cyan-600">
+                                      <span className="font-bold text-gray-900 tabular-nums">
                                         {new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', minimumFractionDigits: 0 }).format(interest.unit.price)}
                                       </span>
                                     )}
-                                    <span className={levelOption?.color || 'text-gray-600'}>
-                                      {levelOption?.icon} {levelOption?.label}
-                                    </span>
+                                    {levelOption && <span className="text-gray-500">· {levelOption.label}</span>}
                                   </div>
                                   {interest.viewing_date && (
-                                    <p className="text-xs text-gray-500 mt-1">
-                                      📅 นัดดู: {new Date(interest.viewing_date).toLocaleString('th-TH')}
-                                    </p>
-                                  )}
-                                  {interest.notes && (
-                                    <p className="text-xs text-gray-500 mt-1 truncate">
-                                      📝 {interest.notes}
+                                    <p className="text-[11px] text-gray-500 mt-1">
+                                      นัดดู {new Date(interest.viewing_date).toLocaleString('th-TH')}
                                     </p>
                                   )}
                                 </div>
@@ -1271,34 +1262,35 @@ const LeadManagement = () => {
                         })}
                       </div>
                     ) : (
-                      // Fallback to legacy single unit display
-                      <div className="p-3 border rounded-lg bg-gradient-to-r from-cyan-50 to-blue-50">
+                      <div className="p-3 border border-gray-100 rounded-lg bg-gray-50/40">
                         <div className="flex items-start gap-3">
-                          <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <Building2 className="w-5 h-5 text-cyan-700" />
+                          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-white border border-gray-200">
+                            <Building2 className="w-4 h-4 text-gray-500" />
                           </div>
                           <div className="flex-1">
-                            <p className="font-semibold text-gray-800">{getPropertyName(selectedLead)}</p>
-                            <p className="text-sm text-gray-600">ยูนิต {getUnitNumber(selectedLead.unit_id)}</p>
+                            <p className="text-sm font-semibold text-gray-900">{getPropertyName(selectedLead)}</p>
+                            <p className="text-xs text-gray-600 mt-0.5">ยูนิต {getUnitNumber(selectedLead.unit_id)}</p>
                           </div>
                         </div>
                       </div>
                     )}
 
                     {/* Lead Info - source, purpose, follow-up */}
-                    <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t">
+                    <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-100">
                       <div>
-                        <p className="text-sm text-gray-500">แหล่งที่มา</p>
-                        <Badge variant="outline">{getSourceLabel(selectedLead.source)}</Badge>
+                        <p className="text-[11px] text-gray-400 uppercase font-medium tracking-wide mb-1">แหล่งที่มา</p>
+                        <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-md bg-gray-50 border border-gray-200 text-gray-700">
+                          {getSourceLabel(selectedLead.source)}
+                        </span>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-500">จุดประสงค์การซื้อ</p>
-                        <p className="font-medium">{getPurchasePurposeLabel(prefs.purchase_purpose || '')}</p>
+                        <p className="text-[11px] text-gray-400 uppercase font-medium tracking-wide mb-1">จุดประสงค์การซื้อ</p>
+                        <p className="text-sm font-semibold text-gray-800">{getPurchasePurposeLabel(prefs.purchase_purpose || '')}</p>
                       </div>
                       {selectedLead.next_follow_up && (
                         <div>
-                          <p className="text-sm text-gray-500">นัดติดตามครั้งต่อไป</p>
-                          <p className="font-medium text-orange-600">
+                          <p className="text-[11px] text-gray-400 uppercase font-medium tracking-wide mb-1">นัดติดตามครั้งต่อไป</p>
+                          <p className="text-sm font-semibold text-gray-800">
                             {new Date(selectedLead.next_follow_up).toLocaleDateString('th-TH')}
                           </p>
                         </div>
@@ -1306,56 +1298,183 @@ const LeadManagement = () => {
                     </div>
                   </div>
 
+                  {/* === Computed Segments — คำนวณจากข้อมูลจริงของ Lead === */}
+                  {(() => {
+                    // Color theme per category — pastel แต่มีสี
+                    type SegCategory = 'demographic' | 'family' | 'buyer' | 'lifecycle' | 'budget' | 'property' | 'critical';
+                    const CATEGORY_STYLES: Record<SegCategory, { dot: string }> = {
+                      demographic: { dot: '#7c3aed' }, // purple
+                      family:      { dot: '#10b981' }, // green
+                      buyer:       { dot: '#3b82f6' }, // blue
+                      lifecycle:   { dot: '#06b6d4' }, // cyan
+                      budget:      { dot: '#f59e0b' }, // amber
+                      property:    { dot: '#a21caf' }, // fuchsia
+                      critical:    { dot: '#e60023' }, // brand red
+                    };
+                    const segs: Array<{ icon: string; label: string; reason: string; cat: SegCategory }> = [];
+
+                    // Demographic — อายุ
+                    const age = prefs.age ? Number(prefs.age) : null;
+                    if (age !== null) {
+                      if (age >= 18 && age <= 30) segs.push({ icon: '🎓', label: 'กลุ่มอายุน้อย', reason: `${age} ปี`, cat: 'demographic' });
+                      else if (age >= 31 && age <= 50) segs.push({ icon: '👨‍💼', label: 'วัยกลางคน', reason: `${age} ปี`, cat: 'demographic' });
+                      else if (age >= 51) segs.push({ icon: '👴', label: 'ผู้สูงอายุ', reason: `${age} ปี`, cat: 'demographic' });
+                    }
+
+                    // Demographic — รายได้
+                    const income = prefs.monthly_income ? Number(prefs.monthly_income) : null;
+                    if (income !== null) {
+                      if (income >= 100000) segs.push({ icon: '💰', label: 'รายได้สูง', reason: `฿${income.toLocaleString()}/เดือน`, cat: 'budget' });
+                      else if (income >= 30000) segs.push({ icon: '💵', label: 'รายได้ปานกลาง', reason: `฿${income.toLocaleString()}/เดือน`, cat: 'budget' });
+                      else segs.push({ icon: '💴', label: 'รายได้น้อย', reason: `฿${income.toLocaleString()}/เดือน`, cat: 'budget' });
+                    }
+
+                    // Family
+                    const familySize = prefs.family_members ? Number(prefs.family_members) : null;
+                    if (familySize !== null) {
+                      if (familySize >= 2) segs.push({ icon: '👨‍👩‍👧', label: 'ครอบครัว', reason: `${familySize} คน`, cat: 'family' });
+                      else if (familySize === 1 || prefs.marital_status === 'single') segs.push({ icon: '🧑', label: 'โสด', reason: 'อยู่คนเดียว', cat: 'family' });
+                    }
+
+                    // Buyer Type
+                    const purpose = prefs.purchase_purpose || '';
+                    if (purpose === 'first_home' || purpose.includes('อยู่อาศัย')) segs.push({ icon: '🏠', label: 'บ้านหลังแรก', reason: 'อยู่อาศัย', cat: 'buyer' });
+                    else if (purpose === 'investment' || purpose.includes('ลงทุน') || purpose.includes('เก็งกำไร')) segs.push({ icon: '📈', label: 'ลงทุน', reason: 'เก็งกำไร', cat: 'buyer' });
+                    else if (purpose === 'rental' || purpose.includes('เช่า')) segs.push({ icon: '🏘️', label: 'ปล่อยเช่า', reason: 'rental', cat: 'buyer' });
+
+                    // Lead Lifecycle
+                    const createdDays = Math.floor((Date.now() - new Date(selectedLead.created_at).getTime()) / (1000 * 60 * 60 * 24));
+                    const lastContactDays = selectedLead.last_contact_date
+                      ? Math.floor((Date.now() - new Date(selectedLead.last_contact_date).getTime()) / (1000 * 60 * 60 * 24))
+                      : null;
+
+                    if (createdDays <= 7) segs.push({ icon: '🌱', label: 'Lead ใหม่ 7 วัน', reason: `${createdDays} วันที่แล้ว`, cat: 'lifecycle' });
+
+                    if ((selectedLead.status === 'qualified' || selectedLead.status === 'negotiating') && selectedLead.priority === 'high') {
+                      segs.push({ icon: '🔥', label: 'Hot Lead', reason: 'priority สูง', cat: 'critical' });
+                    }
+                    if (lastContactDays !== null && lastContactDays >= 30 && selectedLead.status !== 'lost' && selectedLead.status !== 'won') {
+                      segs.push({ icon: '🥶', label: 'Cold Lead 30 วัน', reason: `เงียบ ${lastContactDays} วัน`, cat: 'critical' });
+                    }
+                    if (selectedLead.status === 'lost') segs.push({ icon: '💀', label: 'Lost Lead', reason: 'lost', cat: 'lifecycle' });
+                    if (selectedLead.status === 'won') segs.push({ icon: '🏆', label: 'Won Customer', reason: 'ปิดดีลแล้ว', cat: 'critical' });
+
+                    // Budget
+                    const budget = selectedLead.estimated_value ? Number(selectedLead.estimated_value) : null;
+                    if (budget !== null && budget > 0) {
+                      if (budget >= 10000000) segs.push({ icon: '💎', label: 'งบ Premium 10M+', reason: `฿${budget.toLocaleString()}`, cat: 'critical' });
+                      else if (budget >= 3000000) segs.push({ icon: '💵', label: 'งบ 3-10M', reason: `฿${budget.toLocaleString()}`, cat: 'budget' });
+                      else if (budget >= 1000000) segs.push({ icon: '💴', label: 'งบ 1-3M', reason: `฿${budget.toLocaleString()}`, cat: 'budget' });
+                    }
+
+                    // Property type interest
+                    if (selectedLeadInterests.length > 0) {
+                      const types = new Set(selectedLeadInterests.map(i => i.property?.type).filter(Boolean));
+                      if (types.has('condo')) segs.push({ icon: '🏢', label: 'สนใจคอนโด', reason: 'condo', cat: 'property' });
+                      if (types.has('house')) segs.push({ icon: '🏡', label: 'สนใจบ้านเดี่ยว', reason: 'house', cat: 'property' });
+                      if (types.has('villa')) segs.push({ icon: '🏖️', label: 'สนใจ Villa', reason: 'villa', cat: 'property' });
+                    }
+
+                    if (segs.length === 0) {
+                      return (
+                        <div className="bg-white border border-gray-100 rounded-xl p-5">
+                          <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                            <span className="text-sm">🏷️</span>
+                            Segments
+                          </h3>
+                          <p className="text-sm text-gray-400 italic">ยังไม่สามารถจัดกลุ่มได้ — กรอกข้อมูล (อายุ/รายได้/ครอบครัว) เพิ่มเติม</p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="bg-white border border-gray-100 rounded-xl p-5">
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                            <span className="text-sm">🏷️</span>
+                            Segments ที่อยู่
+                            <span className="text-xs font-normal text-gray-400 ml-1">({segs.length} กลุ่ม)</span>
+                          </h3>
+                          <span className="text-[11px] text-gray-400">คำนวณจาก lead จริง</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {segs.map((seg, i) => {
+                            const style = CATEGORY_STYLES[seg.cat];
+                            return (
+                              <div
+                                key={i}
+                                title={seg.reason}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-xs text-gray-700 transition-all hover:shadow-soft"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: style.dot }} />
+                                <span className="text-[13px]">{seg.icon}</span>
+                                <span className="font-semibold text-gray-900">{seg.label}</span>
+                                <span className="text-[10px] text-gray-400 font-normal">· {seg.reason}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-3 pt-3 border-t border-gray-100">
+                          💡 Lead นี้จะได้รับ campaign ที่ผูกกับ {segs.length} segments นี้
+                        </p>
+                      </div>
+                    );
+                  })()}
+
                   {/* Personal Info Section */}
-                  <div className="bg-white border rounded-xl p-4">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                      <Users className="w-5 h-5 text-green-600" />
+                  <div className="bg-white border border-gray-100 rounded-xl p-5">
+                    <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <Users className="w-4 h-4 text-gray-500" />
                       ข้อมูลส่วนตัว
                     </h3>
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-3 gap-y-3 gap-x-4">
                       <div>
-                        <p className="text-sm text-gray-500">เพศ</p>
-                        <p className="font-medium">{getGenderLabel(prefs.gender || '')}</p>
+                        <p className="text-[11px] text-gray-400 uppercase font-medium tracking-wide mb-1">เพศ</p>
+                        <p className="text-sm font-semibold text-gray-800">{getGenderLabel(prefs.gender || '')}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-500">อายุ</p>
-                        <p className="font-medium">{prefs.age ? `${prefs.age} ปี` : '-'}</p>
+                        <p className="text-[11px] text-gray-400 uppercase font-medium tracking-wide mb-1">อายุ</p>
+                        <p className="text-sm font-semibold text-gray-800">{prefs.age ? `${prefs.age} ปี` : '-'}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-500">สถานภาพ</p>
-                        <p className="font-medium">{getMaritalStatusLabel(prefs.marital_status || '')}</p>
+                        <p className="text-[11px] text-gray-400 uppercase font-medium tracking-wide mb-1">สถานภาพ</p>
+                        <p className="text-sm font-semibold text-gray-800">{getMaritalStatusLabel(prefs.marital_status || '')}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-500">การศึกษา</p>
-                        <p className="font-medium">{getEducationLabel(prefs.education || '')}</p>
+                        <p className="text-[11px] text-gray-400 uppercase font-medium tracking-wide mb-1">การศึกษา</p>
+                        <p className="text-sm font-semibold text-gray-800">{getEducationLabel(prefs.education || '')}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-500">จำนวนสมาชิกในครอบครัว</p>
-                        <p className="font-medium">{prefs.family_members ? `${prefs.family_members} คน` : '-'}</p>
+                        <p className="text-[11px] text-gray-400 uppercase font-medium tracking-wide mb-1">จำนวนสมาชิกในครอบครัว</p>
+                        <p className="text-sm font-semibold text-gray-800">{prefs.family_members ? `${prefs.family_members} คน` : '-'}</p>
                       </div>
                     </div>
                   </div>
 
                   {/* Financial Info Section */}
-                  <div className="bg-white border rounded-xl p-4">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                      <DollarSign className="w-5 h-5 text-yellow-600" />
+                  <div className="bg-white border border-gray-100 rounded-xl p-5">
+                    <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-gray-500" />
                       ข้อมูลทางการเงิน
                     </h3>
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-3 gap-x-4">
                       <div>
-                        <p className="text-sm text-gray-500">อาชีพ</p>
-                        <p className="font-medium">{getOccupationLabel(prefs.occupation || '')}</p>
+                        <p className="text-[11px] text-gray-400 uppercase font-medium tracking-wide mb-1">อาชีพ</p>
+                        <p className="text-sm font-semibold text-gray-800">{getOccupationLabel(prefs.occupation || '') || '-'}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-500">รายได้ต่อเดือน</p>
-                        <p className="font-medium text-green-600">
+                        <p className="text-[11px] text-gray-400 uppercase font-medium tracking-wide mb-1">
+                          รายได้ต่อเดือน
+                        </p>
+                        <p className="text-sm font-bold text-gray-900 tabular-nums">
                           {prefs.monthly_income ? formatCurrency(prefs.monthly_income) : '-'}
                         </p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-500">ภาระหนี้ต่อเดือน</p>
-                        <p className="font-medium text-red-600">
+                        <p className="text-[11px] text-gray-400 uppercase font-medium tracking-wide mb-1">
+                          ภาระหนี้ต่อเดือน
+                        </p>
+                        <p className="text-sm font-bold text-gray-900 tabular-nums">
                           {prefs.monthly_debt ? formatCurrency(prefs.monthly_debt) : '-'}
                         </p>
                       </div>
@@ -1363,9 +1482,9 @@ const LeadManagement = () => {
                   </div>
 
                   {/* Work Address Section */}
-                  <div className="bg-white border rounded-xl p-4">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                      <MapPin className="w-5 h-5 text-red-600" />
+                  <div className="bg-white border border-gray-100 rounded-xl p-5">
+                    <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-gray-500" />
                       ที่อยู่ที่ทำงาน
                     </h3>
                     <div className="space-y-2">
@@ -1508,15 +1627,15 @@ const LeadManagement = () => {
             {/* Content */}
             <div className="p-6 space-y-4">
               {/* Lead Info Card */}
-              <Card className="border-2 border-purple-100 shadow-sm">
+              <Card className="border border-gray-200 shadow-sm">
                 <CardContent className="p-0">
-                  <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-50 to-blue-50 border-b border-purple-100">
-                    <div className="p-1.5 bg-purple-500 rounded-lg">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">
+                    <div className="p-1.5 bg-chateau rounded-lg">
                       <Users className="w-4 h-4 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-purple-900">ข้อมูล Lead ที่จะลบ</h3>
-                      <p className="text-xs text-purple-600">ตรวจสอบข้อมูลก่อนดำเนินการ</p>
+                      <h3 className="font-semibold text-gray-900">ข้อมูล Lead ที่จะลบ</h3>
+                      <p className="text-xs text-gray-500">ตรวจสอบข้อมูลก่อนดำเนินการ</p>
                     </div>
                   </div>
                   <div className="p-4 space-y-3">

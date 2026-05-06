@@ -1054,9 +1054,9 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
           </DialogHeader>
 
           {/* Visual Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-[#e60023]/10 via-[#8B5CF6]/10 to-[#e60023]/10 flex-shrink-0">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50 flex-shrink-0">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-br from-[#e60023] to-[#8B5CF6] rounded-xl shadow-md">
+              <div className="p-2 bg-gradient-to-br from-chateau to-chateau-600 rounded-xl shadow-md">
                 <Users className="w-5 h-5 text-white" />
               </div>
               <div>
@@ -1342,15 +1342,15 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
               </Card>
 
               {/* Section 2: Personal Information - Blue */}
-              <Card className="border-2 border-blue-100 shadow-sm">
+              <Card className="border border-gray-200 shadow-sm">
                 <CardContent className="p-0">
-                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-blue-100/50 border-b border-blue-100">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border-b border-gray-100">
                     <div className="p-1.5 bg-blue-500 rounded-lg">
                       <UserCircle className="w-3.5 h-3.5 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-blue-900 text-sm">ข้อมูลส่วนตัว</h3>
-                      <p className="text-xs text-blue-600">ชื่อ รูปภาพ และข้อมูลติดต่อ</p>
+                      <h3 className="font-semibold text-gray-900 text-sm">ข้อมูลส่วนตัว</h3>
+                      <p className="text-xs text-gray-500">ชื่อ รูปภาพ และข้อมูลติดต่อ</p>
                     </div>
                   </div>
                   <div className="p-4 space-y-4">
@@ -1780,15 +1780,15 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
               </Card>
 
               {/* Section 5: News Source - Purple */}
-              <Card className="border-2 border-purple-100 shadow-sm">
+              <Card className="border border-gray-200 shadow-sm">
                 <CardContent className="p-0">
-                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-purple-50 to-purple-100/50 border-b border-purple-100">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border-b border-gray-100">
                     <div className="p-1.5 bg-purple-500 rounded-lg">
                       <Megaphone className="w-3.5 h-3.5 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-purple-900 text-sm">แหล่งข่าวสาร <span className="text-red-500">*</span></h3>
-                      <p className="text-xs text-purple-600">ท่านได้รับข่าวสารมาจากแหล่งใด</p>
+                      <h3 className="font-semibold text-gray-900 text-sm">แหล่งข่าวสาร <span className="text-red-500">*</span></h3>
+                      <p className="text-xs text-gray-500">ท่านได้รับข่าวสารมาจากแหล่งใด</p>
                     </div>
                   </div>
                   <div className="p-4">

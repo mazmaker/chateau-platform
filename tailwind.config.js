@@ -191,8 +191,10 @@ export default {
         xs: "2px",
       },
       boxShadow: {
-        "soft": "0 2px 8px rgba(0, 0, 0, 0.04)",
-        "soft-lg": "0 8px 24px rgba(0, 0, 0, 0.08)",
+        "soft":    "0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.03)",
+        "soft-md": "0 2px 4px rgba(16, 24, 40, 0.04), 0 4px 8px rgba(16, 24, 40, 0.04)",
+        "soft-lg": "0 4px 8px rgba(16, 24, 40, 0.04), 0 8px 16px rgba(16, 24, 40, 0.06)",
+        "soft-xl": "0 8px 16px rgba(16, 24, 40, 0.04), 0 16px 32px rgba(16, 24, 40, 0.08)",
       },
     },
   },

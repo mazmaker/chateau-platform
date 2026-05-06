@@ -409,24 +409,33 @@ const Analytics: React.FC = () => {
                 <Badge className="bg-chateau text-white">Enterprise</Badge>
               </div>
               <div className="space-y-4">
-                <div className="p-4 bg-gradient-to-r from-chateau-50 to-chateau-50 rounded-lg border border-chateau-100">
-                  <h4 className="font-semibold text-chateau-800 mb-2">🎯 การพยากรณ์ยอดขาย</h4>
-                  <p className="text-sm text-chateau-700">
-                    ระบบ AI พยากรณ์ยอดขายในเดือนหน้า: {(kpis.totalRevenue * 1.15).toLocaleString()} ฿ (+15%)
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-chateau" />
+                    🎯 การพยากรณ์ยอดขาย
+                  </h4>
+                  <p className="text-sm text-gray-600">
+                    ระบบ AI พยากรณ์ยอดขายในเดือนหน้า: <span className="font-semibold text-chateau">{(kpis.totalRevenue * 1.15).toLocaleString()} ฿</span> (+15%)
                   </p>
                 </div>
 
-                <div className="p-4 bg-gradient-to-r from-blue-50 to-blue-50 rounded-lg border border-blue-200">
-                  <h4 className="font-semibold text-blue-900 mb-2">📊 Customer Lifetime Value</h4>
-                  <p className="text-sm text-blue-800">
-                    มูลค่าลูกค้าตลอดชีวิต (CLV): {(kpis.avgDealSize * 12).toLocaleString()} ฿
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                    📊 Customer Lifetime Value
+                  </h4>
+                  <p className="text-sm text-gray-600">
+                    มูลค่าลูกค้าตลอดชีวิต (CLV): <span className="font-semibold text-gray-900">{(kpis.avgDealSize * 12).toLocaleString()} ฿</span>
                   </p>
                 </div>
 
-                <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
-                  <h4 className="font-semibold text-green-900 mb-2">🔍 Cohort Analysis</h4>
-                  <p className="text-sm text-green-800">
-                    ลูกค้าใหม่เดือนนี้มีอัตราการกลับมาซื้อ 68% (สูงกว่าเฉลี่ย 12%)
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    🔍 Cohort Analysis
+                  </h4>
+                  <p className="text-sm text-gray-600">
+                    ลูกค้าใหม่เดือนนี้มีอัตราการกลับมาซื้อ <span className="font-semibold text-emerald-600">68%</span> (สูงกว่าเฉลี่ย 12%)
                   </p>
                 </div>
               </div>

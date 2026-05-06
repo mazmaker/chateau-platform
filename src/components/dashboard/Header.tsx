@@ -49,7 +49,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
   };
 
   return (
-    <header className="h-16 bg-white border-b border-gray-200 flex items-center gap-3 px-4 lg:px-6">
+    <header className="h-[72px] bg-white border-b border-gray-100 flex items-center gap-3 px-5 lg:px-7">
       {/* Mobile hamburger */}
       <Button
         variant="ghost"
@@ -63,7 +63,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
       {/* Scope selector */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors flex-shrink-0 group">
+          <button className="flex items-center gap-2 h-11 px-4 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all flex-shrink-0 group">
             <Building2 className="w-4 h-4 text-chateau" />
             <span className="hidden sm:block text-sm font-medium text-gray-700">
               ขอบเขต:{" "}
@@ -87,7 +87,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
           <input
             type="text"
             placeholder="ค้นหา..."
-            className="w-full h-9 pl-9 pr-4 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-chateau/30 focus:border-chateau transition-colors"
+            className="w-full h-11 pl-10 pr-4 rounded-xl border border-gray-200 bg-gray-50 text-[14.5px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-chateau/20 focus:border-chateau focus:bg-white transition-all"
           />
         </div>
       </div>

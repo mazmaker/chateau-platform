@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   LayoutDashboard,
   Building2,
@@ -15,6 +16,12 @@ import {
   BarChart3,
   Key,
   Lock,
+  ChevronDown,
+  Building,
+  Wrench,
+  Code2,
+  Wand2,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -32,27 +39,40 @@ interface NavItem {
   isPremium?: boolean;
 }
 
-const NAV_GROUPS: { label: string | null; hrefs: string[] }[] = [
-  { label: null, hrefs: ["/", "/owner"] },
-  { label: "บริษัท", hrefs: ["/tenants", "/payments"] },
-  { label: "ธุรกิจ", hrefs: ["/properties", "/leads", "/campaigns", "/analytics", "/api"] },
-  { label: "จัดการ", hrefs: ["/users", "/customization", "/settings"] },
+interface NavGroup {
+  id: string;
+  label: string | null;
+  icon?: React.ElementType;
+  hrefs: string[];
+}
+
+// Top items (no group label) + Collapsible groups (KK style)
+const NAV_GROUPS: NavGroup[] = [
+  { id: "top",       label: null,              hrefs: ["/", "/owner", "/analytics"] },
+  { id: "platform",  label: "PLATFORM CORE",   icon: Building,  hrefs: ["/tenants", "/payments", "/properties"] },
+  { id: "crm",       label: "CRM & SALES",     icon: Users,     hrefs: ["/leads"] },
+  { id: "marketing", label: "MARKETING",       icon: Megaphone, hrefs: ["/campaigns", "/builder", "/triggers", "/marketing-analytics"] },
+  { id: "developer", label: "DEVELOPER",       icon: Code2,     hrefs: ["/api"] },
+  { id: "admin",     label: "ADMIN",           icon: Wrench,    hrefs: ["/users", "/customization", "/settings"] },
 ];
 
 const getAllNavItems = (): NavItem[] => [
-  { icon: LayoutDashboard, label: "ภาพรวม", href: "/" },
-  { icon: TrendingUp, label: "Owner Dashboard", href: "/owner", requiredRoles: ["OWNER"] },
-  { icon: Building2, label: "จัดการบริษัท", href: "/tenants", requiredRoles: ["OWNER"] },
-  { icon: CreditCard, label: "การชำระเงิน", href: "/payments", requiredRoles: ["OWNER"] },
-  { icon: Building2, label: "โครงการ", href: "/properties", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
-  { icon: FileText, label: "Leads", href: "/leads", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
-  { icon: Megaphone, label: "แคมเปญ", href: "/campaigns", requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: BarChart3, label: "รายงานวิเคราะห์", href: "/analytics", requiredRoles: ["OWNER", "ADMIN"], requiredFeature: "analytics", isPremium: true },
-  { icon: Key, label: "การจัดการ API", href: "/api", requiredRoles: ["OWNER", "ADMIN"], requiredFeature: "api_access", isPremium: true },
-  { icon: Users, label: "จัดการผู้ใช้", href: "/users", requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: Palette, label: "ปรับแต่งระบบ", href: "/customization", requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: Settings, label: "การตั้งค่า", href: "/settings", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
-  { icon: LogOut, label: "ออกจากระบบ", href: "/logout", isLogout: true },
+  { icon: LayoutDashboard, label: "Executive Dashboard", href: "/" },
+  { icon: TrendingUp,      label: "Owner Dashboard",     href: "/owner",         requiredRoles: ["OWNER"] },
+  { icon: BarChart3,       label: "Analytics",           href: "/analytics",     requiredRoles: ["OWNER", "ADMIN"], requiredFeature: "analytics", isPremium: true },
+  { icon: Building2,       label: "จัดการบริษัท",         href: "/tenants",       requiredRoles: ["OWNER"] },
+  { icon: CreditCard,      label: "การชำระเงิน",          href: "/payments",      requiredRoles: ["OWNER"] },
+  { icon: Building2,       label: "โครงการ",             href: "/properties",    requiredRoles: ["OWNER", "ADMIN", "SALES"] },
+  { icon: FileText,        label: "Leads",              href: "/leads",         requiredRoles: ["OWNER", "ADMIN", "SALES"] },
+  { icon: Megaphone,       label: "Campaigns",          href: "/campaigns",     requiredRoles: ["OWNER", "ADMIN"] },
+  { icon: Wand2,           label: "Builder Wizard",     href: "/builder",       requiredRoles: ["OWNER", "ADMIN"] },
+  { icon: Zap,             label: "Triggers",           href: "/triggers",      requiredRoles: ["OWNER", "ADMIN"] },
+  { icon: BarChart3,       label: "Marketing Analytics",href: "/marketing-analytics", requiredRoles: ["OWNER", "ADMIN"] },
+  { icon: Key,             label: "การจัดการ API",        href: "/api",           requiredRoles: ["OWNER", "ADMIN"], requiredFeature: "api_access", isPremium: true },
+  { icon: Users,           label: "จัดการผู้ใช้",          href: "/users",         requiredRoles: ["OWNER", "ADMIN"] },
+  { icon: Palette,         label: "ปรับแต่งระบบ",         href: "/customization", requiredRoles: ["OWNER", "ADMIN"] },
+  { icon: Settings,        label: "การตั้งค่า",           href: "/settings",      requiredRoles: ["OWNER", "ADMIN", "SALES"] },
+  { icon: LogOut,          label: "ออกจากระบบ",          href: "/logout",        isLogout: true },
 ];
 
 const getRoleLabel = (userRole: string | null) => {
@@ -75,6 +95,23 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const { user, signOut, userRole, userProfile } = useSimpleAuth();
   const { isOwner, isAdmin } = usePermissions();
   const { hasFeature } = useSubscriptionFeatures();
+
+  // Track which groups are expanded — persist in localStorage so user choice sticks
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem("sidebarExpanded");
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return { platform: true, crm: true, marketing: true, developer: true, admin: true };
+  });
+
+  const toggleGroup = (id: string) => {
+    setExpanded((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      try { localStorage.setItem("sidebarExpanded", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
 
   const handleNavClick = async (item: NavItem) => {
     if (item.isLogout) {
@@ -122,14 +159,38 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const logoutItem = filteredItems.find((i) => i.isLogout);
   const mainItems = filteredItems.filter((i) => !i.isLogout);
 
+  // Render a single nav item button
+  const renderNavItem = (item: NavItem) => {
+    const hasRequiredFeature = item.requiredFeature ? hasFeature(item.requiredFeature) : true;
+    const isLocked = item.requiredFeature && !hasRequiredFeature;
+    const active = isActive(item.href);
+
+    return (
+      <button
+        key={item.href}
+        onClick={() => handleNavClick(item)}
+        disabled={!!isLocked}
+        className={cn(
+          "sidebar-nav-item",
+          active && "active",
+          "w-full flex items-center gap-3 text-left rounded-lg transition-all duration-150",
+          isLocked && "opacity-50 cursor-not-allowed"
+        )}
+        style={{ padding: "11px 14px", marginBottom: "3px" }}
+      >
+        <item.icon className={cn("nav-icon flex-shrink-0", active && "text-white")} size={19} />
+        <span className="text-[14.5px] font-medium flex-1 truncate">{item.label}</span>
+        {item.isPremium && isLocked && <Lock size={12} style={{ color: "#9ca3af" }} />}
+        {item.isPremium && hasRequiredFeature && <Crown size={12} style={{ color: "rgba(245,158,11,0.7)" }} />}
+      </button>
+    );
+  };
+
   return (
     <>
       {/* Mobile overlay */}
       {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={onClose}
-        />
+        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={onClose} />
       )}
 
       <aside
@@ -142,14 +203,14 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
         )}
       >
         {/* Logo */}
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid #e5e7eb" }}>
+        <div style={{ padding: "20px 22px", borderBottom: "1px solid #f3f4f6" }}>
           <div className="flex items-center gap-3">
-            <div className="sidebar-logo-icon w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0">
-              <span className="font-bold text-base leading-none">C</span>
+            <div className="sidebar-logo-icon w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0">
+              <span className="font-bold text-lg leading-none">C</span>
             </div>
             <div className="min-w-0">
-              <p className="sidebar-logo-text font-semibold text-sm leading-tight">CHATEAU</p>
-              <p className="sidebar-logo-sub text-xs leading-tight truncate">
+              <p className="sidebar-logo-text font-bold text-base leading-tight">CHATEAU</p>
+              <p className="sidebar-logo-sub text-xs leading-tight truncate mt-0.5">
                 {userRole === "owner" ? "Platform Owner" : userRole === "admin" ? "Admin Portal" : "Sales Portal"}
               </p>
             </div>
@@ -157,53 +218,58 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto" style={{ padding: "12px" }}>
+        <nav className="flex-1 overflow-y-auto" style={{ padding: "12px 12px 8px" }}>
           {NAV_GROUPS.map((group) => {
             const groupItems = mainItems.filter((item) => group.hrefs.includes(item.href));
             if (groupItems.length === 0) return null;
 
+            // Top section — no header, always visible
+            if (group.id === "top") {
+              return (
+                <div key={group.id} style={{ marginBottom: "12px" }}>
+                  {groupItems.map(renderNavItem)}
+                </div>
+              );
+            }
+
+            // Collapsible group with icon + label + chevron
+            const isExpanded = expanded[group.id];
+            const hasActiveChild = groupItems.some((i) => isActive(i.href));
+            const GroupIcon = group.icon;
+
             return (
-              <div key={group.label ?? "overview"} style={{ marginBottom: "4px" }}>
-                {group.label && (
-                  <p
-                    className="sidebar-section-label font-semibold uppercase"
-                    style={{ padding: "16px 12px 6px", fontSize: "10px", letterSpacing: "0.1em" }}
+              <div key={group.id} style={{ marginBottom: "10px" }}>
+                <button
+                  onClick={() => toggleGroup(group.id)}
+                  className="sidebar-group-header w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-colors duration-150"
+                >
+                  {GroupIcon && <GroupIcon size={16} className="flex-shrink-0 sidebar-group-icon" />}
+                  <span
+                    className="text-[11px] font-bold uppercase flex-1 text-left truncate sidebar-group-label"
+                    style={{ letterSpacing: "0.08em" }}
                   >
                     {group.label}
-                  </p>
-                )}
-                {groupItems.map((item) => {
-                  const hasRequiredFeature = item.requiredFeature ? hasFeature(item.requiredFeature) : true;
-                  const isLocked = item.requiredFeature && !hasRequiredFeature;
-                  const active = isActive(item.href);
-
-                  return (
-                    <button
-                      key={item.href}
-                      onClick={() => handleNavClick(item)}
-                      disabled={!!isLocked}
-                      className={cn(
-                        "sidebar-nav-item",
-                        active && "active",
-                        "w-full flex items-center gap-3 text-left rounded-lg transition-all duration-150",
-                        isLocked && "opacity-50 cursor-not-allowed"
-                      )}
-                      style={{ padding: "10px 12px", marginBottom: "2px" }}
-                    >
-                      <item.icon
-                        className={cn("nav-icon flex-shrink-0", active && "text-white")}
-                        size={18}
-                      />
-                      <span className="text-sm font-medium flex-1 truncate">{item.label}</span>
-                      {item.isPremium && isLocked && (
-                        <Lock size={12} style={{ color: "#52525b" }} />
-                      )}
-                      {item.isPremium && hasRequiredFeature && (
-                        <Crown size={12} style={{ color: "rgba(245,158,11,0.7)" }} />
-                      )}
-                    </button>
-                  );
-                })}
+                  </span>
+                  <ChevronDown
+                    size={14}
+                    className="flex-shrink-0 sidebar-group-chevron transition-transform duration-200"
+                    style={{ transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)" }}
+                  />
+                  {hasActiveChild && !isExpanded && (
+                    <span className="absolute right-2 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#e60023" }} />
+                  )}
+                </button>
+                <div
+                  className="overflow-hidden transition-all duration-200"
+                  style={{
+                    maxHeight: isExpanded ? `${groupItems.length * 48 + 8}px` : "0",
+                    opacity: isExpanded ? 1 : 0,
+                  }}
+                >
+                  <div style={{ paddingLeft: "8px", paddingTop: "4px", paddingBottom: "4px" }}>
+                    {groupItems.map(renderNavItem)}
+                  </div>
+                </div>
               </div>
             );
           })}
@@ -211,7 +277,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
 
         {/* Logout */}
         {logoutItem && (
-          <div style={{ padding: "0 12px 8px" }}>
+          <div style={{ padding: "8px 12px", borderTop: "1px solid #f3f4f6" }}>
             <button
               onClick={() => handleNavClick(logoutItem)}
               className="sidebar-logout-btn w-full flex items-center gap-3 text-left rounded-lg transition-all duration-150"
@@ -224,12 +290,9 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
         )}
 
         {/* User profile */}
-        <div style={{ padding: "16px", borderTop: "1px solid #e5e7eb" }}>
+        <div style={{ padding: "16px", borderTop: "1px solid #f3f4f6" }}>
           <div className="flex items-center gap-3">
-            <div
-              className="sidebar-user-avatar w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden"
-              style={{ border: "1px solid" }}
-            >
+            <div className="sidebar-user-avatar w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ border: "1px solid" }}>
               {userProfile?.avatar_url ? (
                 <img src={userProfile.avatar_url} alt={getUserName()} className="w-full h-full object-cover" />
               ) : (
@@ -237,8 +300,8 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="sidebar-user-name text-sm font-medium truncate leading-tight">{getUserName()}</p>
-              <p className="sidebar-user-role text-xs truncate leading-tight">{getRoleLabel(userRole)}</p>
+              <p className="sidebar-user-name text-sm font-semibold truncate leading-tight">{getUserName()}</p>
+              <p className="sidebar-user-role text-[11px] truncate leading-tight mt-0.5">{getRoleLabel(userRole)}</p>
             </div>
             <div className="flex-shrink-0">
               {userRole === "owner" && <Crown size={14} style={{ color: "#e60023" }} />}

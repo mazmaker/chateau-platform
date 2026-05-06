@@ -1688,7 +1688,7 @@ const TenantManagement = () => {
               <CardContent className="pt-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                    <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl rounded-xl flex items-center justify-center flex-shrink-0">
+                    <div className="w-12 h-12 bg-gradient-to-br from-chateau to-chateau-600 shadow-xl rounded-xl flex items-center justify-center flex-shrink-0">
                       <Building2 className="w-6 h-6 text-white" />
                     </div>
                     <div>

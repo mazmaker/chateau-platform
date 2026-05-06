@@ -281,15 +281,15 @@ const PaymentModal = ({ isOpen, onClose, leadId, leadName }: PaymentModalProps) 
         <div className="space-y-6">
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+            <Card className="bg-white border border-gray-200">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <div className="p-3 bg-blue-500 rounded-lg">
                     <DollarSign className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <p className="text-xs text-blue-600 font-medium">ยอดขาย</p>
-                    <p className="text-xl font-bold text-blue-900">
+                    <p className="text-xs text-gray-500 font-medium">ยอดขาย</p>
+                    <p className="text-xl font-bold text-gray-900">
                       {formatCurrency(summary?.total_amount || 0)}
                     </p>
                   </div>
@@ -297,18 +297,18 @@ const PaymentModal = ({ isOpen, onClose, leadId, leadName }: PaymentModalProps) 
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+            <Card className="bg-white border border-gray-200">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <div className="p-3 bg-green-500 rounded-lg">
                     <TrendingUp className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <p className="text-xs text-green-600 font-medium">ยอดโอน</p>
-                    <p className="text-xl font-bold text-green-900">
+                    <p className="text-xs text-gray-500 font-medium">ยอดโอน</p>
+                    <p className="text-xl font-bold text-gray-900">
                       {formatCurrency(summary?.total_paid || 0)}
                     </p>
-                    <p className="text-xs text-green-600">
+                    <p className="text-xs text-gray-500">
                       {summary?.payment_count || 0} รายการ
                     </p>
                   </div>
@@ -316,15 +316,15 @@ const PaymentModal = ({ isOpen, onClose, leadId, leadName }: PaymentModalProps) 
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
+            <Card className="bg-white border border-gray-200">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <div className="p-3 bg-orange-500 rounded-lg">
                     <AlertCircle className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <p className="text-xs text-orange-600 font-medium">ยอดค้างชำระ</p>
-                    <p className="text-xl font-bold text-orange-900">
+                    <p className="text-xs text-gray-500 font-medium">ยอดค้างชำระ</p>
+                    <p className="text-xl font-bold text-gray-900">
                       {formatCurrency(summary?.total_outstanding || 0)}
                     </p>
                   </div>

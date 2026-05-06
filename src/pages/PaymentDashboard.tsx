@@ -2326,7 +2326,7 @@ const PaymentDashboard = () => {
         <Card>
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl flex items-center justify-center shadow-xl">
+              <div className="w-12 h-12 bg-gradient-to-br from-chateau to-chateau-600 rounded-xl flex items-center justify-center shadow-xl">
                 <AlertCircle className="w-6 h-6 text-white" strokeWidth={2} />
               </div>
               <div>
@@ -2340,7 +2340,7 @@ const PaymentDashboard = () => {
         <Card>
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-gray-600 to-gray-700 rounded-xl flex items-center justify-center shadow-xl">
+              <div className="w-12 h-12 bg-gradient-to-br from-chateau to-chateau-600 rounded-xl flex items-center justify-center shadow-xl">
                 <FileText className="w-6 h-6 text-white" strokeWidth={2} />
               </div>
               <div>
@@ -2354,7 +2354,7 @@ const PaymentDashboard = () => {
         <Card>
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-chateau-700 to-chateau-800 rounded-xl flex items-center justify-center shadow-xl">
+              <div className="w-12 h-12 bg-gradient-to-br from-chateau to-chateau-600 rounded-xl flex items-center justify-center shadow-xl">
                 <Users className="w-6 h-6 text-white" strokeWidth={2} />
               </div>
               <div>
@@ -2469,7 +2469,7 @@ const PaymentDashboard = () => {
               <CardContent className="pt-4 sm:pt-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
                   <div className="flex items-center gap-2 sm:gap-3">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl rounded-xl flex items-center justify-center">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-chateau to-chateau-600 shadow-xl rounded-xl flex items-center justify-center">
                       <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                     </div>
                     <div>
@@ -2568,23 +2568,23 @@ const PaymentDashboard = () => {
             {selectedPayment && (
               <div className="space-y-6 py-4">
                 {/* Payment Overview */}
-                <div className="bg-gradient-to-br from-blue-50 to-blue-50 p-4 sm:p-6 rounded-lg border border-blue-200">
+                <div className="bg-gray-50 p-4 sm:p-6 rounded-lg border border-gray-200">
                   <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <div className="text-sm text-blue-700 mb-1">จำนวนเงิน</div>
-                      <div className="text-3xl font-bold text-blue-800">
+                      <div className="text-sm text-gray-500 mb-1">จำนวนเงิน</div>
+                      <div className="text-3xl font-bold text-chateau">
                         {formatCurrency(selectedPayment.amount)}
                       </div>
-                      <div className="text-sm text-blue-600 mt-1">
+                      <div className="text-sm text-gray-500 mt-1">
                         {'method' in selectedPayment ? getPaymentMethodLabel(selectedPayment.method) : 'ไม่ระบุ'}
                       </div>
                     </div>
                     <div>
-                      <div className="text-sm text-blue-700 mb-1">วันที่ชำระ</div>
+                      <div className="text-sm text-gray-500 mb-1">วันที่ชำระ</div>
                       <div className="text-lg font-semibold text-gray-900">
                         {formatDate(selectedPayment.created_at)}
                       </div>
-                      <div className="text-sm text-blue-600 mt-1">
+                      <div className="text-sm text-gray-500 mt-1">
                         {'status' in selectedPayment ? getPaymentStatusBadge(selectedPayment.status) : 'สำเร็จ'}
                       </div>
                     </div>
