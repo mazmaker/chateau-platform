@@ -275,28 +275,17 @@ const UserManagementContent = () => {
   };
 
   const getRoleBadge = (role: UserRole) => {
-    const styles = {
-      owner: "bg-gray-100 text-gray-700 border-gray-300",
-      admin: "bg-gray-100 text-gray-700 border-blue-300",
-      sales: "bg-green-100 text-green-800 border-green-300"
+    // Tiered hierarchy — owner = brand red strong, admin = brand red light, sales = neutral
+    const config = {
+      owner: { label: 'เจ้าของแพลตฟอร์ม', icon: '👑', className: 'bg-chateau text-white border border-chateau' },
+      admin: { label: 'ผู้ดูแลบริษัท',     icon: '🔧', className: 'bg-chateau-50 text-chateau-700 border border-chateau-100' },
+      sales: { label: 'พนักงานขาย',       icon: '💼', className: 'bg-gray-50 text-gray-700 border border-gray-200' },
     };
-
-    const labels = {
-      owner: "เจ้าของแพลตฟอร์ม",
-      admin: "ผู้ดูแลบริษัท",
-      sales: "พนักงานขาย"
-    };
-
-    const icons = {
-      owner: "👑",
-      admin: "🔧",
-      sales: "💼"
-    };
-
+    const c = config[role] || { label: role, icon: '👤', className: 'bg-gray-50 text-gray-700 border border-gray-200' };
     return (
-      <Badge className={`${styles[role]} border`}>
-        {icons[role]} {labels[role]}
-      </Badge>
+      <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md ${c.className}`}>
+        {c.icon} {c.label}
+      </span>
     );
   };
 
@@ -314,18 +303,19 @@ const UserManagementContent = () => {
 
   const getPasswordStatus = (user: UserData) => {
     if (hasTemporaryPassword(user)) {
+      // Brand red — needs action
       return (
-        <Badge className="bg-chateau-100 text-chateau-700 border-chateau-200 border">
+        <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md bg-chateau-50 text-chateau-700 border border-chateau-100">
           🔑 รหัสผ่านชั่วคราว
-        </Badge>
-      );
-    } else {
-      return (
-        <Badge className="bg-green-100 text-green-800 border-green-300 border">
-          ✅ รหัสผ่านถาวร
-        </Badge>
+        </span>
       );
     }
+    // Neutral — done state
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md bg-gray-50 text-gray-600 border border-gray-200">
+        ✅ รหัสผ่านถาวร
+      </span>
+    );
   };
 
   // Show loading while auth is checking or data is loading
@@ -571,9 +561,13 @@ const UserManagementContent = () => {
                       {getRoleBadge(user.role)}
                     </td>
                     <td className="py-3 px-4">
-                      <Badge className={user.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}>
+                      <span className={`inline-flex items-center text-xs font-semibold px-2 py-1 rounded-md ${
+                        user.is_active
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-chateau-50 text-chateau-700 border border-chateau-100'
+                      }`}>
                         {user.is_active ? "ใช้งานอยู่" : "ระงับ"}
-                      </Badge>
+                      </span>
                     </td>
                     <td className="py-3 px-4">
                       {getPasswordStatus(user)}

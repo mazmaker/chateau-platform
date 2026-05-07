@@ -598,26 +598,39 @@ const LeadManagement = () => {
     });
   };
 
+  // Status visual config — used by both badge (cards/list) and inline (dropdown trigger)
+  const STATUS_CONFIG: Record<string, { label: string; shortLabel?: string; icon: any; dot: string; badge: string }> = {
+    new:         { label: 'ใหม่',            icon: FileText,    dot: '#3b82f6', badge: 'bg-blue-50 text-blue-700 border border-blue-200' },
+    contacted:   { label: 'ติดต่อแล้ว',      icon: Phone,       dot: '#06b6d4', badge: 'bg-cyan-50 text-cyan-700 border border-cyan-200' },
+    qualified:   { label: 'มีคุณสมบัติ',      icon: CheckCircle, dot: '#10b981', badge: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+    negotiating: { label: 'กำลังเจรจา',       icon: TrendingUp,  dot: '#f59e0b', badge: 'bg-amber-50 text-amber-700 border border-amber-200' },
+    negotiation: { label: 'เจรจา',           icon: TrendingUp,  dot: '#f59e0b', badge: 'bg-amber-50 text-amber-700 border border-amber-200' },
+    proposal:    { label: 'เสนอขาย',         icon: FileText,    dot: '#8b5cf6', badge: 'bg-purple-50 text-purple-700 border border-purple-200' },
+    won:         { label: 'ปิดการขายสำเร็จ', shortLabel: 'ปิดดีล',  icon: CheckCircle, dot: '#16a34a', badge: 'bg-green-100 text-green-800 border border-green-300' },
+    closed:      { label: 'ปิดการขาย',       icon: CheckCircle, dot: '#16a34a', badge: 'bg-green-100 text-green-800 border border-green-300' },
+    lost:        { label: 'สูญเสีย',          icon: XCircle,     dot: '#ef4444', badge: 'bg-red-50 text-red-700 border border-red-200' },
+  };
+
+  // Full pill badge (used in cards/list cells)
   const getStatusBadge = (status: LeadStatus) => {
-    const badges: Record<string, { label: string; variant: any; icon: any }> = {
-      new: { label: 'ใหม่', variant: 'default', icon: FileText },
-      contacted: { label: 'ติดต่อแล้ว', variant: 'secondary', icon: Phone },
-      qualified: { label: 'มีคุณสมบัติ', variant: 'secondary', icon: CheckCircle },
-      proposal: { label: 'เสนอขาย', variant: 'default', icon: FileText },
-      negotiating: { label: 'กำลังเจรจา', variant: 'default', icon: TrendingUp },
-      negotiation: { label: 'เจรจา', variant: 'default', icon: TrendingUp },
-      won: { label: 'ปิดดีลสำเร็จ', variant: 'default', icon: CheckCircle },
-      closed: { label: 'ปิดการขาย', variant: 'default', icon: CheckCircle },
-      lost: { label: 'สูญเสีย', variant: 'destructive', icon: XCircle },
-    };
-    // Fallback for any unexpected status — prevents undefined.icon crash
-    const badge = badges[status] || { label: status || 'ไม่ระบุ', variant: 'outline', icon: FileText };
-    const Icon = badge.icon;
+    const cfg = STATUS_CONFIG[status] || { label: status || 'ไม่ระบุ', icon: FileText, dot: '#6b7280', badge: 'bg-gray-50 text-gray-700 border border-gray-200' };
+    const Icon = cfg.icon;
     return (
-      <Badge variant={badge.variant} className="flex items-center gap-1">
+      <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md ${cfg.badge}`}>
         <Icon className="w-3 h-3" />
-        {badge.label}
-      </Badge>
+        {cfg.label}
+      </span>
+    );
+  };
+
+  // Compact inline (used inside dropdown trigger — no nested borders)
+  const getStatusInline = (status: LeadStatus) => {
+    const cfg = STATUS_CONFIG[status] || { label: status || 'ไม่ระบุ', shortLabel: undefined, dot: '#6b7280' };
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-800">
+        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: cfg.dot }} />
+        <span className="truncate">{cfg.shortLabel || cfg.label}</span>
+      </span>
     );
   };
 
@@ -1001,9 +1014,9 @@ const LeadManagement = () => {
                           value={lead.status}
                           onValueChange={(value: LeadStatus) => handleUpdateStatus(lead, value)}
                         >
-                          <SelectTrigger className="w-[140px] h-8 text-xs">
+                          <SelectTrigger className="w-[150px] h-8 text-xs bg-white">
                             <SelectValue>
-                              {getStatusBadge(lead.status)}
+                              {getStatusInline(lead.status)}
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
@@ -1400,7 +1413,6 @@ const LeadManagement = () => {
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-xs text-gray-700 transition-all hover:shadow-soft"
                               >
                                 <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: style.dot }} />
-                                <span className="text-[13px]">{seg.icon}</span>
                                 <span className="font-semibold text-gray-900">{seg.label}</span>
                                 <span className="text-[10px] text-gray-400 font-normal">· {seg.reason}</span>
                               </div>

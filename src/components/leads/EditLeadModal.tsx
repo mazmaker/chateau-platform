@@ -658,14 +658,6 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                 <p className="text-xs text-gray-500">อัปเดตข้อมูลลูกค้าและรายละเอียด Lead</p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={loading}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
-            >
-              <X className="w-5 h-5" />
-            </button>
           </div>
 
           {dataLoading ? (

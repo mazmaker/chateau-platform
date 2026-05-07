@@ -57,6 +57,7 @@ interface LeadRow {
   id: string;
   status: string | null;
   priority: string | null;
+  source: string | null;
   estimated_value: number | null;
   created_at: string;
   last_contact_date: string | null;
@@ -126,7 +127,7 @@ const Index = () => {
         const [leadsRes, propertiesRes, campaignsRes, interestsRes] = await Promise.all([
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from('leads') as any)
-            .select('id, status, priority, estimated_value, created_at, last_contact_date, property_id')
+            .select('id, status, priority, source, estimated_value, created_at, last_contact_date, property_id')
             .eq(tenantId ? 'tenant_id' : 'id', tenantId || 'never'),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from('properties') as any)
@@ -498,25 +499,64 @@ const Index = () => {
             </div>
 
             <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <TrendingUp className="w-4 h-4" style={{ color: KK.red }} />
-                <h2 className="text-base font-bold text-gray-900">Lead Trend (14 วัน)</h2>
+              <div className="flex items-center gap-2 mb-1">
+                <Activity className="w-4 h-4" style={{ color: KK.red }} />
+                <h2 className="text-base font-bold text-gray-900">Lead Sources</h2>
               </div>
-              <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={leadTrend30D.slice(-14)} margin={{ top: 10, right: 5, left: -25, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"  stopColor={KK.red} stopOpacity={0.3} />
-                      <stop offset="100%" stopColor={KK.red} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${Number(v)} leads`, 'จำนวน']} />
-                  <Area type="monotone" dataKey="count" stroke={KK.red} strokeWidth={2.5} fill="url(#trendGrad)" dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <p className="text-xs text-gray-500 mb-4">leads มาจากช่องทางไหน — ใช้ตัดสินใจ marketing budget</p>
+              {(() => {
+                const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
+                  online_facebook: { label: 'Facebook',    color: '#3b82f6' },
+                  online_google:   { label: 'Google',      color: '#10b981' },
+                  offline:         { label: 'Walk-in / Offline', color: '#f59e0b' },
+                  referral:        { label: 'Referral',    color: '#8b5cf6' },
+                  website:         { label: 'Website',     color: '#06b6d4' },
+                };
+                const counts = new Map<string, number>();
+                leads.forEach((l) => {
+                  const src = l.source || 'unknown';
+                  counts.set(src, (counts.get(src) || 0) + 1);
+                });
+                const total = leads.length;
+                const sources = Array.from(counts.entries())
+                  .map(([key, count]) => ({
+                    key,
+                    label: SOURCE_LABELS[key]?.label || key,
+                    color: SOURCE_LABELS[key]?.color || KK.gray,
+                    count,
+                    pct: total > 0 ? (count / total) * 100 : 0,
+                  }))
+                  .sort((a, b) => b.count - a.count);
+
+                if (sources.length === 0) {
+                  return <p className="text-sm text-gray-400 text-center py-8">ไม่มีข้อมูล source</p>;
+                }
+
+                return (
+                  <div className="space-y-3.5">
+                    {sources.map((s) => (
+                      <div key={s.key}>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-sm font-medium text-gray-700">{s.label}</span>
+                          <span className="text-xs tabular-nums">
+                            <span className="font-bold" style={{ color: s.color }}>{s.count}</span>
+                            <span className="text-gray-400 ml-1.5">({s.pct.toFixed(0)}%)</span>
+                          </span>
+                        </div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{ width: `${s.pct}%`, backgroundColor: s.color }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    <div className="pt-2 mt-2 border-t border-gray-100 text-[11px] text-gray-500">
+                      💡 Top source: <span className="font-semibold text-gray-700">{sources[0].label}</span> · {sources[0].count} leads
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">

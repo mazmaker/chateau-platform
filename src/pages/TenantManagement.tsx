@@ -971,14 +971,18 @@ const TenantManagement = () => {
 
 
   const getStatusBadge = (status: string) => {
-    const badges: Record<string, { label: string; variant: any }> = {
-      active: { label: 'Active', variant: 'default' },
-      trial: { label: 'Trial', variant: 'secondary' },
-      suspended: { label: 'ระงับ', variant: 'destructive' },
-      cancelled: { label: 'ยกเลิก', variant: 'outline' }
+    const badges: Record<string, { label: string; className: string }> = {
+      active:    { label: 'Active',  className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+      trial:     { label: 'Trial',   className: 'bg-amber-50 text-amber-700 border border-amber-200' },
+      suspended: { label: 'ระงับ',   className: 'bg-red-50 text-red-700 border border-red-200' },
+      cancelled: { label: 'ยกเลิก',  className: 'bg-gray-100 text-gray-600 border border-gray-300' },
     };
-    const badge = badges[status] || { label: status, variant: 'outline' };
-    return <Badge variant={badge.variant}>{badge.label}</Badge>;
+    const badge = badges[status] || { label: status, className: 'bg-gray-50 text-gray-700 border border-gray-200' };
+    return (
+      <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md ${badge.className}`}>
+        {badge.label}
+      </span>
+    );
   };
 
   const getPlanBadge = (plan: string) => {
@@ -1015,13 +1019,17 @@ const TenantManagement = () => {
 
   const getBillStatusBadge = (status: string) => {
     const badges: Record<string, { label: string; className: string }> = {
-      paid: { label: 'จ่ายแล้ว', className: 'bg-green-100 text-green-800' },
-      pending: { label: 'รอชำระ', className: 'bg-red-100 text-red-800' },
-      overdue: { label: 'เกินกำหนด', className: 'bg-red-100 text-red-800' },
-      cancelled: { label: 'ยกเลิก', className: 'bg-gray-100 text-gray-800' }
+      paid:      { label: 'จ่ายแล้ว',  className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+      pending:   { label: 'รอชำระ',    className: 'bg-amber-50 text-amber-700 border border-amber-200' },
+      overdue:   { label: 'เกินกำหนด', className: 'bg-red-50 text-red-700 border border-red-200' },
+      cancelled: { label: 'ยกเลิก',    className: 'bg-gray-100 text-gray-600 border border-gray-300' },
     };
     const badge = badges[status] || badges.pending;
-    return <Badge className={badge.className}>{badge.label}</Badge>;
+    return (
+      <span className={`inline-flex items-center text-xs font-semibold px-2 py-1 rounded-md ${badge.className}`}>
+        {badge.label}
+      </span>
+    );
   };
 
   const getPaymentMethodLabel = (method: string) => {

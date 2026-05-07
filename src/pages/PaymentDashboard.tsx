@@ -124,7 +124,7 @@ interface Payment {
   amount: number;
   currency: string;
   payment_method: string;
-  payment_status: 'pending' | 'completed' | 'failed' | 'refunded' | 'cancelled';
+  payment_status: 'pending' | 'completed' | 'failed' | 'refunded' | 'cancelled' | 'overdue';
   transaction_id?: string;
   reference_code?: string;
   notes?: string;
@@ -331,7 +331,7 @@ const PaymentDashboard = () => {
               paymentStatus = 'pending';
               break;
             case 'overdue':
-              paymentStatus = 'failed'; // เกินกำหนด = ล้มเหลว
+              paymentStatus = 'overdue'; // ค้างชำระ
               break;
             case 'cancelled':
               paymentStatus = 'cancelled';
@@ -1604,72 +1604,39 @@ const PaymentDashboard = () => {
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { label: string; className: string; icon: any }> = {
-      paid: {
-        label: 'จ่ายแล้ว',
-        className: 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200',
-        icon: CheckCircle
-      },
-      pending: {
-        label: 'รอชำระ',
-        className: 'bg-chateau-100 text-chateau-700 border-chateau-100 hover:bg-chateau-100',
-        icon: Clock
-      },
-      overdue: {
-        label: 'เกินกำหนด',
-        className: 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200 animate-pulse',
-        icon: AlertCircle
-      },
-      cancelled: {
-        label: 'ยกเลิก',
-        className: 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200',
-        icon: XCircle
-      }
+      paid:      { label: 'จ่ายแล้ว',  className: 'bg-emerald-50 text-emerald-700 border border-emerald-200', icon: CheckCircle },
+      pending:   { label: 'รอชำระ',    className: 'bg-amber-50 text-amber-700 border border-amber-200',       icon: Clock },
+      overdue:   { label: 'เกินกำหนด', className: 'bg-red-50 text-red-700 border border-red-200',             icon: AlertCircle },
+      cancelled: { label: 'ยกเลิก',    className: 'bg-gray-100 text-gray-600 border border-gray-300',         icon: XCircle },
     };
     const badge = badges[status] || badges.pending;
     const Icon = badge.icon;
     return (
-      <Badge className={`flex items-center gap-1 font-medium ${badge.className}`}>
+      <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md ${badge.className}`}>
         <Icon className="w-3 h-3" />
         {badge.label}
-      </Badge>
+      </span>
     );
   };
 
   const getPaymentStatusBadge = (status: string) => {
     const badges: Record<string, { label: string; className: string; icon: any }> = {
-      completed: {
-        label: 'สำเร็จ',
-        className: 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200',
-        icon: CheckCircle
-      },
-      pending: {
-        label: 'รอดำเนินการ',
-        className: 'bg-chateau-100 text-chateau-700 border-chateau-100 hover:bg-chateau-100',
-        icon: Clock
-      },
-      failed: {
-        label: 'ล้มเหลว',
-        className: 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200',
-        icon: XCircle
-      },
-      refunded: {
-        label: 'คืนเงิน',
-        className: 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200',
-        icon: RefreshCw
-      },
-      cancelled: {
-        label: 'ยกเลิก',
-        className: 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200',
-        icon: XCircle
-      }
+      completed: { label: 'สำเร็จ',       className: 'bg-emerald-50 text-emerald-700 border border-emerald-200', icon: CheckCircle },
+      paid:      { label: 'จ่ายแล้ว',      className: 'bg-emerald-50 text-emerald-700 border border-emerald-200', icon: CheckCircle },
+      pending:   { label: 'รอดำเนินการ',  className: 'bg-amber-50 text-amber-700 border border-amber-200',       icon: Clock },
+      overdue:   { label: 'ค้างชำระ',     className: 'bg-orange-50 text-orange-700 border border-orange-200',    icon: AlertCircle },
+      failed:    { label: 'ล้มเหลว',       className: 'bg-red-50 text-red-700 border border-red-200',             icon: XCircle },
+      refunded:  { label: 'คืนเงิน',       className: 'bg-blue-50 text-blue-700 border border-blue-200',          icon: RefreshCw },
+      cancelled: { label: 'ยกเลิก',        className: 'bg-gray-100 text-gray-600 border border-gray-300',         icon: XCircle },
+      unknown:   { label: 'ไม่ระบุ',       className: 'bg-gray-50 text-gray-700 border border-gray-200',          icon: AlertCircle },
     };
-    const badge = badges[status] || badges.pending;
+    const badge = badges[status] || badges.unknown;
     const Icon = badge.icon;
     return (
-      <Badge className={`flex items-center gap-1 font-medium ${badge.className}`}>
+      <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md ${badge.className}`}>
         <Icon className="w-3 h-3" />
         {badge.label}
-      </Badge>
+      </span>
     );
   };
 
@@ -1700,18 +1667,18 @@ const PaymentDashboard = () => {
         <div className="space-y-3 sm:space-y-4">
           {/* Payment Stats */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
-            <div className="bg-green-50 p-3 sm:p-4 rounded-lg border border-green-200">
+            <div className="bg-emerald-50 p-3 sm:p-4 rounded-lg border border-emerald-200">
               <div className="flex items-center gap-2">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-                <span className="text-green-800 font-medium">
+                <CheckCircle className="w-5 h-5 text-emerald-600" />
+                <span className="text-emerald-700 font-medium">
                   สำเร็จ: {allPayments.filter(p => p.payment_status === 'completed').length}
                 </span>
               </div>
             </div>
-            <div className="bg-chateau-50 p-3 sm:p-4 rounded-lg border border-chateau-100">
+            <div className="bg-amber-50 p-3 sm:p-4 rounded-lg border border-amber-200">
               <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-chateau" />
-                <span className="text-chateau-700 font-medium">
+                <Clock className="w-5 h-5 text-amber-600" />
+                <span className="text-amber-700 font-medium">
                   รอดำเนินการ: {allPayments.filter(p => p.payment_status === 'pending').length}
                 </span>
               </div>
@@ -1719,7 +1686,7 @@ const PaymentDashboard = () => {
             <div className="bg-red-50 p-3 sm:p-4 rounded-lg border border-red-200">
               <div className="flex items-center gap-2">
                 <XCircle className="w-5 h-5 text-red-600" />
-                <span className="text-red-800 font-medium">
+                <span className="text-red-700 font-medium">
                   ล้มเหลว: {allPayments.filter(p => p.payment_status === 'failed').length}
                 </span>
               </div>
@@ -2103,7 +2070,7 @@ const PaymentDashboard = () => {
                               amount: item.total_amount,
                               currency: 'THB',
                               payment_method: 'pending',
-                              payment_status: 'failed',
+                              payment_status: 'overdue',
                               created_at: item.oldest_due_date,
                               tenant: {
                                 name: item.tenant_name,
@@ -2585,7 +2552,11 @@ const PaymentDashboard = () => {
                         {formatDate(selectedPayment.created_at)}
                       </div>
                       <div className="text-sm text-gray-500 mt-1">
-                        {'status' in selectedPayment ? getPaymentStatusBadge(selectedPayment.status) : 'สำเร็จ'}
+                        {(() => {
+                          const sp = selectedPayment as Record<string, unknown>;
+                          const statusValue = (sp.payment_status as string) || (sp.status as string) || 'unknown';
+                          return getPaymentStatusBadge(statusValue);
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -2611,10 +2582,12 @@ const PaymentDashboard = () => {
                       <div>
                         <div className="text-sm text-gray-600">สถานะ</div>
                         <div className="text-sm">
-                          {'status' in selectedPayment
-                            ? getPaymentStatusBadge(selectedPayment.status)
-                            : <Badge className="bg-green-100 text-green-800">สำเร็จ</Badge>
-                          }
+                          {/* Prefer payment_status (overdue list uses this) → fall back to invoice status → unknown */}
+                          {(() => {
+                            const sp = selectedPayment as Record<string, unknown>;
+                            const statusValue = (sp.payment_status as string) || (sp.status as string) || 'unknown';
+                            return getPaymentStatusBadge(statusValue);
+                          })()}
                         </div>
                       </div>
                       {'tenant_name' in selectedPayment && (

@@ -126,8 +126,9 @@ const MarketingAnalytics = () => {
       name: c.campaign_name,
       sent: c.recipients_count || 0,
       ctr: c.ctr || 0,
-      // Estimated revenue: clicks × 18% conversion × ฿4.5M avg deal
-      revenue: Math.round((c.clicks_count || 0) * 0.18 * 4500000),
+      // Estimated revenue: clicks × 0.5% click-to-close × ฿4.5M avg deal
+      // (industry standard real-estate funnel — 18% was unrealistic)
+      revenue: Math.round((c.clicks_count || 0) * 0.005 * 4500000),
     }));
 
   return (

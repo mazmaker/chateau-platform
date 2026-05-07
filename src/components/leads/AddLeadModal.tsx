@@ -1064,14 +1064,6 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
                 <p className="text-xs text-gray-500">กรอกข้อมูลลูกค้าและรายละเอียดเพื่อสร้าง Lead ใหม่</p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={loading}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
-            >
-              <X className="w-5 h-5" />
-            </button>
           </div>
 
           {/* Form Content - Scrollable */}

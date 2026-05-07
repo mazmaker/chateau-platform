@@ -171,7 +171,8 @@ const CampaignDetail = () => {
   const delivered = Math.round(sent * 0.98);
   const opened = campaign.impressions_count || Math.round(sent * 0.85);
   const clicked = campaign.clicks_count || Math.round(sent * (campaign.ctr || 22) / 100);
-  const converted = Math.round(clicked * 0.18);
+  // Click-to-close conversion ~0.5% — industry standard for real estate
+  const converted = Math.round(clicked * 0.005);
   const revenue = converted * 4500000; // estimated avg deal value
 
   const openRate = sent > 0 ? ((opened / sent) * 100).toFixed(1) : '0.0';
