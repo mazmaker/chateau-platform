@@ -12,7 +12,7 @@ if (!PASSWORD) {
 }
 
 const FILES = [
-  'supabase/migrations/20260424000005_fix_segment_evaluation.sql',
+  'supabase/migrations/20260424000006_seed_real_estate_triggers.sql',
 ];
 
 const connectionString = `postgresql://postgres:${encodeURIComponent(PASSWORD)}@db.${PROJECT_REF}.supabase.co:5432/postgres`;
@@ -39,8 +39,8 @@ for (const f of FILES) {
   }
 }
 
-console.log('\nRefreshing all segments...');
-const r = await client.query('SELECT segment_id, segment_name, member_count FROM refresh_all_segments()');
+console.log('\nVerifying triggers count...');
+const r = await client.query("SELECT name, event_type, is_active, fired_count FROM triggers ORDER BY created_at DESC LIMIT 15");
 console.table(r.rows);
 
 console.log('\nDone.');

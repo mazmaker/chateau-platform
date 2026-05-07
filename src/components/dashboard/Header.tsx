@@ -1,4 +1,9 @@
-import { Bell, Menu, Settings, LogOut, Search, ChevronDown, Building2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import {
+  Bell, Menu, Settings, LogOut, Search, ChevronDown, Building2,
+  CheckCircle2, AlertTriangle, UserPlus, Calendar, Megaphone, Users,
+  Home, X
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -10,15 +15,234 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
 import { usePermissions } from "@/components/auth/PermissionGuard";
+import { supabase } from "@/lib/supabase";
 
 interface HeaderProps {
   onMenuClick: () => void;
 }
 
+// Mock notifications for demo — would come from a notifications table in production
+type NotifType = 'approval' | 'lead' | 'trigger' | 'campaign' | 'inactive';
+interface NotifItem {
+  id: string;
+  type: NotifType;
+  title: string;
+  description: string;
+  time: string;
+  unread: boolean;
+  link?: string;
+}
+
+const MOCK_NOTIFICATIONS: NotifItem[] = [
+  {
+    id: '1',
+    type: 'approval',
+    title: 'Campaign ได้รับการอนุมัติ',
+    description: '"Welcome Pack สมาชิกใหม่" ผ่านการอนุมัติแล้ว — พร้อมส่ง',
+    time: '2 นาทีก่อน',
+    unread: true,
+    link: '/campaigns',
+  },
+  {
+    id: '2',
+    type: 'lead',
+    title: 'Lead ใหม่เข้ามา',
+    description: 'คุณวิภา สนใจ Blu Diamond Condo — กรอกฟอร์มจาก LINE',
+    time: '15 นาทีก่อน',
+    unread: true,
+    link: '/leads',
+  },
+  {
+    id: '3',
+    type: 'inactive',
+    title: 'Lead เงียบ 7 วัน — 3 ราย',
+    description: 'พร้อมยิง trigger "Lead เงียบ 7 วัน" อัตโนมัติคืนนี้',
+    time: '1 ชั่วโมงก่อน',
+    unread: true,
+    link: '/triggers',
+  },
+  {
+    id: '4',
+    type: 'trigger',
+    title: 'Trigger ทำงาน',
+    description: '"ต้อนรับ Lead ใหม่" ส่งให้คุณสมชายเรียบร้อย',
+    time: '3 ชั่วโมงก่อน',
+    unread: false,
+    link: '/triggers',
+  },
+  {
+    id: '5',
+    type: 'campaign',
+    title: 'Campaign กำลังจะส่ง',
+    description: '"BAAN ISSARA Phase 2" — schedule ส่งพรุ่งนี้ 10:00',
+    time: '5 ชั่วโมงก่อน',
+    unread: false,
+    link: '/campaigns',
+  },
+  {
+    id: '6',
+    type: 'lead',
+    title: 'Lead ใหม่ 2 ราย',
+    description: 'คุณกานต์ + คุณนภา จากแคมเปญ "Family Open House"',
+    time: 'เมื่อวาน',
+    unread: false,
+    link: '/leads',
+  },
+];
+
+const NOTIF_STYLES: Record<NotifType, { icon: typeof Bell; color: string; bg: string }> = {
+  approval:  { icon: CheckCircle2,   color: '#10b981', bg: '#ecfdf5' },
+  lead:      { icon: UserPlus,       color: '#3b82f6', bg: '#eff6ff' },
+  trigger:   { icon: Megaphone,      color: '#8b5cf6', bg: '#f5f3ff' },
+  campaign:  { icon: Calendar,       color: '#f59e0b', bg: '#fffbeb' },
+  inactive:  { icon: AlertTriangle,  color: '#ef4444', bg: '#fef2f2' },
+};
+
+// Search result types
+type SearchEntity = 'lead' | 'property' | 'campaign' | 'segment';
+interface SearchResult {
+  id: string;
+  type: SearchEntity;
+  title: string;
+  subtitle: string;
+  link: string;
+}
+
+const ENTITY_LABEL: Record<SearchEntity, string> = {
+  lead: 'Lead',
+  property: 'โครงการ',
+  campaign: 'Campaign',
+  segment: 'Segment',
+};
+
+const ENTITY_ICON: Record<SearchEntity, typeof Bell> = {
+  lead: Users,
+  property: Home,
+  campaign: Megaphone,
+  segment: Users,
+};
+
 const Header = ({ onMenuClick }: HeaderProps) => {
   const navigate = useNavigate();
   const { user, signOut, currentTenant, userRole, userProfile } = useSimpleAuth();
   const { isOwner } = usePermissions();
+
+  // === Notifications state ===
+  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const unreadCount = notifications.filter((n) => n.unread).length;
+
+  const markAsRead = (id: string) => {
+    setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, unread: false } : n));
+  };
+  const markAllRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+  };
+  const clickNotif = (n: NotifItem) => {
+    markAsRead(n.id);
+    setNotifOpen(false);
+    if (n.link) navigate(n.link);
+  };
+
+  // === Search state ===
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  // Close search dropdown on outside click
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, []);
+
+  // Debounced search
+  useEffect(() => {
+    if (!searchQuery.trim() || !currentTenant?.id) {
+      setSearchResults([]);
+      return;
+    }
+    setSearchLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const q = `%${searchQuery}%`;
+        const tenantId = currentTenant.id;
+
+        // Search across 4 entities in parallel
+        const [campaignsRes, propertiesRes, leadsRes, segmentsRes] = await Promise.all([
+          supabase.from('campaigns')
+            .select('id, campaign_name, detail, status')
+            .eq('tenant_id', tenantId).ilike('campaign_name', q).limit(5),
+          supabase.from('properties')
+            .select('id, name, type')
+            .eq('tenant_id', tenantId).ilike('name', q).limit(5),
+          supabase.from('leads')
+            .select('id, customer_id, status, customers(full_name, email)')
+            .eq('tenant_id', tenantId).limit(20),
+          supabase.from('segments')
+            .select('id, code, name, member_count')
+            .eq('tenant_id', tenantId).ilike('name', q).limit(5),
+        ]);
+
+        const results: SearchResult[] = [];
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (campaignsRes.data as any[] || []).forEach((c) => {
+          results.push({ id: c.id, type: 'campaign', title: c.campaign_name, subtitle: c.status || 'campaign', link: `/campaigns/${c.id}` });
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (propertiesRes.data as any[] || []).forEach((p) => {
+          results.push({ id: p.id, type: 'property', title: p.name, subtitle: p.type || 'property', link: `/properties/${p.id}` });
+        });
+        // Filter leads by customer name (client-side because joined query)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (leadsRes.data as any[] || []).filter((l) => {
+          const name = l.customers?.full_name || '';
+          const email = l.customers?.email || '';
+          return name.toLowerCase().includes(searchQuery.toLowerCase()) || email.toLowerCase().includes(searchQuery.toLowerCase());
+        }).slice(0, 5).forEach((l) => {
+          results.push({
+            id: l.id,
+            type: 'lead',
+            title: l.customers?.full_name || 'Unknown',
+            subtitle: l.status || 'lead',
+            link: `/leads/${l.id}`,
+          });
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (segmentsRes.data as any[] || []).forEach((s) => {
+          results.push({
+            id: s.id,
+            type: 'segment',
+            title: s.name,
+            subtitle: `${s.member_count || 0} คน · ${s.code}`,
+            link: `/leads?segment=${s.code}`,
+          });
+        });
+
+        setSearchResults(results);
+      } catch (e) {
+        console.error('Search failed:', e);
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, currentTenant]);
+
+  const handleResultClick = (r: SearchResult) => {
+    setSearchOpen(false);
+    setSearchQuery('');
+    navigate(r.link);
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -48,15 +272,17 @@ const Header = ({ onMenuClick }: HeaderProps) => {
     return currentTenant?.name || "บริษัทของฉัน";
   };
 
+  // Group search results by type
+  const groupedResults = searchResults.reduce((acc, r) => {
+    if (!acc[r.type]) acc[r.type] = [];
+    acc[r.type].push(r);
+    return acc;
+  }, {} as Record<SearchEntity, SearchResult[]>);
+
   return (
-    <header className="h-[72px] bg-white border-b border-gray-100 flex items-center gap-3 px-5 lg:px-7">
+    <header className="h-[72px] bg-white border-b border-gray-100 flex items-center gap-3 px-5 lg:px-7 relative z-30">
       {/* Mobile hamburger */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="lg:hidden flex-shrink-0 text-gray-500"
-        onClick={onMenuClick}
-      >
+      <Button variant="ghost" size="icon" className="lg:hidden flex-shrink-0 text-gray-500" onClick={onMenuClick}>
         <Menu className="w-5 h-5" />
       </Button>
 
@@ -80,31 +306,142 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Search bar */}
-      <div className="flex-1 min-w-0 max-w-sm lg:max-w-md">
+      {/* Search bar with dropdown */}
+      <div className="flex-1 min-w-0 max-w-sm lg:max-w-md" ref={searchRef}>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
           <input
             type="text"
-            placeholder="ค้นหา..."
-            className="w-full h-11 pl-10 pr-4 rounded-xl border border-gray-200 bg-gray-50 text-[14.5px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-chateau/20 focus:border-chateau focus:bg-white transition-all"
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); }}
+            onFocus={() => setSearchOpen(true)}
+            placeholder="ค้นหา leads / โครงการ / campaigns..."
+            className="w-full h-11 pl-10 pr-9 rounded-xl border border-gray-200 bg-gray-50 text-[14.5px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-chateau/20 focus:border-chateau focus:bg-white transition-all"
           />
+          {searchQuery && (
+            <button
+              onClick={() => { setSearchQuery(''); setSearchResults([]); }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Search dropdown */}
+          {searchOpen && searchQuery.trim() && (
+            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl border border-gray-200 shadow-lg max-h-[400px] overflow-y-auto z-40">
+              {searchLoading ? (
+                <div className="p-4 text-center text-sm text-gray-500">กำลังค้นหา...</div>
+              ) : searchResults.length === 0 ? (
+                <div className="p-6 text-center">
+                  <Search className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">ไม่พบผลลัพธ์สำหรับ "{searchQuery}"</p>
+                </div>
+              ) : (
+                <div>
+                  {(Object.keys(groupedResults) as SearchEntity[]).map((entity) => {
+                    const items = groupedResults[entity];
+                    const Icon = ENTITY_ICON[entity];
+                    return (
+                      <div key={entity}>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 pt-3 pb-1.5">{ENTITY_LABEL[entity]} ({items.length})</p>
+                        {items.map((r) => (
+                          <button
+                            key={r.id}
+                            onClick={() => handleResultClick(r)}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left transition-colors"
+                          >
+                            <div className="w-8 h-8 rounded-lg bg-chateau-50 flex items-center justify-center flex-shrink-0">
+                              <Icon className="w-4 h-4 text-chateau" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-900 truncate">{r.title}</p>
+                              <p className="text-xs text-gray-500 truncate">{r.subtitle}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Right side */}
       <div className="flex items-center gap-2 ml-auto flex-shrink-0">
-        {/* Notification bell */}
-        <Button variant="ghost" size="icon" className="relative text-gray-500 hover:text-gray-700">
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
-        </Button>
+        {/* Notification dropdown */}
+        <DropdownMenu open={notifOpen} onOpenChange={setNotifOpen}>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="relative text-gray-500 hover:text-gray-700">
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-[16px] h-[16px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full border-2 border-white flex items-center justify-center">
+                  {unreadCount}
+                </span>
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-[380px] p-0">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-gray-900">การแจ้งเตือน</p>
+                <p className="text-xs text-gray-500">{unreadCount} รายการใหม่</p>
+              </div>
+              {unreadCount > 0 && (
+                <button onClick={markAllRead} className="text-xs font-semibold text-chateau hover:underline">
+                  อ่านทั้งหมด
+                </button>
+              )}
+            </div>
+            <div className="max-h-[420px] overflow-y-auto">
+              {notifications.length === 0 ? (
+                <div className="p-8 text-center">
+                  <Bell className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">ไม่มีการแจ้งเตือน</p>
+                </div>
+              ) : (
+                notifications.map((n) => {
+                  const style = NOTIF_STYLES[n.type];
+                  const Icon = style.icon;
+                  return (
+                    <button
+                      key={n.id}
+                      onClick={() => clickNotif(n)}
+                      className="w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-50 text-left transition-colors border-b border-gray-50 last:border-b-0 relative"
+                    >
+                      {n.unread && (
+                        <span className="absolute right-3 top-4 w-2 h-2 bg-chateau rounded-full" />
+                      )}
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: style.bg }}>
+                        <Icon className="w-4 h-4" style={{ color: style.color }} />
+                      </div>
+                      <div className="min-w-0 flex-1 pr-4">
+                        <p className={`text-sm leading-snug ${n.unread ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}`}>
+                          {n.title}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-2 leading-snug">{n.description}</p>
+                        <p className="text-[11px] text-gray-400 mt-1">{n.time}</p>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50">
+              <button className="w-full text-xs font-semibold text-gray-600 hover:text-chateau text-center">
+                ดูทั้งหมด →
+              </button>
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {/* User menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-2.5 pl-1 pr-2 py-1 rounded-lg hover:bg-gray-100 transition-colors group">
-              {/* Avatar */}
               <div className="w-8 h-8 rounded-full bg-chateau/10 border border-chateau/20 flex items-center justify-center overflow-hidden flex-shrink-0" style={{ backgroundColor: "#fff1f2", borderColor: "#fecdd3" }}>
                 {userProfile?.avatar_url ? (
                   <img src={userProfile.avatar_url} alt={getUserName()} className="w-full h-full object-cover" />
@@ -113,7 +450,6 @@ const Header = ({ onMenuClick }: HeaderProps) => {
                 )}
               </div>
 
-              {/* Name + role */}
               <div className="hidden md:block text-left leading-tight min-w-0">
                 <p className="text-sm font-semibold text-gray-800 truncate max-w-[120px]">{getUserName()}</p>
                 <p className="text-xs text-gray-500 truncate max-w-[120px]">{getRoleLabel()}</p>

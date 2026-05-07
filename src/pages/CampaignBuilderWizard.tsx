@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "@/components/dashboard/Sidebar";
 import Header from "@/components/dashboard/Header";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ import {
   Target,
   UserCheck,
   MessageSquare,
+  CheckCircle2,
 } from "lucide-react";
 
 const KK = {
@@ -96,7 +98,8 @@ const PERSONALIZATION_TOKENS = [
 ];
 
 const CampaignBuilderWizard = () => {
-  const { currentTenant } = useSimpleAuth();
+  const { currentTenant, userProfile } = useSimpleAuth();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeStep, setActiveStep] = useState(1);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
@@ -183,6 +186,11 @@ const CampaignBuilderWizard = () => {
   const [kpiOpenRate, setKpiOpenRate] = useState("");
   const [kpiClickRate, setKpiClickRate] = useState("");
 
+  // === Save state ===
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+
   const toggleSegment = (id: string) => {
     setSelectedSegments((prev) =>
       prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
@@ -238,6 +246,108 @@ const CampaignBuilderWizard = () => {
   const totalReach = segments.filter((s) => selectedSegments.includes(s.id))
     .reduce((sum, s) => sum + (s.member_count || 0), 0);
 
+  // === Save campaign to DB ===
+  const saveCampaign = async (saveStatus: 'draft' | 'pending_approval') => {
+    // Pre-flight validation
+    setSaveError(null);
+    setSaveSuccess(null);
+
+    if (selectedSegments.length === 0) {
+      setSaveError('เลือก segment อย่างน้อย 1 รายการก่อน (Step 1)');
+      setActiveStep(1);
+      return;
+    }
+    if (!campaignName.trim() || !headline.trim() || !body.trim() || !ctaText.trim() || !ctaUrl.trim()) {
+      setSaveError('กรอกข้อมูล Step 2 ให้ครบ (ชื่อ / Headline / Body / CTA Text / CTA URL)');
+      setActiveStep(2);
+      return;
+    }
+    if (!/^https?:\/\//.test(ctaUrl)) {
+      setSaveError('CTA URL ต้องเริ่มด้วย http:// หรือ https://');
+      setActiveStep(2);
+      return;
+    }
+    if (saveStatus === 'pending_approval' && !approverId) {
+      setSaveError('เลือก Approver ก่อน Submit (Step 3)');
+      setActiveStep(3);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Map selected segment IDs → codes (campaigns.segments stores codes)
+      const segmentCodes = segments
+        .filter((s) => selectedSegments.includes(s.id))
+        .map((s) => s.code);
+
+      // Compute scheduled_at + start/end dates
+      let scheduledAt: string | null = null;
+      let startDate = new Date().toISOString().split('T')[0];
+      if (scheduleType === 'now') {
+        scheduledAt = new Date().toISOString();
+      } else if (scheduleType === 'schedule') {
+        scheduledAt = new Date(`${scheduleDate}T${scheduleTime}:00`).toISOString();
+        startDate = scheduleDate;
+      }
+      const endDateD = new Date(startDate);
+      endDateD.setDate(endDateD.getDate() + 30);
+      const endDate = endDateD.toISOString().split('T')[0];
+
+      const payload: Record<string, unknown> = {
+        tenant_id: currentTenant?.id,
+        campaign_code: `CMP-${Date.now().toString(36).toUpperCase()}`,
+        campaign_name: campaignName,
+        detail: body,
+        image_url: imageUrl || null,
+        start_date: startDate,
+        end_date: endDate,
+        frequency: scheduleType === 'recurring' ? recurringPattern : 'one_time',
+        segments: segmentCodes,
+        activities: [campaignType],
+        status: saveStatus,
+        created_by: userProfile?.id ?? null,
+
+        // Marketing extension columns (from migration 20260424000002)
+        property_id: selectedProperties[0] ?? null,
+        campaign_type: campaignType,
+        cta_text: ctaText,
+        cta_url: ctaUrl,
+        template: selectedTemplate,
+        headline,
+        message_body: body,
+        schedule_type: scheduleType,
+        scheduled_at: scheduledAt,
+        approval_status: saveStatus === 'pending_approval' ? 'pending' : null,
+        approver_id: saveStatus === 'pending_approval' ? approverId : null,
+        utm_params: { source: 'line', campaign: 'auto', kpi_open: kpiOpenRate || null, kpi_click: kpiClickRate || null, approver_note: approverNote || null },
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.from('campaigns') as any)
+        .insert([payload])
+        .select();
+
+      if (error) throw error;
+
+      setSaveSuccess(
+        saveStatus === 'draft'
+          ? `บันทึก Draft สำเร็จ — กำลังกลับไปที่หน้ารายการ...`
+          : `ส่งไปขอ Approval สำเร็จ — กำลังกลับไปที่หน้ารายการ...`
+      );
+      console.log('Campaign saved:', data?.[0]?.id);
+      setTimeout(() => navigate('/campaigns'), 1200);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ';
+      console.error('Save campaign failed:', e);
+      setSaveError(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveDraft = () => saveCampaign('draft');
+  const handleSubmitForApproval = () => saveCampaign('pending_approval');
+
   return (
     <AdminGuard>
       <div className="min-h-screen bg-gray-50">
@@ -257,14 +367,44 @@ const CampaignBuilderWizard = () => {
                 <p className="text-[15px] text-gray-500 mt-1.5">Drag &amp; Drop · ไม่ต้องจ้าง Agency · Preview ทุกขั้นตอน · Approval Flow บังคับก่อนส่ง</p>
               </div>
               <div className="flex gap-2.5">
-                <Button variant="outline" className="rounded-xl text-sm h-11 px-5 border-gray-200">
-                  <Save className="w-4 h-4 mr-1.5" /> บันทึก Draft
+                <Button
+                  variant="outline"
+                  className="rounded-xl text-sm h-11 px-5 border-gray-200"
+                  onClick={handleSaveDraft}
+                  disabled={saving}
+                >
+                  {saving ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Save className="w-4 h-4 mr-1.5" />}
+                  บันทึก Draft
                 </Button>
-                <Button style={{ backgroundColor: KK.red, color: '#fff', border: 'none' }} className="rounded-xl text-sm h-11 px-5">
-                  <Send className="w-4 h-4 mr-1.5" /> Submit for Approval
+                <Button
+                  style={{ backgroundColor: KK.red, color: '#fff', border: 'none' }}
+                  className="rounded-xl text-sm h-11 px-5"
+                  onClick={handleSubmitForApproval}
+                  disabled={saving}
+                >
+                  {saving ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
+                  Submit for Approval
                 </Button>
               </div>
             </div>
+
+            {/* Save status banner */}
+            {saveError && (
+              <div className="rounded-xl p-3.5 flex items-start gap-2.5 border" style={{ backgroundColor: KK.redLight, borderColor: KK.redBorder }}>
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: KK.red }} />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold" style={{ color: KK.red }}>บันทึกไม่สำเร็จ</p>
+                  <p className="text-xs text-gray-600 mt-0.5">{saveError}</p>
+                </div>
+                <button onClick={() => setSaveError(null)} className="text-gray-400 hover:text-gray-600 text-sm">×</button>
+              </div>
+            )}
+            {saveSuccess && (
+              <div className="rounded-xl p-3.5 flex items-center gap-2.5 border" style={{ backgroundColor: KK.greenLight, borderColor: '#86efac' }}>
+                <CheckCircle2 className="w-5 h-5 flex-shrink-0" style={{ color: KK.green }} />
+                <p className="text-sm font-semibold flex-1" style={{ color: KK.green }}>{saveSuccess}</p>
+              </div>
+            )}
 
             {/* === Stepper === */}
             <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
@@ -529,6 +669,43 @@ const CampaignBuilderWizard = () => {
                         className="mt-1.5 h-11 rounded-xl"
                       />
                       <p className="text-[11px] text-gray-400 mt-1">รูปจะแสดงด้านบนของ LINE message · แนะนำ 800×500px</p>
+
+                      {/* Live image preview */}
+                      {imageUrl && /^https?:\/\//.test(imageUrl) && (
+                        <div className="mt-3 rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
+                          <div className="aspect-[8/5] w-full max-w-[280px] relative">
+                            <img
+                              src={imageUrl}
+                              alt="Hero preview"
+                              className="absolute inset-0 w-full h-full object-cover"
+                              onError={(e) => {
+                                const target = e.currentTarget;
+                                target.style.display = 'none';
+                                if (target.nextElementSibling) (target.nextElementSibling as HTMLElement).style.display = 'flex';
+                              }}
+                              onLoad={(e) => {
+                                const target = e.currentTarget;
+                                target.style.display = 'block';
+                                if (target.nextElementSibling) (target.nextElementSibling as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-gray-400" style={{ display: 'none' }}>
+                              <AlertCircle className="w-5 h-5" />
+                              <p className="text-xs">โหลดรูปไม่สำเร็จ — ตรวจ URL</p>
+                            </div>
+                          </div>
+                          <div className="px-3 py-2 border-t border-gray-200 flex items-center justify-between">
+                            <p className="text-[10px] text-gray-500 truncate flex-1">{imageUrl}</p>
+                            <button
+                              type="button"
+                              onClick={() => setImageUrl("")}
+                              className="text-[10px] text-gray-400 hover:text-red-500 ml-2 flex-shrink-0"
+                            >
+                              ล้าง
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* CTA Section */}
@@ -812,11 +989,16 @@ const CampaignBuilderWizard = () => {
 
               {/* LINE Preview */}
               <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6 h-fit sticky top-6">
-                <div className="flex items-center gap-2 mb-1">
-                  <Square className="w-4 h-4" style={{ color: KK.green }} />
-                  <h2 className="text-base font-bold text-gray-900">LINE Preview</h2>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <Square className="w-4 h-4" style={{ color: KK.green }} />
+                    <h2 className="text-base font-bold text-gray-900">LINE Preview</h2>
+                  </div>
+                  <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded" style={{ color: KK.red, backgroundColor: KK.redLight }}>
+                    {selectedTemplate}
+                  </span>
                 </div>
-                <p className="text-xs text-gray-500 mb-5">ภาพจำลองเมื่อส่งผ่าน LINE OA</p>
+                <p className="text-xs text-gray-500 mb-5">ภาพจำลองเมื่อส่งผ่าน LINE OA · เปลี่ยน Template เพื่อเปรียบเทียบ</p>
 
                 {/* LINE chat mockup */}
                 <div className="rounded-xl p-4" style={{ backgroundColor: "#3a4858" }}>
@@ -830,20 +1012,93 @@ const CampaignBuilderWizard = () => {
                       <p className="text-white/60 text-[11px]">Official Account</p>
                     </div>
                   </div>
-                  {/* Flex card */}
-                  <div className="bg-white rounded-2xl overflow-hidden">
-                    <div className="h-28" style={{ background: "linear-gradient(135deg, #ff6b8a 0%, #e60023 100%)" }} />
-                    <div className="p-3.5">
-                      <p className="text-sm font-bold text-gray-900 leading-snug">{headline}</p>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed line-clamp-2">{body}</p>
-                      <button
-                        className="w-full mt-3 py-2.5 rounded-lg text-sm font-semibold text-white flex items-center justify-center gap-1"
-                        style={{ backgroundColor: KK.red }}
-                      >
-                        {ctaText} →
-                      </button>
-                    </div>
-                  </div>
+                  {/* Flex card — render different layout per template */}
+                  {(() => {
+                    const hasImage = imageUrl && /^https?:\/\//.test(imageUrl);
+                    const heroBg = hasImage ? null : (
+                      <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, #ff6b8a 0%, #e60023 100%)" }} />
+                    );
+                    const heroImg = hasImage ? (
+                      <img src={imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                    ) : null;
+
+                    // === CAROUSEL: 2 mini cards side by side, scroll horizontal ===
+                    if (selectedTemplate === 'carousel') {
+                      return (
+                        <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollSnapType: 'x mandatory' }}>
+                          {[1, 2].map((n) => (
+                            <div key={n} className="bg-white rounded-2xl overflow-hidden flex-shrink-0" style={{ width: '70%', scrollSnapAlign: 'start' }}>
+                              <div className="h-20 bg-gray-100 relative overflow-hidden">
+                                {heroImg ? <img src={imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" /> : <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, #ff6b8a 0%, #e60023 100%)" }} />}
+                              </div>
+                              <div className="p-2.5">
+                                <p className="text-xs font-bold text-gray-900 leading-tight line-clamp-1">{headline} #{n}</p>
+                                <p className="text-[10px] text-gray-500 mt-1 line-clamp-1">{body}</p>
+                                <button className="w-full mt-2 py-1.5 rounded-md text-[10px] font-semibold text-white" style={{ backgroundColor: KK.red }}>
+                                  {ctaText}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }
+
+                    // === IMAGE: just big image, no text/buttons ===
+                    if (selectedTemplate === 'image') {
+                      return (
+                        <div className="bg-white rounded-2xl overflow-hidden">
+                          <div className="aspect-[4/5] bg-gray-100 relative overflow-hidden">
+                            {heroImg}
+                            {heroBg}
+                            {!hasImage && (
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <ImageIcon className="w-12 h-12 text-white/50" />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // === BUTTONS: text + multiple stacked buttons (no image) ===
+                    if (selectedTemplate === 'buttons') {
+                      return (
+                        <div className="bg-white rounded-2xl overflow-hidden p-3.5">
+                          <p className="text-sm font-bold text-gray-900 leading-snug">{headline}</p>
+                          <p className="text-xs text-gray-600 mt-1.5 leading-relaxed line-clamp-3">{body}</p>
+                          <div className="space-y-1.5 mt-3">
+                            <button className="w-full py-2 rounded-lg text-xs font-semibold text-white" style={{ backgroundColor: KK.red }}>
+                              {ctaText} →
+                            </button>
+                            <button className="w-full py-2 rounded-lg text-xs font-semibold border border-gray-300 text-gray-700">
+                              นัดดูบ้าน
+                            </button>
+                            <button className="w-full py-2 rounded-lg text-xs font-semibold border border-gray-300 text-gray-700">
+                              คุยกับ Sales
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // === BUBBLE (default): image + text + 1 button ===
+                    return (
+                      <div className="bg-white rounded-2xl overflow-hidden">
+                        <div className="h-28 bg-gray-100 relative overflow-hidden">
+                          {heroImg}
+                          {heroBg}
+                        </div>
+                        <div className="p-3.5">
+                          <p className="text-sm font-bold text-gray-900 leading-snug">{headline}</p>
+                          <p className="text-xs text-gray-600 mt-1.5 leading-relaxed line-clamp-2">{body}</p>
+                          <button className="w-full mt-3 py-2.5 rounded-lg text-sm font-semibold text-white flex items-center justify-center gap-1" style={{ backgroundColor: KK.red }}>
+                            {ctaText} →
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <p className="text-white/50 text-[10px] text-right mt-1.5">อ่านแล้ว</p>
                 </div>
 

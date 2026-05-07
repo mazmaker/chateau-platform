@@ -15,6 +15,7 @@ import PropertyManagement from "./pages/PropertyManagement";
 import LeadManagement from "./pages/LeadManagement";
 import LeadCDP from "./pages/LeadCDP";
 import CampaignManagement from "./pages/CampaignManagement";
+import CampaignDetail from "./pages/CampaignDetail";
 import CampaignBuilderWizard from "./pages/CampaignBuilderWizard";
 import Triggers from "./pages/Triggers";
 import MarketingAnalytics from "./pages/MarketingAnalytics";
@@ -302,7 +303,7 @@ const App = () => (
               context={{ page: 'campaign-detail' }}
             >
               <ProtectedRouteSimple>
-                <CampaignManagement />
+                <CampaignDetail />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />
