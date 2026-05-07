@@ -599,16 +599,19 @@ const LeadManagement = () => {
   };
 
   const getStatusBadge = (status: LeadStatus) => {
-    const badges: Record<LeadStatus, { label: string; variant: any; icon: any }> = {
+    const badges: Record<string, { label: string; variant: any; icon: any }> = {
       new: { label: 'ใหม่', variant: 'default', icon: FileText },
       contacted: { label: 'ติดต่อแล้ว', variant: 'secondary', icon: Phone },
       qualified: { label: 'มีคุณสมบัติ', variant: 'secondary', icon: CheckCircle },
       proposal: { label: 'เสนอขาย', variant: 'default', icon: FileText },
+      negotiating: { label: 'กำลังเจรจา', variant: 'default', icon: TrendingUp },
       negotiation: { label: 'เจรจา', variant: 'default', icon: TrendingUp },
+      won: { label: 'ปิดดีลสำเร็จ', variant: 'default', icon: CheckCircle },
       closed: { label: 'ปิดการขาย', variant: 'default', icon: CheckCircle },
-      lost: { label: 'สูญเสีย', variant: 'destructive', icon: XCircle }
+      lost: { label: 'สูญเสีย', variant: 'destructive', icon: XCircle },
     };
-    const badge = badges[status];
+    // Fallback for any unexpected status — prevents undefined.icon crash
+    const badge = badges[status] || { label: status || 'ไม่ระบุ', variant: 'outline', icon: FileText };
     const Icon = badge.icon;
     return (
       <Badge variant={badge.variant} className="flex items-center gap-1">
@@ -764,8 +767,8 @@ const LeadManagement = () => {
   // Calculate stats
   const totalLeads = leads.length;
   const newLeads = leads.filter(l => l.status === 'new').length;
-  const qualifiedLeads = leads.filter(l => l.status === 'qualified' || l.status === 'proposal' || l.status === 'negotiation').length;
-  const closedLeads = leads.filter(l => l.status === 'closed').length;
+  const qualifiedLeads = leads.filter(l => l.status === 'qualified' || l.status === 'negotiating').length;
+  const closedLeads = leads.filter(l => l.status === 'won').length;
   const lostLeads = leads.filter(l => l.status === 'lost').length;
   const conversionRate = totalLeads > 0 ? Math.round((closedLeads / totalLeads) * 100) : 0;
 
@@ -917,9 +920,8 @@ const LeadManagement = () => {
                     <SelectItem value="new">ใหม่</SelectItem>
                     <SelectItem value="contacted">ติดต่อแล้ว</SelectItem>
                     <SelectItem value="qualified">มีคุณสมบัติ</SelectItem>
-                    <SelectItem value="proposal">เสนอขาย</SelectItem>
-                    <SelectItem value="negotiation">เจรจา</SelectItem>
-                    <SelectItem value="closed">ปิดการขาย</SelectItem>
+                    <SelectItem value="negotiating">กำลังเจรจา</SelectItem>
+                    <SelectItem value="won">ปิดการขายสำเร็จ</SelectItem>
                     <SelectItem value="lost">สูญเสีย</SelectItem>
                   </SelectContent>
                 </Select>
@@ -929,12 +931,9 @@ const LeadManagement = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">ทุกแหล่ง</SelectItem>
-                    <SelectItem value="website">Website</SelectItem>
-                    <SelectItem value="facebook">Facebook</SelectItem>
-                    <SelectItem value="line">LINE</SelectItem>
-                    <SelectItem value="referral">แนะนำ</SelectItem>
-                    <SelectItem value="walk_in">Walk-in</SelectItem>
-                    <SelectItem value="advertising">โฆษณา</SelectItem>
+                    <SelectItem value="online_facebook">Facebook</SelectItem>
+                    <SelectItem value="online_google">Google</SelectItem>
+                    <SelectItem value="offline">Walk-in / Offline</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1026,22 +1025,16 @@ const LeadManagement = () => {
                                 <span>มีคุณสมบัติ</span>
                               </div>
                             </SelectItem>
-                            <SelectItem value="proposal">
-                              <div className="flex items-center gap-2">
-                                <FileText className="w-3 h-3" />
-                                <span>เสนอขาย</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="negotiation">
+                            <SelectItem value="negotiating">
                               <div className="flex items-center gap-2">
                                 <TrendingUp className="w-3 h-3" />
-                                <span>เจรจา</span>
+                                <span>กำลังเจรจา</span>
                               </div>
                             </SelectItem>
-                            <SelectItem value="closed">
+                            <SelectItem value="won">
                               <div className="flex items-center gap-2">
                                 <CheckCircle className="w-3 h-3 text-green-600" />
-                                <span>ปิดการขาย</span>
+                                <span>ปิดการขายสำเร็จ</span>
                               </div>
                             </SelectItem>
                             <SelectItem value="lost">
@@ -1674,9 +1667,8 @@ const LeadManagement = () => {
                           {leadToDelete?.status === 'new' ? 'ใหม่' :
                            leadToDelete?.status === 'contacted' ? 'ติดต่อแล้ว' :
                            leadToDelete?.status === 'qualified' ? 'มีคุณสมบัติ' :
-                           leadToDelete?.status === 'proposal' ? 'เสนอขาย' :
-                           leadToDelete?.status === 'negotiation' ? 'เจรจา' :
-                           leadToDelete?.status === 'closed' ? 'ปิดการขาย' :
+                           leadToDelete?.status === 'negotiating' ? 'กำลังเจรจา' :
+                           leadToDelete?.status === 'won' ? 'ปิดการขายสำเร็จ' :
                            leadToDelete?.status === 'lost' ? 'สูญเสีย' : '-'}
                         </p>
                       </div>

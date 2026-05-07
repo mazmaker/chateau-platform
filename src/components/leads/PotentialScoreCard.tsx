@@ -70,11 +70,11 @@ export function PotentialScoreCard({ score, loading }: PotentialScoreCardProps) 
   return (
     <div className="space-y-4">
       {/* Overall Score Card */}
-      <Card className="border-l-4 border-l-purple-500">
+      <Card className="border-l-4 border-l-chateau">
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span className="flex items-center gap-2">
-              <Target className="w-5 h-5 text-purple-600" />
+              <Target className="w-5 h-5 text-chateau" />
               คะแนนความน่าจะเป็นในการซื้อ
             </span>
             <Badge className={getConfidenceBadge(score.confidence_level)}>

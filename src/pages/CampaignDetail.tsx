@@ -9,8 +9,8 @@ import {
 } from "recharts";
 import {
   ArrowLeft, Send, Eye, MousePointerClick, TrendingUp, Calendar, Clock,
-  Edit, Copy, Trash2, Loader2, CheckCircle2, AlertCircle, Users,
-  Target, FileSignature, Bell,
+  Edit, Copy, Trash2, Loader2, AlertCircle, Users,
+  Target, FileSignature, CheckCircle2, Bell,
 } from "lucide-react";
 
 const KK = {
@@ -235,9 +235,6 @@ const CampaignDetail = () => {
                   )}
                 </div>
                 <div className="flex gap-2">
-                  <button className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50">
-                    <Send className="w-3.5 h-3.5" /> Send Test
-                  </button>
                   <button className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50">
                     <Copy className="w-3.5 h-3.5" /> Duplicate
                   </button>

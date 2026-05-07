@@ -12,7 +12,7 @@ if (!PASSWORD) {
 }
 
 const FILES = [
-  'supabase/migrations/20260424000006_seed_real_estate_triggers.sql',
+  'supabase/migrations/20260424000007_demo_data_polish.sql',
 ];
 
 const connectionString = `postgresql://postgres:${encodeURIComponent(PASSWORD)}@db.${PROJECT_REF}.supabase.co:5432/postgres`;
@@ -39,9 +39,22 @@ for (const f of FILES) {
   }
 }
 
-console.log('\nVerifying triggers count...');
-const r = await client.query("SELECT name, event_type, is_active, fired_count FROM triggers ORDER BY created_at DESC LIMIT 15");
+console.log('\nVerifying lead aggregates after polish...');
+const r = await client.query(`
+  SELECT
+    COUNT(*) as total_leads,
+    COUNT(*) FILTER (WHERE created_at >= DATE_TRUNC('month', NOW())) as leads_mtd,
+    COUNT(*) FILTER (WHERE priority = 'high') as hot_leads,
+    COUNT(*) FILTER (WHERE last_contact_date < NOW() - INTERVAL '30 days') as inactive_leads,
+    SUM(estimated_value)::bigint as pipeline_value,
+    COUNT(DISTINCT status) as status_variety
+  FROM leads
+`);
 console.table(r.rows);
+
+const statusDist = await client.query("SELECT status, COUNT(*) as n FROM leads GROUP BY status ORDER BY n DESC");
+console.log('Status distribution:');
+console.table(statusDist.rows);
 
 console.log('\nDone.');
 await client.end();

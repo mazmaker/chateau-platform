@@ -371,7 +371,7 @@ const LeadCDP = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-gray-50">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="lg:ml-[260px] min-h-screen">
@@ -386,7 +386,7 @@ const LeadCDP = () => {
             </Button>
             <div>
               <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <Target className="w-7 h-7 text-violet-600" />
+                <Target className="w-7 h-7 text-chateau" />
                 Customer Data Platform (CDP)
               </h1>
               <p className="text-gray-600">รายละเอียดและการวิเคราะห์ข้อมูลลูกค้า</p>
@@ -398,8 +398,8 @@ const LeadCDP = () => {
             {/* Left Column - Lead Information */}
             <div className="lg:col-span-2">
               {/* Section 1: Lead Information */}
-              <Card className="shadow-lg border-0 overflow-hidden">
-                <CardHeader className="bg-gradient-to-r from-violet-500 to-purple-600 text-white">
+              <Card className="shadow-soft border border-gray-200 overflow-hidden">
+                <CardHeader className="bg-gradient-to-r from-chateau to-chateau-600 text-white">
                   <CardTitle className="flex items-center gap-2">
                     <User className="w-5 h-5" />
                     ข้อมูล Lead
@@ -409,9 +409,9 @@ const LeadCDP = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Personal Info */}
                     <div className="space-y-4">
-                      <div className="flex items-center gap-3 p-3 bg-violet-50 rounded-lg">
-                        <div className="w-12 h-12 bg-violet-100 rounded-full flex items-center justify-center">
-                          <User className="w-6 h-6 text-violet-600" />
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <div className="w-12 h-12 bg-chateau-50 rounded-full flex items-center justify-center">
+                          <User className="w-6 h-6 text-chateau" />
                         </div>
                         <div>
                           <p className="text-sm text-gray-500">ชื่อ - นามสกุล</p>
@@ -462,29 +462,29 @@ const LeadCDP = () => {
 
                     {/* Contact Info */}
                     <div className="space-y-3">
-                      <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
-                        <Phone className="w-5 h-5 text-blue-600" />
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <Phone className="w-5 h-5 text-blue-500" />
                         <div>
                           <p className="text-xs text-gray-500">เบอร์โทร</p>
                           <p className="font-medium">{customer?.phone || '-'}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
-                        <Mail className="w-5 h-5 text-green-600" />
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <Mail className="w-5 h-5 text-emerald-500" />
                         <div>
                           <p className="text-xs text-gray-500">อีเมล</p>
                           <p className="font-medium">{customer?.email || '-'}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 p-3 bg-orange-50 rounded-lg">
-                        <Briefcase className="w-5 h-5 text-orange-600" />
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <Briefcase className="w-5 h-5 text-amber-500" />
                         <div>
                           <p className="text-xs text-gray-500">สถานที่ทำงาน</p>
                           <p className="font-medium">{prefs.workplace || '-'}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-lg">
-                        <MapPin className="w-5 h-5 text-purple-600" />
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <MapPin className="w-5 h-5 text-chateau" />
                         <div>
                           <p className="text-xs text-gray-500">ที่อยู่</p>
                           <p className="font-medium text-sm">
@@ -494,8 +494,8 @@ const LeadCDP = () => {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 p-3 bg-teal-50 rounded-lg">
-                        <Globe className="w-5 h-5 text-teal-600" />
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <Globe className="w-5 h-5 text-cyan-500" />
                         <div>
                           <p className="text-xs text-gray-500">แหล่งที่มาของ Lead</p>
                           <Badge variant="outline" className="mt-1">{getSourceLabel(lead?.source)}</Badge>
@@ -510,10 +510,10 @@ const LeadCDP = () => {
             {/* Right Column - Unit Selection */}
             <div className="lg:col-span-1">
               {/* Section 2: Unit Interests */}
-              <Card className="shadow-lg border-0 overflow-hidden h-full">
-                <CardHeader className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white">
-                  <CardTitle className="flex items-center gap-2">
-                    <Home className="w-5 h-5" />
+              <Card className="shadow-soft border border-gray-200 overflow-hidden h-full">
+                <CardHeader className="bg-gray-50 border-b border-gray-100">
+                  <CardTitle className="flex items-center gap-2 text-gray-900">
+                    <Home className="w-5 h-5 text-chateau" />
                     เลือกยูนิตที่สนใจ ({interests.length > 0 ? interests.length : 1})
                   </CardTitle>
                 </CardHeader>
@@ -530,21 +530,21 @@ const LeadCDP = () => {
                             onClick={() => setSelectedInterestId(interest.id)}
                             className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
                               isSelected
-                                ? 'border-cyan-500 bg-cyan-50 shadow-md'
-                                : 'border-gray-200 bg-white hover:border-cyan-300 hover:bg-gray-50'
+                                ? 'border-chateau bg-chateau-50/40 shadow-soft'
+                                : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
                             }`}
                           >
                             <div className="flex items-center gap-3">
                               <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                                isSelected ? 'bg-cyan-200' : 'bg-gray-100'
+                                isSelected ? 'bg-chateau text-white' : 'bg-gray-100'
                               }`}>
-                                <Building2 className={`w-5 h-5 ${isSelected ? 'text-cyan-700' : 'text-gray-500'}`} />
+                                <Building2 className={`w-5 h-5 ${isSelected ? 'text-white' : 'text-gray-500'}`} />
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-sm truncate">{interest.property?.name || 'โครงการ'}</p>
                                 <p className="text-xs text-gray-500">ยูนิต {interest.unit?.unit_number || '-'}</p>
                                 {interest.unit?.price && (
-                                  <p className="text-xs font-semibold text-cyan-600">{formatCurrency(interest.unit.price)}</p>
+                                  <p className="text-xs font-semibold text-chateau">{formatCurrency(interest.unit.price)}</p>
                                 )}
                               </div>
                               <div className="flex flex-col gap-1 items-end">
@@ -560,15 +560,15 @@ const LeadCDP = () => {
                     </div>
                   ) : (
                     // Fallback to legacy single unit display
-                    <div className="p-3 rounded-lg border-2 border-cyan-500 bg-cyan-50">
+                    <div className="p-3 rounded-lg border-2 border-chateau bg-chateau-50/40">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-cyan-200 rounded-lg flex items-center justify-center">
-                          <Building2 className="w-5 h-5 text-cyan-700" />
+                        <div className="w-10 h-10 bg-chateau rounded-lg flex items-center justify-center">
+                          <Building2 className="w-5 h-5 text-white" />
                         </div>
                         <div className="flex-1">
                           <p className="font-medium text-sm">{property?.name || '-'}</p>
                           <p className="text-xs text-gray-500">ยูนิต {unit?.unit_number || '-'}</p>
-                          <p className="text-xs font-semibold text-cyan-600">{formatCurrency(unitPrice)}</p>
+                          <p className="text-xs font-semibold text-chateau">{formatCurrency(unitPrice)}</p>
                         </div>
                       </div>
                     </div>
@@ -580,7 +580,7 @@ const LeadCDP = () => {
 
           {/* Row 2: Selected Unit Details + Analysis */}
           {selectedInterest && (
-            <div className="bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-200 rounded-lg p-4 mb-6">
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
               <div className="flex items-center gap-4">
                 <div className="w-24 h-20 bg-gray-200 rounded-lg overflow-hidden shadow-md flex-shrink-0">
                   {selectedInterest.unit?.thumbnail_url || selectedInterest.property?.thumbnail_url ? (
@@ -597,7 +597,7 @@ const LeadCDP = () => {
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <p className="text-xs text-violet-600 font-medium">กำลังวิเคราะห์ข้อมูลยูนิต</p>
+                    <p className="text-xs text-chateau font-medium">กำลังวิเคราะห์ข้อมูลยูนิต</p>
                     <Badge className={getInterestStatusBadge(selectedInterest.status).color}>
                       {getInterestStatusBadge(selectedInterest.status).label}
                     </Badge>
@@ -606,15 +606,15 @@ const LeadCDP = () => {
                   <div className="flex items-center gap-4 text-sm text-gray-600">
                     <span>ยูนิต <strong>{selectedInterest.unit?.unit_number}</strong></span>
                     {selectedInterest.unit?.price && (
-                      <span className="font-bold text-cyan-600">{formatCurrency(selectedInterest.unit.price)}</span>
+                      <span className="font-bold text-chateau">{formatCurrency(selectedInterest.unit.price)}</span>
                     )}
                     <span className={getInterestLevelBadge(selectedInterest.interest_level).color}>
                       {getInterestLevelBadge(selectedInterest.interest_level).label}
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-sm">
-                  <Target className="w-4 h-4 text-blue-600" />
+                <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-sm border border-gray-200">
+                  <Target className="w-4 h-4 text-chateau" />
                   <span className="text-sm font-medium">{getPurchasePurposeLabel(prefs.purchase_purpose)}</span>
                 </div>
               </div>
@@ -631,7 +631,7 @@ const LeadCDP = () => {
 
             {/* Show message if no data available */}
             {!leadScore && !loanEstimation && (
-              <Card className="shadow-lg border-0 lg:col-span-2">
+              <Card className="shadow-soft border border-gray-200 lg:col-span-2">
                 <CardContent className="p-8 text-center">
                   <div className="text-gray-400 mb-3">
                     <BarChart3 className="w-16 h-16 mx-auto" />

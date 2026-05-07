@@ -107,15 +107,15 @@ export function LoanEstimationCard({ estimation, loading }: LoanEstimationCardPr
 
           {/* Recommended vs Max */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="text-center p-3 rounded-lg bg-blue-50">
+            <div className="text-center p-3 rounded-lg bg-gray-50 border border-gray-200">
               <div className="text-xs text-muted-foreground mb-1">แนะนำ</div>
-              <div className="text-lg font-semibold text-blue-600">
+              <div className="text-lg font-semibold text-gray-900">
                 {formatCurrency(estimation.recommended_loan_amount)}
               </div>
             </div>
-            <div className="text-center p-3 rounded-lg bg-orange-50">
+            <div className="text-center p-3 rounded-lg bg-gray-50 border border-gray-200">
               <div className="text-xs text-muted-foreground mb-1">ค่างวด/เดือน</div>
-              <div className="text-lg font-semibold text-orange-600">
+              <div className="text-lg font-semibold text-chateau">
                 {formatCurrency(estimation.monthly_payment)}
               </div>
             </div>
@@ -154,7 +154,7 @@ export function LoanEstimationCard({ estimation, loading }: LoanEstimationCardPr
       <Card className="border-l-4 border-l-purple-500">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <CreditCard className="w-5 h-5 text-purple-600" />
+            <CreditCard className="w-5 h-5 text-chateau" />
             ความสามารถในการชำระ
           </CardTitle>
         </CardHeader>

@@ -154,9 +154,8 @@ const STATUS_OPTIONS = [
   { value: "new", label: "ใหม่", color: "bg-blue-100 text-blue-700" },
   { value: "contacted", label: "ติดต่อแล้ว", color: "bg-cyan-100 text-cyan-700" },
   { value: "qualified", label: "มีคุณสมบัติ", color: "bg-green-100 text-green-700" },
-  { value: "proposal", label: "เสนอขาย", color: "bg-yellow-100 text-yellow-700" },
-  { value: "negotiation", label: "เจรจา", color: "bg-orange-100 text-orange-700" },
-  { value: "closed", label: "ปิดการขาย", color: "bg-emerald-100 text-emerald-700" },
+  { value: "negotiating", label: "กำลังเจรจา", color: "bg-orange-100 text-orange-700" },
+  { value: "won", label: "ปิดการขายสำเร็จ", color: "bg-emerald-100 text-emerald-700" },
   { value: "lost", label: "สูญเสีย", color: "bg-red-100 text-red-700" },
 ];
 

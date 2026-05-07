@@ -7,8 +7,8 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -20,7 +20,7 @@ import {
   ArrowUpRight,
   Brain,
   Building2,
-  Inbox,
+  Flame,
   Megaphone,
   Sparkles,
   TrendingUp,
@@ -28,6 +28,8 @@ import {
   Wallet,
 } from "lucide-react";
 import { getDashboardStatistics, DashboardStats } from "@/lib/api/dashboard";
+import { supabase } from "@/lib/supabase";
+import { useSimpleAuth } from "@/contexts/AuthContextSimple";
 
 // Kids Kingdom Color Palette
 const KK = {
@@ -50,47 +52,38 @@ const KK = {
   border:      '#e5e7eb',
 };
 
-// ─── Mock Data ────────────────────────────────────────────────
-const buildRevenue30D = () => {
-  const arr = [];
-  const startDate = new Date(2024, 2, 25);
-  for (let i = 0; i < 28; i++) {
-    const d = new Date(startDate);
-    d.setDate(startDate.getDate() + i);
-    const day = d.getDay();
-    const base = 175000 + Math.sin(i / 3) * 25000;
-    const spike = (day === 0 || day === 6) ? 110000 + Math.random() * 30000 : Math.random() * 20000;
-    arr.push({
-      date: `${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`,
-      revenue: Math.round(base + spike),
-    });
-  }
-  return arr;
-};
+// ─── Real-estate KPI types ────────────────────────────────────
+interface LeadRow {
+  id: string;
+  status: string | null;
+  priority: string | null;
+  estimated_value: number | null;
+  created_at: string;
+  last_contact_date: string | null;
+  property_id: string | null;
+}
 
-const REVENUE_30D = buildRevenue30D();
+interface PropertyRow {
+  id: string;
+  name: string;
+  is_active: boolean | null;
+}
 
 const VISITOR_FORECAST = Array.from({ length: 30 }, (_, i) => {
-  const d = new Date(2024, 3, 24 + i);
+  const d = new Date();
+  d.setDate(d.getDate() + i);  // forecast 30 days into the future
   const day = d.getDay();
   const base = 480 + (day === 0 || day === 6 ? 220 : 0) + Math.sin(i / 4) * 40;
+  const lower = Math.round(base - 80);
+  const upper = Math.round(base + 80);
   return {
     date: `${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`,
     forecast: Math.round(base),
-    upper: Math.round(base + 80),
-    lower: Math.round(base - 80),
+    lower,
+    upper,
+    bandHeight: upper - lower,  // for stacked area band rendering
   };
 });
-
-const TOP_BRANCHES = [
-  { name: 'BAAN ISSARA', admission: 95000,  fnb: 65000 },
-  { name: 'CHATEAU A',   admission: 92000,  fnb: 62000 },
-  { name: 'CHATEAU B',   admission: 155000, fnb: 140000 },
-  { name: 'GRAND',       admission: 145000, fnb: 130000 },
-  { name: 'ROYAL',       admission: 50000,  fnb: 75000 },
-  { name: 'SKY VILLA',   admission: 48000,  fnb: 72000 },
-  { name: 'PARKWAY',     admission: 45000,  fnb: 70000 },
-];
 
 const tooltipStyle = {
   backgroundColor: 'white',
@@ -102,9 +95,16 @@ const tooltipStyle = {
 };
 
 const Index = () => {
+  const { currentTenant } = useSimpleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // === Real-estate aggregates from DB ===
+  const [leads, setLeads] = useState<LeadRow[]>([]);
+  const [properties, setProperties] = useState<PropertyRow[]>([]);
+  const [activeCampaigns, setActiveCampaigns] = useState(0);
+  const [topPropertiesByInterest, setTopPropertiesByInterest] = useState<{ name: string; inquiries: number; activeLeads: number }[]>([]);
 
   useEffect(() => {
     const load = async () => {
@@ -118,62 +118,165 @@ const Index = () => {
           units: { reserved: 69, sold: 90, available: 75, conversionRate: 67.8 },
           leads: { newLeads: 42, convertedToCustomers: 18, totalLeads: 167 },
         });
+      }
+
+      try {
+        // Load real-estate data — leads + properties + campaigns + top by interest
+        const tenantId = currentTenant?.id;
+        const [leadsRes, propertiesRes, campaignsRes, interestsRes] = await Promise.all([
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase.from('leads') as any)
+            .select('id, status, priority, estimated_value, created_at, last_contact_date, property_id')
+            .eq(tenantId ? 'tenant_id' : 'id', tenantId || 'never'),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase.from('properties') as any)
+            .select('id, name, is_active')
+            .eq(tenantId ? 'tenant_id' : 'id', tenantId || 'never'),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase.from('campaigns') as any)
+            .select('id', { count: 'exact', head: true })
+            .eq(tenantId ? 'tenant_id' : 'id', tenantId || 'never')
+            .eq('status', 'active'),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase.from('lead_interests') as any)
+            .select('property_id, lead_id, properties(name)')
+            .eq(tenantId ? 'tenant_id' : 'id', tenantId || 'never'),
+        ]);
+
+        setLeads((leadsRes.data || []) as LeadRow[]);
+        setProperties((propertiesRes.data || []) as PropertyRow[]);
+        setActiveCampaigns(campaignsRes.count || 0);
+
+        // Compute top properties by inquiry count
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const interests = (interestsRes.data || []) as any[];
+        const counts = new Map<string, { name: string; inquiries: number; leads: Set<string> }>();
+        interests.forEach((i) => {
+          const name = i.properties?.name || '(ไม่ระบุ)';
+          const key = i.property_id || '_';
+          const existing = counts.get(key) || { name, inquiries: 0, leads: new Set() };
+          existing.inquiries++;
+          if (i.lead_id) existing.leads.add(i.lead_id);
+          counts.set(key, existing);
+        });
+        const top = Array.from(counts.values())
+          .map((c) => ({ name: c.name, inquiries: c.inquiries, activeLeads: c.leads.size }))
+          .sort((a, b) => b.inquiries - a.inquiries)
+          .slice(0, 7);
+        setTopPropertiesByInterest(top);
+      } catch (e) {
+        console.error('Dashboard real-estate load failed:', e);
       } finally {
         setIsLoading(false);
       }
     };
     load();
-  }, []);
+  }, [currentTenant]);
 
-  const totalLeads = stats?.leads.totalLeads ?? 16137;
-  const totalCustomers = stats?.leads.convertedToCustomers ?? 12850;
-  const totalProjects = stats?.projects.total ?? 20;
-  const completedProjects = stats?.projects.completed ?? 5;
+  // === Compute real-estate KPIs ===
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const closedStatuses = ['won', 'lost', 'converted', 'closed_won', 'closed_lost'];
+  const openLeads = leads.filter((l) => !closedStatuses.includes(l.status || ''));
+
+  // Closing Soon = leads in qualified + negotiating stage (about to close)
+  const closingSoonLeads = leads.filter((l) => l.status === 'qualified' || l.status === 'negotiating');
+  const closingSoonCount = closingSoonLeads.length;
+  const closingSoonValue = closingSoonLeads.reduce((s, l) => s + (Number(l.estimated_value) || 0), 0);
+
+  // Leads MTD (this month)
+  const leadsMTD = leads.filter((l) => new Date(l.created_at) >= startOfMonth).length;
+
+  // Conversion rate
+  const totalLeadsCount = leads.length;
+  const totalCustomersCount = stats?.leads.convertedToCustomers ?? 0;
+  const conversionRate = totalLeadsCount > 0 ? ((totalCustomersCount / totalLeadsCount) * 100).toFixed(1) : '0.0';
+
+  // Hot leads (priority='high')
+  const hotLeadsCount = openLeads.filter((l) => l.priority === 'high').length;
+
+  // Inactive leads (>30 days no contact, churn risk equivalent)
+  const inactiveLeads = openLeads.filter((l) => {
+    if (!l.last_contact_date) return false;
+    return new Date(l.last_contact_date) < thirtyDaysAgo;
+  });
+  const highRiskCount = inactiveLeads.filter((l) => {
+    if (!l.last_contact_date) return false;
+    const sixtyDays = new Date(); sixtyDays.setDate(sixtyDays.getDate() - 60);
+    return new Date(l.last_contact_date) < sixtyDays;
+  }).length;
+  const mediumRiskCount = inactiveLeads.length - highRiskCount;
+
+  // Properties online (active count)
+  const totalProperties = properties.length;
+  const activeProperties = properties.filter((p) => p.is_active !== false).length;
+
+  // Build lead acquisition trend (last 30 days, group by date)
+  const leadTrend30D = (() => {
+    const days: { date: string; key: string; count: number }[] = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const label = `${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+      days.push({ date: label, key, count: 0 });
+    }
+    leads.forEach((l) => {
+      const k = (l.created_at || '').slice(0, 10);
+      const d = days.find((x) => x.key === k);
+      if (d) d.count++;
+    });
+    return days.map(({ date, count }) => ({ date, count }));
+  })();
 
   const KPIS: KpiCardProps[] = [
     {
-      title: 'Revenue MTD',
-      value: '฿6,131,668',
+      title: 'ใกล้ปิดดีล',
+      value: closingSoonCount.toString(),
       icon: Wallet,
       color: KK.red,
       bg: KK.redLight,
-      trend: { value: 18.4, up: true },
+      sub: closingSoonValue > 0
+        ? `฿${(closingSoonValue / 1_000_000).toFixed(1)}M · qualified + negotiating`
+        : 'qualified + negotiating',
     },
     {
-      title: 'Leads MTD',
-      value: totalLeads.toLocaleString(),
+      title: 'Leads ใหม่ (MTD)',
+      value: leadsMTD.toLocaleString(),
       icon: Users,
       color: KK.blue,
       bg: KK.blueLight,
-      trend: { value: 12.5, up: true },
+      sub: `${totalLeadsCount} leads ทั้งระบบ`,
     },
     {
-      title: 'ลูกค้าทั้งระบบ',
-      value: totalCustomers.toLocaleString(),
-      icon: Sparkles,
+      title: 'Conversion Rate',
+      value: `${conversionRate}%`,
+      icon: TrendingUp,
       color: KK.purple,
       bg: KK.purpleLight,
-      trend: { value: 8.2, up: true },
+      sub: `${totalCustomersCount} customers / ${totalLeadsCount} leads`,
     },
     {
       title: 'Active Campaigns',
-      value: '5',
+      value: activeCampaigns.toString(),
       icon: Megaphone,
       color: KK.green,
       bg: KK.greenLight,
-      sub: 'เดือนนี้',
+      sub: 'กำลังทำงาน',
     },
     {
-      title: 'Open Tickets',
-      value: '3',
-      icon: Inbox,
+      title: 'Hot Leads',
+      value: hotLeadsCount.toString(),
+      icon: Flame,
       color: KK.orange,
       bg: KK.orangeLight,
-      sub: 'ทั้งระบบ',
+      sub: 'priority = high',
     },
     {
-      title: 'Properties Online',
-      value: `${completedProjects}/${totalProjects}`,
+      title: 'Properties',
+      value: `${activeProperties}/${totalProperties}`,
       icon: Building2,
       color: KK.gray,
       bg: KK.grayLight,
@@ -196,7 +299,7 @@ const Index = () => {
             </span>
             <h1 className="text-[34px] font-bold text-gray-900 leading-tight tracking-tight">Executive Dashboard</h1>
             <p className="text-[15px] text-gray-500 mt-1.5">
-              ภาพรวมระบบ — Revenue / Leads / Properties / Campaigns / Tickets · อัปเดตล่าสุด {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+              ภาพรวมธุรกิจอสังหา — Pipeline / Leads / Properties / Campaigns · อัปเดตล่าสุด {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
             </p>
           </div>
 
@@ -215,21 +318,21 @@ const Index = () => {
 
           {/* === Row 1: Revenue + AI Forecast === */}
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            {/* Revenue Chart (2/3) */}
+            {/* Lead Acquisition Trend (2/3) */}
             <div className="xl:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <h2 className="text-base font-bold text-gray-900">Revenue ทั้งระบบ</h2>
-                  <p className="text-xs text-gray-500 mt-0.5">30 วันล่าสุด — Stacked all properties</p>
+                  <h2 className="text-base font-bold text-gray-900">Lead Acquisition Trend</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">30 วันล่าสุด — Leads ที่เข้าระบบรายวัน</p>
                 </div>
                 <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: KK.red, backgroundColor: KK.redLight }}>
                   30 วัน
                 </span>
               </div>
               <ResponsiveContainer width="100%" height={280}>
-                <AreaChart data={REVENUE_30D} margin={{ top: 10, right: 8, left: -10, bottom: 0 }}>
+                <AreaChart data={leadTrend30D} margin={{ top: 10, right: 8, left: -10, bottom: 0 }}>
                   <defs>
-                    <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient id="leadGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%"  stopColor={KK.red} stopOpacity={0.35} />
                       <stop offset="100%" stopColor={KK.red} stopOpacity={0} />
                     </linearGradient>
@@ -246,18 +349,18 @@ const Index = () => {
                     tick={{ fontSize: 10, fill: '#9ca3af' }}
                     axisLine={false}
                     tickLine={false}
-                    tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+                    allowDecimals={false}
                   />
                   <Tooltip
                     contentStyle={tooltipStyle}
-                    formatter={(v) => [`฿${Number(v).toLocaleString()}`, 'Revenue']}
+                    formatter={(v) => [`${Number(v)} leads`, 'จำนวน']}
                   />
                   <Area
                     type="monotone"
-                    dataKey="revenue"
+                    dataKey="count"
                     stroke={KK.red}
                     strokeWidth={2.5}
-                    fill="url(#revGrad)"
+                    fill="url(#leadGrad)"
                     dot={false}
                     activeDot={{ r: 4, fill: KK.red, stroke: '#fff', strokeWidth: 2 }}
                   />
@@ -280,21 +383,22 @@ const Index = () => {
                 <Sparkles className="w-4 h-4" style={{ color: KK.purple }} />
               </div>
               <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={VISITOR_FORECAST} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                <ComposedChart data={VISITOR_FORECAST} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
                   <defs>
                     <linearGradient id="confGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"  stopColor={KK.purple} stopOpacity={0.18} />
-                      <stop offset="100%" stopColor={KK.purple} stopOpacity={0.04} />
+                      <stop offset="0%"  stopColor={KK.purple} stopOpacity={0.22} />
+                      <stop offset="100%" stopColor={KK.purple} stopOpacity={0.06} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                   <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#9ca3af' }} axisLine={false} tickLine={false} interval={4} />
                   <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                   <Tooltip contentStyle={tooltipStyle} />
-                  <Area type="monotone" dataKey="upper" stroke="none" fill="url(#confGrad)" />
-                  <Area type="monotone" dataKey="lower" stroke="none" fill="#fff" />
+                  {/* Confidence band: stack invisible "lower" then visible "bandHeight" on top */}
+                  <Area type="monotone" dataKey="lower"      stackId="band" stroke="none" fill="transparent" isAnimationActive={false} />
+                  <Area type="monotone" dataKey="bandHeight" stackId="band" stroke="none" fill="url(#confGrad)" isAnimationActive={false} />
                   <Line type="monotone" dataKey="forecast" stroke={KK.purple} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-                </LineChart>
+                </ComposedChart>
               </ResponsiveContainer>
               <div className="mt-3 p-3 rounded-xl" style={{ backgroundColor: KK.purpleLight }}>
                 <p className="text-xs font-semibold" style={{ color: KK.purple }}>คาดการณ์เฉลี่ย 580 leads/วัน</p>
@@ -305,79 +409,101 @@ const Index = () => {
 
           {/* === Row 2: Top Properties + Churn Risk === */}
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            {/* Top Properties (2/3) */}
+            {/* Top Properties by Inquiries (2/3) */}
             <div className="xl:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-              <h2 className="text-base font-bold text-gray-900">Top Properties Performance MTD</h2>
-              <p className="text-xs text-gray-500 mt-0.5 mb-4">เปรียบเทียบยอดขาย Admission vs F&B</p>
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={TOP_BRANCHES} margin={{ top: 10, right: 8, left: -10, bottom: 0 }} barCategoryGap="22%">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v) => `฿${Number(v).toLocaleString()}`} />
-                  <Bar dataKey="admission" stackId="a" fill={KK.red}    radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="fnb"       stackId="a" fill={KK.orange} radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-              <div className="flex gap-4 mt-3 pl-2">
-                <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: KK.red }} /><span className="text-xs text-gray-600">Admission</span></div>
-                <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: KK.orange }} /><span className="text-xs text-gray-600">F&B / Add-ons</span></div>
-              </div>
+              <h2 className="text-base font-bold text-gray-900">Top Properties by Inquiries</h2>
+              <p className="text-xs text-gray-500 mt-0.5 mb-4">โครงการที่มีผู้สนใจมากที่สุด — เรียงตาม lead inquiries</p>
+              {topPropertiesByInterest.length === 0 ? (
+                <div className="flex items-center justify-center h-[260px] text-sm text-gray-400">
+                  ยังไม่มีข้อมูล inquiries
+                </div>
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={topPropertiesByInterest} margin={{ top: 10, right: 8, left: -10, bottom: 0 }} barCategoryGap="22%">
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} interval={0} />
+                      <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                      <Tooltip contentStyle={tooltipStyle} />
+                      <Bar dataKey="inquiries"  fill={KK.red}    radius={[6, 6, 0, 0]} name="Inquiries" />
+                      <Bar dataKey="activeLeads" fill={KK.orange} radius={[6, 6, 0, 0]} name="Active Leads" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div className="flex gap-4 mt-3 pl-2">
+                    <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: KK.red }} /><span className="text-xs text-gray-600">Inquiries (รวม)</span></div>
+                    <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: KK.orange }} /><span className="text-xs text-gray-600">Active Leads (unique)</span></div>
+                  </div>
+                </>
+              )}
             </div>
 
-            {/* Churn Risk (1/3) */}
+            {/* Inactive Leads (1/3) */}
             <div className="bg-white border rounded-2xl shadow-soft p-5" style={{ borderColor: KK.amberLight }}>
               <div className="flex items-center gap-2 mb-1">
                 <AlertTriangle className="w-4 h-4" style={{ color: KK.amber }} />
-                <h2 className="text-base font-bold text-gray-900">Churn Risk Alert</h2>
+                <h2 className="text-base font-bold text-gray-900">Inactive Leads Alert</h2>
               </div>
-              <p className="text-xs text-gray-500 mb-4">ลูกค้าเสี่ยงเลิกใช้บริการ</p>
+              <p className="text-xs text-gray-500 mb-4">Leads ที่ไม่ติดต่อนานและเสี่ยงหลุด</p>
 
               <div className="rounded-xl p-4 mb-3" style={{ backgroundColor: KK.redLight, border: `1px solid ${KK.redBorder}` }}>
-                <div className="text-4xl font-bold leading-none" style={{ color: KK.red }}>142</div>
-                <div className="text-xs text-gray-600 mt-1.5">ลูกค้าเสี่ยงทั้งหมด</div>
+                <div className="text-4xl font-bold leading-none" style={{ color: KK.red }}>{inactiveLeads.length}</div>
+                <div className="text-xs text-gray-600 mt-1.5">leads เงียบมากกว่า 30 วัน</div>
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="rounded-xl p-3" style={{ backgroundColor: KK.redLight }}>
-                  <div className="text-xs text-gray-600 mb-1">High Risk</div>
-                  <div className="text-2xl font-bold" style={{ color: KK.red }}>38</div>
+                  <div className="text-xs text-gray-600 mb-1">High Risk (60+ วัน)</div>
+                  <div className="text-2xl font-bold" style={{ color: KK.red }}>{highRiskCount}</div>
                 </div>
                 <div className="rounded-xl p-3" style={{ backgroundColor: KK.amberLight }}>
-                  <div className="text-xs text-gray-600 mb-1">Medium</div>
-                  <div className="text-2xl font-bold" style={{ color: KK.amber }}>104</div>
+                  <div className="text-xs text-gray-600 mb-1">Medium (30-60 วัน)</div>
+                  <div className="text-2xl font-bold" style={{ color: KK.amber }}>{mediumRiskCount}</div>
                 </div>
               </div>
 
               <button className="w-full mt-4 text-xs font-semibold py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-colors" style={{ color: KK.red, backgroundColor: KK.redLight }}>
-                ดูรายละเอียด <ArrowUpRight className="w-3.5 h-3.5" />
+                ดู Leads ทั้งหมด <ArrowUpRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
 
-          {/* === Row 3: Quick Stats + Activity === */}
+          {/* === Row 3: Funnel + Lead Trend + Activity === */}
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
               <div className="flex items-center gap-2 mb-3">
                 <Activity className="w-4 h-4" style={{ color: KK.green }} />
-                <h2 className="text-base font-bold text-gray-900">Conversion Funnel</h2>
+                <h2 className="text-base font-bold text-gray-900">Sales Funnel</h2>
               </div>
               <div className="space-y-3">
-                <FunnelStep label="Visitors"    value={45200} max={45200} color={KK.gray} />
-                <FunnelStep label="Leads"       value={16137} max={45200} color={KK.blue} />
-                <FunnelStep label="Qualified"   value={8420}  max={45200} color={KK.purple} />
-                <FunnelStep label="Customers"   value={12850} max={45200} color={KK.green} />
-                <FunnelStep label="Repeat"      value={3260}  max={45200} color={KK.red} />
+                {(() => {
+                  const totalLeadsLocal = leads.length;
+                  const newLeadsCount = leads.filter((l) => l.status === 'new').length;
+                  const contactedCount = leads.filter((l) => l.status === 'contacted').length;
+                  const qualifiedCount = leads.filter((l) => l.status === 'qualified').length;
+                  const negotiationCount = leads.filter((l) => l.status === 'negotiating').length;
+                  const wonCount = leads.filter((l) => l.status === 'won').length;
+                  const max = Math.max(totalLeadsLocal, newLeadsCount, contactedCount, qualifiedCount, negotiationCount, wonCount, 1);
+                  return (
+                    <>
+                      <FunnelStep label="All Leads"     value={totalLeadsLocal} max={max} color={KK.gray} />
+                      <FunnelStep label="New"           value={newLeadsCount}   max={max} color={KK.blue} />
+                      <FunnelStep label="Contacted"     value={contactedCount}  max={max} color="#06b6d4" />
+                      <FunnelStep label="Qualified"     value={qualifiedCount}  max={max} color={KK.purple} />
+                      <FunnelStep label="Negotiating"   value={negotiationCount} max={max} color={KK.orange} />
+                      <FunnelStep label="Won"           value={wonCount}        max={max} color={KK.green} />
+                    </>
+                  );
+                })()}
               </div>
             </div>
 
             <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
               <div className="flex items-center gap-2 mb-3">
                 <TrendingUp className="w-4 h-4" style={{ color: KK.red }} />
-                <h2 className="text-base font-bold text-gray-900">Sales Trend</h2>
+                <h2 className="text-base font-bold text-gray-900">Lead Trend (14 วัน)</h2>
               </div>
               <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={REVENUE_30D.slice(-14)} margin={{ top: 10, right: 5, left: -25, bottom: 0 }}>
+                <AreaChart data={leadTrend30D.slice(-14)} margin={{ top: 10, right: 5, left: -25, bottom: 0 }}>
                   <defs>
                     <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%"  stopColor={KK.red} stopOpacity={0.3} />
@@ -386,9 +512,9 @@ const Index = () => {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                   <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v) => `฿${Number(v).toLocaleString()}`} />
-                  <Area type="monotone" dataKey="revenue" stroke={KK.red} strokeWidth={2.5} fill="url(#trendGrad)" dot={false} />
+                  <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${Number(v)} leads`, 'จำนวน']} />
+                  <Area type="monotone" dataKey="count" stroke={KK.red} strokeWidth={2.5} fill="url(#trendGrad)" dot={false} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -400,11 +526,11 @@ const Index = () => {
               </div>
               <div className="space-y-3">
                 {[
-                  { type: 'lead',     text: 'มีลูกค้าใหม่ 42 ราย',          time: '2 นาทีที่แล้ว', color: KK.blue },
-                  { type: 'sale',     text: 'ปิดดีล BAAN ISSARA #24',       time: '15 นาทีที่แล้ว', color: KK.green },
-                  { type: 'campaign', text: 'แคมเปญ Q2 ลงโฆษณาแล้ว',     time: '1 ชั่วโมงที่แล้ว', color: KK.orange },
-                  { type: 'alert',    text: 'Churn risk เพิ่มขึ้น 4 ราย',   time: '3 ชั่วโมงที่แล้ว', color: KK.red },
-                  { type: 'system',   text: 'รายงานเดือน เม.ย. พร้อม',     time: 'เมื่อวาน',        color: KK.purple },
+                  { type: 'lead',     text: `Leads ใหม่ ${leadsMTD} ราย เดือนนี้`,                time: 'อัปเดต',        color: KK.blue },
+                  { type: 'closing', text: `${closingSoonCount} deals ใกล้ปิด · ฿${(closingSoonValue/1_000_000).toFixed(1)}M`, time: 'real-time',    color: KK.red },
+                  { type: 'campaign', text: `${activeCampaigns} campaigns กำลังทำงาน`,           time: '1 ชั่วโมงที่แล้ว', color: KK.orange },
+                  { type: 'alert',    text: `${inactiveLeads.length} leads เงียบ > 30 วัน`,        time: 'ต้องติดตาม',      color: KK.amber },
+                  { type: 'top',      text: `Top property: ${topPropertiesByInterest[0]?.name || '-'}`, time: 'รายไตรมาส',    color: KK.purple },
                 ].map((item, i) => (
                   <div key={i} className="flex items-start gap-3">
                     <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: item.color }} />
