@@ -16,7 +16,7 @@ interface UserAccountManagementProps {
   initialData: {
     email: string;
     full_name: string;
-    role: 'owner' | 'admin' | 'sales';
+    role: 'owner' | 'admin' | 'sales' | 'agent' | 'customer';
     is_active: boolean;
     last_sign_in_at?: string;
     password_set_at?: string;

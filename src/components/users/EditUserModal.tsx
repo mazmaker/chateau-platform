@@ -25,7 +25,7 @@ interface EditUserModalProps {
   onClose: () => void;
   user: UserData | null;
   onUpdateSuccess: () => void;
-  currentUserRole?: 'owner' | 'admin' | 'sales' | null;
+  currentUserRole?: 'owner' | 'admin' | 'sales' | 'agent' | 'customer' | null;
 }
 
 const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess, currentUserRole }: EditUserModalProps) => {
@@ -45,6 +45,8 @@ const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess, currentUserRole
     if (lowerRole === 'owner') return 'เจ้าของบริษัท (Owner)';
     if (lowerRole === 'admin') return 'ผู้ดูแลบริษัท (Admin)';
     if (lowerRole === 'sales') return 'พนักงานขาย (Sales)';
+    if (lowerRole === 'agent') return 'นายหน้า (Agent)';
+    if (lowerRole === 'customer') return 'ลูกค้า (Customer)';
     return 'ตำแหน่งปัจจุบัน';
   };
 
@@ -200,6 +202,8 @@ const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess, currentUserRole
                 <SelectContent>
                   <SelectItem value={UserRole.ADMIN}>ผู้ดูแลบริษัท (Admin)</SelectItem>
                   <SelectItem value={UserRole.SALES}>พนักงานขาย (Sales)</SelectItem>
+                  <SelectItem value={UserRole.AGENT}>นายหน้า (Agent)</SelectItem>
+                  <SelectItem value={UserRole.CUSTOMER}>ลูกค้า (Customer)</SelectItem>
                 </SelectContent>
               </Select>
             )}

@@ -20,9 +20,11 @@ export enum SubscriptionPlan {
 }
 
 export enum UserRole {
-  OWNER = 'owner',   // Platform Owner - manages all tenants, billing, subscriptions
-  ADMIN = 'admin',   // Company Admin - manages own company, properties, leads, theme
-  SALES = 'sales'    // Sales Staff - manages customers, leads for their company
+  OWNER = 'owner',       // Platform Owner - manages all tenants, billing, subscriptions
+  ADMIN = 'admin',       // Tenant Admin - manages own company, properties, leads, sales+agent permissions
+  SALES = 'sales',       // In-house Sales Staff - sells projects assigned to them (project-scoped)
+  AGENT = 'agent',       // External Broker (นายหน้า) - sells specific units assigned to them (unit-scoped)
+  CUSTOMER = 'customer'  // End-buyer - views properties + own reservations (future scope)
 }
 
 export enum PropertyType {
@@ -593,12 +595,16 @@ export type RolePermissions = {
   owner: Permission[];
   admin: Permission[];
   sales: Permission[];
+  agent: Permission[];
+  customer: Permission[];
 };
 
 export const ROLE_PERMISSIONS: RolePermissions = {
   owner: ['read', 'write', 'delete', 'manage_users', 'manage_settings', 'manage_billing'],
   admin: ['read', 'write', 'delete', 'manage_users'],
-  sales: ['read', 'write', 'manage_customers', 'manage_bookings']
+  sales: ['read', 'write', 'manage_customers', 'manage_bookings'],
+  agent: ['read', 'manage_customers'],
+  customer: ['read']
 };
 
 // ====================================================================

@@ -224,13 +224,17 @@ const DemoUserModal = ({ isOpen, onClose, onSuccess }: DemoUserModalProps) => {
               const roleColors = {
                 [UserRole.OWNER]: "bg-gray-100 text-gray-700 border-gray-300",
                 [UserRole.ADMIN]: "bg-gray-100 text-gray-700 border-blue-300",
-                [UserRole.SALES]: "bg-green-100 text-green-800 border-green-300"
+                [UserRole.SALES]: "bg-green-100 text-green-800 border-green-300",
+                [UserRole.AGENT]: "bg-amber-100 text-amber-800 border-amber-300",
+                [UserRole.CUSTOMER]: "bg-blue-100 text-blue-800 border-blue-300"
               };
 
               const roleLabels = {
                 [UserRole.OWNER]: "เจ้าของ",
                 [UserRole.ADMIN]: "แอดมิน",
-                [UserRole.SALES]: "พนักงานขาย"
+                [UserRole.SALES]: "พนักงานขาย",
+                [UserRole.AGENT]: "นายหน้า",
+                [UserRole.CUSTOMER]: "ลูกค้า"
               };
 
               return (

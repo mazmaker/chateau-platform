@@ -62,8 +62,19 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'write',
     'manage_customers',
     'manage_leads',
-    'view_properties' // Sales can VIEW properties (read-only)
+    'view_properties' // Sales can VIEW properties (read-only) within projects assigned
     // Sales CANNOT: delete, manage_users, manage_settings, manage_properties, manage_billing
+  ],
+  [UserRole.AGENT]: [
+    'read',
+    'manage_customers', // Agent can manage their own referred customers
+    'view_properties'   // Agent can VIEW only specific units assigned (RLS-enforced)
+    // Agent CANNOT: write (no status changes), manage_leads (internal only), and beyond
+  ],
+  [UserRole.CUSTOMER]: [
+    'read',
+    'view_properties'   // Customer can browse public/own listings only (RLS-enforced)
+    // Customer CANNOT: write, manage anything — purely a viewer role
   ]
 };
 

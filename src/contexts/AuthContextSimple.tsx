@@ -32,7 +32,7 @@ interface UserProfile {
   full_name: string | null
   avatar_url: string | null
   phone: string | null
-  role: 'owner' | 'admin' | 'sales' | null
+  role: 'owner' | 'admin' | 'sales' | 'agent' | 'customer' | null
   is_active: boolean
   created_at: string | null
   tenant_id?: string | null
@@ -45,7 +45,7 @@ interface UserTenant {
   id: string
   user_id: string
   tenant_id: string
-  role: 'owner' | 'admin' | 'sales'
+  role: 'owner' | 'admin' | 'sales' | 'agent' | 'customer'
   is_active: boolean
   tenants: Tenant
 }
@@ -57,7 +57,7 @@ interface AuthContextType {
   loading: boolean
   authChecked: boolean
   currentTenant: Tenant | null
-  userRole: 'owner' | 'admin' | 'sales' | null
+  userRole: 'owner' | 'admin' | 'sales' | 'agent' | 'customer' | null
   tenantSuspended: boolean  // true when tenant status is 'suspended'
   passwordResetRequired: boolean  // true when user must change password on next login
   userTenants: UserTenant[]
@@ -89,7 +89,7 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(false) // Start with false for faster initial load
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(null)
-  const [userRole, setUserRole] = useState<'owner' | 'admin' | 'sales' | null>(null)
+  const [userRole, setUserRole] = useState<'owner' | 'admin' | 'sales' | 'agent' | 'customer' | null>(null)
   const [tenantSuspended, setTenantSuspended] = useState(false) // Track if tenant is suspended
   const [passwordResetRequired, setPasswordResetRequired] = useState(false) // Track if user must change password
   const [userTenants, setUserTenants] = useState<UserTenant[]>([])

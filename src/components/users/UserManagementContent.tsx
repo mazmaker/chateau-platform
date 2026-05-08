@@ -16,7 +16,7 @@ import UserAccountManagement from "./UserAccountManagement";
 import DemoUserModal from "./DemoUserModal";
 import { toast } from "sonner";
 
-type UserRole = 'owner' | 'admin' | 'sales';
+type UserRole = 'owner' | 'admin' | 'sales' | 'agent' | 'customer';
 
 interface UserData {
   id: string;
@@ -277,9 +277,11 @@ const UserManagementContent = () => {
   const getRoleBadge = (role: UserRole) => {
     // Tiered hierarchy — owner = brand red strong, admin = brand red light, sales = neutral
     const config = {
-      owner: { label: 'เจ้าของแพลตฟอร์ม', icon: '👑', className: 'bg-chateau text-white border border-chateau' },
-      admin: { label: 'ผู้ดูแลบริษัท',     icon: '🔧', className: 'bg-chateau-50 text-chateau-700 border border-chateau-100' },
-      sales: { label: 'พนักงานขาย',       icon: '💼', className: 'bg-gray-50 text-gray-700 border border-gray-200' },
+      owner:    { label: 'เจ้าของแพลตฟอร์ม', icon: '👑', className: 'bg-chateau text-white border border-chateau' },
+      admin:    { label: 'ผู้ดูแลบริษัท',     icon: '🔧', className: 'bg-chateau-50 text-chateau-700 border border-chateau-100' },
+      sales:    { label: 'พนักงานขาย',       icon: '💼', className: 'bg-gray-50 text-gray-700 border border-gray-200' },
+      agent:    { label: 'นายหน้า',           icon: '🤝', className: 'bg-amber-50 text-amber-700 border border-amber-200' },
+      customer: { label: 'ลูกค้า',            icon: '👤', className: 'bg-blue-50 text-blue-700 border border-blue-200' },
     };
     const c = config[role] || { label: role, icon: '👤', className: 'bg-gray-50 text-gray-700 border border-gray-200' };
     return (
@@ -376,7 +378,7 @@ const UserManagementContent = () => {
       </Card>
 
       {/* Stats Cards */}
-      <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-2' : 'md:grid-cols-5'} gap-4`}>
+      <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-2' : 'md:grid-cols-4 lg:grid-cols-7'} gap-4`}>
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center">
@@ -449,6 +451,34 @@ const UserManagementContent = () => {
                 </div>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-amber-100 rounded-lg">
+                    <User className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-gray-600">นายหน้า</p>
+                    <p className="text-xl font-semibold">{users.filter(u => u.role === 'agent').length}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <User className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-gray-600">ลูกค้า</p>
+                    <p className="text-xl font-semibold">{users.filter(u => u.role === 'customer').length}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </>
         )}
       </div>
@@ -495,6 +525,8 @@ const UserManagementContent = () => {
                   <SelectItem value="owner">👑 เจ้าของแพลตฟอร์ม</SelectItem>
                   <SelectItem value="admin">🔧 ผู้ดูแลบริษัท</SelectItem>
                   <SelectItem value="sales">💼 พนักงานขาย</SelectItem>
+                  <SelectItem value="agent">🤝 นายหน้า</SelectItem>
+                  <SelectItem value="customer">👤 ลูกค้า</SelectItem>
                 </SelectContent>
               </Select>
             )}

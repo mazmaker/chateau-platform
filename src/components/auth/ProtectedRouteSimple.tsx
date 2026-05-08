@@ -6,7 +6,7 @@ import { Building2, Loader2 } from 'lucide-react'
 interface SimpleProtectedRouteProps {
   children: ReactNode
   onlyGuests?: boolean
-  requireRole?: 'owner' | 'admin' | 'sales'
+  requireRole?: 'owner' | 'admin' | 'sales' | 'agent' | 'customer'
 }
 
 export const ProtectedRouteSimple = ({
@@ -125,7 +125,7 @@ export const ProtectedRouteSimple = ({
 // Higher-order component for role-based protection
 export function withRole<P extends object>(
   Component: React.ComponentType<P>,
-  requiredRole: 'owner' | 'admin' | 'sales'
+  requiredRole: 'owner' | 'admin' | 'sales' | 'agent' | 'customer'
 ) {
   return function ProtectedComponent(props: P) {
     return (
@@ -137,13 +137,13 @@ export function withRole<P extends object>(
 }
 
 // Hook to check if user has specific role
-export function useRequireRole(requiredRole: 'owner' | 'admin' | 'sales') {
+export function useRequireRole(requiredRole: 'owner' | 'admin' | 'sales' | 'agent' | 'customer') {
   const { userRole } = useSimpleAuth()
   return userRole === requiredRole
 }
 
 // Hook to check if user has any of the specified roles
-export function useRequireAnyRole(roles: ('owner' | 'admin' | 'sales')[]) {
+export function useRequireAnyRole(roles: ('owner' | 'admin' | 'sales' | 'agent' | 'customer')[]) {
   const { userRole } = useSimpleAuth()
   return roles.includes(userRole as any)
 }

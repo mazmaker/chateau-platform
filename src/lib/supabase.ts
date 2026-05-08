@@ -49,7 +49,7 @@ export interface Database {
           id: string
           user_id: string
           tenant_id: string
-          role: 'owner' | 'admin' | 'sales'
+          role: 'owner' | 'admin' | 'sales' | 'agent' | 'customer'
           is_active: boolean
           invited_by: string | null
           invited_at: string | null

@@ -330,7 +330,7 @@ export interface Database {
     Enums: {
       tenant_status: 'trial' | 'active' | 'suspended' | 'cancelled'
       subscription_plan: 'starter' | 'professional' | 'enterprise'
-      user_role: 'owner' | 'admin' | 'sales'
+      user_role: 'owner' | 'admin' | 'sales' | 'agent' | 'customer'
       booking_status: 'pending' | 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled'
       property_type: 'apartment' | 'house' | 'villa' | 'condo' | 'commercial'
     }

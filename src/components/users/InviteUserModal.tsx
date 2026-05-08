@@ -17,7 +17,7 @@ interface InviteUserModalProps {
   isOpen: boolean;
   onClose: () => void;
   onInviteSuccess: () => void;
-  currentUserRole?: 'owner' | 'admin' | 'sales' | null;
+  currentUserRole?: 'owner' | 'admin' | 'sales' | 'agent' | 'customer' | null;
 }
 
 const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: InviteUserModalProps) => {
@@ -253,6 +253,8 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
                   </>
                 )}
                 <SelectItem value={UserRole.SALES}>พนักงานขาย (Sales)</SelectItem>
+                <SelectItem value={UserRole.AGENT}>นายหน้า (Agent)</SelectItem>
+                <SelectItem value={UserRole.CUSTOMER}>ลูกค้า (Customer)</SelectItem>
               </SelectContent>
             </Select>
             {isAdmin && (
