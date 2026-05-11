@@ -68,11 +68,11 @@ const getAllNavItems = (): NavItem[] => [
   { icon: Wand2,           label: "Builder Wizard",     href: "/builder",       requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Zap,             label: "Triggers",           href: "/triggers",      requiredRoles: ["OWNER", "ADMIN"] },
   { icon: BarChart3,       label: "Marketing Analytics",href: "/marketing-analytics", requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: Key,             label: "การจัดการ API",        href: "/api",           requiredRoles: ["OWNER", "ADMIN"], requiredFeature: "api_access", isPremium: true },
+  { icon: Key,             label: "การจัดการ API",        href: "/api",           requiredRoles: ["OWNER"], requiredFeature: "api_access", isPremium: true },
   { icon: Users,           label: "จัดการผู้ใช้",          href: "/users",         requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Lock,            label: "สิทธิ์ผู้ใช้งาน",        href: "/permissions",   requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: Palette,         label: "ปรับแต่งระบบ",         href: "/customization", requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: Settings,        label: "การตั้งค่า",           href: "/settings",      requiredRoles: ["OWNER", "ADMIN", "SALES"] },
+  { icon: Palette,         label: "ปรับแต่งระบบ",         href: "/customization", requiredRoles: ["OWNER"] },
+  { icon: Settings,        label: "การตั้งค่า",           href: "/settings",      requiredRoles: ["OWNER", "ADMIN", "SALES", "AGENT", "CUSTOMER"] },
   { icon: LogOut,          label: "ออกจากระบบ",          href: "/logout",        isLogout: true },
 ];
 

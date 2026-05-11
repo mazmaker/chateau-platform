@@ -15,9 +15,11 @@ import {
   X,
   MapPin,
   Inbox,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import CloneAssignmentsModal, { CloneUser } from "./CloneAssignmentsModal";
 
 interface AdminUser {
   id: string;
@@ -64,6 +66,7 @@ export const AdminProjectMatrix = () => {
   const [selectedAdminId, setSelectedAdminId] = useState<string | null>(null);
   const [adminSearch, setAdminSearch] = useState("");
   const [projectSearch, setProjectSearch] = useState("");
+  const [cloneOpen, setCloneOpen] = useState(false);
 
   /* ───── Fetch admins (with tenant name) ───── */
   const { data: admins = [], isLoading: loadingAdmins } = useQuery<AdminUser[]>({
@@ -133,6 +136,27 @@ export const AdminProjectMatrix = () => {
     () => (selectedAdmin ? projects.filter((p) => p.tenant_id === selectedAdmin.tenant_id) : []),
     [projects, selectedAdmin]
   );
+
+  /* ───── Clone helpers ───── */
+  const cloneAllUsers: CloneUser[] = useMemo(
+    () =>
+      admins.map((a) => ({
+        id: a.id,
+        name: a.full_name || a.email,
+        email: a.email,
+        tenantId: a.tenant_id,
+        tenantName: a.tenant_name,
+        subtitle: a.email,
+      })),
+    [admins]
+  );
+
+  const getItemsForAdmin = (userId: string) =>
+    assignments.filter((a) => a.admin_user_id === userId).map((a) => a.project_id);
+
+  const selectedAdminItemCount = selectedAdmin ? getItemsForAdmin(selectedAdmin.id).length : 0;
+  const hasOtherSameTenant = !!selectedAdmin &&
+    admins.some((a) => a.id !== selectedAdmin.id && a.tenant_id === selectedAdmin.tenant_id);
 
   const filteredProjects = useMemo(() => {
     const q = projectSearch.trim().toLowerCase();
@@ -427,6 +451,22 @@ export const AdminProjectMatrix = () => {
                     <X className="w-4 h-4 mr-1" />
                     ล้างทั้งหมด{projectSearch && " (ที่กรอง)"}
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!isOwner || selectedAdminItemCount === 0 || !hasOtherSameTenant}
+                    onClick={() => setCloneOpen(true)}
+                    title={
+                      selectedAdminItemCount === 0
+                        ? "ผู้ใช้นี้ไม่มีโครงการที่ดูแล"
+                        : !hasOtherSameTenant
+                        ? "ไม่มี admin คนอื่นใน tenant เดียวกัน"
+                        : "โคลนสิทธิ์ไปยัง admin คนอื่น"
+                    }
+                  >
+                    <Copy className="w-4 h-4 mr-1" />
+                    โคลนสิทธิ์
+                  </Button>
                 </div>
 
                 {/* Project list */}
@@ -445,10 +485,7 @@ export const AdminProjectMatrix = () => {
                         <label
                           key={p.id}
                           className={cn(
-                            "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all",
-                            checked
-                              ? "bg-chateau-50 border border-chateau-100"
-                              : "border border-gray-200 hover:bg-gray-50",
+                            "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all border border-gray-200 hover:bg-gray-50",
                             !isOwner && "cursor-not-allowed opacity-90"
                           )}
                         >
@@ -491,6 +528,21 @@ export const AdminProjectMatrix = () => {
           </CardContent>
         </Card>
       </div>
+
+      <CloneAssignmentsModal
+        open={cloneOpen}
+        onClose={() => setCloneOpen(false)}
+        allUsers={cloneAllUsers}
+        getItemsFor={getItemsForAdmin}
+        getItemName={(id) => projects.find((p) => p.id === id)?.name || id}
+        initialSourceId={selectedAdmin?.id}
+        itemLabel="โครงการ"
+        roleLabel="Admin"
+        table="admin_project_assignments"
+        userColumn="admin_user_id"
+        itemColumn="project_id"
+        queryKeyPrefix="permissions"
+      />
     </div>
   );
 };

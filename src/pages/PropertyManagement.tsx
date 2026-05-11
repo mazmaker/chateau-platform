@@ -74,7 +74,9 @@ import {
   FileText,
   Settings,
   Save,
-  AlertTriangle
+  AlertTriangle,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -86,6 +88,7 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import CreateProjectModal from '@/components/properties/CreateProjectModal';
 import AddLeadModal from '@/components/leads/AddLeadModal';
+import MasterPlanSVG from '@/components/properties/MasterPlanSVG';
 
 interface Property {
   id: string;
@@ -109,6 +112,10 @@ interface Property {
   is_active: boolean;
   is_featured?: boolean;
   created_at: string;
+  master_plan_url?: string | null;
+  location_lat?: number | null;
+  location_lng?: number | null;
+  nearby?: { name: string; type: string; distance_km: number }[] | null;
 }
 
 interface Unit {
@@ -131,11 +138,19 @@ interface Unit {
   parking_spaces?: number;
   images: string[];
   status: 'available' | 'reserved' | 'sold' | 'unavailable';
+  promo_price?: number | null;
+  plot_number?: string | null;
+  view?: string | null;
+  floor_plan_url?: string | null;
+  tour_3d_url?: string | null;
+  furnishing?: 'fully' | 'partial' | 'unfurnished' | null;
+  land_area_sqw?: number | null;
+  floor_count?: number | null;
 }
 
 const PropertyManagement = () => {
   const navigate = useNavigate();
-  const { currentTenant, userRole } = useSimpleAuth();
+  const { currentTenant, userRole, user } = useSimpleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
@@ -145,6 +160,9 @@ const PropertyManagement = () => {
   const [unitSearchQuery, setUnitSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [unitViewMode, setUnitViewMode] = useState<'grid' | 'list'>('grid');
+  const [mySalesUnitIds, setMySalesUnitIds] = useState<Set<string>>(new Set());
+  const [masterPlanImgError, setMasterPlanImgError] = useState(false);
 
   // Dialog states
   const [showPropertyDialog, setShowPropertyDialog] = useState(false);
@@ -177,7 +195,13 @@ const PropertyManagement = () => {
     images: [] as File[],
     image_previews: [] as string[],
     description: '',
-    status: 'available' as Unit['status']
+    status: 'available' as Unit['status'],
+    promo_price: '',
+    plot_number: '',
+    view: '',
+    furnishing: '' as '' | 'fully' | 'partial' | 'unfurnished',
+    floor_plan_url: '',
+    tour_3d_url: ''
   });
 
   useEffect(() => {
@@ -199,6 +223,37 @@ const PropertyManagement = () => {
       fetchMinPrices(propertyIds);
     }
   }, [properties]);
+
+  // Reset master plan image error when switching unit/project
+  useEffect(() => {
+    setMasterPlanImgError(false);
+  }, [viewingUnit?.id, selectedProperty?.master_plan_url]);
+
+  // Sales: fetch own designated units so we can gate edit/delete actions per unit
+  useEffect(() => {
+    if (userRole !== 'sales' || !user?.id) {
+      setMySalesUnitIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('sales_unit_assignments')
+        .select('unit_id')
+        .eq('sales_user_id', user.id)
+        .is('revoked_at', null);
+      if (!cancelled && !error && data) {
+        setMySalesUnitIds(new Set(data.map((r: any) => r.unit_id)));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [userRole, user?.id]);
+
+  const canManageUnit = (unitId: string): boolean => {
+    if (userRole === 'owner' || userRole === 'admin') return true;
+    if (userRole === 'sales') return mySalesUnitIds.has(unitId);
+    return false;
+  };
 
   const fetchProperties = async () => {
     setLoading(true);
@@ -301,7 +356,15 @@ const PropertyManagement = () => {
         pool: unit.pool || false,
         parking_spaces: unit.parking_spaces || 0,
         images: unit.images || [],
-        status: unit.status || 'available'
+        status: unit.status || 'available',
+        promo_price: unit.promo_price,
+        plot_number: unit.plot_number,
+        view: unit.view,
+        floor_plan_url: unit.floor_plan_url,
+        tour_3d_url: unit.tour_3d_url,
+        furnishing: unit.furnishing,
+        land_area_sqw: unit.land_area_sqw,
+        floor_count: unit.floor_count,
       }));
 
       setUnits(mappedUnits);
@@ -378,7 +441,7 @@ const PropertyManagement = () => {
         }
       }
 
-      const unitData = {
+      const unitData: Record<string, any> = {
         tenant_id: currentTenant.id,
         project_id: selectedProperty.id,
         unit_number: unitForm.unit_number,
@@ -390,20 +453,43 @@ const PropertyManagement = () => {
         floor_count: unitForm.floor_count ? parseInt(unitForm.floor_count) : 1,
         price: parseFloat(unitForm.price),
         layout_description: unitForm.description || null,
-        thumbnail_url: thumbnailUrl,
-        images: imageUrls.length > 0 ? imageUrls : [],
-        status: unitForm.status
+        status: unitForm.status,
+        promo_price: unitForm.promo_price ? parseFloat(unitForm.promo_price) : null,
+        plot_number: unitForm.plot_number || null,
+        view: unitForm.view || null,
+        furnishing: unitForm.furnishing || null,
+        floor_plan_url: unitForm.floor_plan_url || null,
+        tour_3d_url: unitForm.tour_3d_url || null
       };
+
+      // Only write thumbnail_url if a new file was uploaded; otherwise preserve existing.
+      // On insert (no editingUnit), always set so new rows get the URL (or null).
+      if (thumbnailUrl) {
+        unitData.thumbnail_url = thumbnailUrl;
+      } else if (!editingUnit) {
+        unitData.thumbnail_url = null;
+      }
+
+      // Same rule for images array.
+      if (imageUrls.length > 0) {
+        unitData.images = imageUrls;
+      } else if (!editingUnit) {
+        unitData.images = [];
+      }
 
       let unitId: string | undefined;
 
       if (editingUnit) {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('units')
           .update(unitData)
-          .eq('id', editingUnit.id);
+          .eq('id', editingUnit.id)
+          .select('id');
 
         if (error) throw error;
+        if (!data || data.length === 0) {
+          throw new Error('คุณไม่มีสิทธิ์แก้ไขยูนิตนี้ — ติดต่อแอดมินเพื่อมอบหมายสิทธิ์');
+        }
         unitId = editingUnit.id;
 
         // Log activity for unit update
@@ -523,7 +609,13 @@ const PropertyManagement = () => {
       images: [],
       image_previews: [],
       description: '',
-      status: 'available'
+      status: 'available',
+      promo_price: '',
+      plot_number: '',
+      view: '',
+      furnishing: '',
+      floor_plan_url: '',
+      tour_3d_url: ''
     });
   };
 
@@ -582,17 +674,23 @@ const PropertyManagement = () => {
       unit_number: unit.unit_number,
       floor: unit.floor_number?.toString() || '',
       size_sqm: unit.area_sqm?.toString() || '',
-      land_area_sqw: '',
+      land_area_sqw: unit.land_area_sqw?.toString() || '',
       bedrooms: unit.bedrooms?.toString() || '',
       bathrooms: unit.bathrooms?.toString() || '',
-      floor_count: '',
+      floor_count: unit.floor_count?.toString() || '',
       price: unit.price?.toString() || '',
       thumbnail: null,
       thumbnail_preview: '',
       images: [],
       image_previews: unit.images || [],
       description: unit.layout_description || '',
-      status: unit.status
+      status: unit.status,
+      promo_price: unit.promo_price?.toString() || '',
+      plot_number: unit.plot_number || '',
+      view: unit.view || '',
+      furnishing: (unit.furnishing as any) || '',
+      floor_plan_url: unit.floor_plan_url || '',
+      tour_3d_url: unit.tour_3d_url || ''
     });
     setShowUnitDialog(true);
   };
@@ -675,12 +773,16 @@ const PropertyManagement = () => {
     if (!deletingUnit || !selectedProperty) return;
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('units')
         .delete()
-        .eq('id', deletingUnit.id);
+        .eq('id', deletingUnit.id)
+        .select('id');
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('คุณไม่มีสิทธิ์ลบยูนิตนี้ — เฉพาะ Owner เท่านั้น');
+      }
 
       // Log activity for unit deletion
       try {
@@ -1162,6 +1264,36 @@ const PropertyManagement = () => {
                     <SelectItem value="sold">ขายแล้ว</SelectItem>
                   </SelectContent>
                 </Select>
+                <div className="inline-flex rounded-md border border-gray-200 bg-white p-0.5 ml-auto">
+                  <button
+                    type="button"
+                    onClick={() => setUnitViewMode('grid')}
+                    aria-pressed={unitViewMode === 'grid'}
+                    title="แสดงแบบกริด"
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded transition-colors ${
+                      unitViewMode === 'grid'
+                        ? 'bg-chateau text-white shadow-sm'
+                        : 'text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                    Grid
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUnitViewMode('list')}
+                    aria-pressed={unitViewMode === 'list'}
+                    title="แสดงแบบรายการ"
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded transition-colors ${
+                      unitViewMode === 'list'
+                        ? 'bg-chateau text-white shadow-sm'
+                        : 'text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <List className="w-3.5 h-3.5" />
+                    List
+                  </button>
+                </div>
               </div>
               <ManagePropertiesGuard fallback={null} showMessage={false}>
                 <Button onClick={() => {
@@ -1174,53 +1306,247 @@ const PropertyManagement = () => {
               </ManagePropertiesGuard>
             </div>
 
-            {/* Units Table */}
-            <Card>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>เลขที่</TableHead>
-                      <TableHead>ชั้น</TableHead>
-                      <TableHead>ขนาด</TableHead>
-                      <TableHead>ห้องนอน/น้ำ</TableHead>
-                      <TableHead>ราคา</TableHead>
-                      <TableHead>สถานะ</TableHead>
-                      <TableHead className="text-right">ดำเนินการ</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredUnits.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                          <Building2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                          ไม่พบยูนิต
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredUnits.map((unit) => (
-                        <TableRow key={unit.id}>
-                          <TableCell className="font-medium">{unit.unit_number}</TableCell>
-                          <TableCell>{unit.floor_number ? `ชั้น ${unit.floor_number}` : '-'}</TableCell>
-                          <TableCell>{unit.area_sqm ? `${unit.area_sqm.toLocaleString()} ตร.ม.` : '-'}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Bed className="w-3 h-3" /> {unit.bedrooms}
-                              <Bath className="w-3 h-3" /> {unit.bathrooms}
+            {/* Units Card Grid / List (PROPERTY HUB style) */}
+            {filteredUnits.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <Building2 className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p className="text-muted-foreground">ไม่พบยูนิต</p>
+                </CardContent>
+              </Card>
+            ) : unitViewMode === 'grid' ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filteredUnits.map((unit) => {
+                  const firstImage = (unit.images && unit.images.length > 0) ? unit.images[0] : null;
+                  const statusConfig =
+                    unit.status === 'available'
+                      ? { label: 'ว่าง', dotClass: 'bg-green-500', wrapClass: 'bg-white/95 text-green-700' }
+                      : unit.status === 'reserved'
+                      ? { label: 'จอง', dotClass: 'bg-amber-500', wrapClass: 'bg-white/95 text-amber-700' }
+                      : unit.status === 'sold'
+                      ? { label: 'ขาย', dotClass: 'bg-red-500', wrapClass: 'bg-white/95 text-red-700' }
+                      : { label: 'ไม่พร้อมขาย', dotClass: 'bg-gray-400', wrapClass: 'bg-white/95 text-gray-600' };
+                  return (
+                    <Card
+                      key={unit.id}
+                      className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group"
+                      onClick={() => handleViewUnit(unit)}
+                    >
+                      {/* Image area */}
+                      <div className="relative aspect-[4/3] bg-gradient-to-br from-gray-100 to-gray-200">
+                        {firstImage ? (
+                          <img
+                            src={firstImage}
+                            alt={unit.unit_number}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                            <ImageIcon className="w-12 h-12" />
+                          </div>
+                        )}
+
+                        {/* Unit code — top-left */}
+                        <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                          <div className="px-2.5 py-1 bg-white/95 backdrop-blur rounded-md text-xs font-semibold text-gray-800 shadow-sm">
+                            {unit.unit_number}
+                          </div>
+                          {userRole === 'sales' && mySalesUnitIds.has(unit.id) && (
+                            <div className="px-2 py-1 bg-chateau text-white rounded-md text-[11px] font-medium shadow-sm">
+                              ของคุณ
                             </div>
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            {formatCurrency(unit.price)}
-                          </TableCell>
-                          <TableCell>{getUnitStatusBadge(unit.status)}</TableCell>
-                          <TableCell className="text-right">
+                          )}
+                        </div>
+
+                        {/* Status badge — top-right */}
+                        <div className={`absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium shadow-sm backdrop-blur ${statusConfig.wrapClass}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dotClass}`} />
+                          {statusConfig.label}
+                        </div>
+                      </div>
+
+                      {/* Content */}
+                      <CardContent className="p-4 space-y-3">
+                        {/* Top row: floor + actions */}
+                        <div className="flex items-start justify-between">
+                          <div className="text-xs text-gray-500">
+                            {unit.floor_number ? `ชั้น ${unit.floor_number}` : 'ยูนิต'}
+                            {unit.area_sqm ? ` · ${unit.area_sqm.toLocaleString()} ตร.ม.` : ''}
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 -mr-1 -mt-1"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenuItem onClick={() => handleViewUnit(unit)}>
+                                <Eye className="w-4 h-4 mr-2" />
+                                ดูรายละเอียด
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleAddLeadFromUnit(unit)}>
+                                <UserPlus className="w-4 h-4 mr-2" />
+                                เพิ่ม Lead ใหม่
+                              </DropdownMenuItem>
+                              <ManagePropertiesGuard fallback={null} showMessage={false}>
+                                {canManageUnit(unit.id) && (
+                                  <DropdownMenuItem onClick={() => handleEditUnit(unit)}>
+                                    <Edit className="w-4 h-4 mr-2" />
+                                    แก้ไข
+                                  </DropdownMenuItem>
+                                )}
+                                {userRole === 'owner' && (
+                                  <DropdownMenuItem
+                                    onClick={() => handleDeleteUnitClick(unit)}
+                                    className="text-red-600 focus:text-red-600"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    ลบ
+                                  </DropdownMenuItem>
+                                )}
+                              </ManagePropertiesGuard>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+
+                        {/* Price */}
+                        <div>
+                          <div className="text-2xl font-bold text-gray-900">
+                            {unit.price >= 1_000_000
+                              ? `${(unit.price / 1_000_000).toFixed(2)} ล้าน`
+                              : formatCurrency(unit.price)}
+                          </div>
+                        </div>
+
+                        {/* Specs icons row */}
+                        <div className="flex items-center gap-3 text-sm text-gray-600 pt-1 border-t border-gray-100">
+                          <span className="flex items-center gap-1" title="ห้องนอน">
+                            <Bed className="w-4 h-4 text-gray-400" />
+                            <span className="font-medium">{unit.bedrooms || 0}</span>
+                          </span>
+                          <span className="flex items-center gap-1" title="ห้องน้ำ">
+                            <Bath className="w-4 h-4 text-gray-400" />
+                            <span className="font-medium">{unit.bathrooms || 0}</span>
+                          </span>
+                          {(unit.parking_spaces ?? 0) > 0 && (
+                            <span className="flex items-center gap-1" title="ที่จอดรถ">
+                              <Square className="w-4 h-4 text-gray-400" />
+                              <span className="font-medium">{unit.parking_spaces}</span>
+                            </span>
+                          )}
+                          {unit.area_sqm > 0 && (
+                            <span className="flex items-center gap-1 ml-auto text-xs text-gray-500" title="พื้นที่">
+                              <Ruler className="w-3.5 h-3.5" />
+                              {unit.area_sqm.toLocaleString()} ตร.ม.
+                            </span>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredUnits.map((unit) => {
+                  const firstImage = (unit.images && unit.images.length > 0) ? unit.images[0] : null;
+                  const statusConfig =
+                    unit.status === 'available'
+                      ? { label: 'ว่าง', dotClass: 'bg-green-500', textClass: 'text-green-700', bgClass: 'bg-green-50' }
+                      : unit.status === 'reserved'
+                      ? { label: 'จอง', dotClass: 'bg-amber-500', textClass: 'text-amber-700', bgClass: 'bg-amber-50' }
+                      : unit.status === 'sold'
+                      ? { label: 'ขาย', dotClass: 'bg-red-500', textClass: 'text-red-700', bgClass: 'bg-red-50' }
+                      : { label: 'ไม่พร้อมขาย', dotClass: 'bg-gray-400', textClass: 'text-gray-600', bgClass: 'bg-gray-50' };
+                  return (
+                    <Card
+                      key={unit.id}
+                      className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
+                      onClick={() => handleViewUnit(unit)}
+                    >
+                      <div className="flex items-stretch">
+                        {/* Thumbnail */}
+                        <div className="relative w-32 sm:w-40 flex-shrink-0 bg-gradient-to-br from-gray-100 to-gray-200">
+                          {firstImage ? (
+                            <img
+                              src={firstImage}
+                              alt={unit.unit_number}
+                              className="w-full h-full object-cover"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                              <ImageIcon className="w-8 h-8" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Body */}
+                        <div className="flex-1 flex flex-col sm:flex-row sm:items-center gap-3 p-4 min-w-0">
+                          {/* Left: code + meta + specs */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="px-2 py-0.5 bg-gray-100 rounded text-xs font-semibold text-gray-800">
+                                {unit.unit_number}
+                              </span>
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${statusConfig.bgClass} ${statusConfig.textClass}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dotClass}`} />
+                                {statusConfig.label}
+                              </span>
+                              {userRole === 'sales' && mySalesUnitIds.has(unit.id) && (
+                                <span className="px-2 py-0.5 bg-chateau text-white rounded-md text-[11px] font-medium">
+                                  ของคุณ
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-500 mb-2">
+                              {unit.floor_number ? `ชั้น ${unit.floor_number}` : 'ยูนิต'}
+                              {unit.area_sqm ? ` · ${unit.area_sqm.toLocaleString()} ตร.ม.` : ''}
+                              {unit.unit_type ? ` · ${unit.unit_type}` : ''}
+                            </div>
+                            <div className="flex items-center gap-3 text-sm text-gray-600">
+                              <span className="flex items-center gap-1" title="ห้องนอน">
+                                <Bed className="w-3.5 h-3.5 text-gray-400" />
+                                <span className="font-medium">{unit.bedrooms || 0}</span>
+                              </span>
+                              <span className="flex items-center gap-1" title="ห้องน้ำ">
+                                <Bath className="w-3.5 h-3.5 text-gray-400" />
+                                <span className="font-medium">{unit.bathrooms || 0}</span>
+                              </span>
+                              {(unit.parking_spaces ?? 0) > 0 && (
+                                <span className="flex items-center gap-1" title="ที่จอดรถ">
+                                  <Square className="w-3.5 h-3.5 text-gray-400" />
+                                  <span className="font-medium">{unit.parking_spaces}</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Right: price + actions */}
+                          <div className="flex items-center gap-3 sm:flex-col sm:items-end sm:gap-1 sm:min-w-[140px]">
+                            <div className="text-lg sm:text-xl font-bold text-gray-900 whitespace-nowrap">
+                              {unit.price >= 1_000_000
+                                ? `${(unit.price / 1_000_000).toFixed(2)} ล้าน`
+                                : formatCurrency(unit.price)}
+                            </div>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 w-7 p-0"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
                                   <MoreHorizontal className="w-4 h-4" />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
+                              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                                 <DropdownMenuItem onClick={() => handleViewUnit(unit)}>
                                   <Eye className="w-4 h-4 mr-2" />
                                   ดูรายละเอียด
@@ -1244,14 +1570,14 @@ const PropertyManagement = () => {
                                 </ManagePropertiesGuard>
                               </DropdownMenuContent>
                             </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -1611,6 +1937,94 @@ const PropertyManagement = () => {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Section 6: PROPERTY HUB-style fields */}
+              <Card className="border-2 border-gray-200 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-200">
+                    <div className="p-1.5 bg-amber-600 rounded-lg">
+                      <Layers className="w-3.5 h-3.5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 text-sm">รายละเอียดเสริม (PROPERTY HUB)</h3>
+                      <p className="text-xs text-gray-600">โปรโมชั่น, แปลง, วิว, ตกแต่ง, แผนผัง, 3D Tour</p>
+                    </div>
+                  </div>
+                  <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="promo_price" className="text-sm font-medium">ราคาโปรโมชั่น (บาท)</Label>
+                      <Input
+                        id="promo_price"
+                        type="number"
+                        value={unitForm.promo_price}
+                        onChange={(e) => setUnitForm({ ...unitForm, promo_price: e.target.value })}
+                        placeholder="เช่น 6490000 (เว้นว่างถ้าไม่มีโปร)"
+                        className="mt-1.5"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="plot_number" className="text-sm font-medium">เลขแปลง</Label>
+                      <Input
+                        id="plot_number"
+                        type="text"
+                        value={unitForm.plot_number}
+                        onChange={(e) => setUnitForm({ ...unitForm, plot_number: e.target.value })}
+                        placeholder="เช่น C-012, A-001"
+                        className="mt-1.5"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Label htmlFor="view" className="text-sm font-medium">วิว</Label>
+                      <Input
+                        id="view"
+                        type="text"
+                        value={unitForm.view}
+                        onChange={(e) => setUnitForm({ ...unitForm, view: e.target.value })}
+                        placeholder="เช่น วิวสระว่ายน้ำ, วิวสวน, วิวเมือง, วิวทะเล 270°"
+                        className="mt-1.5"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Label htmlFor="furnishing" className="text-sm font-medium">สถานะตกแต่ง</Label>
+                      <Select
+                        value={unitForm.furnishing}
+                        onValueChange={(value: any) => setUnitForm({ ...unitForm, furnishing: value })}
+                      >
+                        <SelectTrigger id="furnishing" className="mt-1.5">
+                          <SelectValue placeholder="เลือกระดับการตกแต่ง" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="fully">ตกแต่งครบ พร้อมอยู่ (Fully Furnished)</SelectItem>
+                          <SelectItem value="partial">ตกแต่งบางส่วน (Partially Furnished)</SelectItem>
+                          <SelectItem value="unfurnished">ไม่ตกแต่ง (Unfurnished)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Label htmlFor="floor_plan_url" className="text-sm font-medium">Floor Plan URL</Label>
+                      <Input
+                        id="floor_plan_url"
+                        type="url"
+                        value={unitForm.floor_plan_url}
+                        onChange={(e) => setUnitForm({ ...unitForm, floor_plan_url: e.target.value })}
+                        placeholder="https://... (รูป/PDF แปลนห้อง)"
+                        className="mt-1.5"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Label htmlFor="tour_3d_url" className="text-sm font-medium">3D / VR Tour URL</Label>
+                      <Input
+                        id="tour_3d_url"
+                        type="url"
+                        value={unitForm.tour_3d_url}
+                        onChange={(e) => setUnitForm({ ...unitForm, tour_3d_url: e.target.value })}
+                        placeholder="https://my.matterport.com/show/?m=..."
+                        className="mt-1.5"
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
 
             {/* Footer - Fixed at bottom */}
@@ -1756,108 +2170,341 @@ const PropertyManagement = () => {
                   </Card>
                 )}
 
-                {/* Basic Information */}
+                {/* Pricing — PROPERTY HUB style with promo */}
+                <Card className="border border-gray-200">
+                  <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
+                    <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                      <DollarSign className="w-5 h-5 text-chateau" />
+                      ราคา
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <div className="flex flex-wrap items-baseline gap-3">
+                      {viewingUnit.promo_price && viewingUnit.promo_price < viewingUnit.price ? (
+                        <>
+                          <span className="text-3xl font-bold text-chateau">
+                            {(viewingUnit.promo_price / 1_000_000).toFixed(2)} ล้าน
+                          </span>
+                          <span className="text-lg text-gray-400 line-through">
+                            {(viewingUnit.price / 1_000_000).toFixed(2)} ล้าน
+                          </span>
+                          <Badge className="bg-red-100 text-red-700 hover:bg-red-100">
+                            ลด {(((viewingUnit.price - viewingUnit.promo_price) / viewingUnit.price) * 100).toFixed(0)}%
+                          </Badge>
+                        </>
+                      ) : (
+                        <span className="text-3xl font-bold text-gray-900">
+                          {(viewingUnit.price / 1_000_000).toFixed(2)} ล้าน
+                        </span>
+                      )}
+                    </div>
+                    {viewingUnit.price_per_sqm && (
+                      <p className="text-sm text-gray-500 mt-2">
+                        {formatCurrency(viewingUnit.price_per_sqm)} / ตร.ม.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Specifications — comprehensive grid */}
                 <Card className="border border-gray-200">
                   <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
                     <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
                       <Building2 className="w-5 h-5 text-chateau" />
-                      ข้อมูลพื้นฐาน
+                      ข้อมูลยูนิต
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
                         <p className="text-xs font-medium text-gray-500 mb-1">เลขที่ยูนิต</p>
-                        <p className="text-xl font-bold text-gray-900">{viewingUnit.unit_number}</p>
+                        <p className="text-base font-bold text-gray-900">{viewingUnit.unit_number}</p>
                       </div>
+                      {viewingUnit.plot_number && (
+                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                          <p className="text-xs font-medium text-gray-500 mb-1">เลขแปลง</p>
+                          <p className="text-base font-bold text-gray-900">{viewingUnit.plot_number}</p>
+                        </div>
+                      )}
                       <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                        <p className="text-xs font-medium text-gray-500 mb-1">ชั้น</p>
-                        <p className="text-xl font-bold text-gray-900">{viewingUnit.floor_number || '-'}</p>
+                        <p className="text-xs font-medium text-gray-500 mb-1">
+                          {viewingUnit.floor_count && viewingUnit.floor_count > 1 ? 'จำนวนชั้น' : 'ชั้น'}
+                        </p>
+                        <p className="text-base font-bold text-gray-900">
+                          {viewingUnit.floor_count && viewingUnit.floor_count > 1
+                            ? `${viewingUnit.floor_count} ชั้น`
+                            : viewingUnit.floor_number || '-'}
+                        </p>
                       </div>
                       <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
                         <p className="text-xs font-medium text-gray-500 mb-1">พื้นที่ใช้สอย</p>
-                        <p className="text-xl font-bold text-gray-900">{viewingUnit.area_sqm ? `${viewingUnit.area_sqm} ตร.ม.` : '-'}</p>
+                        <p className="text-base font-bold text-gray-900">{viewingUnit.area_sqm ? `${viewingUnit.area_sqm} ตร.ม.` : '-'}</p>
                       </div>
-                      <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                        <p className="text-xs font-medium text-gray-500 mb-1">ราคา</p>
-                        <p className="text-xl font-bold text-chateau">{formatCurrency(viewingUnit.price)}</p>
+                      {viewingUnit.land_area_sqw && (
+                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                          <p className="text-xs font-medium text-gray-500 mb-1">ที่ดิน</p>
+                          <p className="text-base font-bold text-gray-900">{viewingUnit.land_area_sqw} ตร.วา</p>
+                        </div>
+                      )}
+                      {viewingUnit.facing_direction && (
+                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                          <p className="text-xs font-medium text-gray-500 mb-1">ทิศ</p>
+                          <p className="text-base font-bold text-gray-900">{viewingUnit.facing_direction}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Bed/Bath/Parking icon row */}
+                    <div className="grid grid-cols-3 gap-3 mt-3">
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <Bed className="w-5 h-5 text-chateau" />
+                        <div>
+                          <p className="text-xs font-medium text-gray-500">ห้องนอน</p>
+                          <p className="text-lg font-bold text-gray-900">{viewingUnit.bedrooms}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <Bath className="w-5 h-5 text-chateau" />
+                        <div>
+                          <p className="text-xs font-medium text-gray-500">ห้องน้ำ</p>
+                          <p className="text-lg font-bold text-gray-900">{viewingUnit.bathrooms}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <Square className="w-5 h-5 text-chateau" />
+                        <div>
+                          <p className="text-xs font-medium text-gray-500">ที่จอดรถ</p>
+                          <p className="text-lg font-bold text-gray-900">{viewingUnit.parking_spaces || 0}</p>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
-                {/* Room Details */}
+                {/* Features & Highlights */}
                 <Card className="border border-gray-200">
                   <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
                     <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
                       <Home className="w-5 h-5 text-chateau" />
-                      รายละเอียดห้อง
+                      จุดเด่นยูนิต
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="pt-4">
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                        <div className="p-2 bg-white rounded-lg shadow-sm">
-                          <Bed className="w-6 h-6 text-chateau" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium text-gray-500">ห้องนอน</p>
-                          <p className="text-2xl font-bold text-gray-900">{viewingUnit.bedrooms}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                        <div className="p-2 bg-white rounded-lg shadow-sm">
-                          <Bath className="w-6 h-6 text-chateau" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium text-gray-500">ห้องน้ำ</p>
-                          <p className="text-2xl font-bold text-gray-900">{viewingUnit.bathrooms}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                        <div className="p-2 bg-white rounded-lg shadow-sm">
-                          <Square className="w-6 h-6 text-chateau" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium text-gray-500">ราคา/ตร.ม.</p>
-                          <p className="text-lg font-bold text-gray-900">{viewingUnit.price_per_sqm ? formatCurrency(viewingUnit.price_per_sqm) : '-'}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Additional Info */}
-                    {viewingUnit.layout_description && (
-                      <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                        <p className="text-xs font-semibold text-slate-700 mb-2">รายละเอียดเพิ่มเติม</p>
-                        <p className="text-sm text-slate-600 leading-relaxed">{viewingUnit.layout_description}</p>
+                  <CardContent className="pt-4 space-y-4">
+                    {/* View */}
+                    {viewingUnit.view && (
+                      <div className="p-3 bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg border border-amber-200">
+                        <p className="text-xs font-semibold text-amber-900 mb-1">🌅 วิว</p>
+                        <p className="text-sm font-medium text-amber-900">{viewingUnit.view}</p>
                       </div>
                     )}
 
-                    {/* Features */}
-                    {(viewingUnit.balcony || viewingUnit.garden || viewingUnit.pool || viewingUnit.facing_direction || viewingUnit.building) && (
-                      <div className="mt-4">
-                        <p className="text-xs font-semibold text-slate-700 mb-2">คุณสมบัติพิเศษ</p>
+                    {/* Furnishing */}
+                    {viewingUnit.furnishing && (
+                      <div className="p-3 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
+                        <p className="text-xs font-semibold text-purple-900 mb-1">🛋 สถานะตกแต่ง</p>
+                        <p className="text-sm font-medium text-purple-900">
+                          {viewingUnit.furnishing === 'fully' && 'ตกแต่งครบ พร้อมอยู่ (Fully Furnished)'}
+                          {viewingUnit.furnishing === 'partial' && 'ตกแต่งบางส่วน (Partially Furnished)'}
+                          {viewingUnit.furnishing === 'unfurnished' && 'ไม่ตกแต่ง (Unfurnished)'}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Feature chips */}
+                    {(viewingUnit.balcony || viewingUnit.garden || viewingUnit.pool || viewingUnit.building) && (
+                      <div>
+                        <p className="text-xs font-semibold text-slate-700 mb-2">คุณสมบัติ</p>
                         <div className="flex flex-wrap gap-2">
-                          {viewingUnit.balcony && (
-                            <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-200">มีระเบียง</Badge>
+                          {viewingUnit.pool && (
+                            <Badge variant="secondary" className="bg-cyan-100 text-cyan-800 hover:bg-cyan-200">🏊 มีสระว่ายน้ำ</Badge>
                           )}
                           {viewingUnit.garden && (
-                            <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-200">มีสวน</Badge>
+                            <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-200">🌿 มีสวน</Badge>
                           )}
-                          {viewingUnit.pool && (
-                            <Badge variant="secondary" className="bg-cyan-100 text-cyan-800 hover:bg-cyan-200">มีสระว่ายน้ำ</Badge>
-                          )}
-                          {viewingUnit.facing_direction && (
-                            <Badge variant="outline" className="border-purple-300 text-purple-700">ทิศ {viewingUnit.facing_direction}</Badge>
+                          {viewingUnit.balcony && (
+                            <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-200">🪟 มีระเบียง</Badge>
                           )}
                           {viewingUnit.building && (
-                            <Badge variant="outline" className="border-orange-300 text-orange-700">อาคาร {viewingUnit.building}</Badge>
+                            <Badge variant="outline" className="border-orange-300 text-orange-700">🏢 อาคาร {viewingUnit.building}</Badge>
                           )}
                         </div>
+                      </div>
+                    )}
+
+                    {/* Layout description */}
+                    {viewingUnit.layout_description && (
+                      <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <p className="text-xs font-semibold text-slate-700 mb-2">รายละเอียด</p>
+                        <p className="text-sm text-slate-600 leading-relaxed">{viewingUnit.layout_description}</p>
                       </div>
                     )}
                   </CardContent>
                 </Card>
+
+                {/* Floor Plan + 3D Tour */}
+                {(viewingUnit.floor_plan_url || viewingUnit.tour_3d_url) && (
+                  <Card className="border border-gray-200">
+                    <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
+                      <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                        <Layers className="w-5 h-5 text-chateau" />
+                        แผนผัง & 3D Tour
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4 space-y-3">
+                      {viewingUnit.floor_plan_url && (
+                        <div>
+                          <p className="text-xs font-semibold text-slate-700 mb-2">📐 ผังห้อง</p>
+                          <img
+                            src={viewingUnit.floor_plan_url}
+                            alt="Floor plan"
+                            className="w-full max-h-96 object-contain rounded-lg border border-gray-200 bg-white"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        </div>
+                      )}
+                      {viewingUnit.tour_3d_url && (
+                        <a
+                          href={viewingUnit.tour_3d_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-medium text-sm shadow-sm hover:shadow-md transition-shadow"
+                        >
+                          <Eye className="w-4 h-4" />
+                          เปิด 3D Virtual Tour
+                        </a>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Project Site Plan — uploaded image OR generated SVG */}
+                {(() => {
+                  const hasUploadedPlan =
+                    !!selectedProperty?.master_plan_url &&
+                    !selectedProperty.master_plan_url.includes('placehold.co') &&
+                    !masterPlanImgError;
+                  return (
+                    <Card className="border border-gray-200">
+                      <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
+                        <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                          <Layers className="w-5 h-5 text-chateau" />
+                          ผังโครงการ
+                          {viewingUnit.plot_number && (
+                            <Badge variant="outline" className="ml-2 border-chateau text-chateau">
+                              แปลง {viewingUnit.plot_number}
+                            </Badge>
+                          )}
+                          {!hasUploadedPlan && (
+                            <Badge variant="outline" className="ml-2 border-amber-300 text-amber-700 bg-amber-50">
+                              ผังจำลอง
+                            </Badge>
+                          )}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-4">
+                        {hasUploadedPlan ? (
+                          <>
+                            <a
+                              href={selectedProperty!.master_plan_url!}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block rounded-lg overflow-hidden border border-gray-200 hover:border-chateau transition-colors"
+                            >
+                              <img
+                                src={selectedProperty!.master_plan_url!}
+                                alt={`Master plan ${selectedProperty!.name}`}
+                                className="w-full max-h-96 object-cover"
+                                onError={() => setMasterPlanImgError(true)}
+                              />
+                            </a>
+                            <p className="text-xs text-gray-500 mt-2">คลิกเพื่อดูภาพขนาดเต็ม</p>
+                          </>
+                        ) : (
+                          <>
+                            <MasterPlanSVG
+                              units={units}
+                              highlightedUnitId={viewingUnit.id}
+                              projectName={selectedProperty?.name || 'โครงการ'}
+                            />
+                            <p className="text-xs text-amber-700 mt-2">
+                              {masterPlanImgError
+                                ? '⚠ URL ที่ใส่ไม่ใช่รูปภาพโดยตรง — ต้อง paste URL ที่ลงท้าย .jpg / .png / .webp (คลิกขวาที่รูปจริง → "คัดลอกที่อยู่รูปภาพ")'
+                                : '💡 ผังนี้สร้างจากข้อมูลยูนิตจริง — admin upload ผังจริงในฟอร์มแก้ไขโครงการได้'}
+                            </p>
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
+
+                {/* Map — project location */}
+                {selectedProperty?.location_lat && selectedProperty?.location_lng && (
+                  <Card className="border border-gray-200">
+                    <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
+                      <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                        <MapPin className="w-5 h-5 text-chateau" />
+                        ตำแหน่งโครงการ
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <div className="rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                        <iframe
+                          title={`Map of ${selectedProperty.name}`}
+                          src={`https://www.google.com/maps?q=${selectedProperty.location_lat},${selectedProperty.location_lng}&hl=th&z=15&output=embed`}
+                          width="100%"
+                          height="280"
+                          style={{ border: 0 }}
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        📍 {selectedProperty.address?.street || `${selectedProperty.address?.district || ''}, ${selectedProperty.address?.province || ''}`}
+                        <span className="ml-2 text-gray-400">
+                          ({selectedProperty.location_lat}, {selectedProperty.location_lng})
+                        </span>
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Nearby places */}
+                {selectedProperty?.nearby && selectedProperty.nearby.length > 0 && (
+                  <Card className="border border-gray-200">
+                    <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
+                      <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                        <MapPin className="w-5 h-5 text-chateau" />
+                        ทำเลใกล้เคียง
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {selectedProperty.nearby.map((place, idx) => {
+                          const icon =
+                            place.type === 'shopping' ? '🏬' :
+                            place.type === 'transit' ? '🚇' :
+                            place.type === 'hospital' ? '🏥' :
+                            place.type === 'school' ? '🏫' :
+                            place.type === 'airport' ? '✈️' :
+                            place.type === 'beach' ? '🏖' :
+                            place.type === 'market' ? '🍜' :
+                            place.type === 'landmark' ? '🛕' :
+                            place.type === 'leisure' ? '⛳' : '📍';
+                          return (
+                            <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                              <span className="text-xl flex-shrink-0">{icon}</span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">{place.name}</p>
+                                <p className="text-xs text-gray-500">{place.distance_km} กม.</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Leads Interested in This Unit */}
                 <Card className="border border-gray-200">
@@ -1992,13 +2639,15 @@ const PropertyManagement = () => {
               <Button variant="outline" onClick={() => setShowUnitDetailDialog(false)}>
                 ปิด
               </Button>
-              <Button onClick={() => {
-                setShowUnitDetailDialog(false);
-                if (viewingUnit) handleEditUnit(viewingUnit);
-              }}>
-                <Edit className="w-4 h-4 mr-2" />
-                แก้ไข
-              </Button>
+              {viewingUnit && canManageUnit(viewingUnit.id) && (
+                <Button onClick={() => {
+                  setShowUnitDetailDialog(false);
+                  if (viewingUnit) handleEditUnit(viewingUnit);
+                }}>
+                  <Edit className="w-4 h-4 mr-2" />
+                  แก้ไข
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>

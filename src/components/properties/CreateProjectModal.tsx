@@ -127,10 +127,13 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
     owner_name: "",
     attachments: [] as File[],
     sale_kit_url: "",
-    fact_sheet_url: "",
-    roi_calculator_url: "",
+    documents: [] as { label: string; url: string }[],
     is_active: true,
-    is_featured: false
+    is_featured: false,
+    master_plan_url: "",
+    location_lat: "",
+    location_lng: "",
+    nearby: [] as { name: string; type: string; distance_km: number }[]
   });
 
   const [loading, setLoading] = useState(false);
@@ -220,10 +223,21 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
           owner_name: editingProject.developer || "",
           attachments: [],
           sale_kit_url: editingProject.information_links?.sale_kit || "",
-          fact_sheet_url: editingProject.information_links?.fact_sheet || "",
-          roi_calculator_url: editingProject.information_links?.roi_calculator || "",
+          // Migrate legacy keys into the new documents array on edit-load
+          documents: (() => {
+            const links = editingProject.information_links || {};
+            if (Array.isArray(links.documents) && links.documents.length > 0) return links.documents;
+            const legacy: { label: string; url: string }[] = [];
+            if (links.fact_sheet) legacy.push({ label: 'Fact Sheet', url: links.fact_sheet });
+            if (links.roi_calculator) legacy.push({ label: 'ROI Calculator', url: links.roi_calculator });
+            return legacy;
+          })(),
           is_active: editingProject.is_active ?? true,
-          is_featured: editingProject.is_featured ?? false
+          is_featured: editingProject.is_featured ?? false,
+          master_plan_url: (editingProject as any).master_plan_url || "",
+          location_lat: (editingProject as any).location_lat?.toString() || "",
+          location_lng: (editingProject as any).location_lng?.toString() || "",
+          nearby: ((editingProject as any).nearby as any[]) || []
         });
 
         // Reset flag after form has been populated
@@ -405,10 +419,13 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
       owner_name: "",
       attachments: [],
       sale_kit_url: "",
-      fact_sheet_url: "",
-      roi_calculator_url: "",
+      documents: [],
       is_active: true,
-      is_featured: false
+      is_featured: false,
+      master_plan_url: "",
+      location_lat: "",
+      location_lng: "",
+      nearby: []
     });
     setDistricts([]);
     setSubDistricts([]);
@@ -541,11 +558,14 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
         attachments: attachmentUrls.length > 0 ? attachmentUrls : (isEditing ? editingProject?.images : []),
         information_links: {
           sale_kit: formData.sale_kit_url || null,
-          fact_sheet: formData.fact_sheet_url || null,
-          roi_calculator: formData.roi_calculator_url || null
+          documents: formData.documents.filter(d => d.label.trim() && d.url.trim())
         },
         is_active: formData.is_active,
-        is_featured: formData.is_featured
+        is_featured: formData.is_featured,
+        master_plan_url: formData.master_plan_url || null,
+        location_lat: formData.location_lat ? parseFloat(formData.location_lat) : null,
+        location_lng: formData.location_lng ? parseFloat(formData.location_lng) : null,
+        nearby: formData.nearby.length > 0 ? formData.nearby : null
       };
 
       let dbError;
@@ -1008,55 +1028,253 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
                     </div>
                   </div>
 
-                  {/* Links */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <Label htmlFor="sale_kit_url" className="text-sm font-medium flex items-center gap-1.5">
-                        <ExternalLink className="w-3.5 h-3.5 text-orange-500" />
-                        Sale Kit
-                      </Label>
-                      <Input
-                        id="sale_kit_url"
-                        type="url"
-                        value={formData.sale_kit_url}
-                        onChange={(e) => setFormData(prev => ({ ...prev, sale_kit_url: e.target.value }))}
-                        placeholder="https://..."
-                        disabled={loading}
-                        className="mt-1.5"
-                      />
-                    </div>
+                  {/* Sale Kit — primary doc */}
+                  <div>
+                    <Label htmlFor="sale_kit_url" className="text-sm font-medium flex items-center gap-1.5">
+                      <ExternalLink className="w-3.5 h-3.5 text-orange-500" />
+                      Sale Kit (เอกสารขายหลัก)
+                    </Label>
+                    <Input
+                      id="sale_kit_url"
+                      type="url"
+                      value={formData.sale_kit_url}
+                      onChange={(e) => setFormData(prev => ({ ...prev, sale_kit_url: e.target.value }))}
+                      placeholder="https://drive.google.com/.../brochure.pdf"
+                      disabled={loading}
+                      className="mt-1.5"
+                    />
+                  </div>
 
-                    <div>
-                      <Label htmlFor="fact_sheet_url" className="text-sm font-medium flex items-center gap-1.5">
-                        <ExternalLink className="w-3.5 h-3.5 text-orange-500" />
-                        Fact Sheet
+                  {/* Flexible documents list */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="text-sm font-medium flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-orange-500" />
+                        เอกสารอื่นๆ
                       </Label>
-                      <Input
-                        id="fact_sheet_url"
-                        type="url"
-                        value={formData.fact_sheet_url}
-                        onChange={(e) => setFormData(prev => ({ ...prev, fact_sheet_url: e.target.value }))}
-                        placeholder="https://..."
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setFormData(prev => ({
+                          ...prev,
+                          documents: [...prev.documents, { label: '', url: '' }]
+                        }))}
                         disabled={loading}
-                        className="mt-1.5"
-                      />
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" /> เพิ่มเอกสาร
+                      </Button>
                     </div>
+                    {formData.documents.length === 0 ? (
+                      <p className="text-xs text-gray-500 italic">
+                        ใส่ได้ตามต้องการ — เช่น Fact Sheet, ROI Calculator, Floor Plan PDF, แบบสัญญา
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {formData.documents.map((doc, idx) => (
+                          <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                            <Input
+                              type="text"
+                              placeholder="ชื่อเอกสาร (เช่น Fact Sheet)"
+                              value={doc.label}
+                              onChange={(e) => {
+                                const next = [...formData.documents];
+                                next[idx] = { ...next[idx], label: e.target.value };
+                                setFormData(prev => ({ ...prev, documents: next }));
+                              }}
+                              className="col-span-4"
+                              disabled={loading}
+                            />
+                            <Input
+                              type="url"
+                              placeholder="https://..."
+                              value={doc.url}
+                              onChange={(e) => {
+                                const next = [...formData.documents];
+                                next[idx] = { ...next[idx], url: e.target.value };
+                                setFormData(prev => ({ ...prev, documents: next }));
+                              }}
+                              className="col-span-7"
+                              disabled={loading}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                const next = formData.documents.filter((_, i) => i !== idx);
+                                setFormData(prev => ({ ...prev, documents: next }));
+                              }}
+                              disabled={loading}
+                              className="col-span-1 text-red-500 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
+            {/* Section 4.5: ตำแหน่ง + ผังโครงการ + ทำเลใกล้เคียง */}
+            <Card className="border-2 border-amber-200 shadow-sm">
+              <CardContent className="p-0">
+                <div className="flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-200">
+                  <div className="p-1.5 bg-amber-600 rounded-lg">
+                    <ExternalLink className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 text-sm">ตำแหน่ง · ผังโครงการ · ทำเลใกล้เคียง</h3>
+                    <p className="text-xs text-gray-600">ข้อมูล PROPERTY HUB style สำหรับหน้ารายละเอียดยูนิต</p>
+                  </div>
+                </div>
+                <div className="p-5 space-y-4">
+                  {/* Master plan URL */}
+                  <div>
+                    <Label htmlFor="master_plan_url" className="text-sm font-medium">ผังโครงการ (URL รูป)</Label>
+                    <Input
+                      id="master_plan_url"
+                      type="url"
+                      value={formData.master_plan_url}
+                      onChange={(e) => setFormData(prev => ({ ...prev, master_plan_url: e.target.value }))}
+                      placeholder="https://... (รูป master plan ของโครงการ)"
+                      disabled={loading}
+                      className="mt-1.5"
+                    />
+                    {formData.master_plan_url && (
+                      <img
+                        src={formData.master_plan_url}
+                        alt="Master plan preview"
+                        className="mt-2 w-full max-h-48 object-cover rounded-lg border border-gray-200"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    )}
+                  </div>
+
+                  {/* Lat/Lng */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <Label htmlFor="roi_calculator_url" className="text-sm font-medium flex items-center gap-1.5">
-                        <ExternalLink className="w-3.5 h-3.5 text-orange-500" />
-                        ตารางคำนวณผลตอบแทน
-                      </Label>
+                      <Label htmlFor="location_lat" className="text-sm font-medium">ละติจูด (Latitude)</Label>
                       <Input
-                        id="roi_calculator_url"
-                        type="url"
-                        value={formData.roi_calculator_url}
-                        onChange={(e) => setFormData(prev => ({ ...prev, roi_calculator_url: e.target.value }))}
-                        placeholder="https://..."
+                        id="location_lat"
+                        type="number"
+                        step="0.0001"
+                        value={formData.location_lat}
+                        onChange={(e) => setFormData(prev => ({ ...prev, location_lat: e.target.value }))}
+                        placeholder="13.6358"
                         disabled={loading}
                         className="mt-1.5"
                       />
                     </div>
+                    <div>
+                      <Label htmlFor="location_lng" className="text-sm font-medium">ลองจิจูด (Longitude)</Label>
+                      <Input
+                        id="location_lng"
+                        type="number"
+                        step="0.0001"
+                        value={formData.location_lng}
+                        onChange={(e) => setFormData(prev => ({ ...prev, location_lng: e.target.value }))}
+                        placeholder="100.7058"
+                        disabled={loading}
+                        className="mt-1.5"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 -mt-2">
+                    💡 หาพิกัดได้จาก Google Maps → คลิกขวาตำแหน่ง → คัดลอกตัวเลขชุดแรกเป็น lat, ชุดสองเป็น lng
+                  </p>
+
+                  {/* Nearby list editor */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="text-sm font-medium">ทำเลใกล้เคียง</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setFormData(prev => ({
+                          ...prev,
+                          nearby: [...prev.nearby, { name: '', type: 'shopping', distance_km: 0 }]
+                        }))}
+                        disabled={loading}
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" /> เพิ่มสถานที่
+                      </Button>
+                    </div>
+                    {formData.nearby.length === 0 ? (
+                      <p className="text-xs text-gray-500 italic">ยังไม่มีสถานที่ใกล้เคียง — กดปุ่ม "เพิ่มสถานที่"</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {formData.nearby.map((place, idx) => (
+                          <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                            <Input
+                              type="text"
+                              placeholder="ชื่อสถานที่"
+                              value={place.name}
+                              onChange={(e) => {
+                                const next = [...formData.nearby];
+                                next[idx] = { ...next[idx], name: e.target.value };
+                                setFormData(prev => ({ ...prev, nearby: next }));
+                              }}
+                              className="col-span-5"
+                              disabled={loading}
+                            />
+                            <Select
+                              value={place.type}
+                              onValueChange={(v) => {
+                                const next = [...formData.nearby];
+                                next[idx] = { ...next[idx], type: v };
+                                setFormData(prev => ({ ...prev, nearby: next }));
+                              }}
+                            >
+                              <SelectTrigger className="col-span-4">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="shopping">🏬 ห้าง / shopping</SelectItem>
+                                <SelectItem value="transit">🚇 รถไฟฟ้า / transit</SelectItem>
+                                <SelectItem value="hospital">🏥 โรงพยาบาล</SelectItem>
+                                <SelectItem value="school">🏫 โรงเรียน</SelectItem>
+                                <SelectItem value="airport">✈️ สนามบิน</SelectItem>
+                                <SelectItem value="beach">🏖 ชายหาด</SelectItem>
+                                <SelectItem value="market">🍜 ตลาด</SelectItem>
+                                <SelectItem value="landmark">🛕 สถานที่สำคัญ</SelectItem>
+                                <SelectItem value="leisure">⛳ พักผ่อน</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              placeholder="กม."
+                              value={place.distance_km}
+                              onChange={(e) => {
+                                const next = [...formData.nearby];
+                                next[idx] = { ...next[idx], distance_km: parseFloat(e.target.value) || 0 };
+                                setFormData(prev => ({ ...prev, nearby: next }));
+                              }}
+                              className="col-span-2"
+                              disabled={loading}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                const next = formData.nearby.filter((_, i) => i !== idx);
+                                setFormData(prev => ({ ...prev, nearby: next }));
+                              }}
+                              disabled={loading}
+                              className="col-span-1 text-red-500 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>

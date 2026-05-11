@@ -17,9 +17,11 @@ import {
   Inbox,
   AlertTriangle,
   Home,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import CloneAssignmentsModal, { CloneUser } from "./CloneAssignmentsModal";
 
 interface SalesUser {
   id: string;
@@ -70,6 +72,7 @@ export const SalesUnitMatrix = () => {
   const canEdit = isOwner || isAdmin;
 
   const [selectedSalesId, setSelectedSalesId] = useState<string | null>(null);
+  const [cloneOpen, setCloneOpen] = useState(false);
   const [salesSearch, setSalesSearch] = useState("");
   const [unitSearch, setUnitSearch] = useState("");
 
@@ -166,7 +169,7 @@ export const SalesUnitMatrix = () => {
     }
   }, [salesUsers, selectedSalesId]);
 
-  const selectedSales = useMemo(
+  const selectedSales: SalesUser | undefined = useMemo(
     () => salesUsers.find((s) => s.id === selectedSalesId),
     [salesUsers, selectedSalesId]
   );
@@ -199,6 +202,27 @@ export const SalesUnitMatrix = () => {
 
   const isAssigned = (salesId: string, unitId: string) =>
     assignments.some((a) => a.sales_user_id === salesId && a.unit_id === unitId);
+
+  /* ───── Clone helpers ───── */
+  const cloneAllUsers: CloneUser[] = useMemo(
+    () =>
+      salesUsers.map((s) => ({
+        id: s.id,
+        name: s.full_name || s.email,
+        email: s.email,
+        tenantId: s.tenant_id,
+        tenantName: s.tenant_name,
+        subtitle: s.email,
+      })),
+    [salesUsers]
+  );
+
+  const getItemsForSales = (userId: string) =>
+    assignments.filter((a) => a.sales_user_id === userId).map((a) => a.unit_id);
+
+  const selectedSalesItemCount = selectedSales ? getItemsForSales(selectedSales.id).length : 0;
+  const hasOtherSameTenant = !!selectedSales &&
+    salesUsers.some((s) => s.id !== selectedSales.id && s.tenant_id === selectedSales.tenant_id);
 
   /* Group sales by tenant */
   const salesByTenant = useMemo(() => {
@@ -512,6 +536,22 @@ export const SalesUnitMatrix = () => {
                     <X className="w-4 h-4 mr-1" />
                     ล้างทั้งหมด{unitSearch && " (ที่กรอง)"}
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!canEdit || selectedSalesItemCount === 0 || !hasOtherSameTenant}
+                    onClick={() => setCloneOpen(true)}
+                    title={
+                      selectedSalesItemCount === 0
+                        ? "Sales คนนี้ยังไม่มียูนิตที่รับผิดชอบ"
+                        : !hasOtherSameTenant
+                        ? "ไม่มี Sales คนอื่นใน tenant เดียวกัน"
+                        : "โคลนสิทธิ์ยูนิตไปยัง Sales คนอื่น"
+                    }
+                  >
+                    <Copy className="w-4 h-4 mr-1" />
+                    โคลนสิทธิ์
+                  </Button>
                 </div>
 
                 {filteredUnits.length === 0 ? (
@@ -539,10 +579,7 @@ export const SalesUnitMatrix = () => {
                               <label
                                 key={u.id}
                                 className={cn(
-                                  "flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-all",
-                                  checked
-                                    ? "bg-chateau-50 border border-chateau-100"
-                                    : "border border-gray-200 hover:bg-gray-50",
+                                  "flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-all border border-gray-200 hover:bg-gray-50",
                                   !canEdit && "cursor-not-allowed opacity-90"
                                 )}
                               >
@@ -598,6 +635,25 @@ export const SalesUnitMatrix = () => {
           </CardContent>
         </Card>
       </div>
+
+      <CloneAssignmentsModal
+        open={cloneOpen}
+        onClose={() => setCloneOpen(false)}
+        allUsers={cloneAllUsers}
+        getItemsFor={getItemsForSales}
+        getItemName={(id) => {
+          const u = units.find((x) => x.id === id);
+          if (!u) return id;
+          return u.project_name ? `${u.unit_number} · ${u.project_name}` : u.unit_number;
+        }}
+        initialSourceId={selectedSales?.id}
+        itemLabel="ยูนิต"
+        roleLabel="Sales"
+        table="sales_unit_assignments"
+        userColumn="sales_user_id"
+        itemColumn="unit_id"
+        queryKeyPrefix="permissions"
+      />
     </div>
   );
 };

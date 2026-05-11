@@ -16,9 +16,11 @@ import {
   MapPin,
   Inbox,
   Home,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import CloneAssignmentsModal, { CloneUser } from "./CloneAssignmentsModal";
 
 interface AgentUser {
   id: string;
@@ -65,6 +67,7 @@ export const AgentUnitMatrix = () => {
   const canEdit = isOwner || isAdmin;
 
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [cloneOpen, setCloneOpen] = useState(false);
   const [agentSearch, setAgentSearch] = useState("");
   const [unitSearch, setUnitSearch] = useState("");
 
@@ -172,6 +175,27 @@ export const AgentUnitMatrix = () => {
 
   const isAssigned = (agentId: string, unitId: string) =>
     assignments.some((a) => a.agent_user_id === agentId && a.unit_id === unitId);
+
+  /* ───── Clone helpers ───── */
+  const cloneAllUsers: CloneUser[] = useMemo(
+    () =>
+      agents.map((a) => ({
+        id: a.id,
+        name: a.full_name || a.email,
+        email: a.email,
+        tenantId: a.tenant_id,
+        tenantName: a.tenant_name,
+        subtitle: a.email,
+      })),
+    [agents]
+  );
+
+  const getItemsForAgent = (userId: string) =>
+    assignments.filter((a) => a.agent_user_id === userId).map((a) => a.unit_id);
+
+  const selectedAgentItemCount = selectedAgent ? getItemsForAgent(selectedAgent.id).length : 0;
+  const hasOtherSameTenant = !!selectedAgent &&
+    agents.some((a) => a.id !== selectedAgent.id && a.tenant_id === selectedAgent.tenant_id);
 
   /* Group agents by tenant */
   const agentsByTenant = useMemo(() => {
@@ -472,6 +496,22 @@ export const AgentUnitMatrix = () => {
                     <X className="w-4 h-4 mr-1" />
                     ล้างทั้งหมด{unitSearch && " (ที่กรอง)"}
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!canEdit || selectedAgentItemCount === 0 || !hasOtherSameTenant}
+                    onClick={() => setCloneOpen(true)}
+                    title={
+                      selectedAgentItemCount === 0
+                        ? "Agent คนนี้ยังไม่มียูนิตที่รับผิดชอบ"
+                        : !hasOtherSameTenant
+                        ? "ไม่มี Agent คนอื่นใน tenant เดียวกัน"
+                        : "โคลนสิทธิ์ยูนิตไปยัง Agent คนอื่น"
+                    }
+                  >
+                    <Copy className="w-4 h-4 mr-1" />
+                    โคลนสิทธิ์
+                  </Button>
                 </div>
 
                 {filteredUnits.length === 0 ? (
@@ -499,10 +539,7 @@ export const AgentUnitMatrix = () => {
                               <label
                                 key={u.id}
                                 className={cn(
-                                  "flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-all",
-                                  checked
-                                    ? "bg-amber-50 border border-amber-200"
-                                    : "border border-gray-200 hover:bg-gray-50",
+                                  "flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-all border border-gray-200 hover:bg-gray-50",
                                   !canEdit && "cursor-not-allowed opacity-90"
                                 )}
                               >
@@ -560,6 +597,25 @@ export const AgentUnitMatrix = () => {
           </CardContent>
         </Card>
       </div>
+
+      <CloneAssignmentsModal
+        open={cloneOpen}
+        onClose={() => setCloneOpen(false)}
+        allUsers={cloneAllUsers}
+        getItemsFor={getItemsForAgent}
+        getItemName={(id) => {
+          const u = units.find((x) => x.id === id);
+          if (!u) return id;
+          return u.project_name ? `${u.unit_number} · ${u.project_name}` : u.unit_number;
+        }}
+        initialSourceId={selectedAgent?.id}
+        itemLabel="ยูนิต"
+        roleLabel="Agent"
+        table="agent_unit_assignments"
+        userColumn="agent_user_id"
+        itemColumn="unit_id"
+        queryKeyPrefix="permissions"
+      />
     </div>
   );
 };

@@ -15,9 +15,11 @@ import {
   X,
   MapPin,
   Inbox,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import CloneAssignmentsModal, { CloneUser } from "./CloneAssignmentsModal";
 
 interface SalesUser {
   id: string;
@@ -62,6 +64,7 @@ export const SalesProjectMatrix = () => {
   const canEdit = isOwner || isAdmin;
 
   const [selectedSalesId, setSelectedSalesId] = useState<string | null>(null);
+  const [cloneOpen, setCloneOpen] = useState(false);
   const [salesSearch, setSalesSearch] = useState("");
   const [projectSearch, setProjectSearch] = useState("");
 
@@ -133,6 +136,27 @@ export const SalesProjectMatrix = () => {
     () => (selectedSales ? projects.filter((p) => p.tenant_id === selectedSales.tenant_id) : []),
     [projects, selectedSales]
   );
+
+  /* ───── Clone helpers ───── */
+  const cloneAllUsers: CloneUser[] = useMemo(
+    () =>
+      salesUsers.map((s) => ({
+        id: s.id,
+        name: s.full_name || s.email,
+        email: s.email,
+        tenantId: s.tenant_id,
+        tenantName: s.tenant_name,
+        subtitle: s.email,
+      })),
+    [salesUsers]
+  );
+
+  const getItemsForSales = (userId: string) =>
+    assignments.filter((a) => a.sales_user_id === userId).map((a) => a.project_id);
+
+  const selectedSalesItemCount = selectedSales ? getItemsForSales(selectedSales.id).length : 0;
+  const hasOtherSameTenant = !!selectedSales &&
+    salesUsers.some((s) => s.id !== selectedSales.id && s.tenant_id === selectedSales.tenant_id);
 
   const filteredProjects = useMemo(() => {
     const q = projectSearch.trim().toLowerCase();
@@ -421,6 +445,22 @@ export const SalesProjectMatrix = () => {
                     <X className="w-4 h-4 mr-1" />
                     ล้างทั้งหมด{projectSearch && " (ที่กรอง)"}
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!canEdit || selectedSalesItemCount === 0 || !hasOtherSameTenant}
+                    onClick={() => setCloneOpen(true)}
+                    title={
+                      selectedSalesItemCount === 0
+                        ? "Sales คนนี้ยังไม่มีโครงการที่ดูแล"
+                        : !hasOtherSameTenant
+                        ? "ไม่มี Sales คนอื่นใน tenant เดียวกัน"
+                        : "โคลนสิทธิ์ไปยัง Sales คนอื่น"
+                    }
+                  >
+                    <Copy className="w-4 h-4 mr-1" />
+                    โคลนสิทธิ์
+                  </Button>
                 </div>
 
                 {filteredProjects.length === 0 ? (
@@ -440,10 +480,7 @@ export const SalesProjectMatrix = () => {
                         <label
                           key={p.id}
                           className={cn(
-                            "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all",
-                            checked
-                              ? "bg-chateau-50 border border-chateau-100"
-                              : "border border-gray-200 hover:bg-gray-50",
+                            "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all border border-gray-200 hover:bg-gray-50",
                             !canEdit && "cursor-not-allowed opacity-90"
                           )}
                         >
@@ -488,6 +525,21 @@ export const SalesProjectMatrix = () => {
           </CardContent>
         </Card>
       </div>
+
+      <CloneAssignmentsModal
+        open={cloneOpen}
+        onClose={() => setCloneOpen(false)}
+        allUsers={cloneAllUsers}
+        getItemsFor={getItemsForSales}
+        getItemName={(id) => projects.find((p) => p.id === id)?.name || id}
+        initialSourceId={selectedSales?.id}
+        itemLabel="โครงการ"
+        roleLabel="Sales"
+        table="sales_project_assignments"
+        userColumn="sales_user_id"
+        itemColumn="project_id"
+        queryKeyPrefix="permissions"
+      />
     </div>
   );
 };

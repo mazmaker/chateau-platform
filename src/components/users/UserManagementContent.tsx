@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useCallback } from "react";
-import { Search, Plus, User, Shield, ToggleLeft, ToggleRight, Trash2, Edit, UserPlus, Sparkles, Paperclip, Key } from "lucide-react";
+import { Search, Plus, User, Shield, ToggleLeft, ToggleRight, Trash2, Edit, UserPlus, Paperclip, Key } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,6 @@ import { supabase } from "@/lib/supabase";
 import InviteUserModal from "./InviteUserModal";
 import EditUserModal from "./EditUserModal";
 import UserAccountManagement from "./UserAccountManagement";
-import DemoUserModal from "./DemoUserModal";
 import { toast } from "sonner";
 
 type UserRole = 'owner' | 'admin' | 'sales' | 'agent' | 'customer';
@@ -49,7 +48,6 @@ const UserManagementContent = () => {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAccountManagementModal, setShowAccountManagementModal] = useState(false);
-  const [showDemoModal, setShowDemoModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [deletingUser, setDeletingUser] = useState<UserData | null>(null);
@@ -357,14 +355,6 @@ const UserManagementContent = () => {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button
-                onClick={() => setShowDemoModal(true)}
-                variant="outline"
-                className="flex items-center gap-2 border-chateau-200 text-chateau-600 hover:bg-chateau-50"
-              >
-                <Sparkles className="w-4 h-4" />
-                ทดสอบ
-              </Button>
               <Button
                 onClick={() => setShowInviteModal(true)}
                 className="flex items-center gap-2 bg-gray-900 hover:bg-black text-white shadow-lg"
@@ -693,13 +683,6 @@ const UserManagementContent = () => {
           </div>
         </CardContent>
       </Card>
-
-      {/* Demo User Modal */}
-      <DemoUserModal
-        isOpen={showDemoModal}
-        onClose={() => setShowDemoModal(false)}
-        onSuccess={fetchUsers}
-      />
 
       {/* Invite User Modal */}
       <InviteUserModal
