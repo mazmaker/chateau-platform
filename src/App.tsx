@@ -23,6 +23,7 @@ import AdminCustomization from "./pages/AdminCustomization";
 import Analytics from "./pages/Analytics";
 import ApiManagement from "./pages/ApiManagement";
 import Settings from "./pages/Settings";
+import Permissions from "./pages/Permissions";
 import SetupPassword from "./pages/SetupPassword";
 import AcceptInvite from "./pages/AcceptInvite";
 import ForcePasswordChange from "./pages/ForcePasswordChange";
@@ -328,6 +329,19 @@ const App = () => (
             <ErrorBoundary showRetry showHome errorMessage="ไม่สามารถโหลด Marketing Analytics ได้" context={{ page: 'marketing-analytics' }}>
               <ProtectedRouteSimple>
                 <MarketingAnalytics />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/permissions" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้าสิทธิ์ผู้ใช้งานได้"
+              context={{ page: 'permissions' }}
+            >
+              <ProtectedRouteSimple>
+                <Permissions />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />

@@ -53,7 +53,7 @@ const NAV_GROUPS: NavGroup[] = [
   { id: "crm",       label: "CRM & SALES",     icon: Users,     hrefs: ["/leads"] },
   { id: "marketing", label: "MARKETING",       icon: Megaphone, hrefs: ["/campaigns", "/builder", "/triggers", "/marketing-analytics"] },
   { id: "developer", label: "DEVELOPER",       icon: Code2,     hrefs: ["/api"] },
-  { id: "admin",     label: "ADMIN",           icon: Wrench,    hrefs: ["/users", "/customization", "/settings"] },
+  { id: "admin",     label: "ADMIN",           icon: Wrench,    hrefs: ["/users", "/permissions", "/customization", "/settings"] },
 ];
 
 const getAllNavItems = (): NavItem[] => [
@@ -70,6 +70,7 @@ const getAllNavItems = (): NavItem[] => [
   { icon: BarChart3,       label: "Marketing Analytics",href: "/marketing-analytics", requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Key,             label: "การจัดการ API",        href: "/api",           requiredRoles: ["OWNER", "ADMIN"], requiredFeature: "api_access", isPremium: true },
   { icon: Users,           label: "จัดการผู้ใช้",          href: "/users",         requiredRoles: ["OWNER", "ADMIN"] },
+  { icon: Lock,            label: "สิทธิ์ผู้ใช้งาน",        href: "/permissions",   requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Palette,         label: "ปรับแต่งระบบ",         href: "/customization", requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Settings,        label: "การตั้งค่า",           href: "/settings",      requiredRoles: ["OWNER", "ADMIN", "SALES"] },
   { icon: LogOut,          label: "ออกจากระบบ",          href: "/logout",        isLogout: true },
