@@ -238,7 +238,7 @@ const LeadManagement = () => {
           *,
           customer:customers(id, full_name, email, phone, preferences),
           property:properties(id, name),
-          unit:units(id, unit_number, price)
+          unit:units!leads_unit_id_fkey(id, unit_number, price)
         `)
         .eq('tenant_id', currentTenant?.id)
         .order('created_at', { ascending: false });

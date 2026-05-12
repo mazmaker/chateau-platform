@@ -375,7 +375,7 @@ export const SalesUnitMatrix = () => {
           <ShieldCheck className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <div>
             <p className="font-medium">โหมดดูอย่างเดียว</p>
-            <p className="text-xs">เฉพาะ Owner / Admin เท่านั้นที่แก้ไข Sales × Units ได้</p>
+            <p className="text-xs">เฉพาะ Owner / Admin เท่านั้นที่แก้ไขสิทธิ์ Sales ดูแลยูนิตได้</p>
           </div>
         </div>
       )}
@@ -459,7 +459,7 @@ export const SalesUnitMatrix = () => {
                 <h4 className="font-semibold text-gray-900 mb-1">Sales ยังไม่ได้รับสิทธิ์โครงการ</h4>
                 <p className="text-sm text-gray-600 mb-4">
                   กำหนดสิทธิ์โครงการให้ <strong>{selectedSales.full_name || selectedSales.email}</strong> ก่อน
-                  <br />ที่ Tab <strong>"Sales × Projects"</strong>
+                  <br />ที่ Tab <strong>"สิทธิ์ Sales ดูแลโครงการ"</strong>
                 </p>
                 <p className="text-xs text-gray-500">
                   หลังจากนั้น units ของโครงการที่ assigned จะขึ้นมาให้เลือกที่นี่

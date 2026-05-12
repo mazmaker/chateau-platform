@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { ViewPropertiesGuard, ManagePropertiesGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
@@ -76,7 +76,8 @@ import {
   Save,
   AlertTriangle,
   LayoutGrid,
-  List
+  List,
+  Check
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -85,6 +86,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/lib/supabase';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import CreateProjectModal from '@/components/properties/CreateProjectModal';
 import AddLeadModal from '@/components/leads/AddLeadModal';
@@ -137,7 +139,17 @@ interface Unit {
   pool?: boolean;
   parking_spaces?: number;
   images: string[];
+  thumbnail_url?: string | null;
   status: 'available' | 'reserved' | 'sold' | 'unavailable';
+  locked_by?: string | null;
+  locked_until?: string | null;
+  locked_by_name?: string | null;
+  reserved_customer_name?: string | null;
+  reserved_customer_phone?: string | null;
+  reserved_customer_lead_id?: string | null;
+  deposit_amount?: number | null;
+  reservation_date?: string | null;
+  reservation_notes?: string | null;
   promo_price?: number | null;
   plot_number?: string | null;
   view?: string | null;
@@ -150,6 +162,7 @@ interface Unit {
 
 const PropertyManagement = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { currentTenant, userRole, user } = useSimpleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -163,6 +176,237 @@ const PropertyManagement = () => {
   const [unitViewMode, setUnitViewMode] = useState<'grid' | 'list'>('grid');
   const [mySalesUnitIds, setMySalesUnitIds] = useState<Set<string>>(new Set());
   const [masterPlanImgError, setMasterPlanImgError] = useState(false);
+  const [showReserveDialog, setShowReserveDialog] = useState(false);
+  const [savingReserve, setSavingReserve] = useState(false);
+  const [bookingForm, setBookingForm] = useState({
+    lead_id: '',
+    deposit_amount: '',
+    expiry_days: 14,
+    notes: '',
+  });
+  const [allTenantLeads, setAllTenantLeads] = useState<any[]>([]);
+  const [pendingEditUnitId, setPendingEditUnitId] = useState<string | null>(null);
+  const [scrollProjectFormTo, setScrollProjectFormTo] = useState<'location' | null>(null);
+  const [now, setNow] = useState<number>(Date.now());
+
+  // Tick every 30s so countdowns update without spamming render
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Returns { text, urgent, expired } for a locked_until ISO string
+  const formatCountdown = (lockedUntil?: string | null) => {
+    if (!lockedUntil) return null;
+    const diff = new Date(lockedUntil).getTime() - now;
+    if (diff <= 0) return { text: 'หมดอายุแล้ว', urgent: true, expired: true };
+    const days = Math.floor(diff / 86400000);
+    const hours = Math.floor((diff % 86400000) / 3600000);
+    const mins = Math.floor((diff % 3600000) / 60000);
+    const urgent = diff < 86400000; // under 1 day
+    if (days > 0) return { text: `${days} วัน ${hours} ชม.`, urgent, expired: false };
+    if (hours > 0) return { text: `${hours} ชม. ${mins} นาที`, urgent, expired: false };
+    return { text: `${mins} นาที`, urgent, expired: false };
+  };
+
+  // Map raw lead status (English) → Thai display label
+  const leadStatusLabel = (status?: string | null): string => {
+    if (!status) return '-';
+    const map: Record<string, string> = {
+      new: 'ใหม่',
+      contacted: 'ติดต่อแล้ว',
+      qualified: 'มีคุณสมบัติ',
+      negotiating: 'กำลังเจรจา',
+      negotiation: 'กำลังเจรจา',
+      proposal: 'เสนอขาย',
+      won: 'ปิดดีล',
+      closed: 'ปิดการขาย',
+      lost: 'สูญเสีย',
+    };
+    return map[status] || status;
+  };
+
+  const fetchAllTenantLeads = async () => {
+    if (!currentTenant?.id) return;
+    const { data, error } = await supabase
+      .from('leads')
+      .select('id, status, customer:customers(full_name, phone, email)')
+      .eq('tenant_id', currentTenant.id)
+      .order('created_at', { ascending: false });
+    if (!error) setAllTenantLeads(data || []);
+  };
+
+  const openReserveDialog = async () => {
+    setBookingForm({
+      lead_id: '',
+      deposit_amount: '',
+      expiry_days: 14,
+      notes: '',
+    });
+    await fetchAllTenantLeads();
+    setShowReserveDialog(true);
+  };
+
+  const handleReserveUnit = async () => {
+    if (!viewingUnit || !user) return;
+
+    if (!bookingForm.lead_id) {
+      toast.error('กรุณาเลือก Lead');
+      return;
+    }
+    const lead = allTenantLeads.find((l: any) => l.id === bookingForm.lead_id);
+    if (!lead) {
+      toast.error('ไม่พบ Lead ที่เลือก');
+      return;
+    }
+    const customerName = lead.customer?.full_name || '';
+    const customerPhone = lead.customer?.phone || '';
+    const linkedLeadId: string = lead.id;
+
+    if (!bookingForm.deposit_amount || parseFloat(bookingForm.deposit_amount) <= 0) {
+      toast.error('กรุณากรอกจำนวนเงินจอง');
+      return;
+    }
+
+    setSavingReserve(true);
+    try {
+      const nowDate = new Date();
+      const lockedUntil = new Date(nowDate.getTime() + bookingForm.expiry_days * 86400000).toISOString();
+      const updateData = {
+        status: 'reserved',
+        locked_by: user.id,
+        locked_until: lockedUntil,
+        reservation_date: nowDate.toISOString(),
+        reserved_customer_name: customerName,
+        reserved_customer_phone: customerPhone || null,
+        reserved_customer_lead_id: linkedLeadId,
+        deposit_amount: parseFloat(bookingForm.deposit_amount),
+        reservation_notes: bookingForm.notes.trim() || null,
+      };
+      const { data, error } = await supabase
+        .from('units')
+        .update(updateData)
+        .eq('id', viewingUnit.id)
+        .select('id');
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error('ไม่มีสิทธิ์บันทึกการจอง');
+
+      // If linked to a lead → auto-update lead.status to 'won'
+      // AND auto-create lead_interests row if this lead wasn't already linked to this unit
+      if (linkedLeadId) {
+        await supabase
+          .from('leads')
+          .update({ status: 'won' })
+          .eq('id', linkedLeadId);
+
+        const alreadyInterested = unitLeads.some((li: any) => li.leads?.id === linkedLeadId);
+        if (!alreadyInterested) {
+          await supabase
+            .from('lead_interests')
+            .insert({
+              lead_id: linkedLeadId,
+              unit_id: viewingUnit.id,
+              property_id: viewingUnit.project_id,
+              tenant_id: currentTenant?.id,
+              interest_level: 'high',
+              status: 'interested',
+            });
+        }
+      }
+
+      toast.success(`บันทึกการจองยูนิต ${viewingUnit.unit_number} สำหรับ ${customerName}`);
+      setShowReserveDialog(false);
+      if (selectedProperty) await fetchUnits(selectedProperty.id);
+      await fetchUnitLeads(viewingUnit.id);
+      setViewingUnit(prev => prev ? {
+        ...prev,
+        status: 'reserved',
+        locked_by: user.id,
+        locked_until: lockedUntil,
+        locked_by_name: prev.locked_by_name || user.email || null,
+        reservation_date: updateData.reservation_date,
+        reserved_customer_name: updateData.reserved_customer_name,
+        reserved_customer_phone: updateData.reserved_customer_phone,
+        deposit_amount: updateData.deposit_amount,
+        reservation_notes: updateData.reservation_notes,
+      } : null);
+    } catch (err: any) {
+      toast.error(err.message || 'บันทึกไม่สำเร็จ');
+    } finally {
+      setSavingReserve(false);
+    }
+  };
+
+  const handleMarkAsSold = async () => {
+    if (!viewingUnit) return;
+    if (!confirm(`ปิดการขายยูนิต ${viewingUnit.unit_number}? (สถานะจะเปลี่ยนเป็น "ขายแล้ว" — เก็บข้อมูลผู้ซื้อไว้)`)) return;
+    try {
+      const { data, error } = await supabase
+        .from('units')
+        .update({
+          status: 'sold',
+          locked_until: null, // remove timer
+        })
+        .eq('id', viewingUnit.id)
+        .select('id');
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error('ไม่มีสิทธิ์ปิดการขาย');
+
+      // Sync linked lead → won (if not already)
+      if (viewingUnit.reserved_customer_lead_id) {
+        await supabase
+          .from('leads')
+          .update({ status: 'won' })
+          .eq('id', viewingUnit.reserved_customer_lead_id);
+      }
+
+      toast.success(`ปิดการขายยูนิต ${viewingUnit.unit_number} สำเร็จ`);
+      if (selectedProperty) await fetchUnits(selectedProperty.id);
+      setViewingUnit(prev => prev ? { ...prev, status: 'sold', locked_until: null } : null);
+    } catch (err: any) {
+      toast.error(err.message || 'ปิดการขายไม่สำเร็จ');
+    }
+  };
+
+  const handleCancelReservation = async () => {
+    if (!viewingUnit) return;
+    if (!confirm('ยกเลิกการจองยูนิตนี้? (ข้อมูลผู้จอง + เงินจองจะถูกลบ)')) return;
+    try {
+      const { data, error } = await supabase
+        .from('units')
+        .update({
+          status: 'available',
+          locked_by: null,
+          locked_until: null,
+          reservation_date: null,
+          reserved_customer_name: null,
+          reserved_customer_phone: null,
+          reserved_customer_lead_id: null,
+          deposit_amount: null,
+          reservation_notes: null,
+        })
+        .eq('id', viewingUnit.id)
+        .select('id');
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error('ไม่มีสิทธิ์ยกเลิก');
+      toast.success(`ยกเลิกจองยูนิต ${viewingUnit.unit_number}`);
+      if (selectedProperty) await fetchUnits(selectedProperty.id);
+      setViewingUnit(prev => prev ? {
+        ...prev,
+        status: 'available',
+        locked_by: null,
+        locked_until: null,
+        locked_by_name: null,
+        reservation_date: null,
+        reserved_customer_name: null,
+        reserved_customer_phone: null,
+        deposit_amount: null,
+        reservation_notes: null,
+      } : null);
+    } catch (err: any) {
+      toast.error(err.message || 'ยกเลิกไม่สำเร็จ');
+    }
+  };
 
   // Dialog states
   const [showPropertyDialog, setShowPropertyDialog] = useState(false);
@@ -178,6 +422,13 @@ const PropertyManagement = () => {
   const [selectedUnitForLead, setSelectedUnitForLead] = useState<{ propertyId: string; propertyName: string; unitId: string; unitNumber: string } | null>(null);
   const [unitLeads, setUnitLeads] = useState<any[]>([]);
   const [minPrices, setMinPrices] = useState<Record<string, number>>({});
+  const [projectAggregates, setProjectAggregates] = useState<{
+    totalUnits: number;
+    availableUnits: number;
+    soldUnits: number;
+    reservedUnits: number;
+    totalValue: number;
+  }>({ totalUnits: 0, availableUnits: 0, soldUnits: 0, reservedUnits: 0, totalValue: 0 });
 
   // Form states
   // Note: propertyForm state removed — CreateProjectModal manages its own form state
@@ -192,8 +443,7 @@ const PropertyManagement = () => {
     price: '',
     thumbnail: null as File | null,
     thumbnail_preview: '',
-    images: [] as File[],
-    image_previews: [] as string[],
+    image_items: [] as { url: string; file?: File }[],
     description: '',
     status: 'available' as Unit['status'],
     promo_price: '',
@@ -201,7 +451,13 @@ const PropertyManagement = () => {
     view: '',
     furnishing: '' as '' | 'fully' | 'partial' | 'unfurnished',
     floor_plan_url: '',
-    tour_3d_url: ''
+    tour_3d_url: '',
+    parking_spaces: '',
+    facing_direction: '',
+    building: '',
+    pool: false,
+    garden: false,
+    balcony: false
   });
 
   useEffect(() => {
@@ -223,6 +479,45 @@ const PropertyManagement = () => {
       fetchMinPrices(propertyIds);
     }
   }, [properties]);
+
+  // Auto-select project from URL ?project=<id> (used when returning from Unit Detail)
+  // Also handles ?editProject=1 (open project edit) and ?editUnit=<id> (open unit edit)
+  useEffect(() => {
+    const projectId = searchParams.get('project');
+    const editProject = searchParams.get('editProject');
+    const editUnitId = searchParams.get('editUnit');
+    if (!projectId || properties.length === 0) return;
+
+    const target = properties.find((p) => p.id === projectId);
+    if (!target) return;
+
+    setSelectedProperty(target);
+    if (editProject === '1') {
+      setEditingProperty(target);
+      setShowPropertyDialog(true);
+      setScrollProjectFormTo('location');
+    }
+    if (editUnitId) {
+      setPendingEditUnitId(editUnitId);
+    }
+
+    // Strip handled params (editUnit stripped after consumed below)
+    searchParams.delete('project');
+    if (editProject) searchParams.delete('editProject');
+    setSearchParams(searchParams, { replace: true });
+  }, [searchParams, properties]);
+
+  // Consume pending editUnit once units are loaded
+  useEffect(() => {
+    if (!pendingEditUnitId || units.length === 0) return;
+    const unitToEdit = units.find((u) => u.id === pendingEditUnitId);
+    if (unitToEdit) {
+      handleEditUnit(unitToEdit);
+      setPendingEditUnitId(null);
+      searchParams.delete('editUnit');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [pendingEditUnitId, units]);
 
   // Reset master plan image error when switching unit/project
   useEffect(() => {
@@ -330,6 +625,21 @@ const PropertyManagement = () => {
         .eq('project_id', projectId)
         .order('unit_number', { ascending: true });
 
+      // Fetch reservation user names separately (no FK so can't embed via PostgREST)
+      const reservedByIds = Array.from(
+        new Set((data || []).map((u: any) => u.locked_by).filter(Boolean))
+      );
+      const reservedByMap: Record<string, string> = {};
+      if (reservedByIds.length > 0) {
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, full_name, email')
+          .in('id', reservedByIds);
+        (usersData || []).forEach((u: any) => {
+          reservedByMap[u.id] = u.full_name || u.email;
+        });
+      }
+
       if (error) {
         console.error('Error fetching units:', error);
         setUnits([]);
@@ -356,7 +666,17 @@ const PropertyManagement = () => {
         pool: unit.pool || false,
         parking_spaces: unit.parking_spaces || 0,
         images: unit.images || [],
+        thumbnail_url: unit.thumbnail_url,
         status: unit.status || 'available',
+        locked_by: unit.locked_by,
+        locked_until: unit.locked_until,
+        locked_by_name: unit.locked_by ? (reservedByMap[unit.locked_by] || null) : null,
+        reserved_customer_name: unit.reserved_customer_name,
+        reserved_customer_phone: unit.reserved_customer_phone,
+        reserved_customer_lead_id: unit.reserved_customer_lead_id,
+        deposit_amount: unit.deposit_amount,
+        reservation_date: unit.reservation_date,
+        reservation_notes: unit.reservation_notes,
         promo_price: unit.promo_price,
         plot_number: unit.plot_number,
         view: unit.view,
@@ -374,32 +694,44 @@ const PropertyManagement = () => {
     }
   };
 
-  // Fetch minimum prices from units for all properties
+  // Fetch unit aggregates (min price per project + global counts/value) for all properties
   const fetchMinPrices = async (propertyIds: string[]) => {
     if (!currentTenant || propertyIds.length === 0) return;
 
     try {
       const { data, error } = await supabase
         .from('units')
-        .select('project_id, price')
+        .select('project_id, price, status')
         .eq('tenant_id', currentTenant.id)
-        .in('project_id', propertyIds)
-        .gt('price', 0);
+        .in('project_id', propertyIds);
 
       if (error) {
-        console.error('Error fetching min prices:', error);
+        console.error('Error fetching unit aggregates:', error);
         return;
       }
 
-      // Group by project_id and find minimum price
+      // Min price per project (positive prices only)
       const priceMap: Record<string, number> = {};
-      (data || []).forEach((unit: { project_id: string; price: number }) => {
-        if (!priceMap[unit.project_id] || unit.price < priceMap[unit.project_id]) {
-          priceMap[unit.project_id] = unit.price;
+      let totalUnits = 0;
+      let availableUnits = 0;
+      let soldUnits = 0;
+      let reservedUnits = 0;
+      let totalValue = 0;
+      (data || []).forEach((unit: { project_id: string; price: number; status: string }) => {
+        totalUnits += 1;
+        if (unit.status === 'available') availableUnits += 1;
+        else if (unit.status === 'sold') soldUnits += 1;
+        else if (unit.status === 'reserved') reservedUnits += 1;
+        totalValue += Number(unit.price) || 0;
+        if (unit.price && unit.price > 0) {
+          if (!priceMap[unit.project_id] || unit.price < priceMap[unit.project_id]) {
+            priceMap[unit.project_id] = unit.price;
+          }
         }
       });
 
       setMinPrices(priceMap);
+      setProjectAggregates({ totalUnits, availableUnits, soldUnits, reservedUnits, totalValue });
     } catch (error) {
       console.error('Error fetching min prices:', error);
     }
@@ -432,12 +764,15 @@ const PropertyManagement = () => {
         thumbnailUrl = await uploadUnitImage(unitForm.thumbnail, 'thumbnails');
       }
 
-      // Upload gallery images
-      const imageUrls: string[] = [];
-      for (const file of unitForm.images) {
-        const url = await uploadUnitImage(file, 'gallery');
-        if (url) {
-          imageUrls.push(url);
+      // Build final gallery image URLs — keep existing URLs in order, upload new files,
+      // and respect any removals the user made in the form.
+      const finalImageUrls: string[] = [];
+      for (const item of unitForm.image_items) {
+        if (item.file) {
+          const url = await uploadUnitImage(item.file, 'gallery');
+          if (url) finalImageUrls.push(url);
+        } else if (item.url) {
+          finalImageUrls.push(item.url);
         }
       }
 
@@ -459,7 +794,13 @@ const PropertyManagement = () => {
         view: unitForm.view || null,
         furnishing: unitForm.furnishing || null,
         floor_plan_url: unitForm.floor_plan_url || null,
-        tour_3d_url: unitForm.tour_3d_url || null
+        tour_3d_url: unitForm.tour_3d_url || null,
+        parking_spaces: unitForm.parking_spaces ? parseInt(unitForm.parking_spaces) : 0,
+        facing_direction: unitForm.facing_direction || null,
+        building: unitForm.building || null,
+        pool: unitForm.pool,
+        garden: unitForm.garden,
+        balcony: unitForm.balcony
       };
 
       // Only write thumbnail_url if a new file was uploaded; otherwise preserve existing.
@@ -470,12 +811,9 @@ const PropertyManagement = () => {
         unitData.thumbnail_url = null;
       }
 
-      // Same rule for images array.
-      if (imageUrls.length > 0) {
-        unitData.images = imageUrls;
-      } else if (!editingUnit) {
-        unitData.images = [];
-      }
+      // Always write the final images array — reflects user's add/remove choices.
+      // (Pre-existing kept items are included alongside newly uploaded ones.)
+      unitData.images = finalImageUrls;
 
       let unitId: string | undefined;
 
@@ -589,11 +927,13 @@ const PropertyManagement = () => {
   };
 
   const resetUnitForm = () => {
-    // Revoke object URLs to prevent memory leaks
-    if (unitForm.thumbnail_preview) {
+    // Revoke blob URLs (created from File) to prevent memory leaks. Skip remote URLs.
+    if (unitForm.thumbnail_preview?.startsWith('blob:')) {
       URL.revokeObjectURL(unitForm.thumbnail_preview);
     }
-    unitForm.image_previews.forEach(url => URL.revokeObjectURL(url));
+    unitForm.image_items.forEach(item => {
+      if (item.url.startsWith('blob:')) URL.revokeObjectURL(item.url);
+    });
 
     setUnitForm({
       unit_number: '',
@@ -606,8 +946,7 @@ const PropertyManagement = () => {
       price: '',
       thumbnail: null,
       thumbnail_preview: '',
-      images: [],
-      image_previews: [],
+      image_items: [],
       description: '',
       status: 'available',
       promo_price: '',
@@ -615,7 +954,13 @@ const PropertyManagement = () => {
       view: '',
       furnishing: '',
       floor_plan_url: '',
-      tour_3d_url: ''
+      tour_3d_url: '',
+      parking_spaces: '',
+      facing_direction: '',
+      building: '',
+      pool: false,
+      garden: false,
+      balcony: false
     });
   };
 
@@ -649,21 +994,20 @@ const PropertyManagement = () => {
   const handleImagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length > 0) {
-      const newPreviews = files.map(file => URL.createObjectURL(file));
+      const newItems = files.map(file => ({ url: URL.createObjectURL(file), file }));
       setUnitForm(prev => ({
         ...prev,
-        images: [...prev.images, ...files],
-        image_previews: [...prev.image_previews, ...newPreviews]
+        image_items: [...prev.image_items, ...newItems]
       }));
     }
   };
 
   const removeImage = (index: number) => {
-    URL.revokeObjectURL(unitForm.image_previews[index]);
+    const item = unitForm.image_items[index];
+    if (item?.url.startsWith('blob:')) URL.revokeObjectURL(item.url);
     setUnitForm(prev => ({
       ...prev,
-      images: prev.images.filter((_, i) => i !== index),
-      image_previews: prev.image_previews.filter((_, i) => i !== index)
+      image_items: prev.image_items.filter((_, i) => i !== index)
     }));
   };
 
@@ -680,9 +1024,8 @@ const PropertyManagement = () => {
       floor_count: unit.floor_count?.toString() || '',
       price: unit.price?.toString() || '',
       thumbnail: null,
-      thumbnail_preview: '',
-      images: [],
-      image_previews: unit.images || [],
+      thumbnail_preview: unit.thumbnail_url || '',
+      image_items: (unit.images || []).map(url => ({ url })),
       description: unit.layout_description || '',
       status: unit.status,
       promo_price: unit.promo_price?.toString() || '',
@@ -690,7 +1033,13 @@ const PropertyManagement = () => {
       view: unit.view || '',
       furnishing: (unit.furnishing as any) || '',
       floor_plan_url: unit.floor_plan_url || '',
-      tour_3d_url: unit.tour_3d_url || ''
+      tour_3d_url: unit.tour_3d_url || '',
+      parking_spaces: unit.parking_spaces?.toString() || '',
+      facing_direction: unit.facing_direction || '',
+      building: unit.building || '',
+      pool: !!unit.pool,
+      garden: !!unit.garden,
+      balcony: !!unit.balcony
     });
     setShowUnitDialog(true);
   };
@@ -735,11 +1084,9 @@ const PropertyManagement = () => {
   };
 
   // Handle view unit details
-  const handleViewUnit = async (unit: Unit) => {
-    setViewingUnit(unit);
-    setShowUnitDetailDialog(true);
-    // Fetch leads for this unit
-    await fetchUnitLeads(unit.id);
+  const handleViewUnit = (unit: Unit) => {
+    // Navigate to dedicated unit detail page (full-page view)
+    navigate(`/units/${unit.id}`);
   };
 
   // Handle add lead from unit
@@ -755,11 +1102,16 @@ const PropertyManagement = () => {
     setShowAddLeadModal(true);
   };
 
-  // Handle lead created - navigate to leads page
-  const handleLeadCreated = () => {
+  // Handle lead created — refresh unit leads if viewing a unit, else navigate
+  const handleLeadCreated = async () => {
     setShowAddLeadModal(false);
     setSelectedUnitForLead(null);
-    navigate('/leads');
+    if (viewingUnit) {
+      await fetchUnitLeads(viewingUnit.id);
+      toast.success('เพิ่ม Lead สำเร็จ — เลือกได้ใน "บันทึกการจอง"');
+    } else {
+      navigate('/leads');
+    }
   };
 
   // Handle delete unit confirmation
@@ -895,13 +1247,13 @@ const PropertyManagement = () => {
   const soldUnits = units.filter(u => u.status === 'sold').length;
   const totalValue = units.reduce((sum, u) => sum + u.price, 0);
 
-  // Calculate stats for all projects (project list view)
+  // Calculate stats for all projects (project list view) — based on actual units in DB
   const projectStats = {
-    totalUnits: properties.reduce((sum, p) => sum + (p.total_units || 0), 0),
-    // For now, assume all units are available since we don't track sold units per project yet
-    availableUnits: properties.reduce((sum, p) => sum + (p.total_units || 0), 0),
-    soldUnits: 0, // Will be implemented when unit tracking is added
-    totalValue: properties.reduce((sum, p) => sum + (p.base_price * (p.total_units || 1)), 0)
+    totalUnits: projectAggregates.totalUnits,
+    availableUnits: projectAggregates.availableUnits,
+    soldUnits: projectAggregates.soldUnits,
+    reservedUnits: projectAggregates.reservedUnits,
+    totalValue: projectAggregates.totalValue,
   };
 
   if (!currentTenant) {
@@ -1024,7 +1376,7 @@ const PropertyManagement = () => {
                     {formatCurrency(projectStats.totalValue)}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    ราคาเริ่มต้น x จำนวนยูนิต
+                    รวมราคายูนิตทุกหลังในระบบ
                   </p>
                 </CardContent>
               </Card>
@@ -1317,12 +1669,14 @@ const PropertyManagement = () => {
             ) : unitViewMode === 'grid' ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filteredUnits.map((unit) => {
-                  const firstImage = (unit.images && unit.images.length > 0) ? unit.images[0] : null;
+                  const firstImage = unit.thumbnail_url || ((unit.images && unit.images.length > 0) ? unit.images[0] : null);
+                  const cd = unit.status === 'reserved' ? formatCountdown(unit.locked_until) : null;
+                  const reservedLabel = cd && !cd.expired ? `จอง · ${cd.text}` : 'จอง';
                   const statusConfig =
                     unit.status === 'available'
                       ? { label: 'ว่าง', dotClass: 'bg-green-500', wrapClass: 'bg-white/95 text-green-700' }
                       : unit.status === 'reserved'
-                      ? { label: 'จอง', dotClass: 'bg-amber-500', wrapClass: 'bg-white/95 text-amber-700' }
+                      ? { label: reservedLabel, dotClass: 'bg-amber-500', wrapClass: cd?.urgent ? 'bg-white/95 text-red-700' : 'bg-white/95 text-amber-700' }
                       : unit.status === 'sold'
                       ? { label: 'ขาย', dotClass: 'bg-red-500', wrapClass: 'bg-white/95 text-red-700' }
                       : { label: 'ไม่พร้อมขาย', dotClass: 'bg-gray-400', wrapClass: 'bg-white/95 text-gray-600' };
@@ -1396,7 +1750,7 @@ const PropertyManagement = () => {
                               </DropdownMenuItem>
                               <ManagePropertiesGuard fallback={null} showMessage={false}>
                                 {canManageUnit(unit.id) && (
-                                  <DropdownMenuItem onClick={() => handleEditUnit(unit)}>
+                                  <DropdownMenuItem onClick={() => navigate(`/units/${unit.id}/edit`)}>
                                     <Edit className="w-4 h-4 mr-2" />
                                     แก้ไข
                                   </DropdownMenuItem>
@@ -1455,12 +1809,14 @@ const PropertyManagement = () => {
             ) : (
               <div className="space-y-2">
                 {filteredUnits.map((unit) => {
-                  const firstImage = (unit.images && unit.images.length > 0) ? unit.images[0] : null;
+                  const firstImage = unit.thumbnail_url || ((unit.images && unit.images.length > 0) ? unit.images[0] : null);
+                  const cd = unit.status === 'reserved' ? formatCountdown(unit.locked_until) : null;
+                  const reservedLabel = cd && !cd.expired ? `จอง · ${cd.text}` : 'จอง';
                   const statusConfig =
                     unit.status === 'available'
                       ? { label: 'ว่าง', dotClass: 'bg-green-500', textClass: 'text-green-700', bgClass: 'bg-green-50' }
                       : unit.status === 'reserved'
-                      ? { label: 'จอง', dotClass: 'bg-amber-500', textClass: 'text-amber-700', bgClass: 'bg-amber-50' }
+                      ? { label: reservedLabel, dotClass: 'bg-amber-500', textClass: cd?.urgent ? 'text-red-700' : 'text-amber-700', bgClass: cd?.urgent ? 'bg-red-50' : 'bg-amber-50' }
                       : unit.status === 'sold'
                       ? { label: 'ขาย', dotClass: 'bg-red-500', textClass: 'text-red-700', bgClass: 'bg-red-50' }
                       : { label: 'ไม่พร้อมขาย', dotClass: 'bg-gray-400', textClass: 'text-gray-600', bgClass: 'bg-gray-50' };
@@ -1556,7 +1912,7 @@ const PropertyManagement = () => {
                                   เพิ่ม Lead ใหม่
                                 </DropdownMenuItem>
                                 <ManagePropertiesGuard fallback={null} showMessage={false}>
-                                  <DropdownMenuItem onClick={() => handleEditUnit(unit)}>
+                                  <DropdownMenuItem onClick={() => navigate(`/units/${unit.id}/edit`)}>
                                     <Edit className="w-4 h-4 mr-2" />
                                     แก้ไข
                                   </DropdownMenuItem>
@@ -1587,14 +1943,17 @@ const PropertyManagement = () => {
           onClose={() => {
             setShowPropertyDialog(false);
             setEditingProperty(null);
+            setScrollProjectFormTo(null);
           }}
           onProjectCreated={() => {
             fetchProperties();
             setShowPropertyDialog(false);
             setEditingProperty(null);
             setSelectedProperty(null);
+            setScrollProjectFormTo(null);
           }}
           editingProject={editingProperty}
+          scrollToSection={scrollProjectFormTo}
         />
 
         {/* Unit Dialog */}
@@ -1732,13 +2091,23 @@ const PropertyManagement = () => {
                       <Label className="text-sm font-medium mb-2 block">รูป Gallery (รูปเพิ่มเติม)</Label>
                       <div className="border-2 border-dashed border-purple-200 rounded-xl p-3 bg-purple-50/30">
                         <div className="grid grid-cols-5 gap-2">
-                          {unitForm.image_previews.map((preview, index) => (
+                          {unitForm.image_items.map((item, index) => (
                             <div key={index} className="relative group">
                               <img
-                                src={preview}
+                                src={item.url}
                                 alt={`Gallery ${index + 1}`}
                                 className="w-full h-20 object-cover rounded-lg shadow-sm"
                               />
+                              {!item.file && (
+                                <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-blue-500/90 text-white text-[10px] rounded font-medium">
+                                  เดิม
+                                </span>
+                              )}
+                              {item.file && (
+                                <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-green-500/90 text-white text-[10px] rounded font-medium">
+                                  ใหม่
+                                </span>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => removeImage(index)}
@@ -1817,8 +2186,8 @@ const PropertyManagement = () => {
                       <Bed className="w-3.5 h-3.5 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-orange-900 text-sm">จำนวนห้อง</h3>
-                      <p className="text-xs text-orange-600">ห้องนอน ห้องน้ำ และชั้น</p>
+                      <h3 className="font-semibold text-orange-900 text-sm">ห้องและที่จอด</h3>
+                      <p className="text-xs text-orange-600">ห้องนอน ห้องน้ำ ที่จอดรถ ชั้น ทิศ อาคาร</p>
                     </div>
                   </div>
                   <div className="p-4">
@@ -1854,6 +2223,21 @@ const PropertyManagement = () => {
                         />
                       </div>
                       <div>
+                        <Label htmlFor="parking_spaces" className="text-sm font-medium flex items-center gap-1.5">
+                          <Square className="w-3.5 h-3.5 text-orange-500" />
+                          ที่จอดรถ
+                        </Label>
+                        <Input
+                          id="parking_spaces"
+                          type="number"
+                          min="0"
+                          value={unitForm.parking_spaces}
+                          onChange={(e) => setUnitForm({ ...unitForm, parking_spaces: e.target.value })}
+                          placeholder="เช่น 2"
+                          className="mt-1.5"
+                        />
+                      </div>
+                      <div>
                         <Label htmlFor="floor_count" className="text-sm font-medium flex items-center gap-1.5">
                           <Layers className="w-3.5 h-3.5 text-orange-500" />
                           จำนวนชั้น
@@ -1865,6 +2249,44 @@ const PropertyManagement = () => {
                           value={unitForm.floor_count}
                           onChange={(e) => setUnitForm({ ...unitForm, floor_count: e.target.value })}
                           placeholder="เช่น 2"
+                          className="mt-1.5"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="facing_direction" className="text-sm font-medium flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-orange-500" />
+                          ทิศ
+                        </Label>
+                        <Select
+                          value={unitForm.facing_direction}
+                          onValueChange={(value) => setUnitForm({ ...unitForm, facing_direction: value })}
+                        >
+                          <SelectTrigger id="facing_direction" className="mt-1.5">
+                            <SelectValue placeholder="เลือกทิศ" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="N">เหนือ (N)</SelectItem>
+                            <SelectItem value="S">ใต้ (S)</SelectItem>
+                            <SelectItem value="E">ตะวันออก (E)</SelectItem>
+                            <SelectItem value="W">ตะวันตก (W)</SelectItem>
+                            <SelectItem value="NE">ตะวันออกเฉียงเหนือ (NE)</SelectItem>
+                            <SelectItem value="NW">ตะวันตกเฉียงเหนือ (NW)</SelectItem>
+                            <SelectItem value="SE">ตะวันออกเฉียงใต้ (SE)</SelectItem>
+                            <SelectItem value="SW">ตะวันตกเฉียงใต้ (SW)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="building" className="text-sm font-medium flex items-center gap-1.5">
+                          <Building2 className="w-3.5 h-3.5 text-orange-500" />
+                          อาคาร / Block
+                        </Label>
+                        <Input
+                          id="building"
+                          type="text"
+                          value={unitForm.building}
+                          onChange={(e) => setUnitForm({ ...unitForm, building: e.target.value })}
+                          placeholder="A, B, Tower 1"
                           className="mt-1.5"
                         />
                       </div>
@@ -1892,7 +2314,7 @@ const PropertyManagement = () => {
                         id="description"
                         value={unitForm.description}
                         onChange={(e) => setUnitForm({ ...unitForm, description: e.target.value })}
-                        placeholder="รายละเอียดเพิ่มเติมของยูนิต เช่น วิวสวย ห้องมุม ฯลฯ"
+                        placeholder="เล่าจุดเด่นเฉพาะที่ไม่มีในช่องอื่น เช่น เพิ่งรีโนเวตปี 2024, รับลม 2 ทิศ, ครัว Open Concept, เจ้าของก่อนเป็นสถาปนิก ฯลฯ"
                         rows={2}
                         className="mt-1.5"
                       />
@@ -1946,11 +2368,46 @@ const PropertyManagement = () => {
                       <Layers className="w-3.5 h-3.5 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-gray-900 text-sm">รายละเอียดเสริม (PROPERTY HUB)</h3>
+                      <h3 className="font-semibold text-gray-900 text-sm">รายละเอียดเสริม</h3>
                       <p className="text-xs text-gray-600">โปรโมชั่น, แปลง, วิว, ตกแต่ง, แผนผัง, 3D Tour</p>
                     </div>
                   </div>
-                  <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="p-4 space-y-4">
+                    {/* Feature checkboxes */}
+                    <div>
+                      <Label className="text-sm font-medium mb-2 block">คุณสมบัติพิเศษ</Label>
+                      <div className="grid grid-cols-3 gap-3">
+                        <label className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50">
+                          <input
+                            type="checkbox"
+                            checked={unitForm.pool}
+                            onChange={(e) => setUnitForm({ ...unitForm, pool: e.target.checked })}
+                            className="w-4 h-4 accent-chateau"
+                          />
+                          <span className="text-sm">🏊 มีสระว่ายน้ำ</span>
+                        </label>
+                        <label className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50">
+                          <input
+                            type="checkbox"
+                            checked={unitForm.garden}
+                            onChange={(e) => setUnitForm({ ...unitForm, garden: e.target.checked })}
+                            className="w-4 h-4 accent-chateau"
+                          />
+                          <span className="text-sm">🌿 มีสวน</span>
+                        </label>
+                        <label className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50">
+                          <input
+                            type="checkbox"
+                            checked={unitForm.balcony}
+                            onChange={(e) => setUnitForm({ ...unitForm, balcony: e.target.checked })}
+                            className="w-4 h-4 accent-chateau"
+                          />
+                          <span className="text-sm">🪟 มีระเบียง</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="promo_price" className="text-sm font-medium">ราคาโปรโมชั่น (บาท)</Label>
                       <Input
@@ -2021,6 +2478,7 @@ const PropertyManagement = () => {
                         placeholder="https://my.matterport.com/show/?m=..."
                         className="mt-1.5"
                       />
+                    </div>
                     </div>
                   </div>
                 </CardContent>
@@ -2147,28 +2605,243 @@ const PropertyManagement = () => {
             </DialogHeader>
             {viewingUnit && (
               <div className="space-y-5 py-2">
-                {/* Images */}
-                {viewingUnit.images && viewingUnit.images.length > 0 && (
-                  <Card className="overflow-hidden border border-gray-200">
-                    <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
-                      <CardTitle className="text-base font-semibold text-gray-900">
-                        รูปภาพยูนิต
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-4">
-                      <div className="grid grid-cols-3 gap-3">
-                        {viewingUnit.images.map((img, index) => (
+                {/* Images — hero + thumbnails (combines thumbnail_url and images[]) */}
+                {(() => {
+                  const allImages = Array.from(
+                    new Set([
+                      ...(viewingUnit.thumbnail_url ? [viewingUnit.thumbnail_url] : []),
+                      ...(viewingUnit.images || []),
+                    ])
+                  ).filter(Boolean);
+                  if (allImages.length === 0) return null;
+                  return (
+                    <Card className="overflow-hidden border border-gray-200">
+                      <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
+                        <CardTitle className="text-base font-semibold text-gray-900">
+                          รูปภาพยูนิต
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-4">
+                        {/* Hero image */}
+                        <a
+                          href={allImages[0]}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block"
+                        >
                           <img
-                            key={index}
-                            src={img}
-                            alt={`Unit image ${index + 1}`}
-                            className="w-full h-32 object-cover rounded-lg border-2 border-gray-100 hover:border-[#e60023] transition-all cursor-pointer shadow-sm"
+                            src={allImages[0]}
+                            alt={`${viewingUnit.unit_number} hero`}
+                            className="w-full h-72 object-cover rounded-lg border border-gray-200 hover:border-[#e60023] transition-all cursor-pointer shadow-sm"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                           />
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
+                        </a>
+                        {/* Thumbnails row */}
+                        {allImages.length > 1 && (
+                          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mt-3">
+                            {allImages.slice(1).map((img, index) => (
+                              <a
+                                key={index}
+                                href={img}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <img
+                                  src={img}
+                                  alt={`Unit image ${index + 2}`}
+                                  className="w-full h-20 object-cover rounded-lg border border-gray-100 hover:border-[#e60023] transition-all cursor-pointer shadow-sm"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                />
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
+
+                {/* Reservation / Booking — PROPERTY HUB style (post-deposit) */}
+                {(() => {
+                  const isReserved = viewingUnit.status === 'reserved' && !!viewingUnit.reserved_customer_name;
+                  const isSold = viewingUnit.status === 'sold' && !!viewingUnit.reserved_customer_name;
+                  const canManage = canManageUnit(viewingUnit.id) || userRole === 'owner' || userRole === 'admin';
+                  const expiry = viewingUnit.locked_until ? new Date(viewingUnit.locked_until) : null;
+                  const expired = expiry ? expiry.getTime() < now : false;
+
+                  if (isSold) {
+                    return (
+                      <Card className="border-2 border-green-200 bg-green-50/30">
+                        <CardHeader className="bg-green-50 border-b border-green-200 pb-3">
+                          <CardTitle className="text-base font-semibold text-green-900 flex items-center gap-2">
+                            <Check className="w-5 h-5" />
+                            ปิดการขายแล้ว
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="p-3 bg-white rounded-lg border border-gray-200">
+                              <p className="text-xs font-medium text-gray-500 mb-0.5">ลูกค้า</p>
+                              <p className="text-base font-semibold text-gray-900">{viewingUnit.reserved_customer_name}</p>
+                            </div>
+                            <div className="p-3 bg-white rounded-lg border border-gray-200">
+                              <p className="text-xs font-medium text-gray-500 mb-0.5">เบอร์โทร</p>
+                              <p className="text-base font-medium text-gray-900">{viewingUnit.reserved_customer_phone || '-'}</p>
+                            </div>
+                            <div className="p-3 bg-white rounded-lg border border-gray-200">
+                              <p className="text-xs font-medium text-gray-500 mb-0.5">เงินจอง</p>
+                              <p className="text-base font-medium text-gray-900">
+                                {viewingUnit.deposit_amount
+                                  ? `฿${Number(viewingUnit.deposit_amount).toLocaleString()}`
+                                  : '-'}
+                              </p>
+                            </div>
+                            <div className="p-3 bg-white rounded-lg border border-gray-200">
+                              <p className="text-xs font-medium text-gray-500 mb-0.5">Sales รับผิดชอบ</p>
+                              <p className="text-base font-medium text-gray-900">{viewingUnit.locked_by_name || '-'}</p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  }
+
+                  if (isReserved) {
+                    return (
+                      <Card className="border-2 border-amber-200 bg-amber-50/30">
+                        <CardHeader className="bg-amber-50 border-b border-amber-200 pb-3">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <CardTitle className="text-base font-semibold text-amber-900 flex items-center gap-2">
+                              <Calendar className="w-5 h-5" />
+                              ข้อมูลผู้จอง
+                              {expired && (
+                                <Badge className="bg-red-100 text-red-700 border-red-200">
+                                  หมดอายุแล้ว
+                                </Badge>
+                              )}
+                            </CardTitle>
+                            {canManage && (
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={handleMarkAsSold}
+                                  className="bg-green-600 hover:bg-green-700 text-white"
+                                >
+                                  <Check className="w-4 h-4 mr-1" />
+                                  ปิดการขาย
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleCancelReservation}
+                                  className="text-red-600 border-red-200 hover:bg-red-50"
+                                >
+                                  ยกเลิกการจอง
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </CardHeader>
+                        <CardContent className="pt-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="p-3 bg-white rounded-lg border border-gray-200">
+                              <p className="text-xs font-medium text-gray-500 mb-0.5">ชื่อลูกค้า</p>
+                              <p className="text-base font-semibold text-gray-900">{viewingUnit.reserved_customer_name}</p>
+                            </div>
+                            <div className="p-3 bg-white rounded-lg border border-gray-200">
+                              <p className="text-xs font-medium text-gray-500 mb-0.5">เบอร์โทร</p>
+                              <p className="text-base font-medium text-gray-900">{viewingUnit.reserved_customer_phone || '-'}</p>
+                            </div>
+                            <div className="p-3 bg-white rounded-lg border border-gray-200">
+                              <p className="text-xs font-medium text-gray-500 mb-0.5">เงินจอง</p>
+                              <p className="text-base font-bold text-green-700">
+                                {viewingUnit.deposit_amount
+                                  ? `฿${Number(viewingUnit.deposit_amount).toLocaleString()}`
+                                  : '-'}
+                              </p>
+                            </div>
+                            <div className="p-3 bg-white rounded-lg border border-gray-200">
+                              <p className="text-xs font-medium text-gray-500 mb-0.5">วันที่จอง</p>
+                              <p className="text-sm text-gray-900">
+                                {viewingUnit.reservation_date
+                                  ? new Date(viewingUnit.reservation_date).toLocaleDateString('th-TH', { dateStyle: 'medium' })
+                                  : '-'}
+                              </p>
+                            </div>
+                            <div className="p-3 bg-white rounded-lg border border-gray-200">
+                              <p className="text-xs font-medium text-gray-500 mb-0.5">หมดอายุ</p>
+                              <p className={cn(
+                                "text-sm font-medium",
+                                expired ? "text-red-700" : "text-gray-900"
+                              )}>
+                                {expiry
+                                  ? expiry.toLocaleDateString('th-TH', { dateStyle: 'medium' })
+                                  : '-'}
+                                {expiry && !expired && (
+                                  <span className="text-xs text-gray-500 ml-2">
+                                    ({Math.ceil((expiry.getTime() - now) / 86400000)} วันถัดไป)
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                            <div className="p-3 bg-white rounded-lg border border-gray-200">
+                              <p className="text-xs font-medium text-gray-500 mb-0.5">Sales รับผิดชอบ</p>
+                              <p className="text-sm font-medium text-gray-900">
+                                {viewingUnit.locked_by_name || '-'}
+                              </p>
+                            </div>
+                          </div>
+                          {viewingUnit.reservation_notes && (
+                            <div className="mt-3 p-3 bg-white rounded-lg border border-gray-200">
+                              <p className="text-xs font-medium text-gray-500 mb-1">หมายเหตุ</p>
+                              <p className="text-sm text-gray-700 whitespace-pre-wrap">{viewingUnit.reservation_notes}</p>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  }
+
+                  // status='available' + canManage → show booking record button + add lead
+                  if (viewingUnit.status === 'available' && canManage) {
+                    return (
+                      <Card className="border border-dashed border-gray-300">
+                        <CardContent className="pt-5">
+                          <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <div className="flex items-center gap-3">
+                              <Calendar className="w-5 h-5 text-gray-400" />
+                              <div>
+                                <p className="text-sm font-semibold text-gray-700">ยูนิตยังว่าง</p>
+                                <p className="text-xs text-gray-500">
+                                  {unitLeads.length > 0
+                                    ? `มี ${unitLeads.length} Lead สนใจอยู่ — บันทึกการจองได้`
+                                    : 'ยังไม่มี Lead สนใจ — เพิ่ม Lead ก่อนถ้าลูกค้าจะจอง'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                onClick={() => handleAddLeadFromUnit(viewingUnit)}
+                              >
+                                <UserPlus className="w-4 h-4 mr-1" />
+                                เพิ่ม Lead ใหม่
+                              </Button>
+                              <Button
+                                onClick={openReserveDialog}
+                                className="bg-amber-500 hover:bg-amber-600 text-white"
+                              >
+                                <Calendar className="w-4 h-4 mr-1" />
+                                บันทึกการจอง
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  }
+                  return null;
+                })()}
 
                 {/* Pricing — PROPERTY HUB style with promo */}
                 <Card className="border border-gray-200">
@@ -2648,6 +3321,172 @@ const PropertyManagement = () => {
                   แก้ไข
                 </Button>
               )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Booking Record Dialog — PROPERTY HUB style */}
+        <Dialog open={showReserveDialog} onOpenChange={setShowReserveDialog}>
+          <DialogContent className="sm:max-w-[560px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-amber-600" />
+                บันทึกการจอง — ยูนิต {viewingUnit?.unit_number}
+              </DialogTitle>
+              <DialogDescription>
+                บันทึกข้อมูลลูกค้าที่จ่ายเงินจองและล็อคยูนิตจนกว่าจะทำสัญญา
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              {/* Lead picker — grouped: interested in this unit first, then others */}
+              <div>
+                <Label className="text-sm font-medium">เลือก Lead ที่จะจอง <span className="text-red-500">*</span></Label>
+                {allTenantLeads.length === 0 ? (
+                  <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-sm text-amber-900 font-medium mb-1">⚠️ ยังไม่มี Lead ในระบบ</p>
+                    <p className="text-xs text-amber-800">
+                      กดปิดและใช้ปุ่ม "+ เพิ่ม Lead ใหม่" ก่อน
+                    </p>
+                  </div>
+                ) : (() => {
+                  // Filter out won/lost — those leads shouldn't be re-booked
+                  const activeLeads = allTenantLeads.filter(
+                    (l: any) => l.status !== 'won' && l.status !== 'lost' && l.status !== 'closed'
+                  );
+                  const interestedIds = new Set(unitLeads.map((li: any) => li.leads?.id).filter(Boolean));
+                  const interestedLeads = activeLeads.filter((l: any) => interestedIds.has(l.id));
+                  const otherLeads = activeLeads.filter((l: any) => !interestedIds.has(l.id));
+
+                  if (activeLeads.length === 0) {
+                    return (
+                      <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-sm text-amber-900 font-medium">⚠️ ไม่มี Lead ที่ active</p>
+                        <p className="text-xs text-amber-800">
+                          Lead ทุกคนปิดดีล/สูญเสียไปแล้ว — กด "+ เพิ่ม Lead ใหม่"
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <Select
+                      value={bookingForm.lead_id}
+                      onValueChange={(value) => setBookingForm({ ...bookingForm, lead_id: value })}
+                    >
+                      <SelectTrigger className="mt-1.5">
+                        <SelectValue placeholder={`-- เลือก Lead (${activeLeads.length} คน) --`} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {interestedLeads.length > 0 && (
+                          <>
+                            <div className="px-2 py-1.5 text-xs font-semibold text-amber-700 bg-amber-50 sticky top-0">
+                              🔥 สนใจยูนิตนี้แล้ว ({interestedLeads.length})
+                            </div>
+                            {interestedLeads.map((lead: any) => (
+                              <SelectItem key={lead.id} value={lead.id}>
+                                <span className="font-medium">{lead.customer?.full_name || '(ไม่มีชื่อ)'}</span>
+                                {lead.customer?.phone && (
+                                  <span className="text-xs text-gray-500 ml-2">{lead.customer.phone}</span>
+                                )}
+                              </SelectItem>
+                            ))}
+                          </>
+                        )}
+                        {otherLeads.length > 0 && (
+                          <>
+                            <div className="px-2 py-1.5 text-xs font-semibold text-gray-600 bg-gray-50 sticky top-0">
+                              👥 Lead อื่นใน tenant ({otherLeads.length})
+                            </div>
+                            {otherLeads.map((lead: any) => (
+                              <SelectItem key={lead.id} value={lead.id}>
+                                {lead.customer?.full_name || '(ไม่มีชื่อ)'}
+                                {lead.customer?.phone && (
+                                  <span className="text-xs text-gray-500 ml-2">{lead.customer.phone}</span>
+                                )}
+                              </SelectItem>
+                            ))}
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  );
+                })()}
+                {bookingForm.lead_id && (() => {
+                  const selectedIsInterested = unitLeads.some((li: any) => li.leads?.id === bookingForm.lead_id);
+                  if (!selectedIsInterested) {
+                    return (
+                      <p className="text-xs text-blue-700 mt-1.5">
+                        💡 Lead นี้ยังไม่ได้บันทึกความสนใจในยูนิตนี้ — ระบบจะเพิ่มให้อัตโนมัติเมื่อบันทึกการจอง
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+              <div>
+                <Label htmlFor="booking_deposit" className="text-sm font-medium">
+                  จำนวนเงินจอง (บาท) <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="booking_deposit"
+                  type="number"
+                  min="0"
+                  value={bookingForm.deposit_amount}
+                  onChange={(e) => setBookingForm({ ...bookingForm, deposit_amount: e.target.value })}
+                  placeholder="100000"
+                  className="mt-1.5"
+                />
+                <p className="text-xs text-gray-500 mt-1">นิยม 50,000-200,000 บาท ขึ้นกับราคายูนิต</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-2 block">ระยะเวลาทำสัญญา (วัน)</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[7, 14, 30].map((days) => (
+                    <button
+                      key={days}
+                      type="button"
+                      onClick={() => setBookingForm({ ...bookingForm, expiry_days: days })}
+                      className={cn(
+                        "p-3 rounded-lg border-2 text-center transition-all",
+                        bookingForm.expiry_days === days
+                          ? "border-amber-500 bg-amber-50 text-amber-900"
+                          : "border-gray-200 hover:border-gray-300 text-gray-700"
+                      )}
+                    >
+                      <p className="text-lg font-bold">{days}</p>
+                      <p className="text-xs">วัน</p>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  จะหมดอายุ: <span className="font-medium">
+                    {new Date(Date.now() + bookingForm.expiry_days * 86400000).toLocaleDateString('th-TH', { dateStyle: 'medium' })}
+                  </span>
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="booking_notes" className="text-sm font-medium">หมายเหตุ (ไม่บังคับ)</Label>
+                <Textarea
+                  id="booking_notes"
+                  value={bookingForm.notes}
+                  onChange={(e) => setBookingForm({ ...bookingForm, notes: e.target.value })}
+                  placeholder="ลูกค้าจะกลับมาเซ็นสัญญา 25 พ.ย. / ขอสินเชื่อกับธนาคาร X / ฯลฯ"
+                  rows={2}
+                  className="mt-1.5"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowReserveDialog(false)} disabled={savingReserve}>
+                ยกเลิก
+              </Button>
+              <Button
+                onClick={handleReserveUnit}
+                disabled={savingReserve || !bookingForm.lead_id || !bookingForm.deposit_amount}
+                className="bg-amber-500 hover:bg-amber-600 text-white"
+              >
+                {savingReserve ? 'กำลังบันทึก...' : 'บันทึกการจอง'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

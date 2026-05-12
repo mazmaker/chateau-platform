@@ -12,6 +12,8 @@ import TenantManagement from "./pages/TenantManagement";
 import BillingManagement from "./pages/BillingManagement";
 import PaymentDashboard from "./pages/PaymentDashboard";
 import PropertyManagement from "./pages/PropertyManagement";
+import UnitDetail from "./pages/UnitDetail";
+import UnitEdit from "./pages/UnitEdit";
 import LeadManagement from "./pages/LeadManagement";
 import LeadCDP from "./pages/LeadCDP";
 import CampaignManagement from "./pages/CampaignManagement";
@@ -227,6 +229,32 @@ const App = () => (
             >
               <ProtectedRouteSimple>
                 <PropertyManagement />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/units/:unitId" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดรายละเอียดยูนิตได้"
+              context={{ page: 'unit-detail' }}
+            >
+              <ProtectedRouteSimple>
+                <UnitDetail />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/units/:unitId/edit" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดฟอร์มแก้ไขยูนิตได้"
+              context={{ page: 'unit-edit' }}
+            >
+              <ProtectedRouteSimple>
+                <UnitEdit />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />

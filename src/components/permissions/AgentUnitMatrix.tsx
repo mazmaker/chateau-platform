@@ -347,7 +347,7 @@ export const AgentUnitMatrix = () => {
           <ShieldCheck className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <div>
             <p className="font-medium">โหมดดูอย่างเดียว</p>
-            <p className="text-xs">เฉพาะ Owner / Admin เท่านั้นที่แก้ไข Agent × Units ได้</p>
+            <p className="text-xs">เฉพาะ Owner / Admin เท่านั้นที่แก้ไขสิทธิ์ Agent ดูแลยูนิตได้</p>
           </div>
         </div>
       )}

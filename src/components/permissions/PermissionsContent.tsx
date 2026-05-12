@@ -44,16 +44,16 @@ const PermissionsContent = () => {
       <Tabs defaultValue={isOwner ? "admin-projects" : "sales-projects"} className="w-full">
         <TabsList className="w-full justify-start h-auto p-1 bg-gray-100">
           <TabsTrigger value="admin-projects" className="data-[state=active]:bg-white">
-            🔧 Admin × Projects
+            🔧 สิทธิ์ Admin ดูแลโครงการ
           </TabsTrigger>
           <TabsTrigger value="sales-projects" className="data-[state=active]:bg-white">
-            💼 Sales × Projects
+            💼 สิทธิ์ Sales ดูแลโครงการ
           </TabsTrigger>
           <TabsTrigger value="sales-units" className="data-[state=active]:bg-white">
-            💼 Sales × Units
+            💼 สิทธิ์ Sales ดูแลยูนิต
           </TabsTrigger>
           <TabsTrigger value="agent-units" className="data-[state=active]:bg-white">
-            🤝 Agent × Units
+            🤝 สิทธิ์ Agent ดูแลยูนิต
           </TabsTrigger>
         </TabsList>
 

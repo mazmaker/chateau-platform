@@ -295,7 +295,7 @@ export const SalesProjectMatrix = () => {
           <ShieldCheck className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <div>
             <p className="font-medium">โหมดดูอย่างเดียว</p>
-            <p className="text-xs">เฉพาะ Owner / Admin เท่านั้นที่แก้ไข Sales × Projects ได้</p>
+            <p className="text-xs">เฉพาะ Owner / Admin เท่านั้นที่แก้ไขสิทธิ์ Sales ดูแลโครงการได้</p>
           </div>
         </div>
       )}

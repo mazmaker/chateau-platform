@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
+import LocationPicker from "./LocationPicker";
 
 interface EditingProject {
   id: string;
@@ -60,6 +61,7 @@ interface CreateProjectModalProps {
   onClose: () => void;
   onProjectCreated: () => void;
   editingProject?: EditingProject | null;
+  scrollToSection?: 'location' | null;
 }
 
 interface Province {
@@ -99,7 +101,7 @@ const PROJECT_TYPES = [
   { value: 'condo', label: 'คอนโด' },
 ];
 
-const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject }: CreateProjectModalProps) => {
+const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject, scrollToSection }: CreateProjectModalProps) => {
   const { currentTenant } = useSimpleAuth();
   const isEditing = !!editingProject;
 
@@ -241,7 +243,16 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
         });
 
         // Reset flag after form has been populated
-        setTimeout(() => setIsInitialLoad(false), 200);
+        setTimeout(() => {
+          setIsInitialLoad(false);
+          // Auto-scroll to location section if requested
+          if (scrollToSection === 'location') {
+            setTimeout(() => {
+              const el = document.getElementById('location-section');
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+          }
+        }, 200);
       } else if (isOpen && !editingProject) {
         setIsInitialLoad(false);
         setPrevProvinceId("");
@@ -1120,7 +1131,7 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
             </Card>
 
             {/* Section 4.5: ตำแหน่ง + ผังโครงการ + ทำเลใกล้เคียง */}
-            <Card className="border-2 border-amber-200 shadow-sm">
+            <Card id="location-section" className="border-2 border-amber-200 shadow-sm">
               <CardContent className="p-0">
                 <div className="flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-200">
                   <div className="p-1.5 bg-amber-600 rounded-lg">
@@ -1128,7 +1139,7 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900 text-sm">ตำแหน่ง · ผังโครงการ · ทำเลใกล้เคียง</h3>
-                    <p className="text-xs text-gray-600">ข้อมูล PROPERTY HUB style สำหรับหน้ารายละเอียดยูนิต</p>
+                    <p className="text-xs text-gray-600">ข้อมูลเสริมสำหรับหน้ารายละเอียดยูนิต</p>
                   </div>
                 </div>
                 <div className="p-5 space-y-4">
@@ -1154,38 +1165,20 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject 
                     )}
                   </div>
 
-                  {/* Lat/Lng */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor="location_lat" className="text-sm font-medium">ละติจูด (Latitude)</Label>
-                      <Input
-                        id="location_lat"
-                        type="number"
-                        step="0.0001"
-                        value={formData.location_lat}
-                        onChange={(e) => setFormData(prev => ({ ...prev, location_lat: e.target.value }))}
-                        placeholder="13.6358"
-                        disabled={loading}
-                        className="mt-1.5"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="location_lng" className="text-sm font-medium">ลองจิจูด (Longitude)</Label>
-                      <Input
-                        id="location_lng"
-                        type="number"
-                        step="0.0001"
-                        value={formData.location_lng}
-                        onChange={(e) => setFormData(prev => ({ ...prev, location_lng: e.target.value }))}
-                        placeholder="100.7058"
-                        disabled={loading}
-                        className="mt-1.5"
-                      />
-                    </div>
+                  {/* Interactive map picker */}
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">📍 ตำแหน่งบนแผนที่</Label>
+                    <LocationPicker
+                      lat={formData.location_lat ? parseFloat(formData.location_lat) : null}
+                      lng={formData.location_lng ? parseFloat(formData.location_lng) : null}
+                      onChange={(lat, lng) => setFormData(prev => ({
+                        ...prev,
+                        location_lat: lat.toFixed(6),
+                        location_lng: lng.toFixed(6),
+                      }))}
+                      height={340}
+                    />
                   </div>
-                  <p className="text-xs text-gray-500 -mt-2">
-                    💡 หาพิกัดได้จาก Google Maps → คลิกขวาตำแหน่ง → คัดลอกตัวเลขชุดแรกเป็น lat, ชุดสองเป็น lng
-                  </p>
 
                   {/* Nearby list editor */}
                   <div>
