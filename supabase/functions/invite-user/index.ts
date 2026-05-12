@@ -87,7 +87,7 @@ serve(async (req) => {
     // Check if this is a resend (user already had pending invite)
     if (inviteData.is_resend) {
       // For resend, just return existing token
-      const baseUrl = redirectTo || `${new URL(req.url).origin}/auth/setup-password`
+      const baseUrl = redirectTo || `${new URL(req.url).origin}/auth/accept-invite`
       const inviteUrl = `${baseUrl}?token=${inviteData.signup_token}`
 
       return new Response(

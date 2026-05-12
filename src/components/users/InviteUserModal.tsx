@@ -118,7 +118,7 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
           fullName,
           tenantId,
           role: role.toLowerCase(),
-          redirectTo: `${window.location.origin}/auth/setup-password`
+          redirectTo: `${window.location.origin}/auth/accept-invite`
         }),
       });
 

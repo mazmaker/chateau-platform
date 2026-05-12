@@ -62,6 +62,7 @@ interface CreateProjectModalProps {
   onProjectCreated: () => void;
   editingProject?: EditingProject | null;
   scrollToSection?: 'location' | null;
+  pageMode?: boolean;
 }
 
 interface Province {
@@ -101,7 +102,7 @@ const PROJECT_TYPES = [
   { value: 'condo', label: 'คอนโด' },
 ];
 
-const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject, scrollToSection }: CreateProjectModalProps) => {
+const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject, scrollToSection, pageMode = false }: CreateProjectModalProps) => {
   const { currentTenant } = useSimpleAuth();
   const isEditing = !!editingProject;
 
@@ -644,8 +645,14 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+    <div className={pageMode
+      ? 'w-full'
+      : 'fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4'}
+    >
+      <div className={pageMode
+        ? 'bg-white w-full'
+        : 'bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col'}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
           <div className="flex items-center gap-3">
@@ -669,7 +676,7 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
         </div>
 
         {/* Form Content - Scrollable */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
+        <form onSubmit={handleSubmit} className={pageMode ? '' : 'flex-1 overflow-y-auto'}>
           <div className="p-6 space-y-6">
 
             {/* Section 1: ข้อมูลพื้นฐาน */}

@@ -158,6 +158,7 @@ interface Unit {
   furnishing?: 'fully' | 'partial' | 'unfurnished' | null;
   land_area_sqw?: number | null;
   floor_count?: number | null;
+  created_at?: string | null;
 }
 
 const PropertyManagement = () => {
@@ -168,11 +169,17 @@ const PropertyManagement = () => {
   const [properties, setProperties] = useState<Property[]>([]);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [units, setUnits] = useState<Unit[]>([]);
+  const [unitSalesMap, setUnitSalesMap] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [unitSearchQuery, setUnitSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [priceFilter, setPriceFilter] = useState<string>('all');
+  const [bedroomsFilter, setBedroomsFilter] = useState<string>('all');
+  const [salesFilter, setSalesFilter] = useState<string>('all');
+  const [unitSortBy, setUnitSortBy] = useState<'newest' | 'price_asc' | 'price_desc' | 'unit_number'>('newest');
+  const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
   const [unitViewMode, setUnitViewMode] = useState<'grid' | 'list'>('grid');
   const [mySalesUnitIds, setMySalesUnitIds] = useState<Set<string>>(new Set());
   const [masterPlanImgError, setMasterPlanImgError] = useState(false);
@@ -688,6 +695,37 @@ const PropertyManagement = () => {
       }));
 
       setUnits(mappedUnits);
+
+      // Fetch sales assignments for these units (for Admin/Owner to see who's responsible)
+      if (mappedUnits.length > 0 && (userRole === 'owner' || userRole === 'admin')) {
+        const unitIds = mappedUnits.map((u: Unit) => u.id);
+        const { data: assignments } = await supabase
+          .from('sales_unit_assignments')
+          .select('unit_id, sales_user_id')
+          .in('unit_id', unitIds)
+          .is('revoked_at', null);
+        const salesIds = Array.from(new Set((assignments || []).map((a: any) => a.sales_user_id).filter(Boolean)));
+        let nameById: Record<string, string> = {};
+        if (salesIds.length > 0) {
+          const { data: salesUsers } = await supabase
+            .from('users')
+            .select('id, full_name, email')
+            .in('id', salesIds);
+          (salesUsers || []).forEach((u: any) => {
+            nameById[u.id] = u.full_name || u.email || '(ไม่มีชื่อ)';
+          });
+        }
+        const map: Record<string, string[]> = {};
+        (assignments || []).forEach((a: any) => {
+          const name = nameById[a.sales_user_id];
+          if (!name) return;
+          if (!map[a.unit_id]) map[a.unit_id] = [];
+          map[a.unit_id].push(name);
+        });
+        setUnitSalesMap(map);
+      } else {
+        setUnitSalesMap({});
+      }
     } catch (error) {
       console.error('Error fetching units:', error);
       setUnits([]);
@@ -1235,11 +1273,71 @@ const PropertyManagement = () => {
   });
 
   const filteredUnits = units.filter(unit => {
-    const matchesStatus = statusFilter === 'all' || unit.status === statusFilter;
+    // Search by unit number
     const matchesSearch = unitSearchQuery === '' ||
       unit.unit_number.toLowerCase().includes(unitSearchQuery.toLowerCase());
-    return matchesStatus && matchesSearch;
+    // Status
+    const matchesStatus = statusFilter === 'all' || unit.status === statusFilter;
+    // Price buckets
+    const priceMillion = (unit.promo_price || unit.price) / 1_000_000;
+    const matchesPrice =
+      priceFilter === 'all' ||
+      (priceFilter === 'under-3m' && priceMillion < 3) ||
+      (priceFilter === '3m-5m' && priceMillion >= 3 && priceMillion < 5) ||
+      (priceFilter === '5m-10m' && priceMillion >= 5 && priceMillion <= 10) ||
+      (priceFilter === '10m-20m' && priceMillion > 10 && priceMillion <= 20) ||
+      (priceFilter === 'over-20m' && priceMillion > 20);
+    // Bedrooms
+    const bed = unit.bedrooms || 0;
+    const matchesBedrooms =
+      bedroomsFilter === 'all' ||
+      (bedroomsFilter === '1' && bed === 1) ||
+      (bedroomsFilter === '2' && bed === 2) ||
+      (bedroomsFilter === '3' && bed === 3) ||
+      (bedroomsFilter === '4+' && bed >= 4);
+    // Sales filter (Admin/Owner view only)
+    const salesList = unitSalesMap[unit.id] || [];
+    const matchesSales =
+      salesFilter === 'all' ||
+      (salesFilter === 'none' && salesList.length === 0) ||
+      (salesFilter !== 'all' && salesFilter !== 'none' && salesList.includes(salesFilter));
+    return matchesSearch && matchesStatus && matchesPrice && matchesBedrooms && matchesSales;
   });
+
+  // Apply sort to filtered units
+  const sortedUnits = [...filteredUnits].sort((a, b) => {
+    const priceA = a.promo_price || a.price || 0;
+    const priceB = b.promo_price || b.price || 0;
+    switch (unitSortBy) {
+      case 'price_asc':
+        return priceA - priceB;
+      case 'price_desc':
+        return priceB - priceA;
+      case 'unit_number':
+        return (a.unit_number || '').localeCompare(b.unit_number || '', 'th', { numeric: true });
+      case 'newest':
+      default:
+        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    }
+  });
+
+  // Count active advanced filters (for the toggle badge)
+  const activeAdvancedCount = [
+    priceFilter !== 'all',
+    bedroomsFilter !== 'all',
+    salesFilter !== 'all',
+  ].filter(Boolean).length;
+
+  // Distinct sales names in this project (for Sales filter)
+  const salesNameOptions = Array.from(
+    new Set(Object.values(unitSalesMap).flat())
+  ).sort();
+
+  const clearAdvancedFilters = () => {
+    setPriceFilter('all');
+    setBedroomsFilter('all');
+    setSalesFilter('all');
+  };
 
   // Calculate stats for selected property's units
   const totalUnits = units.length;
@@ -1522,10 +1620,7 @@ const PropertyManagement = () => {
                   </div>
                   <ManagePropertiesGuard fallback={null} showMessage={false}>
                     <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => {
-                        setEditingProperty(selectedProperty);
-                        setShowPropertyDialog(true);
-                      }}>
+                      <Button variant="outline" size="sm" onClick={() => navigate(`/properties/${selectedProperty.id}/edit`)}>
                         <Edit className="w-4 h-4 mr-2" />
                         แก้ไข
                       </Button>
@@ -1616,6 +1711,31 @@ const PropertyManagement = () => {
                     <SelectItem value="sold">ขายแล้ว</SelectItem>
                   </SelectContent>
                 </Select>
+                <Select value={unitSortBy} onValueChange={(v) => setUnitSortBy(v as typeof unitSortBy)}>
+                  <SelectTrigger className="w-[170px]">
+                    <SelectValue placeholder="เรียงลำดับ" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="newest">ล่าสุดก่อน</SelectItem>
+                    <SelectItem value="price_asc">ราคาน้อย → มาก</SelectItem>
+                    <SelectItem value="price_desc">ราคามาก → น้อย</SelectItem>
+                    <SelectItem value="unit_number">เลขยูนิต (ก-ฮ / 0-9)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant={showAdvancedFilter || activeAdvancedCount > 0 ? "default" : "outline"}
+                  onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
+                  className={cn("relative", (showAdvancedFilter || activeAdvancedCount > 0) && "bg-chateau hover:bg-chateau/90 text-white")}
+                >
+                  <Filter className="w-4 h-4 mr-1" />
+                  ตัวกรอง
+                  {activeAdvancedCount > 0 && (
+                    <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-chateau text-xs font-bold">
+                      {activeAdvancedCount}
+                    </span>
+                  )}
+                </Button>
                 <div className="inline-flex rounded-md border border-gray-200 bg-white p-0.5 ml-auto">
                   <button
                     type="button"
@@ -1658,6 +1778,95 @@ const PropertyManagement = () => {
               </ManagePropertiesGuard>
             </div>
 
+            {/* Advanced Filter Row — expandable */}
+            {showAdvancedFilter && (
+              <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <Filter className="w-4 h-4 text-chateau" />
+                    ตัวกรองขั้นสูง
+                    {activeAdvancedCount > 0 && (
+                      <span className="px-2 py-0.5 bg-chateau/10 text-chateau text-xs font-semibold rounded-full">
+                        ใช้ {activeAdvancedCount} ตัวกรอง
+                      </span>
+                    )}
+                  </div>
+                  {activeAdvancedCount > 0 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearAdvancedFilters}
+                      className="text-xs text-gray-600 hover:text-red-600 h-7"
+                    >
+                      <X className="w-3.5 h-3.5 mr-1" />
+                      ล้างตัวกรอง
+                    </Button>
+                  )}
+                </div>
+                <div className={cn(
+                  "grid gap-3",
+                  (userRole === 'owner' || userRole === 'admin')
+                    ? "grid-cols-1 sm:grid-cols-3"
+                    : "grid-cols-1 sm:grid-cols-2"
+                )}>
+                  {/* Price Range */}
+                  <div>
+                    <Label className="text-xs text-gray-600 mb-1.5 block">ช่วงราคา</Label>
+                    <Select value={priceFilter} onValueChange={setPriceFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="ทุกช่วงราคา" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">ทุกช่วงราคา</SelectItem>
+                        <SelectItem value="under-3m">น้อยกว่า 3 ล้าน</SelectItem>
+                        <SelectItem value="3m-5m">3 - 5 ล้าน</SelectItem>
+                        <SelectItem value="5m-10m">5 - 10 ล้าน</SelectItem>
+                        <SelectItem value="10m-20m">10 - 20 ล้าน</SelectItem>
+                        <SelectItem value="over-20m">มากกว่า 20 ล้าน</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Bedrooms */}
+                  <div>
+                    <Label className="text-xs text-gray-600 mb-1.5 block">จำนวนห้องนอน</Label>
+                    <Select value={bedroomsFilter} onValueChange={setBedroomsFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="ทุกแบบ" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">ทุกแบบ</SelectItem>
+                        <SelectItem value="1">1 ห้องนอน</SelectItem>
+                        <SelectItem value="2">2 ห้องนอน</SelectItem>
+                        <SelectItem value="3">3 ห้องนอน</SelectItem>
+                        <SelectItem value="4+">4 ห้องนอนขึ้นไป</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Sales Responsible — Admin/Owner only */}
+                  {(userRole === 'owner' || userRole === 'admin') && (
+                    <div>
+                      <Label className="text-xs text-gray-600 mb-1.5 block">Sales รับผิดชอบ</Label>
+                      <Select value={salesFilter} onValueChange={setSalesFilter}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="ทั้งหมด" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">ทั้งหมด</SelectItem>
+                          <SelectItem value="none">ยังไม่มอบหมาย</SelectItem>
+                          {salesNameOptions.map((name) => (
+                            <SelectItem key={name} value={name}>{name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Units Card Grid / List (PROPERTY HUB style) */}
             {filteredUnits.length === 0 ? (
               <Card>
@@ -1668,7 +1877,7 @@ const PropertyManagement = () => {
               </Card>
             ) : unitViewMode === 'grid' ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filteredUnits.map((unit) => {
+                {sortedUnits.map((unit) => {
                   const firstImage = unit.thumbnail_url || ((unit.images && unit.images.length > 0) ? unit.images[0] : null);
                   const cd = unit.status === 'reserved' ? formatCountdown(unit.locked_until) : null;
                   const reservedLabel = cd && !cd.expired ? `จอง · ${cd.text}` : 'จอง';
@@ -1749,7 +1958,7 @@ const PropertyManagement = () => {
                                 เพิ่ม Lead ใหม่
                               </DropdownMenuItem>
                               <ManagePropertiesGuard fallback={null} showMessage={false}>
-                                {canManageUnit(unit.id) && (
+                                {(userRole === 'owner' || userRole === 'admin') && (
                                   <DropdownMenuItem onClick={() => navigate(`/units/${unit.id}/edit`)}>
                                     <Edit className="w-4 h-4 mr-2" />
                                     แก้ไข
@@ -1801,6 +2010,19 @@ const PropertyManagement = () => {
                             </span>
                           )}
                         </div>
+                        {/* Sales รับผิดชอบ (Admin/Owner view only) */}
+                        {(userRole === 'owner' || userRole === 'admin') && (
+                          <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-gray-100 text-xs">
+                            <User className="w-3 h-3 text-gray-400" />
+                            {unitSalesMap[unit.id]?.length ? (
+                              <span className="text-gray-700 truncate" title={unitSalesMap[unit.id].join(', ')}>
+                                {unitSalesMap[unit.id].join(', ')}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 italic">ยังไม่มี Sales</span>
+                            )}
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   );
@@ -1808,7 +2030,7 @@ const PropertyManagement = () => {
               </div>
             ) : (
               <div className="space-y-2">
-                {filteredUnits.map((unit) => {
+                {sortedUnits.map((unit) => {
                   const firstImage = unit.thumbnail_url || ((unit.images && unit.images.length > 0) ? unit.images[0] : null);
                   const cd = unit.status === 'reserved' ? formatCountdown(unit.locked_until) : null;
                   const reservedLabel = cd && !cd.expired ? `จอง · ${cd.text}` : 'จอง';
@@ -1865,6 +2087,17 @@ const PropertyManagement = () => {
                               {unit.floor_number ? `ชั้น ${unit.floor_number}` : 'ยูนิต'}
                               {unit.area_sqm ? ` · ${unit.area_sqm.toLocaleString()} ตร.ม.` : ''}
                               {unit.unit_type ? ` · ${unit.unit_type}` : ''}
+                              {(userRole === 'owner' || userRole === 'admin') && (
+                                <>
+                                  {' · '}
+                                  <User className="w-3 h-3 inline text-gray-400 mr-0.5" />
+                                  {unitSalesMap[unit.id]?.length ? (
+                                    <span className="text-gray-700">{unitSalesMap[unit.id].join(', ')}</span>
+                                  ) : (
+                                    <span className="text-gray-400 italic">ยังไม่มี Sales</span>
+                                  )}
+                                </>
+                              )}
                             </div>
                             <div className="flex items-center gap-3 text-sm text-gray-600">
                               <span className="flex items-center gap-1" title="ห้องนอน">

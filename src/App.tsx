@@ -14,6 +14,7 @@ import PaymentDashboard from "./pages/PaymentDashboard";
 import PropertyManagement from "./pages/PropertyManagement";
 import UnitDetail from "./pages/UnitDetail";
 import UnitEdit from "./pages/UnitEdit";
+import ProjectEdit from "./pages/ProjectEdit";
 import LeadManagement from "./pages/LeadManagement";
 import LeadCDP from "./pages/LeadCDP";
 import CampaignManagement from "./pages/CampaignManagement";
@@ -26,7 +27,8 @@ import Analytics from "./pages/Analytics";
 import ApiManagement from "./pages/ApiManagement";
 import Settings from "./pages/Settings";
 import Permissions from "./pages/Permissions";
-import SetupPassword from "./pages/SetupPassword";
+import SalesOperations from "./pages/SalesOperations";
+import MyDashboard from "./pages/MyDashboard";
 import AcceptInvite from "./pages/AcceptInvite";
 import ForcePasswordChange from "./pages/ForcePasswordChange";
 import { ProtectedRouteSimple } from "@/components/auth/ProtectedRouteSimple";
@@ -57,18 +59,6 @@ const App = () => (
               <ProtectedRouteSimple onlyGuests={true}>
                 <SimpleLogin />
               </ProtectedRouteSimple>
-            </ErrorBoundary>
-          } />
-
-          {/* Setup Password Route - For email invite flow */}
-          <Route path="/auth/setup-password" element={
-            <ErrorBoundary
-              showRetry={true}
-              showHome={true}
-              errorMessage="ไม่สามารถโหลดหน้าตั้งรหัสผ่านได้"
-              context={{ page: 'setup-password' }}
-            >
-              <SetupPassword />
             </ErrorBoundary>
           } />
 
@@ -158,7 +148,7 @@ const App = () => (
             <ErrorBoundary
               showRetry={true}
               showHome={true}
-              errorMessage="ไม่สามารถโหลดหน้า Owner Dashboard ได้"
+              errorMessage="ไม่สามารถโหลดหน้า Platform Overview ได้"
               context={{ page: 'owner-dashboard' }}
             >
               <ProtectedRouteSimple requireRole="owner">
@@ -259,6 +249,19 @@ const App = () => (
             </ErrorBoundary>
           } />
 
+          <Route path="/properties/:id/edit" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดฟอร์มแก้ไขโครงการได้"
+              context={{ page: 'project-edit' }}
+            >
+              <ProtectedRouteSimple>
+                <ProjectEdit />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
           <Route path="/properties/:id" element={
             <ErrorBoundary
               showRetry={true}
@@ -281,6 +284,32 @@ const App = () => (
             >
               <ProtectedRouteSimple>
                 <LeadManagement />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/sales-operations" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้า Sales Operations ได้"
+              context={{ page: 'sales-operations' }}
+            >
+              <ProtectedRouteSimple>
+                <SalesOperations />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/my-dashboard" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้า My Dashboard ได้"
+              context={{ page: 'my-dashboard' }}
+            >
+              <ProtectedRouteSimple>
+                <MyDashboard />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />

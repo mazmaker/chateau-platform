@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/select';
 import {
   Building2, Bed, Bath, Square, MapPin, Layers, DollarSign, Eye,
-  Calendar, Check, AlertTriangle, ArrowLeft, UserPlus, ImageIcon, Loader2, Edit,
+  Calendar, Check, AlertTriangle, ArrowLeft, UserPlus, ImageIcon, Loader2, Edit, Share2,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -84,6 +84,7 @@ const UnitDetail = () => {
   const [property, setProperty] = useState<Property | null>(null);
   const [siblingUnits, setSiblingUnits] = useState<{ id: string; unit_number: string; status?: string }[]>([]);
   const [unitLeads, setUnitLeads] = useState<any[]>([]);
+  const [responsibleSales, setResponsibleSales] = useState<{ id: string; name: string }[]>([]);
   const [allTenantLeads, setAllTenantLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -161,6 +162,29 @@ const UnitDetail = () => {
       setProperty(propData || null);
       setSiblingUnits(sibs || []);
       setUnitLeads(leadsData || []);
+
+      // Fetch responsible sales (for Admin/Owner)
+      if (userRole === 'owner' || userRole === 'admin') {
+        const { data: assignments } = await supabase
+          .from('sales_unit_assignments')
+          .select('sales_user_id')
+          .eq('unit_id', unitId)
+          .is('revoked_at', null);
+        const ids = (assignments || []).map((a: any) => a.sales_user_id).filter(Boolean);
+        if (ids.length > 0) {
+          const { data: salesUsers } = await supabase
+            .from('users')
+            .select('id, full_name, email')
+            .in('id', ids);
+          setResponsibleSales(
+            (salesUsers || []).map((u: any) => ({ id: u.id, name: u.full_name || u.email || '(ไม่มีชื่อ)' }))
+          );
+        } else {
+          setResponsibleSales([]);
+        }
+      } else {
+        setResponsibleSales([]);
+      }
     } catch (err) {
       console.error(err);
       toast.error('โหลดข้อมูลไม่สำเร็จ');
@@ -320,6 +344,46 @@ const UnitDetail = () => {
     toast.success('เพิ่ม Lead สำเร็จ — เลือกได้ใน "บันทึกการจอง"');
   };
 
+  /* ─── LINE share ─── */
+  const buildShareMessage = (): string => {
+    if (!unit || !property) return '';
+    const priceM = (unit.promo_price && unit.promo_price < unit.price)
+      ? `${(unit.promo_price / 1_000_000).toFixed(2)} ล้าน (จากเดิม ${(unit.price / 1_000_000).toFixed(2)} ล้าน)`
+      : `${(unit.price / 1_000_000).toFixed(2)} ล้าน`;
+    const address = property.address?.street
+      || `${property.address?.district || ''} ${property.address?.province || ''}`.trim();
+    const specs: string[] = [];
+    if (unit.bedrooms) specs.push(`🛏 ${unit.bedrooms} ห้องนอน`);
+    if (unit.bathrooms) specs.push(`🛁 ${unit.bathrooms} ห้องน้ำ`);
+    if (unit.area_sqm) specs.push(`📐 ${unit.area_sqm} ตร.ม.`);
+    const lines = [
+      `🏠 ${property.name} — ยูนิต ${unit.unit_number}`,
+      address ? `📍 ${address}` : null,
+      `💰 ${priceM}`,
+      specs.join(' · '),
+      unit.view ? `🌅 ${unit.view}` : null,
+      '',
+      `ดูรายละเอียดเพิ่ม: ${window.location.origin}/units/${unit.id}`,
+    ].filter(Boolean);
+    return lines.join('\n');
+  };
+
+  const handleShareLine = () => {
+    const text = buildShareMessage();
+    const url = `https://line.me/R/msg/text/?${encodeURIComponent(text)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleCopyLink = async () => {
+    const link = `${window.location.origin}/units/${unit?.id}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success('คัดลอกลิงก์เรียบร้อย');
+    } catch {
+      toast.error('คัดลอกไม่สำเร็จ');
+    }
+  };
+
   /* ─── derived ─── */
   const allImages = useMemo(() => {
     if (!unit) return [];
@@ -389,7 +453,22 @@ const UnitDetail = () => {
                 <span className={cn('w-2 h-2 rounded-full', statusConfig.dotClass)} />
                 {statusConfig.label}
               </div>
-              {canManage && (
+              <Button
+                variant="outline"
+                onClick={handleShareLine}
+                className="border-green-300 text-green-700 hover:bg-green-50"
+                title="แชร์ลิงก์ + รายละเอียดยูนิตไปยังลูกค้าผ่าน LINE"
+              >
+                <Share2 className="w-4 h-4 mr-1" /> แชร์ LINE
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleCopyLink}
+                title="คัดลอกลิงก์หน้านี้"
+              >
+                คัดลอกลิงก์
+              </Button>
+              {(userRole === 'owner' || userRole === 'admin') && (
                 <Button
                   variant="outline"
                   onClick={() => navigate(`/units/${unit.id}/edit`)}
@@ -526,6 +605,47 @@ const UnitDetail = () => {
             </Card>
           )}
 
+          {/* Sales responsibility (Admin/Owner view) */}
+          {(userRole === 'owner' || userRole === 'admin') && (
+            <Card className="border border-gray-200">
+              <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <UserPlus className="w-5 h-5 text-chateau" /> Sales รับผิดชอบ
+                  </CardTitle>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate('/permissions')}
+                  >
+                    มอบหมาย Sales
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4">
+                {responsibleSales.length === 0 ? (
+                  <div className="py-4 text-center text-sm text-gray-500 italic">
+                    ⚠ ยังไม่มี Sales ที่ดูแลยูนิตนี้
+                    <p className="text-xs text-gray-400 mt-1">
+                      กด "มอบหมาย Sales" เพื่อกำหนด — ไปที่หน้าสิทธิ์ผู้ใช้งาน → Tab "สิทธิ์ Sales ดูแลยูนิต"
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {responsibleSales.map((s) => (
+                      <div key={s.id} className="flex items-center gap-2 px-3 py-2 bg-chateau-50 border border-chateau-100 rounded-full">
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-chateau to-purple-600 text-white flex items-center justify-center text-xs font-semibold">
+                          {s.name.slice(0, 1).toUpperCase()}
+                        </div>
+                        <span className="text-sm font-medium text-chateau">{s.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Pricing */}
           <Card className="border border-gray-200">
             <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
@@ -590,15 +710,15 @@ const UnitDetail = () => {
               </CardHeader>
               <CardContent className="pt-4 space-y-3">
                 {unit.view && (
-                  <div className="p-3 bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg border border-amber-200">
-                    <p className="text-xs font-semibold text-amber-900 mb-1">🌅 วิว</p>
-                    <p className="text-sm font-medium text-amber-900">{unit.view}</p>
+                  <div className="p-3 border border-gray-200 rounded-lg">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">🌅 วิว</p>
+                    <p className="text-sm font-medium text-gray-900">{unit.view}</p>
                   </div>
                 )}
                 {unit.furnishing && (
-                  <div className="p-3 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
-                    <p className="text-xs font-semibold text-purple-900 mb-1">🛋 สถานะตกแต่ง</p>
-                    <p className="text-sm font-medium text-purple-900">
+                  <div className="p-3 border border-gray-200 rounded-lg">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">🛋 สถานะตกแต่ง</p>
+                    <p className="text-sm font-medium text-gray-900">
                       {unit.furnishing === 'fully' && 'ตกแต่งครบ พร้อมอยู่'}
                       {unit.furnishing === 'partial' && 'ตกแต่งบางส่วน'}
                       {unit.furnishing === 'unfurnished' && 'ไม่ตกแต่ง'}
@@ -715,7 +835,7 @@ const UnitDetail = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => navigate(`/properties?project=${unit.project_id}&editProject=1`)}
+                    onClick={() => navigate(`/properties/${unit.project_id}/edit?section=location`)}
                   >
                     <Edit className="w-3.5 h-3.5 mr-1" /> แก้ไขข้อมูลโครงการ
                   </Button>

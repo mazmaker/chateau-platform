@@ -25,7 +25,15 @@ type Furnishing = '' | 'fully' | 'partial' | 'unfurnished';
 const UnitEdit = () => {
   const { unitId } = useParams<{ unitId: string }>();
   const navigate = useNavigate();
-  const { currentTenant } = useSimpleAuth();
+  const { currentTenant, userRole } = useSimpleAuth();
+
+  // Sales/Agent/Customer cannot edit unit master data — redirect to detail
+  useEffect(() => {
+    if (userRole && userRole !== 'owner' && userRole !== 'admin') {
+      toast.error('ไม่มีสิทธิ์แก้ไขยูนิต — เฉพาะ Admin/Owner เท่านั้น');
+      navigate(`/units/${unitId}`);
+    }
+  }, [userRole, unitId, navigate]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

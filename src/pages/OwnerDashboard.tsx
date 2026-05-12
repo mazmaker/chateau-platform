@@ -457,15 +457,15 @@ const OwnerDashboard = () => {
     );
   }
 
-  // KK Color Palette
+  // Soft luxury palette — matches Executive Dashboard / My Dashboard for consistency
   const KK = {
-    red: '#e60023', redLight: '#fff1f2', redBorder: '#fecdd3',
-    blue: '#3b82f6', blueLight: '#eff6ff',
-    purple: '#8b5cf6', purpleLight: '#f5f3ff',
-    green: '#10b981', greenLight: '#ecfdf5',
-    orange: '#f97316', orangeLight: '#fff7ed',
-    amber: '#f59e0b', amberLight: '#fffbeb',
-    gray: '#6b7280', grayLight: '#f3f4f6',
+    red: '#ef4444', redLight: '#fef2f2', redBorder: '#fecaca',
+    blue: '#1e3a5f', blueLight: '#eff6ff',
+    purple: '#475569', purpleLight: '#f1f5f9',   // mapped to charcoal slate
+    green: '#16a34a', greenLight: '#f0fdf4',
+    orange: '#d97706', orangeLight: '#fef3c7',
+    amber: '#d97706', amberLight: '#fefce8',
+    gray: '#94a3b8', grayLight: '#fafafa',
     border: '#e5e7eb',
   };
   const kkTooltipStyle = {
@@ -505,7 +505,7 @@ const OwnerDashboard = () => {
                 <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
                   Platform Overview
                 </span>
-                <h1 className="text-[34px] font-bold text-gray-900 leading-tight tracking-tight">Owner Dashboard</h1>
+                <h1 className="text-[34px] font-bold text-gray-900 leading-tight tracking-tight">Platform Overview</h1>
                 <p className="text-[15px] text-gray-500 mt-1.5">ภาพรวมระบบ SaaS Platform · MRR / ARR / Tenants / Churn · อัปเดตล่าสุด {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
               </div>
               <div className="flex gap-2.5">

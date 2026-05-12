@@ -1,311 +1,642 @@
 # รายงานการออกแบบ Monorepo — CHATEAU Platform
 
-**วันที่วิเคราะห์:** 5 พฤษภาคม 2569  
+**วันที่วิเคราะห์:** 2026-05-12
 **สถานะโปรเจ็ค:** Production (Vercel) — branch `001-production-readiness`
+**ผู้เขียน:** Architecture Analysis Session
 
 ---
 
-## 1. สรุปสถานะปัจจุบัน
+## 📌 TL;DR — สรุปบรรทัดเดียว
 
-### โครงสร้างที่มีอยู่
-
-```
-chateau-platform/               ← root (single app)
-├── src/                        ← React app ทั้งหมดอยู่ที่นี่
-│   ├── components/             ← 93 components
-│   ├── pages/                  ← 23 pages
-│   ├── ui/                     ← 46 shadcn/ui primitives (ซ้ำกับ src/components/ui/)
-│   ├── dashboard/              ← chart components เก่า (ซ้ำกับ components/dashboard/)
-│   ├── lib/                    ← utilities, supabase client, business logic
-│   ├── hooks/                  ← 5 custom hooks
-│   ├── types/                  ← TypeScript types
-│   └── contexts/               ← Auth context
-├── chateau-dashboard/          ← ว่างเปล่า (ตั้งใจไว้แต่ยังไม่ได้ทำ)
-├── supabase/                   ← 106+ migrations, 11 edge functions
-├── scripts/                    ← 36+ utility scripts (Node.js)
-├── specs/                      ← specifications
-└── package.json                ← dependency เดียว ไม่มี workspace
-```
-
-### ปัญหาที่พบในโครงสร้างปัจจุบัน
-
-| ปัญหา | รายละเอียด |
-|-------|-----------|
-| **Code duplication** | `src/ui/` และ `src/components/ui/` มี component ซ้ำกัน 46+ ไฟล์ |
-| **Code duplication** | `src/dashboard/` และ `src/components/dashboard/` มี chart ซ้ำกัน |
-| **ไม่มี workspace** | `package.json` เดียว ทุกอย่างรวมกัน แยกไม่ได้ |
-| **Scripts รก** | 36+ scripts กระจัดกระจาย ไม่มี structure |
-| **chateau-dashboard ว่าง** | folder ถูกสร้างไว้แต่ไม่มีโค้ด |
-| **Type ซ้ำซ้อน** | `src/types/database.ts` และ `src/lib/database-types.ts` แยกกันอยู่ |
+**ตอนนี้:** ยังไม่ต้อง migrate monorepo — เป็น single SPA ที่ work อยู่
+**ต้อง migrate เมื่อ:** เริ่มสร้าง Customer Portal (Phase 3) หรือ Mobile App
+**สิ่งที่ทำได้ตอนนี้:** เขียนโค้ดให้ "monorepo-ready" — ใช้ `@/` imports, centralize theme, แยก data layer
 
 ---
 
-## 2. เหตุผลที่ควรทำ Monorepo
+## 1. สถานะปัจจุบัน (Current State)
 
-### ข้อดีสำหรับโปรเจ็คนี้
+### 1.1 โครงสร้างที่มีอยู่
 
-1. **แยก concern ชัดเจน** — frontend / backend types / UI library แยกออกจากกัน
-2. **Reuse code ได้** — `packages/ui` ใช้ร่วมกันได้ระหว่าง apps
-3. **Scale ได้** — เพิ่ม app ใหม่ (mobile, public portal) โดยไม่ต้อง copy โค้ด
-4. **Build cache** — Turborepo cache ทำให้ build เร็วขึ้น 3–10x
-5. **Type safety ข้าม package** — share types ได้โดยไม่ต้อง maintain หลายชุด
+```
+chateau-platform/                  ← single repo, single app
+├── src/                            ← React 19 + Vite SPA
+│   ├── pages/                      ← 25+ pages (Index, MyDashboard, SalesOperations,
+│   │                                  OwnerDashboard, PropertyManagement, LeadManagement,
+│   │                                  UnitDetail, UnitEdit, Permissions, ...)
+│   ├── components/
+│   │   ├── ui/                     ← 50+ shadcn primitives
+│   │   ├── dashboard/              ← Sidebar, Header, KPI cards
+│   │   ├── properties/             ← Property/Unit modals, LocationPicker, MasterPlanSVG
+│   │   ├── leads/                  ← Lead modals
+│   │   ├── permissions/            ← AdminProjectMatrix, SalesUnitMatrix, etc.
+│   │   ├── users/                  ← User management
+│   │   ├── auth/                   ← ProtectedRoute, PermissionGuard
+│   │   └── ... 15+ feature dirs
+│   ├── contexts/                   ← AuthContextSimple
+│   ├── hooks/                      ← usePermissions, useSubscriptionFeatures, etc.
+│   ├── lib/                        ← supabase client, api helpers, utilities
+│   │   ├── api/                    ← dashboard.ts, leads.ts (still mostly inline in pages)
+│   │   ├── billing-scheduler.ts
+│   │   └── ...
+│   ├── types/                      ← TypeScript interfaces
+│   └── App.tsx                     ← routes
+├── supabase/
+│   ├── migrations/                 ← 100+ migrations
+│   └── functions/                  ← edge functions (invite-user, accept-invite, ...)
+├── scripts/                        ← Node utility scripts (apply-migration, check-roles, ...)
+├── documents/                      ← markdown docs
+├── public/
+└── package.json                    ← single deps, no workspaces
+```
+
+### 1.2 Deployable Units ปัจจุบัน
+
+| Unit | จำนวน | สถานะ |
+|---|:---:|---|
+| Web SPA (Vercel) | 1 | ✅ Production |
+| Supabase Edge Functions | 11 | ✅ Production |
+| DB Migrations | 100+ | ✅ Applied |
+| Marketing site | 0 | ❌ ไม่มี |
+| Mobile app | 0 | ❌ ไม่มี |
+| Customer portal | 0 | ❌ ไม่มี |
+
+→ **มี deployable เดียวสำหรับ web app** → monorepo ยังไม่จำเป็น
+
+### 1.3 Roles + Page Map ปัจจุบัน
+
+```
+Pages ในระบบ ทั้งหมดอยู่ใน src/pages/ (single app)
+แต่ละ role เห็นเมนูต่างกัน (role-based routing + Sidebar guards)
+
+Owner       → 18 menus (เห็นทุกอย่าง)
+Admin       → 12 menus (ของบริษัทตัวเอง)
+Sales       → 5 menus (My Dashboard + Sales Ops + Properties + Leads + Settings)
+Agent       → 4 menus (My Dashboard + Properties + Leads + Settings)
+Customer    → ยังไม่มี portal
+```
 
 ---
 
-## 3. โครงสร้าง Monorepo ที่ออกแบบ
+## 2. ทำไมต้อง Monorepo? — เกณฑ์ตัดสิน
 
-### Tooling ที่แนะนำ
+### 2.1 Monorepo ดีเมื่อไหร่
+| สถานการณ์ | ต้อง monorepo? | เหตุผล |
+|---|:---:|---|
+| มี 1 app | ❌ ไม่ | overhead > benefit |
+| มี 2+ apps + share code มาก | ✅ ใช่ | DRY, single source of truth |
+| มี web + mobile | ✅ ใช่ | คนละ framework, share types/api |
+| มี marketing site (SSR) | ✅ ใช่ | คนละ runtime (Next.js vs Vite) |
+| ทีม dev > 3 คน | ⚠️ พิจารณา | ownership boundaries |
+| Build time > 30s | ⚠️ พิจารณา | parallel builds |
 
-| เครื่องมือ | บทบาท | เหตุผล |
-|-----------|-------|--------|
-| **Turborepo** | Build system + caching | Industry standard, setup ง่าย |
-| **pnpm workspaces** | Package manager | ประหยัด disk 40–60%, เร็วกว่า npm |
+### 2.2 Monorepo แยกตามอะไร?
 
-### โครงสร้างใหม่
+**❌ ไม่ใช่:** แยกตาม Role (Sales app, Admin app)
+- Role เป็นเรื่อง **permission/routing** ไม่ใช่ deployment
+- บันทึก memory ของโปรเจ็ค: "No separate /agent portal — Sales uses same pages as Admin"
+
+**✅ ใช่:** แยกตาม **Deployable Unit + Audience**
+- คนละ deployment URL
+- คนละ framework
+- คนละ audience (internal staff vs customer)
+- คนละ branding (white-label per tenant ในอนาคต)
+
+---
+
+## 3. การออกแบบ Monorepo ที่แนะนำ (Future State)
+
+### 3.1 Architecture Overview
 
 ```
-chateau-platform/                    ← monorepo root
+chateau-platform/                         ← monorepo root
 │
-├── apps/
-│   ├── web/                         ← Main app (ย้ายจาก src/ เดิม)
-│   │   ├── src/
-│   │   │   ├── components/          ← components เฉพาะ web app
-│   │   │   │   ├── auth/
-│   │   │   │   ├── dashboard/
-│   │   │   │   ├── leads/
-│   │   │   │   ├── properties/
-│   │   │   │   ├── invoices/
-│   │   │   │   ├── users/
-│   │   │   │   └── layouts/
-│   │   │   ├── pages/               ← 23 pages เดิม
-│   │   │   ├── hooks/               ← 5 custom hooks
-│   │   │   ├── contexts/
-│   │   │   └── App.tsx
-│   │   ├── package.json
+├── apps/                                  ← Deployable applications
+│   ├── portal/                            ← Web SPA สำหรับพนักงาน (Owner/Admin/Sales/Agent)
+│   │   ├── src/                              ← ย้ายจาก src/ ปัจจุบัน
+│   │   │   ├── pages/                        ← Executive, My, Sales Ops, Owner, ...
+│   │   │   ├── routes/
+│   │   │   └── main.tsx
+│   │   ├── public/
 │   │   ├── vite.config.ts
-│   │   └── index.html
+│   │   ├── tsconfig.json
+│   │   └── package.json
 │   │
-│   └── dashboard/                   ← Operator Dashboard (chateau-dashboard เดิม)
+│   ├── customer-portal/                   ← Web app สำหรับลูกค้าซื้อบ้าน (NEW Phase 3)
+│   │   ├── src/
+│   │   │   ├── pages/                        ← My Properties, Documents, Messages, Payments
+│   │   │   └── ...
+│   │   ├── vite.config.ts (หรือ Next.js)
+│   │   └── package.json
+│   │
+│   ├── marketing-site/                    ← chateau.com — public landing (Next.js SSR)
+│   │   ├── pages/                            ← / · /features · /pricing · /blog
+│   │   ├── next.config.js
+│   │   └── package.json
+│   │
+│   └── mobile/                            ← React Native (Sales + Customer)
 │       ├── src/
-│       │   ├── components/          ← components เฉพาะ dashboard
-│       │   └── pages/
-│       ├── package.json
-│       └── vite.config.ts
+│       └── package.json
 │
-├── packages/
-│   ├── ui/                          ← Shared UI Component Library
+├── packages/                              ← Shared libraries
+│   ├── ui/                                ← shadcn components (Button, Card, Dialog, ...)
 │   │   ├── src/
 │   │   │   ├── button.tsx
 │   │   │   ├── card.tsx
-│   │   │   ├── dialog.tsx
-│   │   │   └── ... (46+ components จาก src/ui/ และ src/components/ui/)
-│   │   ├── package.json             ← { "name": "@chateau/ui" }
-│   │   └── tailwind.config.js
+│   │   │   └── index.ts
+│   │   ├── tailwind.config.js
+│   │   └── package.json
 │   │
-│   ├── types/                       ← Shared TypeScript Types
+│   ├── data/                              ← Supabase client + queries + types
 │   │   ├── src/
-│   │   │   ├── database.ts          ← รวม database-types + types/database.ts
-│   │   │   ├── payment.ts
-│   │   │   ├── lead-scoring.ts
-│   │   │   └── errors.ts
-│   │   └── package.json             ← { "name": "@chateau/types" }
+│   │   │   ├── client.ts                    ← createClient
+│   │   │   ├── queries/
+│   │   │   │   ├── units.ts                  ← getUnitsByTenant, etc.
+│   │   │   │   ├── leads.ts
+│   │   │   │   └── tenants.ts
+│   │   │   ├── types/                       ← Database, Unit, Lead, ...
+│   │   │   └── index.ts
+│   │   └── package.json
 │   │
-│   ├── supabase/                    ← Supabase Client + Utilities
+│   ├── auth/                              ← Auth context + permission helpers
 │   │   ├── src/
-│   │   │   ├── client.ts            ← supabase.ts เดิม
-│   │   │   ├── query-client.ts
-│   │   │   ├── lead-scoring.ts
-│   │   │   ├── loan-estimation.ts
-│   │   │   ├── billing-scheduler.ts
-│   │   │   ├── suspension-service.ts
-│   │   │   └── invoice-pdf/
-│   │   └── package.json             ← { "name": "@chateau/supabase" }
+│   │   │   ├── AuthContext.tsx
+│   │   │   ├── usePermissions.ts
+│   │   │   └── guards.tsx
+│   │   └── package.json
 │   │
-│   └── config/                      ← Shared Configs
-│       ├── tailwind.base.js         ← base Tailwind config
-│       ├── tsconfig.base.json       ← base TypeScript config
-│       └── package.json             ← { "name": "@chateau/config" }
+│   ├── theme/                             ← Brand color, typography, Tailwind preset
+│   │   ├── src/
+│   │   │   ├── palette.ts                   ← C constant (soft red theme)
+│   │   │   ├── tailwind-preset.js
+│   │   │   └── index.ts
+│   │   └── package.json
+│   │
+│   ├── utils/                             ← formatTHB, dates, validators, etc.
+│   │   ├── src/
+│   │   │   ├── currency.ts
+│   │   │   ├── date.ts
+│   │   │   └── index.ts
+│   │   └── package.json
+│   │
+│   └── types/                             ← Shared TS types ที่ไม่ใช่ DB
+│       ├── src/
+│       │   ├── role.ts
+│       │   └── domain.ts
+│       └── package.json
 │
-├── supabase/                        ← Supabase backend (ไม่เปลี่ยน)
-│   ├── migrations/                  ← 106+ SQL migrations
-│   └── functions/                   ← 11 edge functions
+├── supabase/                              ← DB migrations + edge functions (shared)
+│   ├── migrations/
+│   ├── functions/
+│   └── seed.sql
 │
-├── scripts/                         ← Utility scripts (จัดกลุ่มใหม่)
-│   ├── users/
-│   ├── database/
-│   └── migrations/
+├── scripts/                               ← Build/dev helper scripts
+├── docs/                                  ← Architecture, ADRs
+├── .github/workflows/                     ← CI/CD per app
 │
-├── turbo.json                       ← Turborepo configuration
-├── pnpm-workspace.yaml              ← pnpm workspaces
-└── package.json                     ← root package (devDependencies เท่านั้น)
+├── turbo.json                             ← Turborepo config (task pipeline)
+├── pnpm-workspace.yaml                    ← Workspace declaration
+└── package.json                           ← Root: only dev tools (turbo, eslint, prettier)
+```
+
+### 3.2 ใครใช้ app ไหน
+
+| Role | Portal | Customer Portal | Marketing Site | Mobile |
+|---|:---:|:---:|:---:|:---:|
+| Owner | ✅ | — | (admin) | optional |
+| Admin | ✅ | — | (admin) | optional |
+| **Sales** | ✅ | — | — | ✅ **mobile-first** |
+| **Agent** | ✅ | — | — | ✅ **mobile-first** |
+| **Customer** | — | ✅ | ✅ (public) | ✅ |
+
+---
+
+## 4. รายละเอียดแต่ละ App
+
+### 4.1 `apps/portal/` — Staff Web App
+**Audience:** Internal staff (Owner, Admin, Sales, Agent)
+**Tech:** Vite + React 19 + TS + shadcn
+**Deploy:** `app.chateau.com` (Vercel)
+**Pages:** 25+ (ของปัจจุบันทั้งหมด)
+
+**Bundle strategy:**
+- Code-split per role group
+- Owner-only pages lazy load
+- Sales gets smaller bundle
+
+### 4.2 `apps/customer-portal/` — Customer Web (Phase 3)
+**Audience:** End customers (ลูกค้าซื้อบ้าน)
+**Tech:** Vite + React 19 + TS + shadcn (หรือ Next.js ถ้าต้อง SEO)
+**Deploy:** `my.chateau.com` หรือ `[tenant].chateau.com` (white-label)
+**Pages (estimate):**
+- My Properties (ยูนิตที่ฉันซื้อ/จอง)
+- Documents (สัญญา, ใบเสร็จ)
+- Payments (ค่างวด, due dates)
+- Messages (คุยกับ Sales)
+- Profile
+
+**Branding:** ใช้ logo + color ของ tenant (white-label)
+
+### 4.3 `apps/marketing-site/` — Public Site
+**Audience:** Prospects ที่ยังไม่ได้สมัคร
+**Tech:** Next.js 15 (SSR สำหรับ SEO)
+**Deploy:** `chateau.com` (Vercel หรือ Cloudflare Pages)
+**Pages:**
+- Landing (`/`)
+- Features
+- Pricing
+- Blog/Resources
+- Sign up / Contact
+
+### 4.4 `apps/mobile/` — React Native (Future)
+**Audience:** Sales (on-site), Customer
+**Tech:** React Native + Expo
+**Deploy:** App Store + Play Store
+**Features:**
+- Quick lead capture (Sales walk-in)
+- Push notifications
+- Offline mode (เก็บ leads ตอนไม่มีเน็ตที่ site visit)
+
+---
+
+## 5. รายละเอียดแต่ละ Shared Package
+
+### 5.1 `packages/ui/`
+**คืออะไร:** ฐานของ shadcn/ui components — Button, Card, Dialog, Input, Select, Table, ...
+
+**ใช้โดย:** `portal`, `customer-portal`, `marketing-site` (web เท่านั้น — RN ไม่ใช้)
+
+**ไม่ใช่:** application-specific components (เช่น `<UnitCard>` อยู่ใน app, ไม่ใช่ที่นี่)
+
+**Export:** named exports สำหรับ tree-shaking
+```ts
+// packages/ui/src/index.ts
+export { Button } from './button';
+export { Card, CardContent, ... } from './card';
+```
+
+### 5.2 `packages/data/`
+**คืออะไร:** Supabase client + queries + types
+
+**โครงสร้าง:**
+```
+packages/data/src/
+├── client.ts                ← createClient(supabaseUrl, key)
+├── types/                   ← จาก supabase typegen
+│   └── database.ts
+├── queries/
+│   ├── units.ts             ← export const getUnitsByTenant, etc.
+│   ├── leads.ts
+│   ├── tenants.ts
+│   └── activity.ts
+└── mutations/
+    ├── leads.ts             ← createLead, updateLeadStatus
+    └── units.ts             ← updateUnitStatus (เปลี่ยน reservation)
+```
+
+**ใช้โดย:** ทุก app ที่ติดกับ Supabase
+
+### 5.3 `packages/auth/`
+**คืออะไร:** Authentication context + permission guards
+
+**Export:**
+```ts
+export { AuthProvider, useAuth } from './AuthContext';
+export { PermissionGuard, RoleGuard } from './guards';
+export { usePermissions } from './usePermissions';
+export type { Role, Permission } from './types';
+```
+
+**Why แยก:** Auth logic + RLS helpers ใช้ใน portal, customer-portal, mobile — แต่ละ app ตั้ง redirect ต่างกัน
+
+### 5.4 `packages/theme/`
+**คืออะไร:** Brand color palette + Tailwind preset + typography tokens
+
+**Export:**
+```ts
+// packages/theme/src/palette.ts
+export const palette = {
+  red:        '#ef4444',
+  redLight:   '#fef2f2',
+  redDeep:    '#e11d48',
+  amber:      '#d97706',
+  green:      '#16a34a',
+  charcoal:   '#475569',
+  slate:      '#94a3b8',
+  // ...
+};
+
+// packages/theme/tailwind-preset.js
+module.exports = {
+  theme: {
+    extend: {
+      colors: {
+        brand: { DEFAULT: palette.red, ... }
+      }
+    }
+  }
+};
+```
+
+**ทำไมสำคัญตอนนี้:** ตอนนี้ทุกหน้าประกาศ `const C = { ... }` ซ้ำกัน — เป็น code duplication ที่ migrate ยาก. ต้อง centralize ก่อน
+
+### 5.5 `packages/utils/`
+**คืออะไร:** Pure utility functions (no React, no Supabase)
+
+**ตัวอย่าง:**
+```ts
+// formatTHB('1234567') → '฿1.2M'
+export const formatTHB = (n: number): string => { ... };
+
+// timeAgo('2026-05-10') → '2 วันก่อน'
+export const timeAgo = (iso: string): string => { ... };
+
+// validators
+export const isValidEmail = (s: string): boolean => { ... };
+```
+
+**Why pure functions:** ใช้ได้ทุก app + ทุก framework (web, RN, marketing)
+
+### 5.6 `packages/types/`
+**คืออะไร:** Domain types ที่ไม่ใช่ DB schema
+
+```ts
+export type Role = 'owner' | 'admin' | 'sales' | 'agent' | 'customer';
+export type Permission = 'view_units' | 'edit_units' | 'manage_users' | ...;
+export type UnitStatus = 'available' | 'reserved' | 'sold' | 'unavailable';
 ```
 
 ---
 
-## 4. Dependency Map
+## 6. Tooling Decisions
 
-```
-apps/web ──────────────────────────────────────────┐
-  depends on:                                       │
-  ├── @chateau/ui       (UI components)             │
-  ├── @chateau/types    (TypeScript types)          │
-  └── @chateau/supabase (Supabase client + logic)  │
-                                                    ▼
-apps/dashboard ──────────────────────────────────── shared packages
-  depends on:
-  ├── @chateau/ui
-  ├── @chateau/types
-  └── @chateau/supabase
+### 6.1 Package Manager: **pnpm** (recommended)
+**Reasons:**
+- Workspace-native (`pnpm-workspace.yaml`)
+- Strict dependency hoisting (catch bugs early)
+- Fast install, disk-efficient
+- ใช้โดย Vue, Vite, Vercel เอง
 
-packages/supabase ──────────────────────────────────
-  depends on:
-  └── @chateau/types
+**Alternatives:** npm workspaces (built-in but slower), Yarn berry (complex)
 
-packages/ui ─────────────────────────────────────────
-  depends on:
-  └── @chateau/config (tailwind base)
-```
+### 6.2 Build Orchestrator: **Turborepo**
+**Reasons:**
+- Caching builds (เห็นผลจริงเมื่อ apps > 2)
+- Task pipelines (`build` → `lint` → `test` parallel)
+- Simple `turbo.json` config
+- ใช้กันใน Vercel ecosystem
 
----
+**Alternatives:** Nx (more powerful but heavier), Bazel (overkill)
 
-## 5. การจัดการ Git Branch (ควรทำคู่กัน)
+### 6.3 Type System: **TypeScript Project References**
+**Reasons:**
+- Incremental builds (compile only changed)
+- Cross-package type checking
+- เป็น standard ที่ Microsoft ออกแบบมาเฉพาะ monorepo
 
-### แนะนำ: GitHub Flow
-
-```
-main  (production → Vercel deploy)
-  │
-  ├── feature/leads-export-pdf
-  ├── feature/booking-calendar
-  ├── fix/invoice-status-bug
-  └── chore/migrate-to-monorepo
-```
-
-**Branch protection rules (ตั้งบน GitHub):**
-- ห้าม push ตรงเข้า `main`
-- ต้องผ่าน Pull Request
-- ต้อง review อย่างน้อย 1 คน
-
----
-
-## 6. แผนการ Migration (ทำทีละขั้น)
-
-### Phase 1 — ตั้งโครงสร้าง (ไม่ break production)
-```
-1. สร้าง turbo.json + pnpm-workspace.yaml
-2. สร้าง packages/config (tailwind + tsconfig base)
-3. ย้าย src/ui/ + src/components/ui/ → packages/ui
-4. ทดสอบ apps/web build ผ่าน
-```
-
-### Phase 2 — แยก Packages
-```
-5. สร้าง packages/types (รวม types ที่ซ้ำซ้อน)
-6. สร้าง packages/supabase (supabase client + business logic)
-7. อัปเดต import ใน apps/web ให้ใช้ @chateau/*
-8. ทดสอบ build + dev
-```
-
-### Phase 3 — เพิ่ม Dashboard App
-```
-9. สร้าง apps/dashboard จาก chateau-dashboard
-10. Reuse @chateau/ui + @chateau/types
-11. ตั้ง Vercel project ใหม่สำหรับ dashboard
-```
-
-### Phase 4 — CI/CD + Optimization
-```
-12. ตั้ง GitHub Actions (lint + test + build)
-13. Turborepo remote cache
-14. จัดระเบียบ scripts/
-```
-
----
-
-## 7. ไฟล์ Config หลักที่ต้องสร้าง
-
-### `pnpm-workspace.yaml`
-```yaml
-packages:
-  - 'apps/*'
-  - 'packages/*'
-```
-
-### `turbo.json`
+### 6.4 Sample `turbo.json`
 ```json
 {
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**", ".next/**"]
     },
-    "dev": {
-      "cache": false,
-      "persistent": true
-    },
-    "lint": {},
-    "test": {
-      "dependsOn": ["^build"]
-    }
+    "dev": { "cache": false, "persistent": true },
+    "lint": { "dependsOn": ["^build"] },
+    "type-check": { "dependsOn": ["^build"] }
   }
 }
 ```
 
-### `packages/ui/package.json`
-```json
-{
-  "name": "@chateau/ui",
-  "version": "0.0.1",
-  "exports": {
-    "./button": "./src/button.tsx",
-    "./card": "./src/card.tsx"
-  },
-  "peerDependencies": {
-    "react": "^19.0.0"
-  }
-}
+### 6.5 Sample `pnpm-workspace.yaml`
+```yaml
+packages:
+  - "apps/*"
+  - "packages/*"
 ```
 
 ---
 
-## 8. สรุปเปรียบเทียบ
+## 7. Migration Strategy — เมื่อถึงเวลา
 
-| หัวข้อ | ปัจจุบัน | หลัง Monorepo |
-|--------|---------|--------------|
-| **โครงสร้าง** | Single app ทุกอย่างรวม | แยก apps + packages ชัดเจน |
-| **UI Components** | ซ้ำ 2 ที่ (src/ui + src/components/ui) | `@chateau/ui` ที่เดียว |
-| **Types** | กระจาย 2 ไฟล์ | `@chateau/types` ที่เดียว |
-| **Dashboard** | ว่างเปล่า | `apps/dashboard` พร้อมใช้ |
-| **Build time** | ทุกครั้ง build ทั้งหมด | Turborepo cache เฉพาะที่เปลี่ยน |
-| **Scale** | เพิ่ม app ใหม่ยาก | เพิ่ม `apps/xxx` ได้เลย |
-| **Onboarding** | อ่านโค้ดยาก (ทุกอย่างใน src/) | แต่ละ package มี scope ชัดเจน |
+### Phase A: เตรียมพื้นที่ (1-2 วัน)
+1. Audit `src/` หา circular imports
+2. Audit page→page imports (ห้ามมี)
+3. Move shared utilities ที่กระจายอยู่ → `src/lib/`
+
+### Phase B: Set up monorepo skeleton (1 วัน)
+1. Init `pnpm-workspace.yaml` + `turbo.json`
+2. Create `apps/` และ `packages/` empty
+3. Test build ของ root works
+
+### Phase C: Extract packages ทีละตัว (3-5 วัน)
+ทำตามลำดับนี้:
+1. **`packages/utils/`** — แตะน้อย, dependency น้อยสุด
+2. **`packages/types/`** — pure types
+3. **`packages/theme/`** — centralize color palette
+4. **`packages/ui/`** — shadcn components
+5. **`packages/data/`** — Supabase queries
+6. **`packages/auth/`** — auth context
+
+แต่ละขั้น: ย้าย → fix imports → test → commit
+
+### Phase D: Move current app (1 วัน)
+- ย้าย `src/` → `apps/portal/src/`
+- Update `vite.config.ts` paths
+- Update CI/CD
+
+### Phase E: Build new apps (per phase ของ roadmap)
+- `apps/customer-portal/` ตอนทำ Phase 3
+- `apps/marketing-site/` ตอนมี content/blog
+- `apps/mobile/` ตอนต้องการ native features
+
+**Total migration effort:** 1-2 สัปดาห์ของ refactor เมื่อถึงเวลา
 
 ---
 
-## 9. ความเสี่ยงและข้อควรระวัง
+## 8. ✅ Preparation Tasks — สิ่งที่ทำได้ "ตอนนี้" เพื่อให้ migrate ง่ายในอนาคต
 
-| ความเสี่ยง | ระดับ | การป้องกัน |
-|-----------|------|-----------|
-| Migration ทำให้ production พัง | สูง | ทำใน branch แยก ไม่ merge จนกว่าจะ test ครบ |
-| Import paths เปลี่ยนหมด | กลาง | ทำทีละ phase ใช้ script อัปเดต path |
-| pnpm ไม่ compatible กับ Vercel | ต่ำ | Vercel รองรับ pnpm เต็ม 100% |
-| Turborepo learning curve | ต่ำ | Config ไม่ซับซ้อน เริ่มต้นได้เร็ว |
+### Priority 1 — ทำเลย (cheap, high-value)
+
+#### 8.1 ใช้ `@/` absolute imports เสมอ
+```ts
+// ❌ ห้าม
+import { Button } from '../../../components/ui/button';
+// ✅ ใช้
+import { Button } from '@/components/ui/button';
+```
+**Status ปัจจุบัน:** ✅ ทำแล้ว — `tsconfig.json` มี `paths` set แล้ว
+
+#### 8.2 ห้าม Page import จาก Page
+```ts
+// ❌ ห้าม
+// src/pages/Index.tsx
+import { something } from '@/pages/OwnerDashboard';
+// ✅ ทำ
+// shared logic ย้ายเข้า lib/
+import { something } from '@/lib/dashboard-helpers';
+```
+**Status:** ⚠️ ต้อง audit — ไม่แน่ใจว่ามีหรือเปล่า
+
+#### 8.3 Centralize Theme/Palette
+ตอนนี้ทุก dashboard ประกาศ `const C = { red: '#ef4444', ... }` ซ้ำกัน
+**ต้องทำ:** ย้ายเข้า `src/lib/theme.ts` แล้ว import ทุกที่
+```ts
+// src/lib/theme.ts (NEW)
+export const palette = {
+  red:        '#ef4444',
+  redLight:   '#fef2f2',
+  // ... ตามที่ใช้ใน Index.tsx
+} as const;
+```
+แล้วในทุก page:
+```ts
+import { palette as C } from '@/lib/theme';
+```
+**Status:** ❌ ยังไม่ทำ — high priority
+
+### Priority 2 — ทำเมื่อมีเวลา (medium-value)
+
+#### 8.4 Refactor Supabase queries → `src/lib/api/`
+ตอนนี้แต่ละ page เขียน `supabase.from('units').select(...)` เอง
+**ต้องทำ:** สร้าง wrapper functions
+```ts
+// src/lib/api/units.ts (NEW)
+export const getUnitsByTenant = (tenantId: string) =>
+  supabase.from('units')
+    .select('id, status, price, deposit_amount, sold_at, reserved_at, project_id')
+    .eq('tenant_id', tenantId);
+```
+**Status:** ⚠️ มี `src/lib/api/dashboard.ts` แล้ว แต่ยังไม่ครอบคลุม
+
+#### 8.5 จัดระเบียบ folder structure ให้ "feature-based"
+อนาคต split ง่ายขึ้น:
+```
+src/
+├── shared/                  ← จะกลายเป็น packages/ ในอนาคต
+│   ├── ui/                  ← (เดิม components/ui/)
+│   ├── auth/
+│   ├── data/                ← (เดิม lib/api/)
+│   ├── theme/
+│   └── utils/
+├── features/                ← จัดตาม feature
+│   ├── dashboard/
+│   ├── leads/
+│   ├── properties/
+│   ├── permissions/
+│   └── admin/
+└── routes/
+```
+**Status:** ❌ ยังไม่ทำ — medium priority (cosmetic refactor)
+
+### Priority 3 — ทำตอนใกล้จะ migrate
+
+#### 8.6 Type extraction → `src/types/database.ts`
+ใช้ `supabase gen types typescript` สร้าง type จริง
+**Status:** ⚠️ บางส่วนทำแล้ว
+
+#### 8.7 Strict ESLint rule for circular imports
+ติด ESLint plugin `import/no-cycle` ป้องกัน regression
+**Status:** ❌ ยังไม่ทำ
 
 ---
 
-## 10. คำแนะนำสุดท้าย
+## 9. Signals — เมื่อไหร่ควร migrate
 
-**ควรทำ Monorepo เมื่อ:**
-- ต้องการสร้าง `apps/dashboard` จริงๆ
-- ทีมโต หรือมีคนทำงานหลายส่วนพร้อมกัน
+### Hard signals (ต้อง migrate)
+- [ ] เริ่มสร้าง Customer Portal (Phase 3) ← **trigger หลัก**
+- [ ] เริ่มสร้าง Mobile App
+- [ ] เริ่มสร้าง marketing site SSR (Next.js)
 
-**ยังไม่ต้องทำถ้า:**
-- โปรเจ็คยังมีคนเดียวหรือสองคน
-- ยังไม่มีแผนสร้าง dashboard app จริงๆ
+### Soft signals (พิจารณา migrate)
+- [ ] Build time > 30 วินาที
+- [ ] Bundle size > 1.5MB
+- [ ] ทีม dev > 3 คน
+- [ ] เห็น code duplication เกิดบ่อย
 
-**สิ่งที่ควรทำก่อน (ได้ประโยชน์ทันที ไม่ต้อง migrate ทั้งหมด):**
-1. ลบ code ซ้ำระหว่าง `src/ui/` และ `src/components/ui/`
-2. รวม `src/types/database.ts` กับ `src/lib/database-types.ts`
-3. จัด `scripts/` ให้เป็นหมวดหมู่
-4. ตั้ง Git branch strategy ให้ถูกต้อง (`main` = production)
+### Current status (2026-05-12)
+- ✅ Build time: ~285 ms (Vite — fast)
+- ✅ มี 1 app
+- ✅ Team size: 1 dev
+- ❌ **ยังไม่มี trigger** — keep monolith
+
+---
+
+## 10. ความเสี่ยง + วิธีลดความเสี่ยง
+
+| Risk | Mitigation |
+|---|---|
+| Premature optimization (migrate เร็วเกิน) | รอจน trigger signal เกิดจริง |
+| Refactor ใหญ่ break ของเดิม | Branch + test ทั้ง regression suite |
+| Tooling learning curve (Turbo, pnpm) | Start small — 1 package extract แรกก่อน |
+| Tenant data leaks between apps | ใช้ same Supabase + RLS, ไม่ต้องกังวล |
+| Build slowness ตอน migrate | Turborepo cache จะแก้เอง |
+| Confusion ในทีม | Doc + ADR (Architecture Decision Records) |
+
+---
+
+## 11. ตัดสินใจล่าสุด (Decision Log)
+
+| Decision | Reason | Date |
+|---|---|---|
+| ไม่แยกตาม Role (no `/agent` portal) | Role = permission ไม่ใช่ deployment | 2026-05-08 |
+| Single SPA ตอนนี้ | overhead > benefit | 2026-05-12 |
+| Plan monorepo เมื่อสร้าง Customer Portal | natural trigger | 2026-05-12 |
+| Tool: pnpm + Turborepo | Industry standard + Vercel-aligned | 2026-05-12 (planned) |
+| Customer Portal เป็น app แยก | คนละ audience, branding, URL | 2026-05-12 |
+
+---
+
+## 12. แนวทาง Roadmap (Suggested)
+
+```
+2026 Q2          2026 Q3              2026 Q4              2027 Q1
+─────────────    ──────────────────   ────────────────     ────────────────
+                                                          
+[ตอนนี้]         [Phase 3]            [Migration]          [Phase 4+]
+Stay single SPA  Start Customer       Monorepo migration   Mobile app
+                 Portal design        (when CP starts)     (extension)
+                 ↓                    ↓                    ↓
+                 Trigger detected!    Refactor → split     New package: mobile
+                                      apps/portal +
+                                      apps/customer-portal
+                                      packages/ui, data,
+                                      auth, theme, utils
+```
+
+---
+
+## 13. คำแนะนำสุดท้าย
+
+### ❌ Don't do now
+- อย่า migrate monorepo ก่อนมี trigger signal
+- อย่า over-engineer folder structure ตอน 1 app
+- อย่าเลือก tooling (Turbo/Nx) ก่อนจำเป็น
+
+### ✅ Do now
+- **ทำ Preparation 8.3 (Centralize Theme)** — high-value, low-cost
+- **ทำ Preparation 8.2 (Audit page→page imports)** — ป้องกันปัญหา
+- Continue building features ที่ค้างใน roadmap (Conversion Watch, Activity Feed, etc.)
+
+### ✅ Do later
+- ตอนเริ่ม Phase 3 (Customer Portal) → ติด `pnpm-workspace.yaml` + `turbo.json`
+- Extract packages ตามลำดับ Section 7 Phase C
+- Create ADR documents สำหรับการตัดสินใจสำคัญ
+
+---
+
+## เอกสารอ้างอิง
+
+- [Turborepo Docs](https://turbo.build/repo/docs)
+- [pnpm Workspaces](https://pnpm.io/workspaces)
+- [TypeScript Project References](https://www.typescriptlang.org/docs/handbook/project-references.html)
+- Vercel monorepo guide: https://vercel.com/docs/monorepos
+- [Nx vs Turborepo comparison](https://blog.nrwl.io/nx-and-turborepo)
+
+---
+
+**สรุปสุดท้าย:** Chateau อยู่ในจุดที่ดี — single SPA ที่ structured ดี.
+Monorepo เป็น **อนาคต** ที่ trigger โดย Customer Portal.
+**ก่อนถึงเวลานั้น**: focus ที่ build features + เขียนโค้ดให้ "monorepo-ready"

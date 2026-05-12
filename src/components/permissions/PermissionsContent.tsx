@@ -43,9 +43,11 @@ const PermissionsContent = () => {
       {/* Tabs */}
       <Tabs defaultValue={isOwner ? "admin-projects" : "sales-projects"} className="w-full">
         <TabsList className="w-full justify-start h-auto p-1 bg-gray-100">
-          <TabsTrigger value="admin-projects" className="data-[state=active]:bg-white">
-            🔧 สิทธิ์ Admin ดูแลโครงการ
-          </TabsTrigger>
+          {isOwner && (
+            <TabsTrigger value="admin-projects" className="data-[state=active]:bg-white">
+              🔧 สิทธิ์ Admin ดูแลโครงการ
+            </TabsTrigger>
+          )}
           <TabsTrigger value="sales-projects" className="data-[state=active]:bg-white">
             💼 สิทธิ์ Sales ดูแลโครงการ
           </TabsTrigger>
@@ -57,9 +59,11 @@ const PermissionsContent = () => {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="admin-projects" className="pt-4">
-          <AdminProjectMatrix />
-        </TabsContent>
+        {isOwner && (
+          <TabsContent value="admin-projects" className="pt-4">
+            <AdminProjectMatrix />
+          </TabsContent>
+        )}
 
         <TabsContent value="sales-projects" className="pt-4">
           <SalesProjectMatrix />
