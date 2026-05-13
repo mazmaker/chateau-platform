@@ -170,7 +170,7 @@ const CONSENT_OPTIONS = [
 ];
 
 const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initialUnitId }: AddLeadModalProps) => {
-  const { currentTenant } = useSimpleAuth();
+  const { currentTenant, userRole, userProfile } = useSimpleAuth();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
 
@@ -254,6 +254,13 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
       resetForm();
     }
   }, [isOpen]);
+
+  // Auto-assign to self for sales/agent roles
+  useEffect(() => {
+    if (isOpen && (userRole === 'sales' || userRole === 'agent') && userProfile?.id) {
+      setFormData(prev => ({ ...prev, assigned_to: userProfile.id }));
+    }
+  }, [isOpen, userRole, userProfile?.id]);
 
   // Auto-populate interest when initialPropertyId and initialUnitId are provided
   useEffect(() => {
@@ -411,17 +418,31 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
 
   const fetchInterestUnits = async (propertyId: string) => {
     try {
-      // Filter out units that are already added to interests
       const existingUnitIds = interests.map(i => i.unit_id);
-      const { data, error } = await supabase
-        .from('units')
-        .select('id, unit_number, project_id, status, price')
-        .eq('project_id', propertyId)
-        .order('unit_number');
-      if (error) throw error;
-      // Filter out already added units
-      const availableUnits = (data || []).filter(u => !existingUnitIds.includes(u.id));
-      setInterestUnits(availableUnits);
+
+      let units: Unit[] = [];
+
+      if (userRole === 'agent' && userProfile?.id) {
+        // Agent: only show their assigned units in this project
+        const { data, error } = await supabase
+          .from('agent_unit_assignments')
+          .select('units(id, unit_number, project_id, status, price)')
+          .eq('agent_user_id', userProfile.id)
+          .is('revoked_at', null);
+        if (error) throw error;
+        units = ((data || []).map((r: any) => r.units).filter(Boolean) as Unit[])
+          .filter(u => u.project_id === propertyId);
+      } else {
+        const { data, error } = await supabase
+          .from('units')
+          .select('id, unit_number, project_id, status, price')
+          .eq('project_id', propertyId)
+          .order('unit_number');
+        if (error) throw error;
+        units = data || [];
+      }
+
+      setInterestUnits(units.filter(u => !existingUnitIds.includes(u.id)));
     } catch (err) {
       console.error('Error fetching interest units:', err);
       setInterestUnits([]);
@@ -1312,22 +1333,30 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
                     {/* Sales Person */}
                     <div className="pt-3 border-t border-cyan-100">
                       <Label htmlFor="assigned_to" className="text-sm font-medium">พนักงานขายผู้รับผิดชอบ</Label>
-                      <Select
-                        value={formData.assigned_to}
-                        onValueChange={(value) => setFormData(prev => ({ ...prev, assigned_to: value }))}
-                        disabled={loading}
-                      >
-                        <SelectTrigger className="mt-1.5 max-w-md">
-                          <SelectValue placeholder="เลือกพนักงานขาย" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-60">
-                          {salesPeople.map((person) => (
-                            <SelectItem key={person.id} value={person.id}>
-                              {person.full_name || person.email}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      {(userRole === 'sales' || userRole === 'agent') ? (
+                        <div className="mt-1.5 max-w-md flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-700">
+                          <span className="text-gray-500">มอบหมายให้:</span>
+                          <span className="font-medium">{userProfile?.full_name || 'คุณ'}</span>
+                          <span className="text-xs text-gray-400 ml-auto">(อัตโนมัติ)</span>
+                        </div>
+                      ) : (
+                        <Select
+                          value={formData.assigned_to}
+                          onValueChange={(value) => setFormData(prev => ({ ...prev, assigned_to: value }))}
+                          disabled={loading}
+                        >
+                          <SelectTrigger className="mt-1.5 max-w-md">
+                            <SelectValue placeholder="เลือกพนักงานขาย" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-60">
+                            {salesPeople.map((person) => (
+                              <SelectItem key={person.id} value={person.id}>
+                                {person.full_name || person.email}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
                     </div>
                   </div>
                 </CardContent>

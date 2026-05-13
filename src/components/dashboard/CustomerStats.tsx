@@ -58,11 +58,11 @@ const CustomerStats = () => {
       const paidInvoices = invoices.filter(inv => inv.status === 'paid').length;
 
       const funnel = [
-        { stage: 'Leads', count: totalLeads, percentage: 100, color: '#6366f1' },
-        { stage: 'Qualified', count: Math.floor(totalLeads * 0.7), percentage: 70, color: '#6b7280' },
-        { stage: 'Interested', count: Math.floor(totalLeads * 0.4), percentage: 40, color: '#ec4899' },
-        { stage: 'Negotiation', count: totalTenants, percentage: totalLeads > 0 ? (totalTenants / totalLeads * 100) : 0, color: '#f59e0b' },
-        { stage: 'Customers', count: paidInvoices, percentage: totalLeads > 0 ? (paidInvoices / totalLeads * 100) : 0, color: '#10b981' },
+        { stage: 'ลูกค้าสนใจ', count: totalLeads, percentage: 100, color: '#6366f1' },
+        { stage: 'มีคุณสมบัติ', count: Math.floor(totalLeads * 0.7), percentage: 70, color: '#6b7280' },
+        { stage: 'สนใจมาก', count: Math.floor(totalLeads * 0.4), percentage: 40, color: '#ec4899' },
+        { stage: 'กำลังเจรจา', count: totalTenants, percentage: totalLeads > 0 ? (totalTenants / totalLeads * 100) : 0, color: '#f59e0b' },
+        { stage: 'ลูกค้าจ่ายแล้ว', count: paidInvoices, percentage: totalLeads > 0 ? (paidInvoices / totalLeads * 100) : 0, color: '#10b981' },
       ];
 
       setFunnelData(funnel);

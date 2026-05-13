@@ -1029,15 +1029,15 @@ const CampaignManagement = () => {
                             ) : (
                               <div className="grid grid-cols-3 gap-2 rounded-xl p-3" style={{ backgroundColor: '#fafafa' }}>
                                 <div className="text-center">
-                                  <div className="text-[10px] text-gray-500 uppercase font-medium tracking-wide mb-1">Open</div>
+                                  <div className="text-[10px] text-gray-500 font-medium tracking-wide mb-1">เปิดอ่าน</div>
                                   <div className="text-base font-bold tabular-nums text-gray-900">{openRate}%</div>
                                 </div>
                                 <div className="text-center border-x border-gray-200">
-                                  <div className="text-[10px] text-gray-500 uppercase font-medium tracking-wide mb-1">Click</div>
+                                  <div className="text-[10px] text-gray-500 font-medium tracking-wide mb-1">กดลิงก์</div>
                                   <div className="text-base font-bold tabular-nums" style={{ color: KK.red }}>{clickRate}%</div>
                                 </div>
                                 <div className="text-center">
-                                  <div className="text-[10px] text-gray-500 uppercase font-medium tracking-wide mb-1">Redeem</div>
+                                  <div className="text-[10px] text-gray-500 font-medium tracking-wide mb-1">ใช้สิทธิ์</div>
                                   <div className="text-base font-bold tabular-nums" style={{ color: KK.green }}>{convertRate}%</div>
                                 </div>
                               </div>

@@ -7,6 +7,8 @@ import Header from '@/components/dashboard/Header';
 import AddLeadModal from '@/components/leads/AddLeadModal';
 import EditLeadModal from '@/components/leads/EditLeadModal';
 import PaymentModal from '@/components/leads/PaymentModal';
+import HandoffLeadDialog from '@/components/leads/HandoffLeadDialog';
+import { toast } from 'sonner';
 import {
   Card,
   CardContent,
@@ -65,7 +67,8 @@ import {
   Trash2,
   AlertTriangle,
   Target,
-  CreditCard
+  CreditCard,
+  Send
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -190,7 +193,9 @@ const LeadManagement = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'all' | 'my' | 'team'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'my' | 'team'>(() =>
+    ['sales', 'agent'].includes(userRole || '') ? 'my' : 'all'
+  );
 
   // Dialog states
   const [showLeadDialog, setShowLeadDialog] = useState(false);
@@ -200,11 +205,47 @@ const LeadManagement = () => {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [selectedLeadInterests, setSelectedLeadInterests] = useState<LeadInterestWithDetails[]>([]);
   const [loadingInterests, setLoadingInterests] = useState(false);
+  const [leadActivities, setLeadActivities] = useState<Array<{ id: string; activity_type: string; description: string; created_at: string; user_name?: string }>>([]);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedLeadForPayment, setSelectedLeadForPayment] = useState<Lead | null>(null);
+  const [showHandoffDialog, setShowHandoffDialog] = useState(false);
+  const [leadForHandoff, setLeadForHandoff] = useState<Lead | null>(null);
+  const [editingVisitId, setEditingVisitId] = useState<string | null>(null);
+  const [visitDateDraft, setVisitDateDraft] = useState<string>('');
+  const [savingVisit, setSavingVisit] = useState(false);
+
+  const toLocalInputValue = (iso?: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const tz = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - tz).toISOString().slice(0, 16);
+  };
+
+  const saveVisitDate = async (interestId: string) => {
+    setSavingVisit(true);
+    try {
+      const isoValue = visitDateDraft ? new Date(visitDateDraft).toISOString() : null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from('lead_interests') as any)
+        .update({ viewing_date: isoValue, updated_at: new Date().toISOString() })
+        .eq('id', interestId);
+      if (error) throw error;
+      setSelectedLeadInterests((prev) =>
+        prev.map((i) => (i.id === interestId ? { ...i, viewing_date: isoValue || undefined } : i))
+      );
+      setEditingVisitId(null);
+      setVisitDateDraft('');
+    } catch (e: any) {
+      console.error('Save viewing date failed:', e);
+      alert('บันทึกวันนัดไม่สำเร็จ: ' + (e?.message || 'unknown'));
+    } finally {
+      setSavingVisit(false);
+    }
+  };
 
   // Form state
   const [leadForm, setLeadForm] = useState({
@@ -449,6 +490,62 @@ const LeadManagement = () => {
       fetchLeads();
     } catch (error) {
       console.error('Error saving lead:', error);
+    }
+  };
+
+  const fetchLeadActivities = async (leadId: string) => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase.from('activity_logs') as any)
+        .select('id, activity_type, description, created_at, user_id')
+        .filter('metadata->>lead_id', 'eq', leadId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      const rows = ((data as any[]) || []) as any[];
+      // Enrich user names
+      const userIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean)));
+      const userMap = new Map<string, string>();
+      if (userIds.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: users } = await (supabase.from('users') as any)
+          .select('id, full_name, email').in('id', userIds);
+        ((users as any[]) || []).forEach((u: any) => userMap.set(u.id, u.full_name || u.email || 'ผู้ใช้'));
+      }
+      setLeadActivities(rows.map((r) => ({
+        id: r.id, activity_type: r.activity_type, description: r.description, created_at: r.created_at,
+        user_name: r.user_id ? userMap.get(r.user_id) : 'ระบบ',
+      })));
+    } catch (e) {
+      console.error('Load lead activities error:', e);
+      setLeadActivities([]);
+    }
+  };
+
+  const markLeadContacted = async (lead: Lead) => {
+    setUpdatingStatus(true);
+    try {
+      const nowIso = new Date().toISOString();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from('leads') as any)
+        .update({ status: 'contacted', last_contact_date: nowIso }).eq('id', lead.id);
+      if (error) throw error;
+      // Log activity
+      const customerName = getCustomerName(lead);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase.from('activity_logs') as any).insert({
+        tenant_id: currentTenant?.id,
+        user_id: userProfile?.id,
+        activity_type: 'lead_contacted',
+        description: `ติดต่อลูกค้า ${customerName}`,
+        metadata: { lead_id: lead.id, customer_id: lead.customer_id },
+      });
+      setSelectedLead({ ...lead, status: 'contacted', last_contact_date: nowIso } as any);
+      await fetchLeads();
+      await fetchLeadActivities(lead.id);
+    } catch (err: any) {
+      console.error('markLeadContacted error:', err);
+    } finally {
+      setUpdatingStatus(false);
     }
   };
 
@@ -903,8 +1000,10 @@ const LeadManagement = () => {
             <div className="space-y-4">
               <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)}>
                 <TabsList>
-                  <TabsTrigger value="all">Leads ทั้งหมด</TabsTrigger>
-                  {userRole === 'admin' && (
+                  {(userRole === 'owner' || userRole === 'admin') && (
+                    <TabsTrigger value="all">Leads ทั้งหมด</TabsTrigger>
+                  )}
+                  {['admin', 'sales', 'agent'].includes(userRole || '') && (
                     <TabsTrigger value="my">Leads ของฉัน</TabsTrigger>
                   )}
                   {userRole === 'admin' && (
@@ -993,6 +1092,7 @@ const LeadManagement = () => {
                       onClick={() => {
                         setSelectedLead(lead);
                         fetchLeadInterests(lead.id);
+                        fetchLeadActivities(lead.id);
                         setShowDetailDialog(true);
                       }}
                     >
@@ -1116,6 +1216,7 @@ const LeadManagement = () => {
                             <DropdownMenuItem onClick={() => {
                               setSelectedLead(lead);
                               fetchLeadInterests(lead.id);
+                              fetchLeadActivities(lead.id);
                               setShowDetailDialog(true);
                             }}>
                               <Eye className="w-4 h-4 mr-2" />
@@ -1125,13 +1226,24 @@ const LeadManagement = () => {
                               <Edit className="w-4 h-4 mr-2" />
                               แก้ไข
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => openDeleteDialog(lead)}
-                              className="text-red-600 focus:text-red-600"
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              ลบ
-                            </DropdownMenuItem>
+                            {userRole === 'agent' && lead.assigned_to === userProfile?.id && (
+                              <DropdownMenuItem onClick={() => {
+                                setLeadForHandoff(lead);
+                                setShowHandoffDialog(true);
+                              }}>
+                                <Send className="w-4 h-4 mr-2 text-chateau" />
+                                ส่งต่อให้ Sales
+                              </DropdownMenuItem>
+                            )}
+                            {userRole !== 'agent' && (
+                              <DropdownMenuItem
+                                onClick={() => openDeleteDialog(lead)}
+                                className="text-red-600 focus:text-red-600"
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                ลบ
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -1204,12 +1316,76 @@ const LeadManagement = () => {
                           </div>
                         </div>
                         <div className="text-right flex-shrink-0">
-                          {getStatusBadge(selectedLead.status)}
+                          {/* Inline status dropdown — click to change */}
+                          <Select
+                            value={selectedLead.status}
+                            onValueChange={async (v) => {
+                              if (v === selectedLead.status) return;
+                              await handleUpdateStatus(selectedLead, v as LeadStatus);
+                              setSelectedLead({ ...selectedLead, status: v as LeadStatus });
+                              await fetchLeadActivities(selectedLead.id);
+                            }}
+                          >
+                            <SelectTrigger className="h-8 w-[160px] text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(['new','contacted','qualified','negotiating','proposal','won','lost'] as LeadStatus[]).map((s) => {
+                                const cfg = STATUS_CONFIG[s];
+                                return (
+                                  <SelectItem key={s} value={s}>
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: cfg.dot }} />
+                                      {cfg.label}
+                                    </span>
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
                           <p className="text-[11px] text-gray-400 mt-2">
                             สร้างเมื่อ {new Date(selectedLead.created_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })}
                           </p>
                         </div>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* === Quick Action Bar === */}
+                  <div className="bg-gradient-to-br from-rose-50/30 to-white border border-gray-100 rounded-xl p-3">
+                    <div className="flex flex-wrap gap-2">
+                      {customer?.phone && (
+                        <a
+                          href={`tel:${customer.phone}`}
+                          className="flex-1 min-w-[100px] flex items-center justify-center gap-1.5 h-10 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 font-semibold text-xs transition-colors"
+                        >
+                          <Phone className="w-3.5 h-3.5" /> โทร
+                        </a>
+                      )}
+                      <button
+                        onClick={() => toast?.info?.('LINE Integration เร็วๆ นี้')}
+                        className="flex-1 min-w-[100px] flex items-center justify-center gap-1.5 h-10 rounded-lg bg-[#06C755]/10 text-[#06C755] hover:bg-[#06C755]/20 font-semibold text-xs transition-colors"
+                      >
+                        <span className="font-bold">L</span> LINE
+                      </button>
+                      {customer?.email && (
+                        <a
+                          href={`mailto:${customer.email}`}
+                          className="flex-1 min-w-[100px] flex items-center justify-center gap-1.5 h-10 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold text-xs transition-colors"
+                        >
+                          <Mail className="w-3.5 h-3.5" /> อีเมล
+                        </a>
+                      )}
+                      {selectedLead.status === 'new' && (
+                        <button
+                          onClick={() => markLeadContacted(selectedLead)}
+                          disabled={updatingStatus}
+                          className="flex-1 min-w-[140px] flex items-center justify-center gap-1.5 h-10 rounded-lg bg-chateau text-white hover:bg-chateau-700 font-semibold text-xs transition-colors disabled:opacity-50"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          {updatingStatus ? 'กำลังบันทึก...' : 'บันทึก "ติดต่อแล้ว"'}
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -1256,10 +1432,51 @@ const LeadManagement = () => {
                                     )}
                                     {levelOption && <span className="text-gray-500">· {levelOption.label}</span>}
                                   </div>
-                                  {interest.viewing_date && (
-                                    <p className="text-[11px] text-gray-500 mt-1">
-                                      นัดดู {new Date(interest.viewing_date).toLocaleString('th-TH')}
-                                    </p>
+                                  {editingVisitId === interest.id ? (
+                                    <div className="flex items-center gap-2 mt-2">
+                                      <Input
+                                        type="datetime-local"
+                                        value={visitDateDraft}
+                                        onChange={(e) => setVisitDateDraft(e.target.value)}
+                                        className="h-8 text-xs flex-1"
+                                        disabled={savingVisit}
+                                      />
+                                      <Button
+                                        size="sm"
+                                        onClick={() => saveVisitDate(interest.id)}
+                                        disabled={savingVisit}
+                                        className="h-8 text-xs"
+                                      >
+                                        บันทึก
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => { setEditingVisitId(null); setVisitDateDraft(''); }}
+                                        disabled={savingVisit}
+                                        className="h-8 text-xs"
+                                      >
+                                        ยกเลิก
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2 mt-1">
+                                      {interest.viewing_date ? (
+                                        <p className="text-[11px] text-amber-700 font-medium">
+                                          📅 นัดดู {new Date(interest.viewing_date).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                        </p>
+                                      ) : (
+                                        <span className="text-[11px] text-gray-400">ยังไม่มีนัด</span>
+                                      )}
+                                      {(userRole === 'agent' || userRole === 'sales' || userRole === 'admin' || userRole === 'owner') && (
+                                        <button
+                                          onClick={() => { setEditingVisitId(interest.id); setVisitDateDraft(toLocalInputValue(interest.viewing_date)); }}
+                                          className="text-[11px] text-chateau hover:underline font-medium"
+                                        >
+                                          {interest.viewing_date ? 'แก้นัด' : '+ นัดดู'}
+                                        </button>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               </div>
@@ -1354,15 +1571,15 @@ const LeadManagement = () => {
                       ? Math.floor((Date.now() - new Date(selectedLead.last_contact_date).getTime()) / (1000 * 60 * 60 * 24))
                       : null;
 
-                    if (createdDays <= 7) segs.push({ icon: '🌱', label: 'Lead ใหม่ 7 วัน', reason: `${createdDays} วันที่แล้ว`, cat: 'lifecycle' });
+                    if (createdDays <= 7) segs.push({ icon: '🌱', label: 'ลูกค้าใหม่ภายใน 7 วัน', reason: `${createdDays} วันที่แล้ว`, cat: 'lifecycle' });
 
                     if ((selectedLead.status === 'qualified' || selectedLead.status === 'negotiating') && selectedLead.priority === 'high') {
-                      segs.push({ icon: '🔥', label: 'Hot Lead', reason: 'priority สูง', cat: 'critical' });
+                      segs.push({ icon: '🔥', label: 'ลูกค้าด่วน', reason: 'ความสำคัญสูง', cat: 'critical' });
                     }
                     if (lastContactDays !== null && lastContactDays >= 30 && selectedLead.status !== 'lost' && selectedLead.status !== 'won') {
-                      segs.push({ icon: '🥶', label: 'Cold Lead 30 วัน', reason: `เงียบ ${lastContactDays} วัน`, cat: 'critical' });
+                      segs.push({ icon: '🥶', label: 'ลูกค้าเงียบหายเกิน 30 วัน', reason: `เงียบ ${lastContactDays} วัน`, cat: 'critical' });
                     }
-                    if (selectedLead.status === 'lost') segs.push({ icon: '💀', label: 'Lost Lead', reason: 'lost', cat: 'lifecycle' });
+                    if (selectedLead.status === 'lost') segs.push({ icon: '💀', label: 'สูญเสียลูกค้า', reason: 'สูญเสีย', cat: 'lifecycle' });
                     if (selectedLead.status === 'won') segs.push({ icon: '🏆', label: 'Won Customer', reason: 'ปิดดีลแล้ว', cat: 'critical' });
 
                     // Budget
@@ -1425,6 +1642,56 @@ const LeadManagement = () => {
                       </div>
                     );
                   })()}
+
+                  {/* === Activity Log Timeline === */}
+                  <div className="bg-white border border-gray-100 rounded-xl p-5">
+                    <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-gray-500" />
+                      ประวัติการติดต่อ
+                      <span className="text-xs font-normal text-gray-400 ml-1">({leadActivities.length} รายการ)</span>
+                    </h3>
+                    {leadActivities.length === 0 ? (
+                      <div className="text-center py-6 text-sm text-gray-400">ยังไม่มีกิจกรรม</div>
+                    ) : (
+                      <div className="relative space-y-3 max-h-[300px] overflow-y-auto pr-2">
+                        {leadActivities.map((a, i) => {
+                          const time = new Date(a.created_at);
+                          const diff = Date.now() - time.getTime();
+                          const mins = Math.floor(diff / 60000);
+                          const hrs = Math.floor(mins / 60);
+                          const days = Math.floor(hrs / 24);
+                          const timeAgo = mins < 1 ? 'เมื่อสักครู่' : mins < 60 ? `${mins} นาทีก่อน` : hrs < 24 ? `${hrs} ชม.ก่อน` : days < 7 ? `${days} วันก่อน` : time.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+                          const typeIcons: Record<string, { icon: any; color: string; bg: string }> = {
+                            lead_created:      { icon: FileText,     color: 'text-blue-700', bg: 'bg-blue-50' },
+                            lead_contacted:    { icon: Phone,        color: 'text-cyan-700', bg: 'bg-cyan-50' },
+                            lead_status_updated:{ icon: TrendingUp,   color: 'text-amber-700', bg: 'bg-amber-50' },
+                            interest_added:    { icon: Building2,    color: 'text-rose-700', bg: 'bg-rose-50' },
+                            viewing_scheduled: { icon: Calendar,     color: 'text-amber-700', bg: 'bg-amber-50' },
+                            handoff_to_sales:  { icon: Users,        color: 'text-purple-700', bg: 'bg-purple-50' },
+                            payment_received:  { icon: CreditCard,   color: 'text-green-700', bg: 'bg-green-50' },
+                          };
+                          const cfg = typeIcons[a.activity_type] || { icon: FileText, color: 'text-gray-600', bg: 'bg-gray-50' };
+                          const Icon = cfg.icon;
+                          return (
+                            <div key={a.id} className="flex items-start gap-3 relative">
+                              {i < leadActivities.length - 1 && (
+                                <div className="absolute left-[15px] top-8 w-0.5 h-[calc(100%-1rem)] bg-gray-100" />
+                              )}
+                              <div className={`relative w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${cfg.bg}`}>
+                                <Icon className={`w-4 h-4 ${cfg.color}`} />
+                              </div>
+                              <div className="flex-1 min-w-0 pb-1">
+                                <p className="text-sm text-gray-900">{a.description}</p>
+                                <p className="text-[11px] text-gray-500 mt-0.5">
+                                  {timeAgo} {a.user_name && `· โดย ${a.user_name}`}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
 
                   {/* Personal Info Section */}
                   <div className="bg-white border border-gray-100 rounded-xl p-5">
@@ -1608,6 +1875,22 @@ const LeadManagement = () => {
             leadName={getCustomerName(selectedLeadForPayment)}
           />
         )}
+
+        {/* Handoff Dialog (Agent → Sales) */}
+        <HandoffLeadDialog
+          open={showHandoffDialog}
+          onOpenChange={(open) => {
+            setShowHandoffDialog(open);
+            if (!open) setLeadForHandoff(null);
+          }}
+          leadId={leadForHandoff?.id || null}
+          customerName={leadForHandoff ? getCustomerName(leadForHandoff) : undefined}
+          unitId={leadForHandoff?.unit_id}
+          projectId={leadForHandoff?.property_id}
+          onSuccess={() => {
+            fetchLeads();
+          }}
+        />
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

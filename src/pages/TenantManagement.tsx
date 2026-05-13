@@ -1426,8 +1426,8 @@ const TenantManagement = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">ทุกสถานะ</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="trial">Trial</SelectItem>
+                <SelectItem value="active">ใช้งานอยู่</SelectItem>
+                <SelectItem value="trial">ทดลองใช้</SelectItem>
                 <SelectItem value="suspended">ระงับ</SelectItem>
                 <SelectItem value="cancelled">ยกเลิก</SelectItem>
               </SelectContent>
@@ -2252,8 +2252,8 @@ const TenantManagement = () => {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="trial">Trial</SelectItem>
-                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="trial">ทดลองใช้</SelectItem>
+                          <SelectItem value="active">ใช้งานอยู่</SelectItem>
                           <SelectItem value="suspended">ระงับ</SelectItem>
                           <SelectItem value="cancelled">ยกเลิก</SelectItem>
                         </SelectContent>

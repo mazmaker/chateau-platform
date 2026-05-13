@@ -230,9 +230,9 @@ export const AdminGuard: React.FC<{ children: React.ReactNode; fallback?: React.
   </PermissionGuard>
 );
 
-// Platform Owner, Company Admin, OR Sales (for customer/lead viewing)
+// Platform Owner, Company Admin, Sales, OR Agent (for customer/lead viewing)
 export const SalesGuard: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> = ({ children, fallback }) => (
-  <PermissionGuard requiredRole={[UserRole.OWNER, UserRole.ADMIN, UserRole.SALES]} fallback={fallback}>
+  <PermissionGuard requiredRole={[UserRole.OWNER, UserRole.ADMIN, UserRole.SALES, UserRole.AGENT]} fallback={fallback}>
     {children}
   </PermissionGuard>
 );

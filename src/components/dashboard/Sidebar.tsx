@@ -14,15 +14,14 @@ import {
   Palette,
   TrendingUp,
   BarChart3,
-  Key,
   Lock,
   ChevronDown,
   Building,
   Wrench,
-  Code2,
   Wand2,
   Zap,
   Trophy,
+  UserCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -51,27 +50,24 @@ interface NavGroup {
 const NAV_GROUPS: NavGroup[] = [
   { id: "top",       label: null,              hrefs: ["/", "/owner", "/analytics", "/my-dashboard"] },
   { id: "platform",  label: "PLATFORM CORE",   icon: Building,  hrefs: ["/tenants", "/payments", "/properties"] },
-  { id: "crm",       label: "CRM & SALES",     icon: Users,     hrefs: ["/leads", "/sales-operations"] },
+  { id: "crm",       label: "CRM & SALES",     icon: Users,     hrefs: ["/leads"] },
   { id: "marketing", label: "MARKETING",       icon: Megaphone, hrefs: ["/campaigns", "/builder", "/triggers", "/marketing-analytics"] },
-  { id: "developer", label: "DEVELOPER",       icon: Code2,     hrefs: ["/api"] },
   { id: "admin",     label: "ADMIN",           icon: Wrench,    hrefs: ["/users", "/permissions", "/customization", "/settings"] },
 ];
 
 const getAllNavItems = (): NavItem[] => [
   { icon: LayoutDashboard, label: "Executive Dashboard", href: "/",            requiredRoles: ["OWNER", "ADMIN"] },
   { icon: TrendingUp,      label: "Platform Overview",   href: "/owner",         requiredRoles: ["OWNER"] },
-  { icon: Trophy,          label: "My Dashboard",        href: "/my-dashboard",  requiredRoles: ["SALES", "AGENT"] },
+  { icon: Trophy,          label: "Dashboard ของฉัน",    href: "/my-dashboard",  requiredRoles: ["SALES", "AGENT"] },
   { icon: BarChart3,       label: "Analytics",           href: "/analytics",     requiredRoles: ["OWNER", "ADMIN"], requiredFeature: "analytics", isPremium: true },
   { icon: Building2,       label: "จัดการบริษัท",         href: "/tenants",       requiredRoles: ["OWNER"] },
   { icon: CreditCard,      label: "การชำระเงิน",          href: "/payments",      requiredRoles: ["OWNER"] },
-  { icon: Building2,       label: "โครงการ",             href: "/properties",    requiredRoles: ["OWNER", "ADMIN", "SALES"] },
-  { icon: FileText,        label: "Leads",              href: "/leads",         requiredRoles: ["OWNER", "ADMIN", "SALES"] },
-  { icon: Briefcase,       label: "Sales Operations",   href: "/sales-operations", requiredRoles: ["OWNER", "ADMIN", "SALES"] },
+  { icon: Building2,       label: "โครงการ",             href: "/properties",    requiredRoles: ["OWNER", "ADMIN", "SALES", "AGENT"] },
+  { icon: FileText,        label: "Leads",              href: "/leads",         requiredRoles: ["OWNER", "ADMIN", "SALES", "AGENT"] },
   { icon: Megaphone,       label: "Campaigns",          href: "/campaigns",     requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Wand2,           label: "Builder Wizard",     href: "/builder",       requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Zap,             label: "Triggers",           href: "/triggers",      requiredRoles: ["OWNER", "ADMIN"] },
   { icon: BarChart3,       label: "Marketing Analytics",href: "/marketing-analytics", requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: Key,             label: "การจัดการ API",        href: "/api",           requiredRoles: ["OWNER"], requiredFeature: "api_access", isPremium: true },
   { icon: Users,           label: "จัดการผู้ใช้",          href: "/users",         requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Lock,            label: "สิทธิ์ผู้ใช้งาน",        href: "/permissions",   requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Palette,         label: "ปรับแต่งระบบ",         href: "/customization", requiredRoles: ["OWNER"] },
@@ -84,6 +80,7 @@ const getRoleLabel = (userRole: string | null) => {
     case "owner": return "เจ้าของแพลตฟอร์ม";
     case "admin": return "ผู้ดูแลบริษัท";
     case "sales": return "พนักงานขาย";
+    case "agent": return "นายหน้า";
     default: return "ผู้ใช้";
   }
 };
@@ -153,7 +150,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
       })
       .map((item) => {
         if (item.href === "/users" && isAdmin && !isOwner) {
-          return { ...item, label: "พนักงานขาย" };
+          return { ...item, label: "ทีมงาน" };
         }
         return item;
       });
@@ -215,7 +212,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             <div className="min-w-0">
               <p className="sidebar-logo-text font-bold text-base leading-tight">CHATEAU</p>
               <p className="sidebar-logo-sub text-xs leading-tight truncate mt-0.5">
-                {userRole === "owner" ? "Platform Owner" : userRole === "admin" ? "Admin Portal" : "Sales Portal"}
+                {userRole === "owner" ? "Platform Owner" : userRole === "admin" ? "Admin Portal" : userRole === "agent" ? "Agent Portal" : "Sales Portal"}
               </p>
             </div>
           </div>
@@ -311,6 +308,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
               {userRole === "owner" && <Crown size={14} style={{ color: "#e60023" }} />}
               {userRole === "admin" && <Shield size={14} style={{ color: "#6b7280" }} />}
               {userRole === "sales" && <Briefcase size={14} style={{ color: "#6b7280" }} />}
+              {userRole === "agent" && <UserCheck size={14} style={{ color: "#6b7280" }} />}
             </div>
           </div>
         </div>

@@ -182,6 +182,8 @@ const PropertyManagement = () => {
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
   const [unitViewMode, setUnitViewMode] = useState<'grid' | 'list'>('grid');
   const [mySalesUnitIds, setMySalesUnitIds] = useState<Set<string>>(new Set());
+  const [mySalesProjectIds, setMySalesProjectIds] = useState<Set<string>>(new Set());
+  const [myAgentUnitIds, setMyAgentUnitIds] = useState<Set<string>>(new Set());
   const [masterPlanImgError, setMasterPlanImgError] = useState(false);
   const [showReserveDialog, setShowReserveDialog] = useState(false);
   const [savingReserve, setSavingReserve] = useState(false);
@@ -531,29 +533,64 @@ const PropertyManagement = () => {
     setMasterPlanImgError(false);
   }, [viewingUnit?.id, selectedProperty?.master_plan_url]);
 
-  // Sales: fetch own designated units so we can gate edit/delete actions per unit
+  // Sales: fetch own designated units + projects so we can gate edit/delete actions
   useEffect(() => {
     if (userRole !== 'sales' || !user?.id) {
       setMySalesUnitIds(new Set());
+      setMySalesProjectIds(new Set());
       return;
     }
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
-        .from('sales_unit_assignments')
-        .select('unit_id')
-        .eq('sales_user_id', user.id)
-        .is('revoked_at', null);
-      if (!cancelled && !error && data) {
-        setMySalesUnitIds(new Set(data.map((r: any) => r.unit_id)));
+      const [unitRes, projRes] = await Promise.all([
+        supabase.from('sales_unit_assignments')
+          .select('unit_id')
+          .eq('sales_user_id', user.id)
+          .is('revoked_at', null),
+        supabase.from('sales_project_assignments')
+          .select('project_id')
+          .eq('sales_user_id', user.id)
+          .is('revoked_at', null),
+      ]);
+      if (cancelled) return;
+      if (!unitRes.error && unitRes.data) {
+        setMySalesUnitIds(new Set(unitRes.data.map((r: any) => r.unit_id)));
+      }
+      if (!projRes.error && projRes.data) {
+        setMySalesProjectIds(new Set(projRes.data.map((r: any) => r.project_id)));
       }
     })();
     return () => { cancelled = true; };
   }, [userRole, user?.id]);
 
-  const canManageUnit = (unitId: string): boolean => {
+  // Agent: fetch own assigned units
+  useEffect(() => {
+    if (userRole !== 'agent' || !user?.id) {
+      setMyAgentUnitIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('agent_unit_assignments')
+        .select('unit_id')
+        .eq('agent_user_id', user.id)
+        .is('revoked_at', null);
+      if (!cancelled && !error && data) {
+        setMyAgentUnitIds(new Set(data.map((r: any) => r.unit_id)));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [userRole, user?.id]);
+
+  const canManageUnit = (unitId: string, projectId?: string): boolean => {
     if (userRole === 'owner' || userRole === 'admin') return true;
-    if (userRole === 'sales') return mySalesUnitIds.has(unitId);
+    if (userRole === 'sales') {
+      if (mySalesUnitIds.has(unitId)) return true;
+      if (projectId && mySalesProjectIds.has(projectId)) return true;
+      return false;
+    }
+    if (userRole === 'agent') return myAgentUnitIds.has(unitId);
     return false;
   };
 
@@ -1915,7 +1952,7 @@ const PropertyManagement = () => {
                           <div className="px-2.5 py-1 bg-white/95 backdrop-blur rounded-md text-xs font-semibold text-gray-800 shadow-sm">
                             {unit.unit_number}
                           </div>
-                          {userRole === 'sales' && mySalesUnitIds.has(unit.id) && (
+                          {((userRole === 'sales' && mySalesUnitIds.has(unit.id)) || (userRole === 'agent' && myAgentUnitIds.has(unit.id))) && (
                             <div className="px-2 py-1 bg-chateau text-white rounded-md text-[11px] font-medium shadow-sm">
                               ของคุณ
                             </div>
@@ -2077,7 +2114,7 @@ const PropertyManagement = () => {
                                 <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dotClass}`} />
                                 {statusConfig.label}
                               </span>
-                              {userRole === 'sales' && mySalesUnitIds.has(unit.id) && (
+                              {((userRole === 'sales' && mySalesUnitIds.has(unit.id)) || (userRole === 'agent' && myAgentUnitIds.has(unit.id))) && (
                                 <span className="px-2 py-0.5 bg-chateau text-white rounded-md text-[11px] font-medium">
                                   ของคุณ
                                 </span>
@@ -2898,7 +2935,7 @@ const PropertyManagement = () => {
                 {(() => {
                   const isReserved = viewingUnit.status === 'reserved' && !!viewingUnit.reserved_customer_name;
                   const isSold = viewingUnit.status === 'sold' && !!viewingUnit.reserved_customer_name;
-                  const canManage = canManageUnit(viewingUnit.id) || userRole === 'owner' || userRole === 'admin';
+                  const canManage = canManageUnit(viewingUnit.id, viewingUnit.project_id) || userRole === 'owner' || userRole === 'admin';
                   const expiry = viewingUnit.locked_until ? new Date(viewingUnit.locked_until) : null;
                   const expired = expiry ? expiry.getTime() < now : false;
 
@@ -3545,7 +3582,7 @@ const PropertyManagement = () => {
               <Button variant="outline" onClick={() => setShowUnitDetailDialog(false)}>
                 ปิด
               </Button>
-              {viewingUnit && canManageUnit(viewingUnit.id) && (
+              {viewingUnit && canManageUnit(viewingUnit.id, viewingUnit.project_id) && (
                 <Button onClick={() => {
                   setShowUnitDetailDialog(false);
                   if (viewingUnit) handleEditUnit(viewingUnit);

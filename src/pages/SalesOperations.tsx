@@ -116,8 +116,15 @@ interface UserRow {
 
 const SalesOperations = () => {
   const navigate = useNavigate();
-  const { currentTenant } = useSimpleAuth();
+  const { currentTenant, userRole, authChecked } = useSimpleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Redirect Sales/Agent away — this page is Admin/Owner only
+  useEffect(() => {
+    if (authChecked && userRole && !['owner', 'admin'].includes(userRole)) {
+      navigate(userRole === 'sales' || userRole === 'agent' ? '/my-dashboard' : '/', { replace: true });
+    }
+  }, [authChecked, userRole, navigate]);
   const [leads, setLeads] = useState<LeadRow[]>([]);
   const [interests, setInterests] = useState<InterestRow[]>([]);
   const [units, setUnits] = useState<UnitRow[]>([]);
@@ -235,6 +242,21 @@ const SalesOperations = () => {
 
   // Hot Leads (priority=high + open status)
   const openStatuses = new Set(['new', 'contacted', 'qualified', 'negotiating']);
+
+  const statusLabel = (s?: string | null): string => {
+    const map: Record<string, string> = {
+      new: 'ใหม่',
+      contacted: 'ติดต่อแล้ว',
+      qualified: 'มีคุณสมบัติ',
+      proposal: 'เสนอราคา',
+      negotiating: 'กำลังเจรจา',
+      negotiation: 'กำลังเจรจา',
+      won: 'ปิดดีลแล้ว',
+      closed: 'ปิดดีลแล้ว',
+      lost: 'สูญเสีย',
+    };
+    return s ? (map[s] || s) : '—';
+  };
   const userById = new Map(users.map((u) => [u.id, u.full_name || u.email]));
   const propById = new Map(properties.map((p) => [p.id, p.name]));
   const unitById = new Map(units.map((u) => [u.id, u]));
@@ -409,15 +431,15 @@ const SalesOperations = () => {
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <Flame className="w-4 h-4" style={{ color: C.red }} />
-                      <h2 className="text-base font-bold text-gray-900">Hot Leads</h2>
+                      <h2 className="text-base font-bold text-gray-900">ลูกค้าด่วน</h2>
                     </div>
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.red, backgroundColor: C.redLight }}>
                       {hotLeads.length} ต้องตามด่วน
                     </span>
                   </div>
-                  <p className="text-xs text-gray-500 mb-4">priority = high · ยังเปิด</p>
+                  <p className="text-xs text-gray-500 mb-4">ความสำคัญสูง · ยังไม่ปิดดีล</p>
                   {hotLeads.length === 0 ? (
-                    <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ยังไม่มี hot leads</div>
+                    <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ยังไม่มีลูกค้าด่วน</div>
                   ) : (
                     <div className="space-y-2.5">
                       {hotLeads.map((l) => (
@@ -436,7 +458,7 @@ const SalesOperations = () => {
                           </div>
                           <div className="text-right shrink-0">
                             <span className="text-xs font-semibold tabular-nums" style={{ color: C.red }}>
-                              {l.status}
+                              {statusLabel(l.status)}
                             </span>
                             <p className="text-[11px] text-gray-400 mt-0.5">{timeAgo(l.created_at)}</p>
                           </div>
@@ -451,15 +473,15 @@ const SalesOperations = () => {
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <AlertTriangle className="w-4 h-4" style={{ color: C.amber }} />
-                      <h2 className="text-base font-bold text-gray-900">Inactive Leads</h2>
+                      <h2 className="text-base font-bold text-gray-900">ลูกค้าที่เงียบหาย</h2>
                     </div>
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.amber, backgroundColor: C.amberLight }}>
                       {inactiveLeads.length} เสี่ยงหลุด
                     </span>
                   </div>
-                  <p className="text-xs text-gray-500 mb-4">ไม่ติดต่อ &gt; 30 วัน · ยังเปิด</p>
+                  <p className="text-xs text-gray-500 mb-4">ไม่ติดต่อเกิน 30 วัน · ยังไม่ปิดดีล</p>
                   {inactiveLeads.length === 0 ? (
-                    <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ไม่มี lead ที่เงียบนาน 🎉</div>
+                    <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ไม่มีลูกค้าที่เงียบนาน 🎉</div>
                   ) : (
                     <div className="space-y-2.5">
                       {inactiveLeads.map((l) => (
@@ -479,7 +501,7 @@ const SalesOperations = () => {
                             <span className="text-xs font-semibold tabular-nums" style={{ color: l.daysInactive >= 60 ? C.red : C.amber }}>
                               {l.daysInactive} วัน
                             </span>
-                            <p className="text-[11px] text-gray-400 mt-0.5">{l.status}</p>
+                            <p className="text-[11px] text-gray-400 mt-0.5">{statusLabel(l.status)}</p>
                           </div>
                         </button>
                       ))}

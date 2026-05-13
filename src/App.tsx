@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import UserManagement from "./pages/UserManagement";
 import Projects from "./pages/Projects";
@@ -27,7 +27,14 @@ import Analytics from "./pages/Analytics";
 import ApiManagement from "./pages/ApiManagement";
 import Settings from "./pages/Settings";
 import Permissions from "./pages/Permissions";
-import SalesOperations from "./pages/SalesOperations";
+import CustomerLogin from "./pages/customer/CustomerLogin";
+import CustomerDashboard from "./pages/customer/CustomerDashboard";
+import CustomerProperties from "./pages/customer/CustomerProperties";
+import CustomerPropertyDetail from "./pages/customer/CustomerPropertyDetail";
+import CustomerUnitDetail from "./pages/customer/CustomerUnitDetail";
+import CustomerProfile from "./pages/customer/CustomerProfile";
+import CustomerBookings from "./pages/customer/CustomerBookings";
+import CustomerPayments from "./pages/customer/CustomerPayments";
 import MyDashboard from "./pages/MyDashboard";
 import AcceptInvite from "./pages/AcceptInvite";
 import ForcePasswordChange from "./pages/ForcePasswordChange";
@@ -288,18 +295,7 @@ const App = () => (
             </ErrorBoundary>
           } />
 
-          <Route path="/sales-operations" element={
-            <ErrorBoundary
-              showRetry={true}
-              showHome={true}
-              errorMessage="ไม่สามารถโหลดหน้า Sales Operations ได้"
-              context={{ page: 'sales-operations' }}
-            >
-              <ProtectedRouteSimple>
-                <SalesOperations />
-              </ProtectedRouteSimple>
-            </ErrorBoundary>
-          } />
+          <Route path="/sales-operations" element={<Navigate to="/analytics" replace />} />
 
           <Route path="/my-dashboard" element={
             <ErrorBoundary
@@ -312,6 +308,30 @@ const App = () => (
                 <MyDashboard />
               </ProtectedRouteSimple>
             </ErrorBoundary>
+          } />
+
+          {/* Customer Portal — public login + protected pages */}
+          <Route path="/customer/login" element={<CustomerLogin />} />
+          <Route path="/customer" element={
+            <ProtectedRouteSimple><CustomerDashboard /></ProtectedRouteSimple>
+          } />
+          <Route path="/customer/properties" element={
+            <ProtectedRouteSimple><CustomerProperties /></ProtectedRouteSimple>
+          } />
+          <Route path="/customer/properties/:id" element={
+            <ProtectedRouteSimple><CustomerPropertyDetail /></ProtectedRouteSimple>
+          } />
+          <Route path="/customer/units/:id" element={
+            <ProtectedRouteSimple><CustomerUnitDetail /></ProtectedRouteSimple>
+          } />
+          <Route path="/customer/profile" element={
+            <ProtectedRouteSimple><CustomerProfile /></ProtectedRouteSimple>
+          } />
+          <Route path="/customer/bookings" element={
+            <ProtectedRouteSimple><CustomerBookings /></ProtectedRouteSimple>
+          } />
+          <Route path="/customer/payments" element={
+            <ProtectedRouteSimple><CustomerPayments /></ProtectedRouteSimple>
           } />
 
           <Route path="/leads/:id" element={

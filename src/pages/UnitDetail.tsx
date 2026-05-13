@@ -18,12 +18,13 @@ import {
 } from '@/components/ui/select';
 import {
   Building2, Bed, Bath, Square, MapPin, Layers, DollarSign, Eye,
-  Calendar, Check, AlertTriangle, ArrowLeft, UserPlus, ImageIcon, Loader2, Edit, Share2,
+  Calendar, Check, AlertTriangle, ArrowLeft, UserPlus, ImageIcon, Loader2, Edit, Share2, Heart, Send,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import MasterPlanSVG from '@/components/properties/MasterPlanSVG';
 import AddLeadModal from '@/components/leads/AddLeadModal';
+import HandoffLeadDialog from '@/components/leads/HandoffLeadDialog';
 
 interface Unit {
   id: string;
@@ -78,7 +79,8 @@ interface Property {
 const UnitDetail = () => {
   const { unitId } = useParams<{ unitId: string }>();
   const navigate = useNavigate();
-  const { user, currentTenant, userRole } = useSimpleAuth();
+  const { user, userProfile, currentTenant, userRole } = useSimpleAuth();
+  const myUserId = userProfile?.id || user?.id;
 
   const [unit, setUnit] = useState<Unit | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
@@ -110,6 +112,16 @@ const UnitDetail = () => {
 
   // Sales designated units
   const [mySalesUnitIds, setMySalesUnitIds] = useState<Set<string>>(new Set());
+  const [mySalesProjectIds, setMySalesProjectIds] = useState<Set<string>>(new Set());
+  const [myAgentUnitIds, setMyAgentUnitIds] = useState<Set<string>>(new Set());
+  const [showQuickInterestDialog, setShowQuickInterestDialog] = useState(false);
+  const [quickInterestLeadId, setQuickInterestLeadId] = useState('');
+  const [quickInterestLevel, setQuickInterestLevel] = useState<'high' | 'medium' | 'low'>('high');
+  const [savingQuickInterest, setSavingQuickInterest] = useState(false);
+  const [showHandoffDialog, setShowHandoffDialog] = useState(false);
+  const [handoffLeadId, setHandoffLeadId] = useState<string | null>(null);
+  const [handoffCustomerName, setHandoffCustomerName] = useState<string | undefined>();
+  const [showHandoffPicker, setShowHandoffPicker] = useState(false);
 
   /* ─── tick countdown every 30s ─── */
   useEffect(() => {
@@ -144,7 +156,7 @@ const UnitDetail = () => {
         supabase.from('units').select('id, unit_number, status').eq('project_id', unitData.project_id),
         supabase
           .from('lead_interests')
-          .select('*, leads:lead_id(id, status, customers:customer_id(id, full_name, email, phone))')
+          .select('*, leads:lead_id(id, status, assigned_to, customers:customer_id(id, full_name, email, phone))')
           .eq('unit_id', unitId),
       ]);
 
@@ -193,26 +205,74 @@ const UnitDetail = () => {
     }
   };
 
-  /* ─── sales designated unit set (for canManage) ─── */
+  /* ─── sales/agent designated unit set (for canManage) ─── */
   useEffect(() => {
-    if (userRole !== 'sales' || !user?.id) {
+    if (!user?.id) {
       setMySalesUnitIds(new Set());
+      setMySalesProjectIds(new Set());
+      setMyAgentUnitIds(new Set());
       return;
     }
-    (async () => {
-      const { data } = await supabase
-        .from('sales_unit_assignments')
-        .select('unit_id')
-        .eq('sales_user_id', user.id)
-        .is('revoked_at', null);
-      setMySalesUnitIds(new Set((data || []).map((r: any) => r.unit_id)));
-    })();
+    if (userRole === 'sales') {
+      (async () => {
+        const [unitRes, projRes] = await Promise.all([
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase.from('sales_unit_assignments') as any)
+            .select('unit_id')
+            .eq('sales_user_id', user.id)
+            .is('revoked_at', null),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase.from('sales_project_assignments') as any)
+            .select('project_id')
+            .eq('sales_user_id', user.id)
+            .is('revoked_at', null),
+        ]);
+        setMySalesUnitIds(new Set((unitRes.data || []).map((r: any) => r.unit_id)));
+        setMySalesProjectIds(new Set((projRes.data || []).map((r: any) => r.project_id)));
+      })();
+    } else if (userRole === 'agent') {
+      (async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data } = await (supabase.from('agent_unit_assignments') as any)
+          .select('unit_id')
+          .eq('agent_user_id', user.id)
+          .is('revoked_at', null);
+        setMyAgentUnitIds(new Set((data || []).map((r: any) => r.unit_id)));
+      })();
+    }
   }, [userRole, user?.id]);
 
-  const canManageUnit = (id: string): boolean => {
+  const canManageUnit = (unitId: string, projectId?: string): boolean => {
     if (userRole === 'owner' || userRole === 'admin') return true;
-    if (userRole === 'sales') return mySalesUnitIds.has(id);
+    if (userRole === 'sales') {
+      if (mySalesUnitIds.has(unitId)) return true;
+      if (projectId && mySalesProjectIds.has(projectId)) return true;
+      return false;
+    }
+    if (userRole === 'agent') return myAgentUnitIds.has(unitId);
     return false;
+  };
+
+  const isAgentUser = userRole === 'agent';
+
+  // My active leads on this unit (for Handoff button)
+  const myLeadsOnUnit = unitLeads
+    .map((li: any) => li.leads)
+    .filter((l: any) => l && l.assigned_to === myUserId && l.status !== 'won' && l.status !== 'lost' && l.status !== 'closed');
+
+  const openHandoffFlow = () => {
+    if (myLeadsOnUnit.length === 0) {
+      toast.error('ยังไม่มี Lead ของคุณบนยูนิตนี้ — สร้าง Lead ก่อน');
+      return;
+    }
+    if (myLeadsOnUnit.length === 1) {
+      const l = myLeadsOnUnit[0];
+      setHandoffLeadId(l.id);
+      setHandoffCustomerName(l.customers?.full_name);
+      setShowHandoffDialog(true);
+    } else {
+      setShowHandoffPicker(true);
+    }
   };
 
   /* ─── helpers ─── */
@@ -230,7 +290,7 @@ const UnitDetail = () => {
     if (!currentTenant?.id) return;
     const { data } = await supabase
       .from('leads')
-      .select('id, status, customer:customers(full_name, phone, email)')
+      .select('id, status, assigned_to, customer_id, customer:customers(id, full_name, phone, email)')
       .eq('tenant_id', currentTenant.id)
       .order('created_at', { ascending: false });
     setAllTenantLeads(data || []);
@@ -285,6 +345,35 @@ const UnitDetail = () => {
         });
       }
 
+      // Create customer-facing booking record so the customer portal sees it
+      const customerId = lead.customer_id || lead.customer?.id || null;
+      if (customerId) {
+        const depositAmt = parseFloat(bookingForm.deposit_amount);
+        const unitPrice = Number(unit.price || 0);
+        const depositPct = unitPrice > 0 ? depositAmt / unitPrice : 0;
+        const reservationDay = nowDate.toISOString().slice(0, 10);
+        const transferEstimate = new Date(nowDate.getTime() + 90 * 86400000).toISOString().slice(0, 10);
+        await (supabase.from('bookings') as any).insert({
+          tenant_id: currentTenant?.id,
+          property_id: unit.project_id,
+          customer_id: customerId,
+          check_in_date: reservationDay,
+          check_out_date: transferEstimate,
+          total_amount: unitPrice,
+          currency: 'THB',
+          status: 'pending',
+          notes: {
+            unit_id: unit.id,
+            unit_number: unit.unit_number,
+            lead_id: lead.id,
+            deposit_amount: depositAmt,
+            deposit_pct: depositPct,
+            remaining_amount: Math.max(0, unitPrice - depositAmt),
+          },
+          created_by: user.id,
+        });
+      }
+
       toast.success(`บันทึกการจองยูนิต ${unit.unit_number} สำหรับ ${customerName}`);
       setShowReserveDialog(false);
       await loadAll();
@@ -295,13 +384,46 @@ const UnitDetail = () => {
     }
   };
 
+  const handleQuickInterest = async () => {
+    if (!unit) return;
+    if (!quickInterestLeadId) { toast.error('กรุณาเลือก Lead'); return; }
+    setSavingQuickInterest(true);
+    try {
+      const existing = unitLeads.some((li: any) => li.leads?.id === quickInterestLeadId);
+      if (existing) {
+        toast.info('Lead นี้บันทึกความสนใจในยูนิตนี้แล้ว');
+        setShowQuickInterestDialog(false);
+        return;
+      }
+      const { error } = await (supabase as any).from('lead_interests').insert({
+        lead_id: quickInterestLeadId,
+        unit_id: unit.id,
+        property_id: unit.project_id,
+        tenant_id: currentTenant?.id,
+        interest_level: quickInterestLevel,
+        status: 'interested',
+        notes: 'บันทึกโดย Agent ที่หน้างาน',
+      });
+      if (error) throw error;
+      toast.success(`บันทึกความสนใจยูนิต ${unit.unit_number} สำเร็จ`);
+      setShowQuickInterestDialog(false);
+      setQuickInterestLeadId('');
+      setQuickInterestLevel('high');
+      await loadAll();
+    } catch (err: any) {
+      toast.error(err.message || 'บันทึกไม่สำเร็จ');
+    } finally {
+      setSavingQuickInterest(false);
+    }
+  };
+
   const handleMarkAsSold = async () => {
     if (!unit) return;
     if (!confirm(`ปิดการขายยูนิต ${unit.unit_number}? (สถานะจะเปลี่ยนเป็น "ขายแล้ว")`)) return;
     try {
       const { data, error } = await supabase
         .from('units')
-        .update({ status: 'sold', locked_until: null })
+        .update({ status: 'sold', locked_until: null, sold_at: new Date().toISOString() })
         .eq('id', unit.id)
         .select('id');
       if (error) throw error;
@@ -309,6 +431,12 @@ const UnitDetail = () => {
       if (unit.reserved_customer_lead_id) {
         await supabase.from('leads').update({ status: 'won' }).eq('id', unit.reserved_customer_lead_id);
       }
+      // Promote pending booking → confirmed (customer sees: ชำระแล้ว · ทำสัญญา)
+      await (supabase.from('bookings') as any)
+        .update({ status: 'confirmed' })
+        .eq('tenant_id', currentTenant?.id)
+        .filter('notes->>unit_id', 'eq', unit.id)
+        .in('status', ['pending']);
       toast.success(`ปิดการขายยูนิต ${unit.unit_number} สำเร็จ`);
       await loadAll();
     } catch (err: any) {
@@ -331,6 +459,12 @@ const UnitDetail = () => {
         .select('id');
       if (error) throw error;
       if (!data || data.length === 0) throw new Error('ไม่มีสิทธิ์ยกเลิก');
+      // Cancel any open bookings tied to this unit so customer sees "ยกเลิก"
+      await (supabase.from('bookings') as any)
+        .update({ status: 'cancelled' })
+        .eq('tenant_id', currentTenant?.id)
+        .filter('notes->>unit_id', 'eq', unit.id)
+        .in('status', ['pending', 'confirmed']);
       toast.success(`ยกเลิกจองยูนิต ${unit.unit_number}`);
       await loadAll();
     } catch (err: any) {
@@ -420,7 +554,7 @@ const UnitDetail = () => {
   const expired = expiry ? expiry.getTime() < now : false;
   const isReservedActive = unit.status === 'reserved' && !!unit.reserved_customer_name;
   const isSold = unit.status === 'sold' && !!unit.reserved_customer_name;
-  const canManage = canManageUnit(unit.id) || userRole === 'owner' || userRole === 'admin';
+  const canManage = canManageUnit(unit.id, unit.project_id) || userRole === 'owner' || userRole === 'admin';
 
   return (
     <div className="min-h-screen bg-[#f8fafc]">
@@ -586,19 +720,41 @@ const UnitDetail = () => {
                     <div>
                       <p className="text-sm font-semibold text-gray-700">ยูนิตยังว่าง</p>
                       <p className="text-xs text-gray-500">
-                        {unitLeads.length > 0
-                          ? `มี ${unitLeads.length} Lead สนใจอยู่ — บันทึกการจองได้`
-                          : 'ยังไม่มี Lead สนใจ — เพิ่ม Lead ก่อนถ้าลูกค้าจะจอง'}
+                        {isAgentUser
+                          ? unitLeads.length > 0
+                            ? `มี ${unitLeads.length} Lead สนใจอยู่ — ส่งต่อให้ Sales จองให้`
+                            : 'ลูกค้าสนใจ? บันทึกความสนใจ + Lead แล้วส่งต่อ Sales'
+                          : unitLeads.length > 0
+                            ? `มี ${unitLeads.length} Lead สนใจอยู่ — บันทึกการจองได้`
+                            : 'ยังไม่มี Lead สนใจ — เพิ่ม Lead ก่อนถ้าลูกค้าจะจอง'}
                       </p>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => setShowAddLeadModal(true)}>
-                      <UserPlus className="w-4 h-4 mr-1" /> เพิ่ม Lead ใหม่
-                    </Button>
-                    <Button onClick={openReserveDialog} className="bg-amber-500 hover:bg-amber-600 text-white">
-                      <Calendar className="w-4 h-4 mr-1" /> บันทึกการจอง
-                    </Button>
+                  <div className="flex gap-2 flex-wrap">
+                    {isAgentUser ? (
+                      <>
+                        <Button variant="outline" onClick={async () => { await fetchAllTenantLeads(); setShowQuickInterestDialog(true); }} className="border-rose-200 text-rose-700 hover:bg-rose-50">
+                          <Heart className="w-4 h-4 mr-1" /> ลูกค้าสนใจ
+                        </Button>
+                        <Button variant="outline" onClick={() => setShowAddLeadModal(true)}>
+                          <UserPlus className="w-4 h-4 mr-1" /> เพิ่ม Lead ใหม่
+                        </Button>
+                        {myLeadsOnUnit.length > 0 && (
+                          <Button onClick={openHandoffFlow} className="bg-chateau hover:bg-chateau-600 text-white">
+                            <Send className="w-4 h-4 mr-1" /> ส่งต่อให้ Sales{myLeadsOnUnit.length > 1 ? ` (${myLeadsOnUnit.length})` : ''}
+                          </Button>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <Button variant="outline" onClick={() => setShowAddLeadModal(true)}>
+                          <UserPlus className="w-4 h-4 mr-1" /> เพิ่ม Lead ใหม่
+                        </Button>
+                        <Button onClick={openReserveDialog} className="bg-amber-500 hover:bg-amber-600 text-white">
+                          <Calendar className="w-4 h-4 mr-1" /> บันทึกการจอง
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -1082,6 +1238,87 @@ const UnitDetail = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Quick Mark Interest dialog (Agent — fastest action) */}
+      <Dialog open={showQuickInterestDialog} onOpenChange={setShowQuickInterestDialog}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Heart className="w-5 h-5 text-rose-600" /> บันทึก "ลูกค้าสนใจ" — ยูนิต {unit.unit_number}
+            </DialogTitle>
+            <DialogDescription>
+              บันทึกความสนใจเร็วๆ ที่หน้างาน — ไม่ล็อคยูนิต, ใช้ติดตามต่อในระบบ
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-sm font-medium">เลือก Lead ลูกค้า <span className="text-red-500">*</span></Label>
+              {(() => {
+                const myLeads = allTenantLeads.filter((l: any) =>
+                  l.assigned_to === myUserId && l.status !== 'won' && l.status !== 'lost' && l.status !== 'closed'
+                );
+                if (myLeads.length === 0) {
+                  return (
+                    <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      <p className="text-sm text-gray-800">ยังไม่มี Lead ของคุณ — กดปิดและใช้ปุ่ม "+ เพิ่ม Lead ใหม่"</p>
+                    </div>
+                  );
+                }
+                return (
+                  <Select value={quickInterestLeadId} onValueChange={setQuickInterestLeadId}>
+                    <SelectTrigger className="mt-1.5">
+                      <SelectValue placeholder={`-- เลือก Lead ของคุณ (${myLeads.length} คน) --`} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {myLeads.map((lead: any) => (
+                        <SelectItem key={lead.id} value={lead.id}>
+                          <span className="font-medium">{lead.customer?.full_name || '(ไม่มีชื่อ)'}</span>
+                          {lead.customer?.phone && <span className="text-xs text-gray-500 ml-2">{lead.customer.phone}</span>}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                );
+              })()}
+            </div>
+
+            <div>
+              <Label className="text-sm font-medium mb-2 block">ระดับความสนใจ</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { v: 'high',   label: '🔥 สนใจมาก', selectedCls: 'border-rose-500 bg-rose-50 text-rose-900 ring-2 ring-rose-200' },
+                  { v: 'medium', label: '👀 สนใจ',      selectedCls: 'border-amber-500 bg-amber-50 text-amber-900 ring-2 ring-amber-200' },
+                  { v: 'low',    label: '💭 ดูเฉยๆ',    selectedCls: 'border-gray-500 bg-gray-100 text-gray-900 ring-2 ring-gray-200' },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => setQuickInterestLevel(opt.v)}
+                    className={cn(
+                      'p-2.5 rounded-lg border-2 text-center text-sm font-medium transition-all',
+                      quickInterestLevel === opt.v
+                        ? opt.selectedCls
+                        : 'border-gray-200 hover:border-gray-300 text-gray-600 bg-white'
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowQuickInterestDialog(false)} disabled={savingQuickInterest}>ยกเลิก</Button>
+            <Button
+              onClick={handleQuickInterest}
+              disabled={savingQuickInterest || !quickInterestLeadId}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+            >
+              {savingQuickInterest ? 'กำลังบันทึก...' : 'บันทึกความสนใจ'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <AddLeadModal
         isOpen={showAddLeadModal}
         onClose={() => setShowAddLeadModal(false)}
@@ -1089,6 +1326,56 @@ const UnitDetail = () => {
         initialPropertyId={property.id}
         initialUnitId={unit.id}
       />
+
+      {/* Handoff Lead Dialog (Agent → Sales) */}
+      <HandoffLeadDialog
+        open={showHandoffDialog}
+        onOpenChange={(open) => {
+          setShowHandoffDialog(open);
+          if (!open) { setHandoffLeadId(null); setHandoffCustomerName(undefined); }
+        }}
+        leadId={handoffLeadId}
+        customerName={handoffCustomerName}
+        unitId={unit.id}
+        projectId={unit.project_id}
+        onSuccess={() => { loadAll(); }}
+      />
+
+      {/* Handoff Picker — when multiple Leads of mine on this unit */}
+      <Dialog open={showHandoffPicker} onOpenChange={setShowHandoffPicker}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="w-5 h-5 text-chateau" /> เลือก Lead ที่จะส่งต่อ
+            </DialogTitle>
+            <DialogDescription>
+              ยูนิต {unit.unit_number} มี {myLeadsOnUnit.length} Lead ของคุณ — เลือกคนที่จะส่งต่อให้ Sales
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            {myLeadsOnUnit.map((l: any) => (
+              <button
+                key={l.id}
+                onClick={() => {
+                  setHandoffLeadId(l.id);
+                  setHandoffCustomerName(l.customers?.full_name);
+                  setShowHandoffPicker(false);
+                  setShowHandoffDialog(true);
+                }}
+                className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-chateau hover:bg-chateau-50 transition-colors"
+              >
+                <p className="text-sm font-medium text-gray-900">{l.customers?.full_name || '(ไม่มีชื่อ)'}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {l.customers?.phone || ''} · สถานะ {leadStatusLabel(l.status)}
+                </p>
+              </button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowHandoffPicker(false)}>ยกเลิก</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

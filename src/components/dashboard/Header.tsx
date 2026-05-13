@@ -21,7 +21,6 @@ interface HeaderProps {
   onMenuClick: () => void;
 }
 
-// Mock notifications for demo — would come from a notifications table in production
 type NotifType = 'approval' | 'lead' | 'trigger' | 'campaign' | 'inactive';
 interface NotifItem {
   id: string;
@@ -33,69 +32,54 @@ interface NotifItem {
   link?: string;
 }
 
-const MOCK_NOTIFICATIONS: NotifItem[] = [
-  {
-    id: '1',
-    type: 'approval',
-    title: 'Campaign ได้รับการอนุมัติ',
-    description: '"Welcome Pack สมาชิกใหม่" ผ่านการอนุมัติแล้ว — พร้อมส่ง',
-    time: '2 นาทีก่อน',
-    unread: true,
-    link: '/campaigns',
-  },
-  {
-    id: '2',
-    type: 'lead',
-    title: 'Lead ใหม่เข้ามา',
-    description: 'คุณวิภา สนใจ Blu Diamond Condo — กรอกฟอร์มจาก LINE',
-    time: '15 นาทีก่อน',
-    unread: true,
-    link: '/leads',
-  },
-  {
-    id: '3',
-    type: 'inactive',
-    title: 'Lead เงียบ 7 วัน — 3 ราย',
-    description: 'พร้อมยิง trigger "Lead เงียบ 7 วัน" อัตโนมัติคืนนี้',
-    time: '1 ชั่วโมงก่อน',
-    unread: true,
-    link: '/triggers',
-  },
-  {
-    id: '4',
-    type: 'trigger',
-    title: 'Trigger ทำงาน',
-    description: '"ต้อนรับ Lead ใหม่" ส่งให้คุณสมชายเรียบร้อย',
-    time: '3 ชั่วโมงก่อน',
-    unread: false,
-    link: '/triggers',
-  },
-  {
-    id: '5',
-    type: 'campaign',
-    title: 'Campaign กำลังจะส่ง',
-    description: '"BAAN ISSARA Phase 2" — schedule ส่งพรุ่งนี้ 10:00',
-    time: '5 ชั่วโมงก่อน',
-    unread: false,
-    link: '/campaigns',
-  },
-  {
-    id: '6',
-    type: 'lead',
-    title: 'Lead ใหม่ 2 ราย',
-    description: 'คุณกานต์ + คุณนภา จากแคมเปญ "Family Open House"',
-    time: 'เมื่อวาน',
-    unread: false,
-    link: '/leads',
-  },
-];
-
 const NOTIF_STYLES: Record<NotifType, { icon: typeof Bell; color: string; bg: string }> = {
   approval:  { icon: CheckCircle2,   color: '#10b981', bg: '#ecfdf5' },
   lead:      { icon: UserPlus,       color: '#3b82f6', bg: '#eff6ff' },
   trigger:   { icon: Megaphone,      color: '#8b5cf6', bg: '#f5f3ff' },
   campaign:  { icon: Calendar,       color: '#f59e0b', bg: '#fffbeb' },
   inactive:  { icon: AlertTriangle,  color: '#ef4444', bg: '#fef2f2' },
+};
+
+// Map activity_type → notification UI
+const mapActivityToNotif = (activity_type: string, description: string): { type: NotifType; title: string; link?: string } => {
+  const map: Record<string, { type: NotifType; title: string; link?: string }> = {
+    lead_created:      { type: 'lead',     title: 'Lead ใหม่เข้ามา',                   link: '/leads' },
+    lead_assigned:     { type: 'lead',     title: 'มอบหมาย Lead ใหม่',                  link: '/leads' },
+    lead_contacted:    { type: 'lead',     title: 'ติดต่อ Lead เรียบร้อย',              link: '/leads' },
+    lead_qualified:    { type: 'lead',     title: 'Lead ผ่านคุณสมบัติ',                 link: '/leads' },
+    lead_won:          { type: 'approval', title: 'ปิดดีลสำเร็จ! 🎉',                  link: '/leads' },
+    interest_added:    { type: 'lead',     title: 'มีคนสนใจยูนิตใหม่',                  link: '/leads' },
+    viewing_scheduled: { type: 'campaign', title: 'นัดดูยูนิตใหม่',                     link: '/leads' },
+    viewing_completed: { type: 'approval', title: 'พาดูยูนิตเสร็จ',                     link: '/leads' },
+    soft_reserve:      { type: 'approval', title: 'จองชั่วคราวเรียบร้อย',                link: '/leads' },
+    handoff_to_sales:  { type: 'lead',     title: 'Agent ส่งต่อ Lead',                  link: '/leads' },
+    booking_created:   { type: 'approval', title: 'มีการจองยูนิตใหม่',                 link: '/payments' },
+    payment_received:  { type: 'approval', title: 'รับเงินจองเรียบร้อย',                link: '/payments' },
+    contract_signed:   { type: 'approval', title: 'เซ็นสัญญาสำเร็จ',                   link: '/payments' },
+    unit_assigned:     { type: 'trigger',  title: 'มอบหมายยูนิตให้ Sales',              link: '/permissions' },
+    agent_invited:     { type: 'trigger',  title: 'เชิญ Agent เข้าระบบ',                link: '/users' },
+    campaign_launched: { type: 'campaign', title: 'เริ่ม Campaign การตลาด',             link: '/campaigns' },
+    promo_applied:     { type: 'campaign', title: 'ใช้โปรโมชั่น',                       link: '/campaigns' },
+    document_uploaded: { type: 'trigger',  title: 'อัปโหลดเอกสาร',                      link: '/settings' },
+    price_updated:     { type: 'trigger',  title: 'ปรับราคายูนิต',                      link: '/properties' },
+    property_added:    { type: 'trigger',  title: 'เพิ่มโครงการใหม่',                  link: '/properties' },
+    user_invited:      { type: 'trigger',  title: 'เชิญผู้ใช้ใหม่',                     link: '/users' },
+  };
+  const found = map[activity_type] || { type: 'trigger', title: description || activity_type };
+  return found;
+};
+
+const formatTimeAgo = (iso: string): string => {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'เมื่อสักครู่';
+  if (mins < 60) return `${mins} นาทีก่อน`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} ชั่วโมงก่อน`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days} วันก่อน`;
+  if (days < 30) return `${Math.floor(days / 7)} สัปดาห์ก่อน`;
+  return `${Math.floor(days / 30)} เดือนก่อน`;
 };
 
 // Search result types
@@ -127,16 +111,58 @@ const Header = ({ onMenuClick }: HeaderProps) => {
   const { user, signOut, currentTenant, userRole, userProfile } = useSimpleAuth();
   const { isOwner } = usePermissions();
 
-  // === Notifications state ===
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  // === Notifications state — fetched from activity_logs ===
+  const [notifications, setNotifications] = useState<NotifItem[]>([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const unreadCount = notifications.filter((n) => n.unread).length;
 
+  useEffect(() => {
+    if (!currentTenant?.id) return;
+    (async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase.from('activity_logs') as any)
+        .select('id, activity_type, description, created_at')
+        .eq('tenant_id', currentTenant.id)
+        .order('created_at', { ascending: false })
+        .limit(15);
+      const seenKey = `notifs_read_${currentTenant.id}`;
+      const readIds: string[] = (() => {
+        try { return JSON.parse(localStorage.getItem(seenKey) || '[]'); } catch { return []; }
+      })();
+      const items: NotifItem[] = ((data as any[]) || []).map((row: any) => {
+        const m = mapActivityToNotif(row.activity_type, row.description);
+        return {
+          id: row.id,
+          type: m.type,
+          title: m.title,
+          description: row.description || '',
+          time: formatTimeAgo(row.created_at),
+          unread: !readIds.includes(row.id),
+          link: m.link,
+        };
+      });
+      setNotifications(items);
+    })();
+  }, [currentTenant?.id]);
+
+  const persistRead = (ids: string[]) => {
+    if (!currentTenant?.id) return;
+    const key = `notifs_read_${currentTenant.id}`;
+    try {
+      const existing: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+      const merged = Array.from(new Set([...existing, ...ids]));
+      localStorage.setItem(key, JSON.stringify(merged));
+    } catch { /* ignore */ }
+  };
+
   const markAsRead = (id: string) => {
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, unread: false } : n));
+    persistRead([id]);
   };
   const markAllRead = () => {
+    const allIds = notifications.map((n) => n.id);
     setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+    persistRead(allIds);
   };
   const clickNotif = (n: NotifItem) => {
     markAsRead(n.id);

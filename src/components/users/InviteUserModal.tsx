@@ -125,7 +125,7 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to send invite');
+        throw new Error(result.error || 'ไม่สามารถส่งคำเชิญได้');
       }
 
       // Show success with invite link
@@ -134,7 +134,7 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
 
     } catch (error: any) {
       console.error('Error inviting user:', error);
-      setError(error.message || "เกิดข้อผิดพลาดในการเพิ่มผู้ใช้");
+      setError(error.message || "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง");
     } finally {
       setLoading(false);
     }
@@ -162,7 +162,7 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-xl font-semibold text-gray-900">
-            {isAdmin ? 'เพิ่มพนักงานขายใหม่' : 'เพิ่มผู้ใช้ใหม่'}
+            {isAdmin ? 'เพิ่มสมาชิกทีมใหม่' : 'เพิ่มผู้ใช้ใหม่'}
           </h2>
           <button
             onClick={handleClose}
@@ -240,12 +240,12 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
               <Shield className="w-4 h-4 inline mr-1" />
               ตำแหน่ง
             </Label>
-            <Select value={role} onValueChange={(value: UserRole) => setRole(value)} disabled={loading || isAdmin}>
+            <Select value={role} onValueChange={(value: UserRole) => setRole(value)} disabled={loading}>
               <SelectTrigger>
                 <SelectValue placeholder="เลือกตำแหน่ง..." />
               </SelectTrigger>
               <SelectContent>
-                {/* ADMIN can only add SALES users, OWNER can add all roles */}
+                {/* ADMIN can add SALES and AGENT, OWNER can add all roles */}
                 {!isAdmin && (
                   <>
                     <SelectItem value={UserRole.OWNER}>เจ้าของบริษัท (Owner)</SelectItem>
@@ -254,12 +254,11 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
                 )}
                 <SelectItem value={UserRole.SALES}>พนักงานขาย (Sales)</SelectItem>
                 <SelectItem value={UserRole.AGENT}>นายหน้า (Agent)</SelectItem>
-                <SelectItem value={UserRole.CUSTOMER}>ลูกค้า (Customer)</SelectItem>
               </SelectContent>
             </Select>
             {isAdmin && (
               <p className="text-xs text-gray-500 mt-1">
-                * แอดมินสามารถเพิ่มได้เฉพาะตำแหน่งพนักงานขาย
+                * แอดมินสามารถเพิ่มได้เฉพาะพนักงานขายและนายหน้า
               </p>
             )}
           </div>

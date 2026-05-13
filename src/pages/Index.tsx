@@ -473,16 +473,16 @@ const Index = () => {
                   <p className="text-xs text-gray-500 mb-5">Lead → ปิดดีล</p>
 
                   <div className="space-y-3.5">
-                    <FunnelStep label="Leads ทั้งหมด" value={leadsTotal} max={Math.max(leadsTotal, 1)} color="#cbd5e1" />
-                    <FunnelStep label="Contacted +" value={leadsContacted} max={Math.max(leadsTotal, 1)} color={C.gray} />
-                    <FunnelStep label="Qualified +" value={leadsQualified} max={Math.max(leadsTotal, 1)} color={C.charcoal} />
-                    <FunnelStep label="Negotiating +" value={leadsNegotiating} max={Math.max(leadsTotal, 1)} color={C.amber} />
-                    <FunnelStep label="Won" value={leadsWon} max={Math.max(leadsTotal, 1)} color={C.green} />
+                    <FunnelStep label="ลูกค้าสนใจทั้งหมด" value={leadsTotal} max={Math.max(leadsTotal, 1)} color="#cbd5e1" />
+                    <FunnelStep label="ติดต่อแล้ว +" value={leadsContacted} max={Math.max(leadsTotal, 1)} color={C.gray} />
+                    <FunnelStep label="มีคุณสมบัติ +" value={leadsQualified} max={Math.max(leadsTotal, 1)} color={C.charcoal} />
+                    <FunnelStep label="กำลังเจรจา +" value={leadsNegotiating} max={Math.max(leadsTotal, 1)} color={C.amber} />
+                    <FunnelStep label="ปิดดีลแล้ว" value={leadsWon} max={Math.max(leadsTotal, 1)} color={C.green} />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 mt-5 pt-5 border-t border-gray-100">
                     <div className="rounded-xl p-3" style={{ backgroundColor: C.greenLight }}>
-                      <p className="text-xs text-gray-600">Lead → Won</p>
+                      <p className="text-xs text-gray-600">อัตราปิดดีล</p>
                       <p className="text-2xl font-bold tabular-nums" style={{ color: C.green }}>
                         {conversionRate.toFixed(1)}<span className="text-sm">%</span>
                       </p>

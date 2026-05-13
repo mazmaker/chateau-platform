@@ -4,6 +4,7 @@ import Sidebar from "@/components/dashboard/Sidebar";
 import Header from "@/components/dashboard/Header";
 import {
   AlertTriangle,
+  CalendarDays,
   CheckCircle2,
   Clock,
   Flame,
@@ -33,7 +34,8 @@ const C = {
 };
 
 // Industry-standard commission rate for Thai real estate sales (placeholder)
-const COMMISSION_RATE = 0.015; // 1.5%
+const COMMISSION_RATE_SALES = 0.015; // 1.5% — in-house sales
+const COMMISSION_RATE_AGENT = 0.025; // 2.5% — external broker (typical industry rate)
 
 // Stage → close probability (used for projected commission)
 const STAGE_PROBABILITY: Record<string, number> = {
@@ -99,12 +101,21 @@ interface PropertyRow {
 
 const MyDashboard = () => {
   const navigate = useNavigate();
-  const { user, userProfile, currentTenant } = useSimpleAuth();
+  const { user, userProfile, currentTenant, userRole } = useSimpleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [myLeads, setMyLeads] = useState<LeadRow[]>([]);
   const [allLeads, setAllLeads] = useState<{ assigned_to: string | null; status: string | null; estimated_value: number | null; updated_at: string }[]>([]);
   const [myLockedUnits, setMyLockedUnits] = useState<UnitLockedRow[]>([]);
+  const [myAssignedUnits, setMyAssignedUnits] = useState<UnitLockedRow[]>([]);
   const [properties, setProperties] = useState<PropertyRow[]>([]);
+  const [upcomingVisits, setUpcomingVisits] = useState<Array<{
+    id: string;
+    viewing_date: string;
+    lead_id: string;
+    unit_id: string;
+    customer_name: string | null;
+    unit_number: string | null;
+  }>>([]);
   const [loading, setLoading] = useState(true);
 
   // The current user's public.users.id (used as assigned_to in leads)
@@ -131,12 +142,14 @@ const MyDashboard = () => {
           (supabase.from('leads') as any)
             .select('assigned_to, status, estimated_value, updated_at')
             .eq('tenant_id', tenantId),
-          // Units I have locked (reservations)
+          // Sales: units locked by me | Agent: no locked units (uses assignments instead)
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from('units') as any)
-            .select('id, unit_number, status, locked_until, price, project_id')
-            .eq('tenant_id', tenantId)
-            .eq('locked_by', myId),
+          userRole === 'sales'
+            ? (supabase.from('units') as any)
+                .select('id, unit_number, status, locked_until, price, project_id')
+                .eq('tenant_id', tenantId)
+                .eq('locked_by', myId)
+            : Promise.resolve({ data: [] }),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from('properties') as any)
             .select('id, name')
@@ -147,6 +160,40 @@ const MyDashboard = () => {
         setAllLeads(allLeadsRes.data || []);
         setMyLockedUnits((lockedRes.data || []) as UnitLockedRow[]);
         setProperties((propsRes.data || []) as PropertyRow[]);
+
+        // Agent: fetch assigned units separately
+        if (userRole === 'agent') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: agentAssignments } = await (supabase.from('agent_unit_assignments') as any)
+            .select('units(id, unit_number, status, locked_until, price, project_id)')
+            .eq('tenant_id', tenantId)
+            .eq('agent_user_id', myId)
+            .is('revoked_at', null);
+          const units = (agentAssignments || [])
+            .map((r: any) => r.units)
+            .filter(Boolean) as UnitLockedRow[];
+          setMyAssignedUnits(units);
+        }
+
+        // Upcoming site visits — leads assigned to me with viewing_date in future
+        const myLeadIds = ((myLeadsRes.data || []) as LeadRow[]).map((l) => l.id);
+        if (myLeadIds.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: visitRows } = await (supabase.from('lead_interests') as any)
+            .select('id, viewing_date, lead_id, unit_id, leads(customers(full_name)), units(unit_number)')
+            .in('lead_id', myLeadIds)
+            .gte('viewing_date', new Date().toISOString())
+            .order('viewing_date', { ascending: true })
+            .limit(10);
+          setUpcomingVisits((visitRows || []).map((r: any) => ({
+            id: r.id,
+            viewing_date: r.viewing_date,
+            lead_id: r.lead_id,
+            unit_id: r.unit_id,
+            customer_name: r.leads?.customers?.full_name || null,
+            unit_number: r.units?.unit_number || null,
+          })));
+        }
       } catch (e) {
         console.error('My Dashboard load failed:', e);
       } finally {
@@ -218,11 +265,12 @@ const MyDashboard = () => {
       return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
     });
 
-  // Commission projection
-  const confirmedCommission = myWonValueMTD * COMMISSION_RATE;
+  // Commission projection — different rate per role
+  const commissionRate = userRole === 'agent' ? COMMISSION_RATE_AGENT : COMMISSION_RATE_SALES;
+  const confirmedCommission = myWonValueMTD * commissionRate;
   const projectedCommission = myOpenLeads.reduce((s, l) => {
     const prob = STAGE_PROBABILITY[l.status || ''] || 0;
-    return s + (Number(l.estimated_value || 0) * prob * COMMISSION_RATE);
+    return s + (Number(l.estimated_value || 0) * prob * commissionRate);
   }, 0);
 
   const propById = new Map(properties.map((p) => [p.id, p.name]));
@@ -230,11 +278,14 @@ const MyDashboard = () => {
   // Stage badge color
   const stageBadge = (status: string | null) => {
     switch (status) {
-      case 'negotiating': return { label: 'Negotiating', color: C.amber, bg: C.amberLight };
-      case 'qualified':   return { label: 'Qualified',   color: C.charcoal, bg: C.charcoalLight };
-      case 'contacted':   return { label: 'Contacted',   color: C.slate, bg: C.slateLight };
-      case 'new':         return { label: 'New',         color: C.gray, bg: C.grayLight };
-      default:            return { label: status || '—', color: C.gray, bg: C.grayLight };
+      case 'negotiating': return { label: 'กำลังเจรจา',   color: C.amber, bg: C.amberLight };
+      case 'qualified':   return { label: 'มีคุณสมบัติ',  color: C.charcoal, bg: C.charcoalLight };
+      case 'contacted':   return { label: 'ติดต่อแล้ว',   color: C.slate, bg: C.slateLight };
+      case 'new':         return { label: 'ใหม่',         color: C.gray, bg: C.grayLight };
+      case 'won':         return { label: 'ปิดดีลแล้ว',   color: C.green, bg: C.greenLight };
+      case 'lost':        return { label: 'สูญเสีย',      color: C.red, bg: C.redLight };
+      case 'proposal':    return { label: 'เสนอราคา',     color: C.slate, bg: C.slateLight };
+      default:            return { label: status || '—',  color: C.gray, bg: C.grayLight };
     }
   };
 
@@ -279,7 +330,7 @@ const MyDashboard = () => {
                   sub={<span className="text-xs text-gray-500">มูลค่ารวม {formatTHB(myWonValueMTD)}</span>}
                 />
                 <KpiCard
-                  title="Pipeline ของฉัน"
+                  title="มูลค่ายอดขายที่กำลังขาย"
                   value={formatTHB(myPipelineValue)}
                   icon={Wallet}
                   color={C.amber}
@@ -287,12 +338,12 @@ const MyDashboard = () => {
                   sub={<span className="text-xs text-gray-500">{myOpenLeads.length} ดีลที่เปิดอยู่</span>}
                 />
                 <KpiCard
-                  title="Hot Leads ของฉัน"
+                  title="ลูกค้าด่วน"
                   value={myHotLeads.length.toString()}
                   icon={Flame}
                   color={C.redDeep}
                   bg={C.redDeepLight}
-                  sub={<span className="text-xs text-gray-500">priority = high</span>}
+                  sub={<span className="text-xs text-gray-500">ระดับความสำคัญสูง</span>}
                 />
                 <KpiCard
                   title="อันดับในทีม"
@@ -314,7 +365,7 @@ const MyDashboard = () => {
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
                   <div className="flex items-center gap-2 mb-1">
                     <Clock className="w-4 h-4" style={{ color: C.red }} />
-                    <h2 className="text-base font-bold text-gray-900">Follow up วันนี้</h2>
+                    <h2 className="text-base font-bold text-gray-900">นัดติดตามวันนี้</h2>
                     {todayFollowUps.length > 0 && (
                       <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.red, backgroundColor: C.redLight }}>
                         {todayFollowUps.length} ราย
@@ -323,7 +374,7 @@ const MyDashboard = () => {
                   </div>
                   <p className="text-xs text-gray-500 mb-4">นัดติดต่อตามแผนวันนี้</p>
                   {todayFollowUps.length === 0 ? (
-                    <div className="h-[140px] flex items-center justify-center text-sm text-gray-400">ไม่มี follow-up วันนี้ 🎉</div>
+                    <div className="h-[140px] flex items-center justify-center text-sm text-gray-400">ไม่มีนัดติดตามวันนี้ 🎉</div>
                   ) : (
                     <div className="space-y-2.5">
                       {todayFollowUps.map((l) => (
@@ -340,7 +391,7 @@ const MyDashboard = () => {
                             </p>
                           </div>
                           <span className="text-xs font-semibold tabular-nums shrink-0" style={{ color: C.red }}>
-                            {l.status}
+                            {stageBadge(l.status).label}
                           </span>
                         </button>
                       ))}
@@ -352,7 +403,7 @@ const MyDashboard = () => {
                 <div className="bg-white border rounded-2xl shadow-soft p-6" style={{ borderColor: C.amberLight }}>
                   <div className="flex items-center gap-2 mb-1">
                     <AlertTriangle className="w-4 h-4" style={{ color: C.amber }} />
-                    <h2 className="text-base font-bold text-gray-900">Lead ที่เงียบ</h2>
+                    <h2 className="text-base font-bold text-gray-900">ลูกค้าที่เงียบหาย</h2>
                     {inactiveLeads.length > 0 && (
                       <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.amber, backgroundColor: C.amberLight }}>
                         {inactiveLeads.length} ราย
@@ -386,25 +437,22 @@ const MyDashboard = () => {
                   )}
                 </div>
 
-                {/* Reservations expiring */}
-                <div className="bg-white border rounded-2xl shadow-soft p-6" style={{ borderColor: C.redLight }}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Target className="w-4 h-4" style={{ color: C.redDeep }} />
-                    <h2 className="text-base font-bold text-gray-900">การจองใกล้หมดอายุ</h2>
-                    {expiringSoon.length > 0 && (
+                {/* Reservations expiring (Sales) | Assigned units (Agent) */}
+                {userRole === 'agent' ? (
+                  <div className="bg-white border rounded-2xl shadow-soft p-6" style={{ borderColor: C.redLight }}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Target className="w-4 h-4" style={{ color: C.redDeep }} />
+                      <h2 className="text-base font-bold text-gray-900">ยูนิตที่รับมอบหมาย</h2>
                       <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.redDeep, backgroundColor: C.redDeepLight }}>
-                        {expiringSoon.length} ยูนิต
+                        {myAssignedUnits.length} ยูนิต
                       </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-500 mb-4">ภายใน 7 วัน — ต้องปิดดีลก่อนหลุด</p>
-                  {expiringSoon.length === 0 ? (
-                    <div className="h-[140px] flex items-center justify-center text-sm text-gray-400">ไม่มีการจองที่ใกล้หมดอายุ</div>
-                  ) : (
-                    <div className="space-y-2.5">
-                      {expiringSoon.map((u) => {
-                        const days = daysFromNow(u.locked_until);
-                        return (
+                    </div>
+                    <p className="text-xs text-gray-500 mb-4">ยูนิตที่ได้รับมอบหมายให้ดูแล</p>
+                    {myAssignedUnits.length === 0 ? (
+                      <div className="h-[140px] flex items-center justify-center text-sm text-gray-400">ยังไม่มียูนิตที่ได้รับมอบหมาย</div>
+                    ) : (
+                      <div className="space-y-2.5 max-h-[200px] overflow-y-auto">
+                        {myAssignedUnits.map((u) => (
                           <button
                             key={u.id}
                             onClick={() => navigate(`/units/${u.id}`)}
@@ -414,15 +462,99 @@ const MyDashboard = () => {
                               <p className="text-sm font-medium text-gray-900 truncate">{u.unit_number}</p>
                               <p className="text-xs text-gray-500 mt-0.5">{propById.get(u.project_id) || '—'} · {formatTHB(Number(u.price))}</p>
                             </div>
-                            <span className="text-xs font-semibold tabular-nums shrink-0" style={{ color: days !== null && days <= 1 ? C.red : C.amber }}>
-                              เหลือ {days ?? '—'} วัน
+                            <span className="text-xs font-semibold tabular-nums shrink-0" style={{
+                              color: u.status === 'available' ? C.green : u.status === 'reserved' ? C.amber : C.charcoal
+                            }}>
+                              {u.status === 'available' ? 'ว่าง' : u.status === 'reserved' ? 'จอง' : u.status === 'sold' ? 'ขายแล้ว' : u.status}
                             </span>
                           </button>
-                        );
-                      })}
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-white border rounded-2xl shadow-soft p-6" style={{ borderColor: C.redLight }}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Target className="w-4 h-4" style={{ color: C.redDeep }} />
+                      <h2 className="text-base font-bold text-gray-900">การจองใกล้หมดอายุ</h2>
+                      {expiringSoon.length > 0 && (
+                        <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.redDeep, backgroundColor: C.redDeepLight }}>
+                          {expiringSoon.length} ยูนิต
+                        </span>
+                      )}
                     </div>
-                  )}
+                    <p className="text-xs text-gray-500 mb-4">ภายใน 7 วัน — ต้องปิดดีลก่อนหลุด</p>
+                    {expiringSoon.length === 0 ? (
+                      <div className="h-[140px] flex items-center justify-center text-sm text-gray-400">ไม่มีการจองที่ใกล้หมดอายุ</div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {expiringSoon.map((u) => {
+                          const days = daysFromNow(u.locked_until);
+                          return (
+                            <button
+                              key={u.id}
+                              onClick={() => navigate(`/units/${u.id}`)}
+                              className="w-full flex items-start justify-between gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-gray-900 truncate">{u.unit_number}</p>
+                                <p className="text-xs text-gray-500 mt-0.5">{propById.get(u.project_id) || '—'} · {formatTHB(Number(u.price))}</p>
+                              </div>
+                              <span className="text-xs font-semibold tabular-nums shrink-0" style={{ color: days !== null && days <= 1 ? C.red : C.amber }}>
+                                เหลือ {days ?? '—'} วัน
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Upcoming Site Visits */}
+              <div className="bg-white border rounded-2xl shadow-soft p-6" style={{ borderColor: C.amberLight }}>
+                <div className="flex items-center gap-2 mb-1">
+                  <CalendarDays className="w-4 h-4" style={{ color: C.amber }} />
+                  <h2 className="text-base font-bold text-gray-900">นัดดูยูนิตที่กำลังจะถึง</h2>
+                  <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.amber, backgroundColor: C.amberLight }}>
+                    {upcomingVisits.length} นัด
+                  </span>
                 </div>
+                <p className="text-xs text-gray-500 mb-4">ลูกค้านัดมาดูยูนิตที่ฉันดูแล</p>
+                {upcomingVisits.length === 0 ? (
+                  <div className="h-[100px] flex items-center justify-center text-sm text-gray-400">
+                    ยังไม่มีนัดดูยูนิตที่กำลังจะถึง
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 max-h-[260px] overflow-y-auto">
+                    {upcomingVisits.map((v) => {
+                      const d = new Date(v.viewing_date);
+                      const isToday = d.toDateString() === new Date().toDateString();
+                      const dateLabel = d.toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+                      return (
+                        <button
+                          key={v.id}
+                          onClick={() => navigate(`/leads`)}
+                          className="w-full flex items-start justify-between gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {v.customer_name || 'ลูกค้า'} · ยูนิต {v.unit_number || '—'}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-0.5">{dateLabel}</p>
+                          </div>
+                          <span className="text-xs font-semibold tabular-nums shrink-0 px-2 py-0.5 rounded-full" style={{
+                            color: isToday ? C.red : C.amber,
+                            backgroundColor: isToday ? C.redLight : C.amberLight,
+                          }}>
+                            {isToday ? 'วันนี้' : 'กำลังจะถึง'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Row 3: Active Deals Table */}
@@ -435,7 +567,7 @@ const MyDashboard = () => {
                 <p className="text-xs text-gray-500 mb-5">เรียงตามขั้นตอนที่ใกล้ปิด</p>
                 {activeDeals.length === 0 ? (
                   <div className="h-[180px] flex items-center justify-center text-sm text-gray-400">
-                    ยังไม่มีดีลที่ดูแล — ขอ assign leads จากแอดมิน
+                    ยังไม่มีดีลที่ดูแล — ขอให้แอดมินมอบหมายลูกค้าให้
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -480,7 +612,10 @@ const MyDashboard = () => {
                   <Trophy className="w-4 h-4" style={{ color: C.amber }} />
                   <h2 className="text-base font-bold text-gray-900">คาดการณ์ค่าคอม</h2>
                 </div>
-                <p className="text-xs text-gray-500 mb-5">คำนวณที่ commission rate {(COMMISSION_RATE * 100).toFixed(1)}% (ของจริงให้ confirm กับ HR)</p>
+                <p className="text-xs text-gray-500 mb-5">
+                  คำนวณที่ commission rate {(commissionRate * 100).toFixed(1)}%
+                  {userRole === 'agent' ? ' (อัตรานายหน้าภายนอก — ของจริงตามสัญญา)' : ' (ของจริงให้ confirm กับ HR)'}
+                </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="rounded-xl p-4" style={{ backgroundColor: C.greenLight }}>

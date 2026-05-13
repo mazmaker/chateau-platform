@@ -117,9 +117,9 @@ const UserManagementContent = () => {
         .select('*')
         .order('created_at', { ascending: false });
 
-      // ADMIN can only see SALES users in their tenant
+      // ADMIN sees SALES + AGENT users in their tenant
       if (isAdmin && currentTenant) {
-        query = query.eq('tenant_id', currentTenant.id).eq('role', 'sales');
+        query = query.eq('tenant_id', currentTenant.id).in('role', ['sales', 'agent']);
         console.log('👔 FetchUsers: Admin filter applied for tenant', currentTenant.id);
       }
 
@@ -344,11 +344,11 @@ const UserManagementContent = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
-                  {isAdmin ? 'จัดการพนักงานขาย' : 'จัดการผู้ใช้'}
+                  {isAdmin ? 'จัดการทีมงาน' : 'จัดการผู้ใช้'}
                 </h1>
                 <p className="text-gray-600 mt-1">
                   {isAdmin
-                    ? 'จัดการพนักงานขายในบริษัทของคุณ'
+                    ? 'จัดการพนักงานขายและนายหน้าในบริษัทของคุณ'
                     : 'จัดการผู้ใช้และสิทธิ์ในระบบของคุณ'
                   }
                 </p>
@@ -360,7 +360,7 @@ const UserManagementContent = () => {
                 className="flex items-center gap-2 bg-gray-900 hover:bg-black text-white shadow-lg"
               >
                 <UserPlus className="w-4 h-4" />
-                {isAdmin ? 'เพิ่มพนักงานขาย' : 'เพิ่มผู้ใช้ใหม่'}
+                {isAdmin ? 'เพิ่มสมาชิกทีม' : 'เพิ่มผู้ใช้ใหม่'}
               </Button>
             </div>
           </div>
@@ -368,7 +368,7 @@ const UserManagementContent = () => {
       </Card>
 
       {/* Stats Cards */}
-      <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-2' : 'md:grid-cols-4 lg:grid-cols-7'} gap-4`}>
+      <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-4' : 'md:grid-cols-4 lg:grid-cols-7'} gap-4`}>
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center">
@@ -376,7 +376,7 @@ const UserManagementContent = () => {
                 <User className="w-5 h-5 text-blue-600" />
               </div>
               <div className="ml-3">
-                <p className="text-sm text-gray-600">{isAdmin ? 'พนักงานขายทั้งหมด' : 'ทั้งหมด'}</p>
+                <p className="text-sm text-gray-600">{isAdmin ? 'สมาชิกทั้งหมด' : 'ทั้งหมด'}</p>
                 <p className="text-xl font-semibold">{users.length}</p>
               </div>
             </div>
@@ -396,6 +396,38 @@ const UserManagementContent = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Admin-only: split sales vs agent counts */}
+        {isAdmin && (
+          <>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-gray-100 rounded-lg">
+                    <User className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-gray-600">พนักงานขาย</p>
+                    <p className="text-xl font-semibold">{users.filter(u => u.role === 'sales').length}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-amber-100 rounded-lg">
+                    <User className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-gray-600">นายหน้า</p>
+                    <p className="text-xl font-semibold">{users.filter(u => u.role === 'agent').length}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
 
         {/* Only show owner/admin stats for OWNER users */}
         {!isAdmin && (
@@ -504,22 +536,24 @@ const UserManagementContent = () => {
               </Select>
             )}
 
-            {/* Only show role filter for OWNER users */}
-            {!isAdmin && (
-              <Select value={roleFilter} onValueChange={(value: UserRole | "all") => setRoleFilter(value)}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="ทุกตำแหน่ง" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">ทุกตำแหน่ง</SelectItem>
-                  <SelectItem value="owner">👑 เจ้าของแพลตฟอร์ม</SelectItem>
-                  <SelectItem value="admin">🔧 ผู้ดูแลบริษัท</SelectItem>
-                  <SelectItem value="sales">💼 พนักงานขาย</SelectItem>
-                  <SelectItem value="agent">🤝 นายหน้า</SelectItem>
-                  <SelectItem value="customer">👤 ลูกค้า</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
+            {/* Role filter — Owner sees all roles, Admin sees only sales/agent */}
+            <Select value={roleFilter} onValueChange={(value: UserRole | "all") => setRoleFilter(value)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="ทุกตำแหน่ง" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">ทุกตำแหน่ง</SelectItem>
+                {!isAdmin && (
+                  <>
+                    <SelectItem value="owner">👑 เจ้าของแพลตฟอร์ม</SelectItem>
+                    <SelectItem value="admin">🔧 ผู้ดูแลบริษัท</SelectItem>
+                  </>
+                )}
+                <SelectItem value="sales">💼 พนักงานขาย</SelectItem>
+                <SelectItem value="agent">🤝 นายหน้า</SelectItem>
+                {!isAdmin && <SelectItem value="customer">👤 ลูกค้า</SelectItem>}
+              </SelectContent>
+            </Select>
 
             <Select value={statusFilter} onValueChange={(value: "all" | "active" | "inactive") => setStatusFilter(value)}>
               <SelectTrigger className="w-[140px]">
