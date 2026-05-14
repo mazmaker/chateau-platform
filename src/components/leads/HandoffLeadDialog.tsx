@@ -116,6 +116,24 @@ const HandoffLeadDialog = ({ open, onOpenChange, leadId, customerName, unitId, p
         .eq('id', leadId);
 
       if (error) throw error;
+
+      // Log handoff with proper metadata so Agent dashboard can track referrals
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('activity_logs') as any).insert({
+          tenant_id: currentTenant?.id,
+          user_id: userProfile?.id,
+          activity_type: 'handoff_to_sales',
+          description: `${agentName} ส่งต่อ Lead ${customerName || ''} → ${salesUser?.full_name || salesUser?.email}`,
+          metadata: {
+            lead_id: leadId,
+            from_user_id: userProfile?.id,
+            to_user_id: selectedSalesId,
+            customer_name: customerName,
+          },
+        });
+      } catch { /* non-blocking */ }
+
       toast.success(`ส่งต่อ Lead ให้ ${salesUser?.full_name || 'Sales'} สำเร็จ`);
       onSuccess?.();
       onOpenChange(false);

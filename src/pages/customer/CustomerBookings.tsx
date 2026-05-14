@@ -65,11 +65,13 @@ const CustomerBookings = () => {
     cancelled: bookings.filter((b) => b.status === 'cancelled').length,
   };
 
+  // Labels follow standard Thai real estate purchase journey (Sansiri/AP/Origin):
+  // pending = รอชำระมัดจำ (must match dashboard "💰 รอชำระมัดจำ" badge)
   const statusInfo = (s: string) => {
     switch (s) {
-      case 'pending': return { label: 'รอชำระเงินจอง', icon: Clock, color: 'text-amber-700 bg-amber-50 border-amber-100' };
-      case 'confirmed': return { label: 'ชำระแล้ว · ทำสัญญา', icon: CheckCircle2, color: 'text-blue-700 bg-blue-50 border-blue-100' };
-      case 'checked_in': return { label: 'โอนกรรมสิทธิ์เรียบร้อย', icon: Home, color: 'text-green-700 bg-green-50 border-green-100' };
+      case 'pending': return { label: '💰 รอชำระมัดจำ', icon: Clock, color: 'text-orange-700 bg-orange-50 border-orange-100' };
+      case 'confirmed': return { label: '✓ ชำระแล้ว · รอทำสัญญา', icon: CheckCircle2, color: 'text-blue-700 bg-blue-50 border-blue-100' };
+      case 'checked_in': return { label: '🏠 โอนกรรมสิทธิ์แล้ว', icon: Home, color: 'text-green-700 bg-green-50 border-green-100' };
       case 'cancelled': return { label: 'ยกเลิก', icon: XCircle, color: 'text-gray-600 bg-gray-100 border-gray-200' };
       default: return { label: s, icon: FileText, color: 'text-gray-600 bg-gray-100 border-gray-200' };
     }
@@ -94,14 +96,14 @@ const CustomerBookings = () => {
         <>
           {/* Stats */}
           <div className="grid grid-cols-3 gap-2">
-            <StatBlock value={counts.active} label="ดำเนินการ" />
-            <StatBlock value={counts.completed} label="โอนแล้ว" tone="green" />
+            <StatBlock value={counts.active} label="การจองของฉัน" />
+            <StatBlock value={counts.completed} label="โอนกรรมสิทธิ์แล้ว" tone="green" />
             <StatBlock value={counts.cancelled} label="ยกเลิก" tone="gray" />
           </div>
 
           {/* Filter */}
           <div className="flex gap-2">
-            <FilterPill active={filter === 'active'} onClick={() => setFilter('active')}>กำลังดำเนินการ</FilterPill>
+            <FilterPill active={filter === 'active'} onClick={() => setFilter('active')}>การจองของฉัน</FilterPill>
             <FilterPill active={filter === 'completed'} onClick={() => setFilter('completed')}>โอนแล้ว</FilterPill>
             <FilterPill active={filter === 'all'} onClick={() => setFilter('all')}>ทั้งหมด</FilterPill>
           </div>
@@ -161,10 +163,10 @@ const CustomerBookings = () => {
                       </div>
 
                       {b.status === 'pending' && depositAmount && (
-                        <div className="mt-3 p-3 bg-amber-50 border border-amber-100 rounded-xl">
-                          <p className="text-xs text-amber-900 font-semibold mb-0.5">รอชำระเงินจอง</p>
-                          <p className="text-xs text-amber-700">
-                            ติดต่อ Sales เพื่อชำระเงินจอง {fmtTHB(depositAmount)} ภายใน 7 วัน
+                        <div className="mt-3 p-3 bg-orange-50 border border-orange-100 rounded-xl">
+                          <p className="text-xs text-orange-900 font-semibold mb-0.5">💰 รอชำระมัดจำ</p>
+                          <p className="text-xs text-orange-700">
+                            ติดต่อ Sales เพื่อชำระเงินมัดจำ {fmtTHB(depositAmount)} ภายใน 7 วัน
                           </p>
                         </div>
                       )}

@@ -118,6 +118,12 @@ const Header = ({ onMenuClick }: HeaderProps) => {
 
   useEffect(() => {
     if (!currentTenant?.id) return;
+    const seenKey = `notifs_read_${currentTenant.id}`;
+    const readRow = (id: string) => {
+      try { return (JSON.parse(localStorage.getItem(seenKey) || '[]') as string[]).includes(id); } catch { return false; }
+    };
+
+    let cancelled = false;
     (async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data } = await (supabase.from('activity_logs') as any)
@@ -125,10 +131,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         .eq('tenant_id', currentTenant.id)
         .order('created_at', { ascending: false })
         .limit(15);
-      const seenKey = `notifs_read_${currentTenant.id}`;
-      const readIds: string[] = (() => {
-        try { return JSON.parse(localStorage.getItem(seenKey) || '[]'); } catch { return []; }
-      })();
+      if (cancelled) return;
       const items: NotifItem[] = ((data as any[]) || []).map((row: any) => {
         const m = mapActivityToNotif(row.activity_type, row.description);
         return {
@@ -137,12 +140,44 @@ const Header = ({ onMenuClick }: HeaderProps) => {
           title: m.title,
           description: row.description || '',
           time: formatTimeAgo(row.created_at),
-          unread: !readIds.includes(row.id),
+          unread: !readRow(row.id),
           link: m.link,
         };
       });
       setNotifications(items);
     })();
+
+    // Realtime: prepend any new activity_logs row for this tenant
+    const channel = supabase
+      .channel(`activity_logs:${currentTenant.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'activity_logs', filter: `tenant_id=eq.${currentTenant.id}` },
+        (payload) => {
+          const row = payload.new as any;
+          if (!row?.id) return;
+          const m = mapActivityToNotif(row.activity_type, row.description);
+          const newItem: NotifItem = {
+            id: row.id,
+            type: m.type,
+            title: m.title,
+            description: row.description || '',
+            time: formatTimeAgo(row.created_at),
+            unread: !readRow(row.id),
+            link: m.link,
+          };
+          setNotifications((prev) => {
+            if (prev.some((p) => p.id === newItem.id)) return prev;
+            return [newItem, ...prev].slice(0, 30);
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
   }, [currentTenant?.id]);
 
   const persistRead = (ids: string[]) => {

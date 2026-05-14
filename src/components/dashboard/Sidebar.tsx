@@ -81,6 +81,7 @@ const getRoleLabel = (userRole: string | null) => {
     case "admin": return "ผู้ดูแลบริษัท";
     case "sales": return "พนักงานขาย";
     case "agent": return "นายหน้า";
+    case "customer": return "ลูกค้า";
     default: return "ผู้ใช้";
   }
 };
@@ -212,7 +213,12 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             <div className="min-w-0">
               <p className="sidebar-logo-text font-bold text-base leading-tight">CHATEAU</p>
               <p className="sidebar-logo-sub text-xs leading-tight truncate mt-0.5">
-                {userRole === "owner" ? "Platform Owner" : userRole === "admin" ? "Admin Portal" : userRole === "agent" ? "Agent Portal" : "Sales Portal"}
+                {userRole === "owner" ? "Platform Owner"
+                  : userRole === "admin" ? "Admin Portal"
+                  : userRole === "agent" ? "Agent Portal"
+                  : userRole === "customer" ? "Customer Portal"
+                  : userRole === "sales" ? "Sales Portal"
+                  : "Portal"}
               </p>
             </div>
           </div>

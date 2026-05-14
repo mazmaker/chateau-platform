@@ -102,9 +102,19 @@ const PROJECT_TYPES = [
   { value: 'condo', label: 'คอนโด' },
 ];
 
+interface TenantOption {
+  id: string;
+  name: string;
+}
+
 const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject, scrollToSection, pageMode = false }: CreateProjectModalProps) => {
-  const { currentTenant } = useSimpleAuth();
+  const { currentTenant, userRole } = useSimpleAuth();
   const isEditing = !!editingProject;
+  const isOwner = userRole === 'owner';
+
+  // Tenant selector (Owner only — create new project for any tenant)
+  const [tenantOptions, setTenantOptions] = useState<TenantOption[]>([]);
+  const [selectedTenantId, setSelectedTenantId] = useState<string>('');
 
   // Location data
   const [provinces, setProvinces] = useState<Province[]>([]);
@@ -153,6 +163,25 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
       fetchProvinces();
     }
   }, [isOpen]);
+
+  // Fetch tenant list (Owner only) + default selection
+  useEffect(() => {
+    if (!isOpen) return;
+    setSelectedTenantId(currentTenant?.id || '');
+    if (!isOwner || isEditing) return;
+    (async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.from('tenants') as any)
+        .select('id, name, status')
+        .neq('status', 'cancelled')
+        .order('name');
+      if (error) {
+        console.error('Failed to fetch tenants:', error);
+        return;
+      }
+      setTenantOptions((data || []) as TenantOption[]);
+    })();
+  }, [isOpen, isOwner, isEditing, currentTenant?.id]);
 
   // Pre-fill form when editing
   useEffect(() => {
@@ -542,9 +571,19 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
       const district = districts.find(d => d.id === parseInt(formData.district_id));
       const subDistrict = subDistricts.find(sd => sd.id === parseInt(formData.sub_district_id));
 
-      // Prepare project data
+      // Prepare project data — Owner can pick tenant; everyone else falls back to current
+      const effectiveTenantId = (isOwner && !isEditing && selectedTenantId)
+        ? selectedTenantId
+        : currentTenant?.id;
+
+      if (!effectiveTenantId) {
+        setError('ไม่พบ tenant — กรุณาเลือกบริษัทเจ้าของโครงการ');
+        setLoading(false);
+        return;
+      }
+
       const projectData = {
-        tenant_id: currentTenant?.id,
+        tenant_id: effectiveTenantId,
         name: formData.name,
         type: formData.project_type,
         description: '',
@@ -678,6 +717,45 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
         {/* Form Content - Scrollable */}
         <form onSubmit={handleSubmit} className={pageMode ? '' : 'flex-1 overflow-y-auto'}>
           <div className="p-6 space-y-6">
+
+            {/* Owner-only: pick which tenant this project belongs to */}
+            {isOwner && !isEditing && (
+              <Card className="border-2 border-amber-200 shadow-sm">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-amber-50 to-yellow-50 border-b border-amber-200">
+                    <div className="p-2 bg-amber-500 rounded-lg">
+                      <Building2 className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">บริษัทเจ้าของโครงการ <span className="text-red-500">*</span></h3>
+                      <p className="text-xs text-gray-600">โหมด Owner — เลือกได้ว่าจะสร้างให้บริษัทไหน</p>
+                    </div>
+                  </div>
+                  <div className="p-5">
+                    <Select
+                      value={selectedTenantId}
+                      onValueChange={setSelectedTenantId}
+                      disabled={loading}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="เลือกบริษัท..." />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        {tenantOptions.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.name}
+                            {t.id === currentTenant?.id && <span className="text-xs text-amber-600 ml-2">(ปัจจุบัน)</span>}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {tenantOptions.length === 0 && (
+                      <p className="text-xs text-gray-500 mt-2">กำลังโหลดรายชื่อบริษัท...</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Section 1: ข้อมูลพื้นฐาน */}
             <Card className="border border-gray-200 shadow-sm">

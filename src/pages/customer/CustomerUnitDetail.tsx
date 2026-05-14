@@ -69,6 +69,7 @@ const CustomerUnitDetail = () => {
   const [unit, setUnit] = useState<Unit | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
   const [myInterest, setMyInterest] = useState<{ id: string; status: string; viewing_date: string | null; created_at: string | null } | null>(null);
+  const [myBooking, setMyBooking] = useState<{ id: string; status: string; total_amount: number; deposit_amount: number | null } | null>(null);
   const [myLead, setMyLead] = useState<{ id: string; status: string | null; last_contact_date: string | null } | null>(null);
   const [similarUnits, setSimilarUnits] = useState<Unit[]>([]);
   const [assignedSales, setAssignedSales] = useState<Sales | null>(null);
@@ -159,6 +160,23 @@ const CustomerUnitDetail = () => {
               if (matchingLead) setMyLead({ id: matchingLead.id, status: matchingLead.status, last_contact_date: matchingLead.last_contact_date });
             }
           }
+
+          // Booking row for THIS unit + customer — drives step 6 (จองยูนิต) state
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: bookings } = await (supabase.from('bookings') as any)
+            .select('id, status, total_amount, notes')
+            .eq('customer_id', (customer as any).id)
+            .neq('status', 'cancelled')
+            .order('created_at', { ascending: false });
+          const matchingBooking = ((bookings || []) as any[]).find((b) => (b.notes?.unit_id) === id);
+          setMyBooking(matchingBooking
+            ? {
+                id: matchingBooking.id,
+                status: matchingBooking.status,
+                total_amount: Number(matchingBooking.total_amount || 0),
+                deposit_amount: matchingBooking.notes?.deposit_amount != null ? Number(matchingBooking.notes.deposit_amount) : null,
+              }
+            : null);
 
           // Find assigned sales
           const assignedId = leadList.find((l: any) => l.assigned_to)?.assigned_to;
@@ -593,6 +611,14 @@ const CustomerUnitDetail = () => {
             );
             const salesContacted = interestProgressed || contactAfterInterest || unitReservedForMyLead;
 
+            // Booking-driven states (the timeline's source of truth for steps 6+7):
+            // pending  → Sales locked unit, customer hasn't paid deposit yet (active step "จองยูนิต")
+            // confirmed → customer paid deposit (step "จองยูนิต" done, "ทำสัญญา / โอน" active)
+            // checked_in/out → contract signed + transfer done (step "ทำสัญญา / โอน" done)
+            const bookingStatus = myBooking?.status || null;
+            const depositPaid = bookingStatus === 'confirmed' || bookingStatus === 'checked_in' || bookingStatus === 'checked_out';
+            const titleTransferred = bookingStatus === 'checked_in' || bookingStatus === 'checked_out' || hasWon || (unitReservedForMyLead && unit.status === 'sold');
+
             const steps = [
               { key: 'submit', label: 'ส่งคำขอ', sub: 'ระบบบันทึกเรียบร้อย', done: true },
               {
@@ -614,8 +640,23 @@ const CustomerUnitDetail = () => {
                 done: salesContacted,
               },
               { key: 'visit', label: 'นัดดูยูนิต', sub: hasVisit ? new Date(myInterest.viewing_date!).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'ยังไม่นัด', done: hasVisit },
-              { key: 'negotiate', label: 'เจรจา / ตกลง', sub: hasNegotiating ? 'กำลังเจรจา' : hasReserved || hasWon ? 'เรียบร้อย' : 'ขั้นต่อไป', done: hasReserved || hasWon || hasNegotiating },
-              { key: 'book', label: 'จองยูนิต', sub: hasWon ? 'ปิดดีลแล้ว' : hasReserved ? 'จองเรียบร้อย' : 'ขั้นต่อไป', done: hasReserved || hasWon },
+              { key: 'negotiate', label: 'เจรจา / Sales ล็อคยูนิต', sub: hasReserved || hasWon ? 'Sales จองให้แล้ว' : hasNegotiating ? 'กำลังเจรจา' : 'ขั้นต่อไป', done: hasReserved || hasWon || hasNegotiating },
+              {
+                key: 'deposit',
+                label: 'ชำระมัดจำ',
+                sub: depositPaid
+                  ? '✓ ชำระแล้ว'
+                  : bookingStatus === 'pending'
+                    ? `💰 รอชำระมัดจำ${myBooking?.deposit_amount ? ` ${(myBooking.deposit_amount / 1_000).toLocaleString('th-TH')}K` : ''}`
+                    : 'ขั้นต่อไป',
+                done: depositPaid,
+              },
+              {
+                key: 'transfer',
+                label: 'ทำสัญญา / โอนกรรมสิทธิ์',
+                sub: titleTransferred ? 'โอนเรียบร้อย' : depositPaid ? 'รอทำสัญญา' : 'ขั้นต่อไป',
+                done: titleTransferred,
+              },
             ];
             const activeIdx = steps.findIndex((s) => !s.done);
             const currentActive = activeIdx === -1 ? steps.length - 1 : activeIdx;

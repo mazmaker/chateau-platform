@@ -4,11 +4,14 @@ import Sidebar from "@/components/dashboard/Sidebar";
 import Header from "@/components/dashboard/Header";
 import {
   AlertTriangle,
+  Briefcase,
   CalendarDays,
   CheckCircle2,
   Clock,
   Flame,
+  Send,
   Target,
+  TrendingUp,
   Trophy,
   Wallet,
 } from "lucide-react";
@@ -99,6 +102,15 @@ interface PropertyRow {
   name: string;
 }
 
+interface ReferralLead {
+  id: string;
+  status: string | null;
+  estimated_value: number | null;
+  updated_at: string;
+  assigned_to: string | null;
+  customers?: { full_name: string | null } | null;
+}
+
 const MyDashboard = () => {
   const navigate = useNavigate();
   const { user, userProfile, currentTenant, userRole } = useSimpleAuth();
@@ -107,6 +119,7 @@ const MyDashboard = () => {
   const [allLeads, setAllLeads] = useState<{ assigned_to: string | null; status: string | null; estimated_value: number | null; updated_at: string }[]>([]);
   const [myLockedUnits, setMyLockedUnits] = useState<UnitLockedRow[]>([]);
   const [myAssignedUnits, setMyAssignedUnits] = useState<UnitLockedRow[]>([]);
+  const [myReferrals, setMyReferrals] = useState<ReferralLead[]>([]);
   const [properties, setProperties] = useState<PropertyRow[]>([]);
   const [upcomingVisits, setUpcomingVisits] = useState<Array<{
     id: string;
@@ -161,7 +174,7 @@ const MyDashboard = () => {
         setMyLockedUnits((lockedRes.data || []) as UnitLockedRow[]);
         setProperties((propsRes.data || []) as PropertyRow[]);
 
-        // Agent: fetch assigned units separately
+        // Agent: fetch assigned units + referrals (leads I handed off to Sales)
         if (userRole === 'agent') {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: agentAssignments } = await (supabase.from('agent_unit_assignments') as any)
@@ -173,6 +186,27 @@ const MyDashboard = () => {
             .map((r: any) => r.units)
             .filter(Boolean) as UnitLockedRow[];
           setMyAssignedUnits(units);
+
+          // Referrals: activity_logs of type 'handoff_to_sales' where I'm the from_user
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: handoffActs } = await (supabase.from('activity_logs') as any)
+            .select('metadata, created_at')
+            .eq('tenant_id', tenantId)
+            .eq('activity_type', 'handoff_to_sales')
+            .order('created_at', { ascending: false })
+            .limit(100);
+          const myHandoffLeadIds = Array.from(new Set(
+            ((handoffActs || []) as any[])
+              .filter((a: any) => a.metadata?.from_user_id === myId && a.metadata?.lead_id)
+              .map((a: any) => a.metadata.lead_id)
+          ));
+          if (myHandoffLeadIds.length > 0) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: refLeads } = await (supabase.from('leads') as any)
+              .select('id, status, estimated_value, updated_at, assigned_to, customers(full_name)')
+              .in('id', myHandoffLeadIds);
+            setMyReferrals((refLeads || []) as ReferralLead[]);
+          }
         }
 
         // Upcoming site visits — leads assigned to me with viewing_date in future
@@ -236,12 +270,50 @@ const MyDashboard = () => {
   const myRank = myRankIndex >= 0 ? myRankIndex + 1 : null;
   const myAllTimeWonValue = repWonValueMap.get(myId) || 0;
 
-  // Today's tasks — leads to follow up today
-  const todayFollowUps = myOpenLeads.filter((l) => {
+  // Lookup map — used by today's tasks aggregation below
+  const propById = new Map(properties.map((p) => [p.id, p.name]));
+
+  // Today's tasks — phone follow-ups (leads with next_follow_up = today)
+  const todayPhoneFollowUps = myOpenLeads.filter((l) => {
     if (!l.next_follow_up) return false;
     const d = new Date(l.next_follow_up);
     return d >= todayStart && d <= todayEnd;
   });
+
+  // Today's site visits (subset of upcomingVisits where viewing_date is today)
+  const todaySiteVisits = upcomingVisits.filter((v) => {
+    const d = new Date(v.viewing_date);
+    return d >= todayStart && d <= todayEnd;
+  });
+
+  // Unified "งานวันนี้" — both phone follow-ups + site visits + reservations expiring today
+  type TodayTask = {
+    key: string;
+    kind: 'call' | 'visit' | 'expiring';
+    title: string;
+    sub: string;
+    time?: string;
+    leadId?: string;
+    unitId?: string;
+  };
+  const todayTasks: TodayTask[] = [
+    ...todayPhoneFollowUps.map((l): TodayTask => ({
+      key: `call-${l.id}`,
+      kind: 'call',
+      title: l.customers?.full_name || '(ไม่ระบุชื่อ)',
+      sub: l.property_id ? propById.get(l.property_id) || '—' : 'นัดโทรติดต่อ',
+      leadId: l.id,
+    })),
+    ...todaySiteVisits.map((v): TodayTask => ({
+      key: `visit-${v.id}`,
+      kind: 'visit',
+      title: v.customer_name || 'ลูกค้า',
+      sub: `ยูนิต ${v.unit_number || '—'}`,
+      time: new Date(v.viewing_date).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+      leadId: v.lead_id,
+      unitId: v.unit_id,
+    })),
+  ];
 
   // Inactive leads — open + no contact in 30+ days
   const inactiveLeads = myOpenLeads.filter((l) => l.last_contact_date && new Date(l.last_contact_date) < thirtyDaysAgo);
@@ -265,6 +337,23 @@ const MyDashboard = () => {
       return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
     });
 
+  // ─── Agent-specific metrics ─────────────────────────────────
+  // Units I manage — breakdown by status
+  const unitsAvailable = myAssignedUnits.filter((u) => u.status === 'available').length;
+  const unitsReserved = myAssignedUnits.filter((u) => u.status === 'reserved').length;
+  const unitsSold = myAssignedUnits.filter((u) => u.status === 'sold').length;
+
+  // Referrals — leads I handed off to Sales
+  const referralsOpen = myReferrals.filter((r) => openStatuses.has(r.status || ''));
+  const referralsWon = myReferrals.filter((r) => r.status === 'won');
+  const referralsLost = myReferrals.filter((r) => r.status === 'lost');
+  const referralWonValueMTD = referralsWon
+    .filter((r) => new Date(r.updated_at) >= startOfMonth)
+    .reduce((s, r) => s + Number(r.estimated_value || 0), 0);
+  const referralConversionRate = myReferrals.length > 0
+    ? (referralsWon.length / myReferrals.length) * 100
+    : 0;
+
   // Commission projection — different rate per role
   const commissionRate = userRole === 'agent' ? COMMISSION_RATE_AGENT : COMMISSION_RATE_SALES;
   const confirmedCommission = myWonValueMTD * commissionRate;
@@ -272,8 +361,6 @@ const MyDashboard = () => {
     const prob = STAGE_PROBABILITY[l.status || ''] || 0;
     return s + (Number(l.estimated_value || 0) * prob * commissionRate);
   }, 0);
-
-  const propById = new Map(properties.map((p) => [p.id, p.name]));
 
   // Stage badge color
   const stageBadge = (status: string | null) => {
@@ -304,7 +391,9 @@ const MyDashboard = () => {
               สวัสดี {userProfile?.full_name?.split(' ')[0] || 'คุณ'}
             </h1>
             <p className="text-[15px] text-gray-500 mt-1.5">
-              ผลงานของคุณ · งานที่ต้องทำวันนี้ · ค่าคอมที่จะได้
+              {userRole === 'agent'
+                ? 'ยูนิตที่ดูแล · ลูกค้าที่ส่งต่อให้ Sales · ค่าคอมจาก referrals'
+                : 'ผลงานของคุณ · งานที่ต้องทำวันนี้ · ค่าคอมที่จะได้'}
             </p>
           </div>
 
@@ -321,77 +410,125 @@ const MyDashboard = () => {
             <>
               {/* Row 1: Personal KPIs */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <KpiCard
-                  title="ปิดดีลได้เดือนนี้"
-                  value={myWonMTD.length.toString()}
-                  icon={CheckCircle2}
-                  color={C.red}
-                  bg={C.redLight}
-                  sub={<span className="text-xs text-gray-500">มูลค่ารวม {formatTHB(myWonValueMTD)}</span>}
-                />
-                <KpiCard
-                  title="มูลค่ายอดขายที่กำลังขาย"
-                  value={formatTHB(myPipelineValue)}
-                  icon={Wallet}
-                  color={C.amber}
-                  bg={C.amberLight}
-                  sub={<span className="text-xs text-gray-500">{myOpenLeads.length} ดีลที่เปิดอยู่</span>}
-                />
-                <KpiCard
-                  title="ลูกค้าด่วน"
-                  value={myHotLeads.length.toString()}
-                  icon={Flame}
-                  color={C.redDeep}
-                  bg={C.redDeepLight}
-                  sub={<span className="text-xs text-gray-500">ระดับความสำคัญสูง</span>}
-                />
-                <KpiCard
-                  title="อันดับในทีม"
-                  value={myRank ? `#${myRank}` : '—'}
-                  icon={Trophy}
-                  color={C.charcoal}
-                  bg={C.charcoalLight}
-                  sub={
-                    myRank
-                      ? <span className="text-xs text-gray-500">จาก {totalReps} คน · {formatTHB(myAllTimeWonValue)}</span>
-                      : <span className="text-xs text-gray-400">ยังไม่มีดีลปิด</span>
-                  }
-                />
+                {userRole === 'agent' ? (
+                  <>
+                    <KpiCard
+                      title="ยูนิตที่ดูแล"
+                      value={myAssignedUnits.length.toString()}
+                      icon={Briefcase}
+                      color={C.red}
+                      bg={C.redLight}
+                      sub={<span className="text-xs text-gray-500">{unitsAvailable} ว่าง · {unitsReserved} จอง · {unitsSold} ขายแล้ว</span>}
+                    />
+                    <KpiCard
+                      title="Referrals กำลังดูแล"
+                      value={referralsOpen.length.toString()}
+                      icon={Wallet}
+                      color={C.amber}
+                      bg={C.amberLight}
+                      sub={<span className="text-xs text-gray-500">{myReferrals.length} referrals ทั้งหมด</span>}
+                    />
+                    <KpiCard
+                      title="Referrals ปิดดีลได้"
+                      value={referralsWon.length.toString()}
+                      icon={CheckCircle2}
+                      color={C.redDeep}
+                      bg={C.redDeepLight}
+                      sub={<span className="text-xs text-gray-500">{formatTHB(referralWonValueMTD)} เดือนนี้</span>}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <KpiCard
+                      title="ปิดดีลได้เดือนนี้"
+                      value={myWonMTD.length.toString()}
+                      icon={CheckCircle2}
+                      color={C.red}
+                      bg={C.redLight}
+                      sub={<span className="text-xs text-gray-500">มูลค่ารวม {formatTHB(myWonValueMTD)}</span>}
+                    />
+                    <KpiCard
+                      title="มูลค่ายอดขายที่กำลังขาย"
+                      value={formatTHB(myPipelineValue)}
+                      icon={Wallet}
+                      color={C.amber}
+                      bg={C.amberLight}
+                      sub={<span className="text-xs text-gray-500">{myOpenLeads.length} ดีลที่เปิดอยู่</span>}
+                    />
+                    <KpiCard
+                      title="ลูกค้าด่วน"
+                      value={myHotLeads.length.toString()}
+                      icon={Flame}
+                      color={C.redDeep}
+                      bg={C.redDeepLight}
+                      sub={<span className="text-xs text-gray-500">ระดับความสำคัญสูง</span>}
+                    />
+                  </>
+                )}
+                {userRole === 'agent' ? (
+                  <KpiCard
+                    title="อัตราการแปลง"
+                    value={`${referralConversionRate.toFixed(0)}%`}
+                    icon={TrendingUp}
+                    color={C.charcoal}
+                    bg={C.charcoalLight}
+                    sub={
+                      myReferrals.length > 0
+                        ? <span className="text-xs text-gray-500">{referralsWon.length} ปิด · {referralsLost.length} เสีย</span>
+                        : <span className="text-xs text-gray-400">ยังไม่มี referrals</span>
+                    }
+                  />
+                ) : (
+                  <KpiCard
+                    title="อันดับในทีม"
+                    value={myRank ? `#${myRank}` : '—'}
+                    icon={Trophy}
+                    color={C.charcoal}
+                    bg={C.charcoalLight}
+                    sub={
+                      myRank
+                        ? <span className="text-xs text-gray-500">จาก {totalReps} คน · {formatTHB(myAllTimeWonValue)}</span>
+                        : <span className="text-xs text-gray-400">ยังไม่มีดีลปิด</span>
+                    }
+                  />
+                )}
               </div>
 
               {/* Row 2: Today's Tasks */}
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                {/* Follow-ups due today */}
+                {/* Today's tasks — phone follow-ups + site visits unified */}
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
                   <div className="flex items-center gap-2 mb-1">
                     <Clock className="w-4 h-4" style={{ color: C.red }} />
-                    <h2 className="text-base font-bold text-gray-900">นัดติดตามวันนี้</h2>
-                    {todayFollowUps.length > 0 && (
+                    <h2 className="text-base font-bold text-gray-900">งานวันนี้</h2>
+                    {todayTasks.length > 0 && (
                       <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.red, backgroundColor: C.redLight }}>
-                        {todayFollowUps.length} ราย
+                        {todayTasks.length} งาน
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mb-4">นัดติดต่อตามแผนวันนี้</p>
-                  {todayFollowUps.length === 0 ? (
-                    <div className="h-[140px] flex items-center justify-center text-sm text-gray-400">ไม่มีนัดติดตามวันนี้ 🎉</div>
+                  <p className="text-xs text-gray-500 mb-4">นัดโทร · นัดดูยูนิตวันนี้</p>
+                  {todayTasks.length === 0 ? (
+                    <div className="h-[140px] flex items-center justify-center text-sm text-gray-400">ไม่มีงานนัดวันนี้ 🎉</div>
                   ) : (
                     <div className="space-y-2.5">
-                      {todayFollowUps.map((l) => (
+                      {todayTasks.map((t) => (
                         <button
-                          key={l.id}
-                          onClick={() => navigate(`/leads?lead=${l.id}`)}
+                          key={t.key}
+                          onClick={() => navigate(t.leadId ? `/leads?lead=${t.leadId}` : '/leads')}
                           className="w-full flex items-start justify-between gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left"
                         >
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-gray-900 truncate">{l.customers?.full_name || '(ไม่ระบุชื่อ)'}</p>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              {l.property_id ? propById.get(l.property_id) || '—' : '—'}
-                              {l.estimated_value ? ` · ${formatTHB(Number(l.estimated_value))}` : ''}
-                            </p>
+                          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                            <span className="text-base flex-shrink-0 mt-0.5">
+                              {t.kind === 'visit' ? '🏠' : '📞'}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">{t.title}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">{t.sub}</p>
+                            </div>
                           </div>
-                          <span className="text-xs font-semibold tabular-nums shrink-0" style={{ color: C.red }}>
-                            {stageBadge(l.status).label}
+                          <span className="text-xs font-semibold tabular-nums shrink-0" style={{ color: t.kind === 'visit' ? C.amber : C.red }}>
+                            {t.kind === 'visit' ? (t.time || 'นัดดู') : 'โทร'}
                           </span>
                         </button>
                       ))}
@@ -399,7 +536,8 @@ const MyDashboard = () => {
                   )}
                 </div>
 
-                {/* Inactive leads (mine) */}
+                {/* Inactive leads — Sales-only (Agent doesn't chase customers) */}
+                {userRole !== 'agent' && (
                 <div className="bg-white border rounded-2xl shadow-soft p-6" style={{ borderColor: C.amberLight }}>
                   <div className="flex items-center gap-2 mb-1">
                     <AlertTriangle className="w-4 h-4" style={{ color: C.amber }} />
@@ -436,6 +574,7 @@ const MyDashboard = () => {
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* Reservations expiring (Sales) | Assigned units (Agent) */}
                 {userRole === 'agent' ? (
@@ -557,54 +696,104 @@ const MyDashboard = () => {
                 )}
               </div>
 
-              {/* Row 3: Active Deals Table */}
-              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
-                <div className="flex items-center gap-2 mb-1">
-                  <Wallet className="w-4 h-4" style={{ color: C.red }} />
-                  <h2 className="text-base font-bold text-gray-900">ดีลที่ฉันดูแลอยู่</h2>
-                  <span className="ml-auto text-xs text-gray-500">{activeDeals.length} ดีล</span>
+              {/* Row 3: Active Deals (Sales) | Referrals (Agent) */}
+              {userRole === 'agent' ? (
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Send className="w-4 h-4" style={{ color: C.red }} />
+                    <h2 className="text-base font-bold text-gray-900">ลูกค้าที่ฉันส่งต่อ Sales</h2>
+                    <span className="ml-auto text-xs text-gray-500">{myReferrals.length} referrals</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-5">ติดตามสถานะ referrals ของคุณ</p>
+                  {myReferrals.length === 0 ? (
+                    <div className="h-[180px] flex items-center justify-center text-sm text-gray-400 text-center px-4">
+                      ยังไม่มี referral — ส่งต่อ Lead ที่หน้า Leads ผ่านปุ่ม "ส่งต่อ Sales"
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-gray-500 border-b border-gray-100">
+                            <th className="text-left py-2 px-3 font-medium">ลูกค้า</th>
+                            <th className="text-left py-2 px-3 font-medium">Sales ที่รับช่วง</th>
+                            <th className="text-left py-2 px-3 font-medium">สถานะ</th>
+                            <th className="text-right py-2 px-3 font-medium">มูลค่า</th>
+                            <th className="text-right py-2 px-3 font-medium">อัพเดต</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {myReferrals.map((r) => {
+                            const badge = stageBadge(r.status);
+                            return (
+                              <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/leads?lead=${r.id}`)}>
+                                <td className="py-3 px-3 font-medium text-gray-900">{r.customers?.full_name || '(ไม่ระบุ)'}</td>
+                                <td className="py-3 px-3 text-gray-700 text-xs">{r.assigned_to ? '✓ ส่งต่อแล้ว' : '— รอ Sales'}</td>
+                                <td className="py-3 px-3">
+                                  <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold" style={{ color: badge.color, backgroundColor: badge.bg }}>
+                                    {badge.label}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3 text-right tabular-nums font-semibold" style={{ color: C.charcoal }}>
+                                  {formatTHB(Number(r.estimated_value || 0))}
+                                </td>
+                                <td className="py-3 px-3 text-right text-xs text-gray-500">{timeAgo(r.updated_at)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
-                <p className="text-xs text-gray-500 mb-5">เรียงตามขั้นตอนที่ใกล้ปิด</p>
-                {activeDeals.length === 0 ? (
-                  <div className="h-[180px] flex items-center justify-center text-sm text-gray-400">
-                    ยังไม่มีดีลที่ดูแล — ขอให้แอดมินมอบหมายลูกค้าให้
+              ) : (
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Wallet className="w-4 h-4" style={{ color: C.red }} />
+                    <h2 className="text-base font-bold text-gray-900">ดีลที่ฉันดูแลอยู่</h2>
+                    <span className="ml-auto text-xs text-gray-500">{activeDeals.length} ดีล</span>
                   </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-xs text-gray-500 border-b border-gray-100">
-                          <th className="text-left py-2 px-3 font-medium">ลูกค้า</th>
-                          <th className="text-left py-2 px-3 font-medium">โครงการ</th>
-                          <th className="text-left py-2 px-3 font-medium">สถานะ</th>
-                          <th className="text-right py-2 px-3 font-medium">มูลค่า</th>
-                          <th className="text-right py-2 px-3 font-medium">ติดต่อล่าสุด</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {activeDeals.map((l) => {
-                          const badge = stageBadge(l.status);
-                          return (
-                            <tr key={l.id} className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/leads?lead=${l.id}`)}>
-                              <td className="py-3 px-3 font-medium text-gray-900">{l.customers?.full_name || '(ไม่ระบุ)'}</td>
-                              <td className="py-3 px-3 text-gray-700">{l.property_id ? propById.get(l.property_id) || '—' : '—'}</td>
-                              <td className="py-3 px-3">
-                                <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold" style={{ color: badge.color, backgroundColor: badge.bg }}>
-                                  {badge.label}
-                                </span>
-                              </td>
-                              <td className="py-3 px-3 text-right tabular-nums font-semibold" style={{ color: C.charcoal }}>
-                                {formatTHB(Number(l.estimated_value || 0))}
-                              </td>
-                              <td className="py-3 px-3 text-right text-xs text-gray-500">{timeAgo(l.last_contact_date)}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+                  <p className="text-xs text-gray-500 mb-5">เรียงตามขั้นตอนที่ใกล้ปิด</p>
+                  {activeDeals.length === 0 ? (
+                    <div className="h-[180px] flex items-center justify-center text-sm text-gray-400">
+                      ยังไม่มีดีลที่ดูแล — ขอให้แอดมินมอบหมายลูกค้าให้
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-gray-500 border-b border-gray-100">
+                            <th className="text-left py-2 px-3 font-medium">ลูกค้า</th>
+                            <th className="text-left py-2 px-3 font-medium">โครงการ</th>
+                            <th className="text-left py-2 px-3 font-medium">สถานะ</th>
+                            <th className="text-right py-2 px-3 font-medium">มูลค่า</th>
+                            <th className="text-right py-2 px-3 font-medium">ติดต่อล่าสุด</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeDeals.map((l) => {
+                            const badge = stageBadge(l.status);
+                            return (
+                              <tr key={l.id} className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/leads?lead=${l.id}`)}>
+                                <td className="py-3 px-3 font-medium text-gray-900">{l.customers?.full_name || '(ไม่ระบุ)'}</td>
+                                <td className="py-3 px-3 text-gray-700">{l.property_id ? propById.get(l.property_id) || '—' : '—'}</td>
+                                <td className="py-3 px-3">
+                                  <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold" style={{ color: badge.color, backgroundColor: badge.bg }}>
+                                    {badge.label}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3 text-right tabular-nums font-semibold" style={{ color: C.charcoal }}>
+                                  {formatTHB(Number(l.estimated_value || 0))}
+                                </td>
+                                <td className="py-3 px-3 text-right text-xs text-gray-500">{timeAgo(l.last_contact_date)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Row 4: Commission Projection */}
               <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">

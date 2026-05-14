@@ -139,12 +139,16 @@ const CustomerDashboard = () => {
   const fmt = (n?: number) => (n ? `${(n / 1_000_000).toFixed(2)} ล้าน` : '-');
   const upcomingVisits = interests.filter((i) => i.viewing_date && new Date(i.viewing_date) > new Date());
 
+  // Labels aligned with industry-standard real estate journey (Sansiri Plus / AP Connect):
+  // สนใจ → นัดดูแล้ว → กำลังเจรจา → รอชำระมัดจำ (reserved) → ปิดดีลแล้ว (won)
+  // "รอชำระมัดจำ" matches the booking row's pending label so dashboard ↔ bookings stay in sync.
   const statusBadge = (s?: string) => {
-    if (s === 'interested') return { label: 'สนใจ', color: 'text-rose-600 bg-rose-50' };
-    if (s === 'viewing_scheduled') return { label: 'นัดดูแล้ว', color: 'text-amber-700 bg-amber-50' };
-    if (s === 'viewed') return { label: 'ดูแล้ว', color: 'text-blue-700 bg-blue-50' };
-    if (s === 'negotiating') return { label: 'กำลังเจรจา', color: 'text-amber-700 bg-amber-50' };
-    if (s === 'reserved') return { label: 'จองแล้ว', color: 'text-green-700 bg-green-50' };
+    if (s === 'interested') return { label: 'บันทึกความสนใจ', color: 'text-rose-600 bg-rose-50' };
+    if (s === 'viewing_scheduled') return { label: '📅 นัดดูแล้ว', color: 'text-amber-700 bg-amber-50' };
+    if (s === 'viewed') return { label: '✓ ดูแล้ว', color: 'text-blue-700 bg-blue-50' };
+    if (s === 'negotiating') return { label: '🤝 กำลังเจรจา', color: 'text-amber-700 bg-amber-50' };
+    if (s === 'reserved') return { label: '💰 รอชำระมัดจำ', color: 'text-orange-700 bg-orange-50' };
+    if (s === 'won') return { label: '✓ ปิดดีลแล้ว', color: 'text-green-700 bg-green-50' };
     return { label: s || '—', color: 'text-gray-600 bg-gray-100' };
   };
 

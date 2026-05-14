@@ -115,3 +115,6 @@ nul
 .playwright-mcp/
 docs/chat/
 backups/
+
+# Personal notes (private — do not commit)
+documents/จดเอง.md
