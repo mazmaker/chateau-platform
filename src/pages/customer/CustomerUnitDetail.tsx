@@ -242,18 +242,60 @@ const CustomerUnitDetail = () => {
         .select('id, full_name').eq('auth_user_id', user.id).maybeSingle();
       if (!customer) { toast.error('ไม่พบข้อมูลลูกค้า'); return; }
 
-      // 🔍 Find Sales who handles this unit (unit-level first, then project-level)
+      // 🔍 Find Sales — Workload-balanced routing (industry-standard for Thai real estate)
+      //
+      // Priority order:
+      //  (1) Sales explicitly assigned to THIS unit (sales_unit_assignments) — highest priority,
+      //      override balancing because the unit was specifically pre-allocated to that Sales.
+      //  (2) Among Sales managing the project (sales_project_assignments), pick the one with
+      //      the FEWEST active open leads. This balances workload fairly across the team.
+      //      Tie-breaker: oldest last-assignment time → round-robin behaviour for equal load.
+      //  (3) No Sales at all → assigned_to = null → goes to "pool" for Admin to assign manually.
       let salesUserId: string | null = null;
+      let routingReason: string = 'pool';
+
+      // (1) Unit-level explicit assignment
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: unitAssign } = await (supabase.from('sales_unit_assignments') as any)
         .select('sales_user_id').eq('unit_id', unit.id).is('revoked_at', null).limit(1).maybeSingle();
       if (unitAssign?.sales_user_id) {
         salesUserId = unitAssign.sales_user_id;
+        routingReason = 'unit_assigned';
       } else {
+        // (2) Project-level — pick least-loaded Sales
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: projAssign } = await (supabase.from('sales_project_assignments') as any)
-          .select('sales_user_id').eq('project_id', unit.project_id).is('revoked_at', null).limit(1).maybeSingle();
-        if (projAssign?.sales_user_id) salesUserId = projAssign.sales_user_id;
+        const { data: projAssigns } = await (supabase.from('sales_project_assignments') as any)
+          .select('sales_user_id, assigned_at')
+          .eq('project_id', unit.project_id)
+          .is('revoked_at', null);
+        const candidates = ((projAssigns || []) as any[]).filter((r) => r.sales_user_id);
+        if (candidates.length > 0) {
+          // Count active leads per candidate (status not 'won'/'lost')
+          const candidateIds = candidates.map((c) => c.sales_user_id);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: activeLeadRows } = await (supabase.from('leads') as any)
+            .select('assigned_to, status')
+            .eq('tenant_id', unit.tenant_id)
+            .in('assigned_to', candidateIds)
+            .not('status', 'in', '("won","lost")');
+          const loadByUser = new Map<string, number>();
+          candidateIds.forEach((id) => loadByUser.set(id, 0));
+          ((activeLeadRows || []) as any[]).forEach((r) => {
+            loadByUser.set(r.assigned_to, (loadByUser.get(r.assigned_to) || 0) + 1);
+          });
+          // Sort: lowest load first, oldest assigned_at as tie-breaker
+          const ranked = candidates
+            .map((c) => ({
+              id: c.sales_user_id,
+              load: loadByUser.get(c.sales_user_id) || 0,
+              assignedAt: c.assigned_at ? new Date(c.assigned_at).getTime() : 0,
+            }))
+            .sort((a, b) => a.load - b.load || a.assignedAt - b.assignedAt);
+          salesUserId = ranked[0].id;
+          routingReason = candidates.length === 1
+            ? 'project_sole_sales'
+            : `project_balanced (load ${ranked[0].load}, ${candidates.length} candidates)`;
+        }
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -301,7 +343,7 @@ const CustomerUnitDetail = () => {
         if (intErr) throw intErr;
       }
 
-      // 🔔 Insert activity_log so Sales bell picks it up
+      // 🔔 Insert activity_log so Sales bell picks it up (+ audit trail for routing decision)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase.from('activity_logs') as any).insert({
         tenant_id: unit.tenant_id,
@@ -314,6 +356,8 @@ const CustomerUnitDetail = () => {
           unit_number: unit.unit_number,
           customer_name: (customer as any).full_name,
           source: 'customer_portal',
+          routing_reason: routingReason,
+          assigned_to: salesUserId,
         },
       });
 
