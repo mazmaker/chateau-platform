@@ -28,6 +28,7 @@ import ApiManagement from "./pages/ApiManagement";
 import Settings from "./pages/Settings";
 import Permissions from "./pages/Permissions";
 import CustomerLogin from "./pages/customer/CustomerLogin";
+import CustomerLineCallback from "./pages/customer/CustomerLineCallback";
 import CustomerDashboard from "./pages/customer/CustomerDashboard";
 import CustomerProperties from "./pages/customer/CustomerProperties";
 import CustomerPropertyDetail from "./pages/customer/CustomerPropertyDetail";
@@ -312,6 +313,7 @@ const App = () => (
 
           {/* Customer Portal — public login + protected pages */}
           <Route path="/customer/login" element={<CustomerLogin />} />
+          <Route path="/customer/line-callback" element={<CustomerLineCallback />} />
           <Route path="/customer" element={
             <ProtectedRouteSimple><CustomerDashboard /></ProtectedRouteSimple>
           } />
