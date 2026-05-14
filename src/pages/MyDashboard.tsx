@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Clock,
   Flame,
+  Megaphone,
   Send,
   Target,
   TrendingUp,
@@ -78,6 +79,7 @@ interface LeadRow {
   customers?: { full_name: string | null; phone: string | null } | null;
   status: string | null;
   priority: string | null;
+  source: string | null;
   estimated_value: number | null;
   assigned_to: string | null;
   last_contact_date: string | null;
@@ -147,7 +149,7 @@ const MyDashboard = () => {
         const [myLeadsRes, allLeadsRes, lockedRes, propsRes] = await Promise.all([
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from('leads') as any)
-            .select('id, customer_id, status, priority, estimated_value, assigned_to, last_contact_date, next_follow_up, created_at, updated_at, property_id, unit_id, customers(full_name, phone)')
+            .select('id, customer_id, status, priority, source, estimated_value, assigned_to, last_contact_date, next_follow_up, created_at, updated_at, property_id, unit_id, customers(full_name, phone)')
             .eq('tenant_id', tenantId)
             .eq('assigned_to', myId),
           // For rank — only need won deals' assigned_to + value (others)
@@ -336,6 +338,47 @@ const MyDashboard = () => {
       if (sa !== sb) return sb - sa;
       return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
     });
+
+  // ─── Sales personal analytics ───────────────────────────────
+  // Lead Source breakdown — where my leads came from
+  const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
+    online_facebook: { label: '📘 Facebook', color: '#1877f2' },
+    online_google:   { label: '🔍 Google',   color: '#fbbc04' },
+    online_line:     { label: '💬 LINE',     color: '#06c755' },
+    agent_referral:  { label: '🤝 นายหน้า',   color: '#ec4899' },
+    offline:         { label: '🚶 Walk-in',  color: C.green },
+  };
+  const sourceCounts: Record<string, number> = {};
+  myLeads.forEach((l) => {
+    const key = (l.source || 'unknown').toLowerCase();
+    sourceCounts[key] = (sourceCounts[key] || 0) + 1;
+  });
+  const mySourceBreakdown = Object.entries(sourceCounts)
+    .map(([key, count]) => ({
+      key,
+      label: SOURCE_LABELS[key]?.label || key,
+      color: SOURCE_LABELS[key]?.color || C.slate,
+      count,
+      pct: myLeads.length > 0 ? (count / myLeads.length) * 100 : 0,
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  // Personal funnel — my own conversion rate per stage
+  const myFunnelStages = [
+    { key: 'new', label: 'ใหม่' },
+    { key: 'contacted', label: 'ติดต่อแล้ว' },
+    { key: 'qualified', label: 'คัดกรอง' },
+    { key: 'negotiating', label: 'เจรจา' },
+    { key: 'won', label: 'ปิดได้' },
+  ];
+  const myFunnelData = myFunnelStages.map((s) => ({
+    ...s,
+    count: myLeads.filter((l) => l.status === s.key).length,
+  }));
+  const myFunnelMax = Math.max(...myFunnelData.map((s) => s.count), 1);
+  const myConversionRate = myLeads.length > 0
+    ? (myLeads.filter((l) => l.status === 'won').length / myLeads.length) * 100
+    : 0;
 
   // ─── Agent-specific metrics ─────────────────────────────────
   // Units I manage — breakdown by status
@@ -792,6 +835,82 @@ const MyDashboard = () => {
                       </table>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Row 3.5: Sales personal analytics — source breakdown + mini funnel (Sales only) */}
+              {userRole !== 'agent' && myLeads.length > 0 && (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  {/* Lead Source breakdown */}
+                  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Megaphone className="w-4 h-4" style={{ color: C.amber }} />
+                      <h2 className="text-base font-bold text-gray-900">แหล่งที่มาของลีดฉัน</h2>
+                      <span className="ml-auto text-xs text-gray-500">{myLeads.length} leads</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-5">ช่องทางไหนทำลีดฉันมามากที่สุด</p>
+                    {mySourceBreakdown.length === 0 ? (
+                      <div className="h-[160px] flex items-center justify-center text-sm text-gray-400">ยังไม่มี source data</div>
+                    ) : (
+                      <div className="space-y-3">
+                        {mySourceBreakdown.map((s) => (
+                          <div key={s.key}>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-sm font-medium text-gray-700">{s.label}</span>
+                              <span className="text-xs tabular-nums">
+                                <span className="font-bold" style={{ color: s.color }}>{s.count}</span>
+                                <span className="text-gray-400 ml-1.5">({s.pct.toFixed(0)}%)</span>
+                              </span>
+                            </div>
+                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full transition-all" style={{ width: `${s.pct}%`, backgroundColor: s.color }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Mini personal funnel */}
+                  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+                    <div className="flex items-center gap-2 mb-1">
+                      <TrendingUp className="w-4 h-4" style={{ color: C.red }} />
+                      <h2 className="text-base font-bold text-gray-900">Funnel ของฉัน</h2>
+                      <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.green, backgroundColor: C.greenLight }}>
+                        {myConversionRate.toFixed(0)}% ปิดได้
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-5">เห็นภาพรวม pipeline ส่วนตัว</p>
+                    <div className="space-y-2.5">
+                      {myFunnelData.map((s, i) => {
+                        const widthPct = (s.count / myFunnelMax) * 100;
+                        const prev = i > 0 ? myFunnelData[i - 1].count : 0;
+                        const drop = prev > 0 && s.count < prev ? ((prev - s.count) / prev) * 100 : 0;
+                        return (
+                          <div key={s.key}>
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-medium text-gray-700">{s.label}</span>
+                                {i > 0 && drop > 0 && (
+                                  <span className="text-[10px] font-medium text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded">
+                                    -{drop.toFixed(0)}%
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-xs font-bold tabular-nums" style={{ color: s.key === 'won' ? C.green : C.charcoal }}>
+                                {s.count}
+                              </span>
+                            </div>
+                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full transition-all"
+                                style={{ width: `${Math.max(widthPct, 2)}%`, backgroundColor: s.key === 'won' ? C.green : '#fca5a5' }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
 
