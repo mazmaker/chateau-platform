@@ -124,6 +124,9 @@ const Index = () => {
           return;
         }
 
+        // Lazy cleanup: revert any reservations whose hold has expired before reading inventory
+        try { await (supabase as any).rpc('revert_expired_unit_reservations'); } catch { /* ignore */ }
+
         const [unitsRes, propRes, leadsRes] = await Promise.all([
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from('units') as any)

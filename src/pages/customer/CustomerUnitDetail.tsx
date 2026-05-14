@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   Building2, Bed, Bath, Square, Layers, MapPin, Heart, Loader2, Sun, ParkingCircle, Check,
   ChevronLeft, ChevronRight, Phone, MessageCircle, Calendar, Calculator, Share2,
-  ChevronDown, View, Sparkles, Receipt,
+  ChevronDown, View, Sparkles, Receipt, XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +42,7 @@ interface Unit {
   tour_3d_url?: string | null;
   project_id: string;
   tenant_id: string;
+  reserved_customer_lead_id?: string | null;
 }
 
 interface Property {
@@ -67,7 +68,7 @@ const CustomerUnitDetail = () => {
   const navigate = useNavigate();
   const [unit, setUnit] = useState<Unit | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
-  const [myInterest, setMyInterest] = useState<{ id: string; status: string; viewing_date: string | null } | null>(null);
+  const [myInterest, setMyInterest] = useState<{ id: string; status: string; viewing_date: string | null; created_at: string | null } | null>(null);
   const [myLead, setMyLead] = useState<{ id: string; status: string | null; last_contact_date: string | null } | null>(null);
   const [similarUnits, setSimilarUnits] = useState<Unit[]>([]);
   const [assignedSales, setAssignedSales] = useState<Sales | null>(null);
@@ -147,7 +148,11 @@ const CustomerUnitDetail = () => {
           if (leadIds.length > 0) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data: existing } = await (supabase.from('lead_interests') as any)
-              .select('id, status, viewing_date, lead_id').eq('unit_id', id).in('lead_id', leadIds).maybeSingle();
+              .select('id, status, viewing_date, lead_id, created_at')
+              .eq('unit_id', id)
+              .in('lead_id', leadIds)
+              .not('status', 'in', '("dropped","lost")')
+              .maybeSingle();
             if (existing) {
               setMyInterest(existing as any);
               const matchingLead = leadList.find((l: any) => l.id === (existing as any).lead_id);
@@ -256,12 +261,27 @@ const CustomerUnitDetail = () => {
         await (supabase.from('leads') as any).update({ assigned_to: salesUserId }).eq('id', (lead as any).id);
       }
 
+      // Reuse a previously cancelled interest row if it exists (preserve audit trail / created_at)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: intErr } = await (supabase.from('lead_interests') as any).insert({
-        tenant_id: unit.tenant_id, lead_id: (lead as any).id, property_id: unit.project_id, unit_id: unit.id,
-        status: 'interested', interest_level: 'high', notes: 'บันทึกจาก Customer Portal',
-      });
-      if (intErr) throw intErr;
+      const { data: previousInterest } = await (supabase.from('lead_interests') as any)
+        .select('id, status')
+        .eq('lead_id', (lead as any).id)
+        .eq('unit_id', unit.id)
+        .maybeSingle();
+      if (previousInterest) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: reErr } = await (supabase.from('lead_interests') as any)
+          .update({ status: 'interested', interest_level: 'high', notes: 'ลูกค้ากดสนใจอีกครั้งจาก Customer Portal' })
+          .eq('id', (previousInterest as any).id);
+        if (reErr) throw reErr;
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: intErr } = await (supabase.from('lead_interests') as any).insert({
+          tenant_id: unit.tenant_id, lead_id: (lead as any).id, property_id: unit.project_id, unit_id: unit.id,
+          status: 'interested', interest_level: 'high', notes: 'บันทึกจาก Customer Portal',
+        });
+        if (intErr) throw intErr;
+      }
 
       // 🔔 Insert activity_log so Sales bell picks it up
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -283,6 +303,49 @@ const CustomerUnitDetail = () => {
       setShowInterestConfirm(true);
     } catch (err: any) {
       toast.error(err.message || 'บันทึกไม่สำเร็จ');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCancelInterest = async () => {
+    if (!unit || !myInterest) return;
+    if (!confirm('ยืนยันยกเลิกความสนใจในยูนิตนี้?\nคุณจะสามารถกด "ฉันสนใจ" ใหม่ได้ทุกเมื่อ')) return;
+    setSubmitting(true);
+    try {
+      // 'dropped' is the closest enum value for "customer cancelled" (lead_interests_status_check)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from('lead_interests') as any)
+        .update({ status: 'dropped', notes: 'ลูกค้ายกเลิกจาก Customer Portal' })
+        .eq('id', myInterest.id);
+      if (error) throw error;
+
+      // Notify Sales via activity_log
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: customer } = await (supabase.from('customers') as any)
+          .select('id, full_name').eq('auth_user_id', user?.id).maybeSingle();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('activity_logs') as any).insert({
+          tenant_id: unit.tenant_id,
+          user_id: assignedSales?.id || null,
+          activity_type: 'interest_cancelled',
+          description: `ลูกค้า${(customer as any)?.full_name || ''} ยกเลิกความสนใจยูนิต ${unit.unit_number}`,
+          metadata: {
+            lead_id: myLead?.id,
+            unit_id: unit.id,
+            unit_number: unit.unit_number,
+            customer_name: (customer as any)?.full_name,
+            source: 'customer_portal',
+          },
+        });
+      } catch { /* non-blocking */ }
+
+      toast.success('ยกเลิกความสนใจเรียบร้อย');
+      setMyInterest(null);
+    } catch (err: any) {
+      toast.error(err.message || 'ยกเลิกไม่สำเร็จ');
     } finally {
       setSubmitting(false);
     }
@@ -509,12 +572,26 @@ const CustomerUnitDetail = () => {
           </h2>
           {(() => {
             const hasVisit = !!myInterest.viewing_date;
-            const hasReserved = myInterest.status === 'reserved';
+            // Treat unit-level reservation/sale for this customer's lead as a positive signal
+            const unitReservedForMyLead = !!(myLead?.id && unit.reserved_customer_lead_id === myLead.id);
+            const hasReserved = myInterest.status === 'reserved' || (unitReservedForMyLead && unit.status === 'reserved');
             const hasNegotiating = myInterest.status === 'negotiating';
-            const hasWon = myInterest.status === 'won';
-            // "Sales ติดต่อกลับ" — done only when Sales has actually contacted, not just assigned
-            const contactedStatuses = ['contacted', 'qualified', 'negotiating', 'won'];
-            const salesContacted = !!myLead?.last_contact_date || contactedStatuses.includes((myLead?.status || '').toLowerCase());
+            const hasWon = myInterest.status === 'won' || (unitReservedForMyLead && unit.status === 'sold');
+
+            // "Sales ติดต่อกลับ" — true only when Sales actually contacted ABOUT THIS UNIT (not just any prior unit).
+            // A single lead is shared across many lead_interests, so lead.last_contact_date alone is ambiguous.
+            // Real signals that Sales engaged with THIS interest:
+            //  1. This interest's status has advanced beyond the initial "interested"
+            //  2. lead.last_contact_date was set AFTER this interest was created
+            //  3. Sales has reserved/sold this exact unit for this lead
+            const advancedInterestStates = ['contacted', 'qualified', 'negotiating', 'reserved', 'won'];
+            const interestProgressed = advancedInterestStates.includes((myInterest?.status || '').toLowerCase());
+            const contactAfterInterest = !!(
+              myLead?.last_contact_date &&
+              myInterest?.created_at &&
+              new Date(myLead.last_contact_date) > new Date(myInterest.created_at)
+            );
+            const salesContacted = interestProgressed || contactAfterInterest || unitReservedForMyLead;
 
             const steps = [
               { key: 'submit', label: 'ส่งคำขอ', sub: 'ระบบบันทึกเรียบร้อย', done: true },
@@ -528,7 +605,7 @@ const CustomerUnitDetail = () => {
                 key: 'contacted',
                 label: 'Sales ติดต่อกลับ',
                 sub: salesContacted
-                  ? (myLead?.last_contact_date
+                  ? (contactAfterInterest && myLead?.last_contact_date
                       ? `ติดต่อแล้วเมื่อ ${new Date(myLead.last_contact_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}`
                       : 'Sales ติดต่อแล้ว')
                   : assignedSales
@@ -584,6 +661,19 @@ const CustomerUnitDetail = () => {
                     <p className="text-[11px] text-amber-900 leading-relaxed">
                       <strong>SLA:</strong> Sales จะติดต่อกลับภายใน 2 ชั่วโมงทำการ — ใช้ปุ่มด้านล่างเพื่อคุย Sales ตอนนี้
                     </p>
+                  </div>
+                )}
+                {/* Cancel interest — only allowed before reservation/sale */}
+                {!hasReserved && !hasWon && (
+                  <div className="mt-4 pt-4 border-t border-rose-100/60 flex justify-center">
+                    <button
+                      onClick={handleCancelInterest}
+                      disabled={submitting}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-rose-700 bg-white border border-rose-300 rounded-full hover:bg-rose-50 hover:border-rose-400 active:scale-[0.98] transition-all disabled:opacity-40"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      ยกเลิกความสนใจในยูนิตนี้
+                    </button>
                   </div>
                 )}
               </div>

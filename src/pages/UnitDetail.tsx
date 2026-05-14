@@ -341,8 +341,14 @@ const UnitDetail = () => {
       if (!alreadyInterested) {
         await supabase.from('lead_interests').insert({
           lead_id: lead.id, unit_id: unit.id, property_id: unit.project_id,
-          tenant_id: currentTenant?.id, interest_level: 'high', status: 'interested',
+          tenant_id: currentTenant?.id, interest_level: 'high', status: 'reserved',
         });
+      } else {
+        // Sync existing interest to 'reserved' so customer timeline reflects the new stage
+        await (supabase.from('lead_interests') as any)
+          .update({ status: 'reserved' })
+          .eq('lead_id', lead.id)
+          .eq('unit_id', unit.id);
       }
 
       // Create customer-facing booking record so the customer portal sees it
@@ -430,6 +436,11 @@ const UnitDetail = () => {
       if (!data || data.length === 0) throw new Error('ไม่มีสิทธิ์ปิดการขาย');
       if (unit.reserved_customer_lead_id) {
         await supabase.from('leads').update({ status: 'won' }).eq('id', unit.reserved_customer_lead_id);
+        // Sync the matching lead_interest → 'won' so customer timeline reflects the close
+        await (supabase.from('lead_interests') as any)
+          .update({ status: 'won' })
+          .eq('lead_id', unit.reserved_customer_lead_id)
+          .eq('unit_id', unit.id);
       }
       // Promote pending booking → confirmed (customer sees: ชำระแล้ว · ทำสัญญา)
       await (supabase.from('bookings') as any)
@@ -465,6 +476,14 @@ const UnitDetail = () => {
         .eq('tenant_id', currentTenant?.id)
         .filter('notes->>unit_id', 'eq', unit.id)
         .in('status', ['pending', 'confirmed']);
+      // Revert any 'reserved'/'won' interest for this unit so customer timeline reflects the rollback
+      if (unit.reserved_customer_lead_id) {
+        await (supabase.from('lead_interests') as any)
+          .update({ status: 'interested' })
+          .eq('lead_id', unit.reserved_customer_lead_id)
+          .eq('unit_id', unit.id)
+          .in('status', ['reserved', 'won']);
+      }
       toast.success(`ยกเลิกจองยูนิต ${unit.unit_number}`);
       await loadAll();
     } catch (err: any) {

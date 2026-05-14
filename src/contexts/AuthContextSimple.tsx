@@ -96,6 +96,15 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
   const [authChecked, setAuthChecked] = useState(false) // Track if we've checked auth at least once
   const navigate = useNavigate()
 
+  // Customer Portal sessions are tracked in the `customers` table — they have no row in `users`.
+  // Detect by synthetic email + user_metadata.role to skip the users-table lookup entirely.
+  const isCustomerAuthUser = (u: SupabaseUser | null): boolean => {
+    if (!u) return false
+    if (u.user_metadata?.role === 'customer') return true
+    if (typeof u.email === 'string' && /^customer\+/.test(u.email)) return true
+    return false
+  }
+
   // Fetch user profile from database (includes role and tenant_id)
   const fetchUserProfile = async (userId: string) => {
     try {
@@ -273,12 +282,21 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
           // but having the role immediately helps prevent UI flicker
         }
 
-        // Fetch data in parallel for speed
-        const [profile, tenants] = await Promise.all([
-          fetchUserProfile(session.user.id),
-          fetchUserTenants(session.user.id)
-        ])
+        // Customer Portal users don't have a row in `users` — skip those fetches.
+        const skipStaffLookup = isCustomerAuthUser(session.user)
 
+        // Fetch data in parallel for speed
+        const [profile, tenants] = skipStaffLookup
+          ? [null as any, [] as UserTenant[]]
+          : await Promise.all([
+              fetchUserProfile(session.user.id),
+              fetchUserTenants(session.user.id)
+            ])
+
+        if (skipStaffLookup) {
+          console.log('[Auth] Customer auth detected — skipping users-table lookup')
+          setUserRole('customer')
+        }
         console.log('[Auth] Profile:', profile?.email, 'Role:', profile?.role)
         console.log('[Auth] Tenants:', tenants.map(t => ({ email: profile?.email, tenant: t.tenants?.name, role: t.role })))
 
@@ -500,6 +518,13 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
           if (cachedRole) {
             console.log('[Auth] Using cached role:', cachedRole.role, 'for tenant:', cachedRole.tenantId)
             setUserRole(cachedRole.role as any)
+          }
+
+          // Customer Portal users don't exist in `users` — skip those fetches.
+          if (isCustomerAuthUser(session.user)) {
+            console.log('[Auth] Customer auth detected (background) — skipping users-table lookup')
+            setUserRole('customer')
+            return
           }
 
           // Fetch profile and tenants in background (non-blocking)

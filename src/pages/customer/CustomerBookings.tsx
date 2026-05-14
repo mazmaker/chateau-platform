@@ -27,6 +27,9 @@ const CustomerBookings = () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) { navigate('/customer/login'); return; }
 
+        // Auto-revert any expired reservations so the customer sees up-to-date booking statuses
+        try { await (supabase as any).rpc('revert_expired_unit_reservations'); } catch { /* ignore */ }
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: customer } = await (supabase.from('customers') as any)
           .select('id').eq('auth_user_id', user.id).maybeSingle();

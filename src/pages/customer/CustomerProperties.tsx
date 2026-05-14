@@ -64,6 +64,10 @@ const CustomerProperties = () => {
   useEffect(() => {
     const load = async () => {
       try {
+        // Lazy auto-revert: clean up any expired reservations before showing inventory.
+        // Fire-and-forget — never block the page on this.
+        try { await (supabase as any).rpc('revert_expired_unit_reservations'); } catch { /* ignore */ }
+
         const [propsRes, unitsRes] = await Promise.all([
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from('properties') as any)

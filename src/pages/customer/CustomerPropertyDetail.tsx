@@ -124,6 +124,28 @@ const CustomerPropertyDetail = () => {
     load();
   }, [id]);
 
+  // Apply: (1) status pill, (2) budget filter, (3) bedroom filter
+  // Must be declared BEFORE any conditional early returns to satisfy Rules of Hooks.
+  const visible = useMemo(() => {
+    const arr = filter === 'all' ? units : units.filter((u) => u.status === filter);
+    return arr.filter((u) => {
+      if (budgetFilter !== 'all') {
+        const r = BUDGET_RANGES[budgetFilter];
+        const price = u.promo_price ?? u.price ?? 0;
+        if (price < r.min || price > r.max) return false;
+      }
+      if (bedFilter !== 'all') {
+        const beds = u.bedrooms ?? 0;
+        if (bedFilter === '4plus') {
+          if (beds < 4) return false;
+        } else {
+          if (beds !== parseInt(bedFilter, 10)) return false;
+        }
+      }
+      return true;
+    });
+  }, [units, filter, budgetFilter, bedFilter]);
+
   if (loading) {
     return (
       <CustomerLayout title="กำลังโหลด..." showBack backTo="/customer/properties">
@@ -150,26 +172,6 @@ const CustomerPropertyDetail = () => {
     sold: units.filter((u) => u.status === 'sold').length,
     total: units.length,
   };
-  // Apply: (1) status pill, (2) budget filter, (3) bedroom filter
-  const visible = useMemo(() => {
-    const arr = filter === 'all' ? units : units.filter((u) => u.status === filter);
-    return arr.filter((u) => {
-      if (budgetFilter !== 'all') {
-        const r = BUDGET_RANGES[budgetFilter];
-        const price = u.promo_price ?? u.price ?? 0;
-        if (price < r.min || price > r.max) return false;
-      }
-      if (bedFilter !== 'all') {
-        const beds = u.bedrooms ?? 0;
-        if (bedFilter === '4plus') {
-          if (beds < 4) return false;
-        } else {
-          if (beds !== parseInt(bedFilter, 10)) return false;
-        }
-      }
-      return true;
-    });
-  }, [units, filter, budgetFilter, bedFilter]);
 
   const statusDot = (s?: string) => {
     if (s === 'available') return <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-50 text-green-700"><span className="w-1.5 h-1.5 rounded-full bg-green-500" /> ว่าง</span>;

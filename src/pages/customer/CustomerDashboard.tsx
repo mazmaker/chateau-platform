@@ -120,6 +120,7 @@ const CustomerDashboard = () => {
             .from('lead_interests')
             .select('id, unit_id, property_id, status, interest_level, viewing_date, property:properties(id, name), unit:units(id, unit_number, price, status, thumbnail_url)')
             .in('lead_id', leadIds)
+            .not('status', 'in', '("dropped","lost")')
             .order('created_at', { ascending: false });
           setInterests((intRows || []) as any);
         }
