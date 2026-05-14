@@ -141,13 +141,13 @@ const NEWS_SOURCE_ONLINE = [
   { value: "other", label: "อื่นๆ" },
 ];
 
+// Canonical 5-category set — shared with Customer Profile + Lead CDP
 const PURCHASE_PURPOSE_OPTIONS = [
-  { value: "residence", label: "เพื่ออยู่อาศัย" },
-  { value: "speculation", label: "เก็งกำไร" },
-  { value: "monthly_rent", label: "ปล่อยเช่ารายเดือน" },
-  { value: "daily_rent", label: "ปล่อยเช่ารายวัน" },
-  { value: "flip", label: "ซ่อมแล้วขาย" },
-  { value: "other", label: "อื่นๆ" },
+  { value: "residence",  label: "🏡 อยู่อาศัยเอง" },
+  { value: "investment", label: "💰 ลงทุน (เช่า / ขายต่อ)" },
+  { value: "vacation",   label: "🌴 บ้านที่สอง / พักผ่อน" },
+  { value: "family",     label: "👨‍👩‍👧 ครอบครัว (พ่อแม่ / บุตรหลาน)" },
+  { value: "other",      label: "❓ อื่นๆ / ยังไม่ตัดสินใจ" },
 ];
 
 const STATUS_OPTIONS = [

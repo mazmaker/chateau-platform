@@ -17,6 +17,7 @@ interface StatusData {
   name: string;
   value: number;
   color: string;
+  [key: string]: any;
 }
 
 const ProjectPerformance = () => {
@@ -86,10 +87,10 @@ const ProjectPerformance = () => {
       };
 
       const statusDistribution = Object.entries(statusCount)
-        .filter(([_, count]) => count > 0)
+        .filter(([_, count]) => (count as number) > 0)
         .map(([plan, count]) => ({
           name: statusNames[plan as keyof typeof statusNames] || plan,
-          value: count,
+          value: count as number,
           color: statusColors[plan as keyof typeof statusColors] || '#6b7280'
         }));
 

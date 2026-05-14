@@ -127,13 +127,16 @@ const Header = ({ onMenuClick }: HeaderProps) => {
     (async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data } = await (supabase.from('activity_logs') as any)
-        .select('id, activity_type, description, created_at')
+        .select('id, activity_type, description, created_at, metadata')
         .eq('tenant_id', currentTenant.id)
         .order('created_at', { ascending: false })
         .limit(15);
       if (cancelled) return;
       const items: NotifItem[] = ((data as any[]) || []).map((row: any) => {
         const m = mapActivityToNotif(row.activity_type, row.description);
+        // If the activity carries a lead_id in metadata, deep-link to that specific lead's detail.
+        const leadId = row.metadata?.lead_id;
+        const link = leadId ? `/leads/${leadId}` : m.link;
         return {
           id: row.id,
           type: m.type,
@@ -141,7 +144,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
           description: row.description || '',
           time: formatTimeAgo(row.created_at),
           unread: !readRow(row.id),
-          link: m.link,
+          link,
         };
       });
       setNotifications(items);
@@ -157,6 +160,8 @@ const Header = ({ onMenuClick }: HeaderProps) => {
           const row = payload.new as any;
           if (!row?.id) return;
           const m = mapActivityToNotif(row.activity_type, row.description);
+          const leadId = row.metadata?.lead_id;
+          const link = leadId ? `/leads/${leadId}` : m.link;
           const newItem: NotifItem = {
             id: row.id,
             type: m.type,
@@ -164,7 +169,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
             description: row.description || '',
             time: formatTimeAgo(row.created_at),
             unread: !readRow(row.id),
-            link: m.link,
+            link,
           };
           setNotifications((prev) => {
             if (prev.some((p) => p.id === newItem.id)) return prev;
@@ -236,17 +241,18 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         const tenantId = currentTenant.id;
 
         // Search across 4 entities in parallel
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const [campaignsRes, propertiesRes, leadsRes, segmentsRes] = await Promise.all([
-          supabase.from('campaigns')
+          (supabase.from('campaigns') as any)
             .select('id, campaign_name, detail, status')
             .eq('tenant_id', tenantId).ilike('campaign_name', q).limit(5),
-          supabase.from('properties')
+          (supabase.from('properties') as any)
             .select('id, name, type')
             .eq('tenant_id', tenantId).ilike('name', q).limit(5),
-          supabase.from('leads')
+          (supabase.from('leads') as any)
             .select('id, customer_id, status, customers(full_name, email)')
             .eq('tenant_id', tenantId).limit(20),
-          supabase.from('segments')
+          (supabase.from('segments') as any)
             .select('id, code, name, member_count')
             .eq('tenant_id', tenantId).ilike('name', q).limit(5),
         ]);

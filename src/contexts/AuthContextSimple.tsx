@@ -1,4 +1,4 @@
-import React, {
+import {
   createContext,
   useContext,
   useEffect,
@@ -108,8 +108,8 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
   // Fetch user profile from database (includes role and tenant_id)
   const fetchUserProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('users')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.from('users') as any)
         .select('*')
         .eq('id', userId)
         .single()
@@ -132,14 +132,9 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
       console.log('[Auth] Fetching tenants for userId:', userId)
 
       // First get user data with role and tenant_id
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select(`
-          id,
-          tenant_id,
-          role,
-          is_active
-        `)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: userData, error: userError } = await (supabase.from('users') as any)
+        .select(`id, tenant_id, role, is_active`)
         .eq('id', userId)
         .eq('is_active', true)
         .single()
@@ -151,12 +146,14 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
         console.error('Error fetching user:', userError)
         return []
       }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const u = userData as any
 
       // Then fetch tenant separately using RPC to bypass RLS
-      const { data: tenantData, error: tenantError } = await supabase
-        .from('tenants')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: tenantData, error: tenantError } = await (supabase.from('tenants') as any)
         .select('*')
-        .eq('id', userData.tenant_id)
+        .eq('id', u.tenant_id)
         .single()
 
       console.log('[Auth] Tenant data:', tenantData)
@@ -166,11 +163,13 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
       let logoUrlCached: string | null = null;
       let companyNameCached: string | null = null;
 
-      if (tenantData) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const td = tenantData as any
+      if (td) {
         try {
           // Try to get from localStorage cache first (5 min cache)
-          const cacheKey = `company_logo_${tenantData.id}`;
-          const cacheTimestamp = `company_logo_ts_${tenantData.id}`;
+          const cacheKey = `company_logo_${td.id}`;
+          const cacheTimestamp = `company_logo_ts_${td.id}`;
           const cachedLogo = localStorage.getItem(cacheKey);
           const cachedTime = localStorage.getItem(cacheTimestamp);
 
@@ -178,7 +177,7 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
             const age = Date.now() - parseInt(cachedTime);
             if (age < 5 * 60 * 1000) { // 5 minutes cache
               logoUrlCached = cachedLogo;
-              const cachedName = localStorage.getItem(`company_name_${tenantData.id}`);
+              const cachedName = localStorage.getItem(`company_name_${td.id}`);
               if (cachedName) companyNameCached = cachedName;
               console.log('[Auth] Using cached logo');
             }
@@ -186,7 +185,7 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
 
           // If no cached logo or expired, fetch from API
           if (!logoUrlCached) {
-            const companySettings = await getCompanySettings(tenantData.id);
+            const companySettings = await getCompanySettings(td.id);
             if (companySettings?.logo_url) {
               logoUrlCached = companySettings.logo_url;
               localStorage.setItem(cacheKey, companySettings.logo_url);
@@ -194,7 +193,7 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
             }
             if (companySettings?.company_name) {
               companyNameCached = companySettings.company_name;
-              localStorage.setItem(`company_name_${tenantData.id}`, companySettings.company_name);
+              localStorage.setItem(`company_name_${td.id}`, companySettings.company_name);
             }
           }
         } catch (err) {
@@ -204,16 +203,16 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
 
       // Transform to match expected format
       const transformed = [{
-        id: userData.id,
-        user_id: userData.id,
-        tenant_id: userData.tenant_id,
-        role: userData.role,
-        is_active: userData.is_active,
-        tenants: {
-          ...tenantData,
+        id: u.id,
+        user_id: u.id,
+        tenant_id: u.tenant_id,
+        role: u.role,
+        is_active: u.is_active,
+        tenants: td ? {
+          ...td,
           logo_url_cached: logoUrlCached || undefined,
           company_name_cached: companyNameCached || undefined,
-        } || null
+        } : null
       }]
 
       console.log('[Auth] Transformed tenants:', transformed)
@@ -381,14 +380,14 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
 
       if (!error && data.user) {
         // Check if user needs to reset password
-        const { data: userProfile } = await supabase
-          .from('users')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: userProfile } = await (supabase.from('users') as any)
           .select('password_set_at')
           .eq('id', data.user.id)
           .single()
 
         // Check if user has temporary password (password_set_at is null)
-        const passwordResetRequired = userProfile?.password_set_at === null
+        const passwordResetRequired = (userProfile as any)?.password_set_at === null
 
         // User is signed in, auth state change will handle the rest
         return { error: null, data, passwordResetRequired }

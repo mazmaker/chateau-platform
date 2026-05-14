@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Phone, Mail, MapPin, Briefcase, Heart, Loader2, Save, Edit, MessageCircle, UserCheck } from 'lucide-react';
+import { User, Phone, Mail, MapPin, Briefcase, Heart, Loader2, Save, Edit, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import CustomerLayout from './CustomerLayout';
+import { PURCHASE_PURPOSE_OPTIONS, getPurchasePurposeLabel } from '@/lib/purchasePurpose';
 
 interface CustomerProfile {
   id: string;
@@ -15,14 +16,6 @@ interface CustomerProfile {
   phone: string | null;
   date_of_birth?: string | null;
   preferences?: any;
-}
-
-interface SalesContact {
-  id: string;
-  full_name: string | null;
-  email: string | null;
-  phone?: string | null;
-  role: string;
 }
 
 interface FormState {
@@ -49,7 +42,6 @@ const EMPTY_FORM: FormState = {
 const CustomerProfile = () => {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
-  const [salesTeam, setSalesTeam] = useState<SalesContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -88,19 +80,6 @@ const CustomerProfile = () => {
         if (!cust) { toast.error('ไม่พบข้อมูล'); return; }
         setProfile(cust as CustomerProfile);
         setForm(profileToForm(cust as CustomerProfile));
-
-        // Load sales/agent team from customer's leads
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: leads } = await (supabase.from('leads') as any)
-          .select('assigned_to').eq('customer_id', (cust as any).id);
-        const assignedIds = Array.from(new Set(((leads as any[]) || [])
-          .map((l: any) => l.assigned_to).filter(Boolean)));
-        if (assignedIds.length > 0) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: salesUsers } = await (supabase.from('users') as any)
-            .select('id, full_name, email, phone, role').in('id', assignedIds);
-          setSalesTeam(((salesUsers as any[]) || []) as SalesContact[]);
-        }
       } catch (err) {
         console.error('Load profile error:', err);
       } finally {
@@ -182,59 +161,6 @@ const CustomerProfile = () => {
         {prefs.occupation && <p className="text-sm text-gray-500 mt-1">{prefs.occupation}</p>}
       </div>
 
-      {/* Sales/Agent Team — who looks after you */}
-      {salesTeam.length > 0 && (
-        <div className="bg-white border border-gray-100 rounded-2xl p-5">
-          <h2 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-2">
-            <UserCheck className="w-4 h-4 text-chateau" /> ทีมที่ดูแลคุณ
-          </h2>
-          <p className="text-[11px] text-gray-500 mb-3">ติดต่อได้ตลอดสำหรับสอบถาม / นัดดูยูนิต / จอง</p>
-          <div className="space-y-2.5">
-            {salesTeam.map((s) => {
-              const initials = (s.full_name || s.email || '?').slice(0, 2).toUpperCase();
-              const roleLabel = s.role === 'agent' ? 'นายหน้า' : s.role === 'sales' ? 'พนักงานขาย' : s.role === 'admin' ? 'ผู้ดูแล' : s.role;
-              const roleColor = s.role === 'agent' ? 'text-amber-700 bg-amber-50' : 'text-blue-700 bg-blue-50';
-              return (
-                <div key={s.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:border-chateau hover:bg-rose-50/30 transition-all">
-                  <div className="w-11 h-11 rounded-full bg-gradient-to-br from-chateau to-chateau-700 text-white flex items-center justify-center font-semibold text-sm flex-shrink-0">
-                    {initials}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{s.full_name || s.email}</p>
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${roleColor}`}>{roleLabel}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-[11px] text-gray-500">
-                      {s.phone && <span className="flex items-center gap-0.5"><Phone className="w-3 h-3" />{s.phone}</span>}
-                      {s.email && <span className="truncate">{s.email}</span>}
-                    </div>
-                  </div>
-                  <div className="flex gap-1.5 flex-shrink-0">
-                    {s.phone && (
-                      <a href={`tel:${s.phone}`} className="w-9 h-9 rounded-full bg-green-50 text-green-600 hover:bg-green-100 flex items-center justify-center transition-colors" title="โทร">
-                        <Phone className="w-4 h-4" />
-                      </a>
-                    )}
-                    <button
-                      onClick={() => toast.info('LINE Integration เร็วๆ นี้')}
-                      className="w-9 h-9 rounded-full bg-[#06C755]/10 text-[#06C755] hover:bg-[#06C755]/20 flex items-center justify-center font-bold text-sm transition-colors"
-                      title="LINE Chat"
-                    >
-                      L
-                    </button>
-                    {s.email && (
-                      <a href={`mailto:${s.email}`} className="w-9 h-9 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center transition-colors" title="Email">
-                        <MessageCircle className="w-4 h-4" />
-                      </a>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Editable: Basic Info */}
       <div className="bg-white border border-gray-100 rounded-2xl p-5">
         <div className="flex items-center justify-between mb-4">
@@ -277,97 +203,107 @@ const CustomerProfile = () => {
         </div>
       </div>
 
-      {/* Occupation + finance (editable) */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-5">
-        <h2 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Briefcase className="w-4 h-4 text-gray-600" /> ข้อมูลด้านอาชีพ
-        </h2>
-        <div className="space-y-4">
-          <Field label="อาชีพ" icon={Briefcase} value={prefs.occupation || null} editing={editing}>
-            <Input value={form.occupation} onChange={(e) => setForm({ ...form, occupation: e.target.value })} disabled={saving} placeholder="เช่น พนักงานบริษัท, ธุรกิจส่วนตัว" />
-          </Field>
-          <Field label="ที่ทำงาน" icon={Briefcase} value={prefs.workplace || null} editing={editing}>
-            <Input value={form.workplace} onChange={(e) => setForm({ ...form, workplace: e.target.value })} disabled={saving} placeholder="ชื่อบริษัทหรือสถานที่ทำงาน" />
-          </Field>
-          <Field
-            label="รายได้ต่อเดือน (บาท)"
-            icon={Briefcase}
-            value={prefs.monthly_income ? `${Number(prefs.monthly_income).toLocaleString()} บาท` : null}
-            editing={editing}
-            mono
-          >
-            <Input
-              type="number"
-              inputMode="numeric"
-              value={form.monthly_income}
-              onChange={(e) => setForm({ ...form, monthly_income: e.target.value })}
-              disabled={saving}
-              placeholder="เช่น 50000"
-            />
-          </Field>
+      {/* Additional info — collapsed by default. CRM still gets full data via DB;
+          customer sees a clean default view and expands only when they want to update. */}
+      <details className="bg-white border border-gray-100 rounded-2xl group">
+        <summary className="px-5 py-4 flex items-center justify-between cursor-pointer list-none">
+          <div className="flex items-center gap-2">
+            <Briefcase className="w-4 h-4 text-gray-600" />
+            <h2 className="text-sm font-semibold text-gray-900">ข้อมูลเพิ่มเติม</h2>
+            <span className="text-[11px] text-gray-400">(5 รายการ)</span>
+          </div>
+          <ChevronDown className="w-4 h-4 text-gray-400 transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="px-5 pb-5 pt-1 border-t border-gray-100 space-y-5">
+          <p className="text-[11px] text-gray-500 leading-relaxed -mt-1">
+            💡 ช่วยให้ Sales แนะนำยูนิตที่ตรงกับคุณมากขึ้น — ตอบเฉพาะที่สะดวก
+          </p>
+
+          {/* — อาชีพ + การเงิน — */}
+          <div className="space-y-4">
+            <Field label="อาชีพ" icon={Briefcase} value={prefs.occupation || null} editing={editing}>
+              <Input value={form.occupation} onChange={(e) => setForm({ ...form, occupation: e.target.value })} disabled={saving} placeholder="เช่น พนักงานบริษัท, ธุรกิจส่วนตัว" />
+            </Field>
+            <Field label="ที่ทำงาน" icon={Briefcase} value={prefs.workplace || null} editing={editing}>
+              <Input value={form.workplace} onChange={(e) => setForm({ ...form, workplace: e.target.value })} disabled={saving} placeholder="ชื่อบริษัทหรือสถานที่ทำงาน" />
+            </Field>
+            <Field
+              label="รายได้ต่อเดือน (บาท)"
+              icon={Briefcase}
+              value={prefs.monthly_income ? `${Number(prefs.monthly_income).toLocaleString()} บาท` : null}
+              editing={editing}
+              mono
+            >
+              <Input
+                type="number"
+                inputMode="numeric"
+                value={form.monthly_income}
+                onChange={(e) => setForm({ ...form, monthly_income: e.target.value })}
+                disabled={saving}
+                placeholder="เช่น 50000"
+              />
+            </Field>
+          </div>
+
+          {/* — ที่อยู่ — */}
+          <div className="pt-3 border-t border-gray-100">
+            <p className="text-xs font-medium text-gray-700 mb-3 flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5 text-gray-500" /> ที่อยู่
+            </p>
+            {editing ? (
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-gray-500 mb-1.5">จังหวัด</Label>
+                  <Input value={form.province} onChange={(e) => setForm({ ...form, province: e.target.value })} disabled={saving} placeholder="เช่น กรุงเทพมหานคร" />
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-500 mb-1.5">เขต / อำเภอ</Label>
+                  <Input value={form.district} onChange={(e) => setForm({ ...form, district: e.target.value })} disabled={saving} placeholder="เช่น บางรัก" />
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-500 mb-1.5">แขวง / ตำบล</Label>
+                  <Input value={form.sub_district} onChange={(e) => setForm({ ...form, sub_district: e.target.value })} disabled={saving} placeholder="เช่น สีลม" />
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-900">
+                {[prefs.address?.sub_district, prefs.address?.district, prefs.address?.province].filter(Boolean).join(', ') || <span className="text-gray-400">—</span>}
+              </p>
+            )}
+          </div>
+
+          {/* — จุดประสงค์การซื้อ — */}
+          <div className="pt-3 border-t border-gray-100">
+            <p className="text-xs font-medium text-gray-700 mb-3 flex items-center gap-1.5">
+              <Heart className="w-3.5 h-3.5 text-gray-500" /> จุดประสงค์การซื้อ
+            </p>
+            {editing ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {PURCHASE_PURPOSE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setForm({ ...form, purchase_purpose: form.purchase_purpose === opt.value ? '' : opt.value })}
+                    className={`px-4 py-2.5 rounded-xl text-sm font-medium border transition text-left ${
+                      form.purchase_purpose === opt.value
+                        ? 'border-chateau bg-rose-50/50 text-chateau'
+                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="mr-1.5">{opt.emoji}</span>{opt.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-900 font-medium">
+                {prefs.purchase_purpose
+                  ? getPurchasePurposeLabel(prefs.purchase_purpose)
+                  : <span className="text-gray-400">—</span>}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
-
-      {/* Address (editable) */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-5">
-        <h2 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <MapPin className="w-4 h-4 text-gray-600" /> ที่อยู่
-        </h2>
-        {editing ? (
-          <div className="space-y-3">
-            <div>
-              <Label className="text-xs text-gray-500 mb-1.5">จังหวัด</Label>
-              <Input value={form.province} onChange={(e) => setForm({ ...form, province: e.target.value })} disabled={saving} placeholder="เช่น กรุงเทพมหานคร" />
-            </div>
-            <div>
-              <Label className="text-xs text-gray-500 mb-1.5">เขต / อำเภอ</Label>
-              <Input value={form.district} onChange={(e) => setForm({ ...form, district: e.target.value })} disabled={saving} placeholder="เช่น บางรัก" />
-            </div>
-            <div>
-              <Label className="text-xs text-gray-500 mb-1.5">แขวง / ตำบล</Label>
-              <Input value={form.sub_district} onChange={(e) => setForm({ ...form, sub_district: e.target.value })} disabled={saving} placeholder="เช่น สีลม" />
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-gray-900">
-            {[prefs.address?.sub_district, prefs.address?.district, prefs.address?.province].filter(Boolean).join(', ') || <span className="text-gray-400">—</span>}
-          </p>
-        )}
-      </div>
-
-      {/* Purchase purpose (editable) */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-5">
-        <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-          <Heart className="w-4 h-4 text-gray-600" /> จุดประสงค์การซื้อ
-        </h2>
-        {editing ? (
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { value: 'own_residence', label: '🏡 อยู่อาศัยเอง' },
-              { value: 'investment', label: '💰 ลงทุน' },
-            ].map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setForm({ ...form, purchase_purpose: form.purchase_purpose === opt.value ? '' : opt.value })}
-                className={`px-4 py-2.5 rounded-xl text-sm font-medium border transition ${
-                  form.purchase_purpose === opt.value
-                    ? 'border-chateau bg-rose-50/50 text-chateau'
-                    : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-gray-900 font-medium">
-            {prefs.purchase_purpose === 'own_residence' && '🏡 อยู่อาศัยเอง'}
-            {prefs.purchase_purpose === 'investment' && '💰 ลงทุน'}
-            {!prefs.purchase_purpose && <span className="text-gray-400">—</span>}
-          </p>
-        )}
-      </div>
+      </details>
     </CustomerLayout>
   );
 };

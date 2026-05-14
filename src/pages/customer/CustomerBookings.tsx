@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Calendar, FileText, Loader2, CheckCircle2, Clock, XCircle, Home } from 'lucide-react';
+import { Building2, Calendar, FileText, Loader2, CheckCircle2, Clock, XCircle, Home, AlertCircle, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 import CustomerLayout from './CustomerLayout';
 
 interface Booking {
@@ -15,11 +16,75 @@ interface Booking {
   property?: { id: string; name: string; thumbnail_url?: string | null };
 }
 
+const CANCEL_REASONS = [
+  { value: 'changed_mind', label: 'เปลี่ยนใจ' },
+  { value: 'found_other', label: 'เจอโครงการอื่นที่ตรงกว่า' },
+  { value: 'over_budget', label: 'เกินงบประมาณ' },
+  { value: 'need_more_time', label: 'ขอเวลาตัดสินใจ' },
+  { value: 'other', label: 'อื่นๆ' },
+] as const;
+
 const CustomerBookings = () => {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('active');
+  const [cancellingBooking, setCancellingBooking] = useState<Booking | null>(null);
+  const [cancelReason, setCancelReason] = useState<string>('changed_mind');
+  const [cancelDetail, setCancelDetail] = useState<string>('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const reloadBookings = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: customer } = await (supabase.from('customers') as any)
+        .select('id').eq('auth_user_id', user.id).maybeSingle();
+      if (!customer) return;
+      const { data } = await (supabase.from('bookings') as any)
+        .select('id, status, total_amount, currency, check_in_date, created_at, notes, property:properties(id, name, thumbnail_url)')
+        .eq('customer_id', (customer as any).id)
+        .order('created_at', { ascending: false });
+      setBookings((data || []) as Booking[]);
+    } catch (err) {
+      console.error('Reload bookings error:', err);
+    }
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!cancellingBooking) return;
+    setSubmitting(true);
+    try {
+      const reasonLabel = CANCEL_REASONS.find((r) => r.value === cancelReason)?.label || cancelReason;
+      const fullReason = cancelDetail.trim()
+        ? `${reasonLabel}: ${cancelDetail.trim()}`
+        : reasonLabel;
+      const { error } = await (supabase as any).rpc('customer_cancel_booking', {
+        p_booking_id: cancellingBooking.id,
+        p_reason: fullReason,
+      });
+      if (error) throw error;
+      toast.success('ยกเลิกการจองเรียบร้อย');
+      setCancellingBooking(null);
+      setCancelReason('changed_mind');
+      setCancelDetail('');
+      await reloadBookings();
+    } catch (err: any) {
+      console.error('Cancel booking error:', err);
+      const msg: string = err?.message || '';
+      if (msg.includes('CANNOT_CANCEL_STATUS')) {
+        toast.error('ไม่สามารถยกเลิกได้ — booking นี้ผ่านขั้นชำระเงินแล้ว กรุณาติดต่อ Sales');
+      } else if (msg.includes('BOOKING_NOT_FOUND_OR_NOT_OWNED')) {
+        toast.error('ไม่พบการจองนี้');
+      } else if (msg.includes('NOT_AUTHENTICATED')) {
+        toast.error('กรุณาเข้าสู่ระบบใหม่');
+      } else {
+        toast.error('เกิดข้อผิดพลาด: ' + msg);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -171,12 +236,16 @@ const CustomerBookings = () => {
                         </div>
                       )}
 
-                      <button
-                        onClick={() => navigate('/customer/payments')}
-                        className="mt-3 w-full text-xs font-medium text-chateau hover:underline text-center py-2"
-                      >
-                        ดูประวัติการชำระเงิน →
-                      </button>
+                      {b.status === 'pending' && (
+                        <div className="mt-3 flex justify-end">
+                          <button
+                            onClick={() => setCancellingBooking(b)}
+                            className="text-xs font-medium text-red-600 hover:bg-red-50 text-center py-2 px-3 rounded-lg border border-red-100"
+                          >
+                            ยกเลิกการจอง
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -184,6 +253,116 @@ const CustomerBookings = () => {
             </div>
           )}
         </>
+      )}
+
+      {/* Cancel Booking Modal */}
+      {cancellingBooking && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={() => !submitting && setCancellingBooking(null)}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-red-600" />
+                <h3 className="text-base font-semibold text-gray-900">ยกเลิกการจอง</h3>
+              </div>
+              <button
+                onClick={() => !submitting && setCancellingBooking(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                disabled={submitting}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-4 space-y-4">
+              {/* Booking summary */}
+              <div className="bg-gray-50 rounded-xl p-3 text-sm">
+                <p className="font-semibold text-gray-900">{cancellingBooking.property?.name || 'โครงการ'}</p>
+                {cancellingBooking.notes?.unit_number && (
+                  <p className="text-xs text-gray-600 mt-0.5">ยูนิต {cancellingBooking.notes.unit_number}</p>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  จองเมื่อ {new Date(cancellingBooking.created_at).toLocaleDateString('th-TH', { dateStyle: 'medium' })}
+                </p>
+              </div>
+
+              {/* Warning */}
+              <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+                <p className="text-xs text-amber-900">
+                  ⚠️ <span className="font-semibold">การยกเลิกไม่สามารถกู้คืนได้</span> — ยูนิตจะถูกปล่อยให้ลูกค้าคนอื่นจองต่อทันที
+                </p>
+              </div>
+
+              {/* Reason */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">เหตุผลในการยกเลิก</label>
+                <div className="space-y-1.5">
+                  {CANCEL_REASONS.map((r) => (
+                    <label
+                      key={r.value}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
+                        cancelReason === r.value
+                          ? 'border-chateau bg-red-50/50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="cancel-reason"
+                        value={r.value}
+                        checked={cancelReason === r.value}
+                        onChange={(e) => setCancelReason(e.target.value)}
+                        className="accent-chateau"
+                      />
+                      <span className="text-sm text-gray-800">{r.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Detail textarea */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                  รายละเอียดเพิ่มเติม {cancelReason === 'other' ? <span className="text-red-500">*</span> : <span className="text-gray-400">(ไม่บังคับ)</span>}
+                </label>
+                <textarea
+                  value={cancelDetail}
+                  onChange={(e) => setCancelDetail(e.target.value)}
+                  rows={2}
+                  maxLength={200}
+                  placeholder="ระบุเพิ่มเติมถ้ามี..."
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-100 focus:border-red-300 resize-none"
+                />
+                <p className="text-[10px] text-gray-400 mt-1 text-right">{cancelDetail.length}/200</p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex gap-2">
+              <button
+                onClick={() => setCancellingBooking(null)}
+                disabled={submitting}
+                className="flex-1 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                ปิด
+              </button>
+              <button
+                onClick={handleConfirmCancel}
+                disabled={submitting || (cancelReason === 'other' && !cancelDetail.trim())}
+                className="flex-1 py-2.5 text-sm font-semibold text-white bg-red-600 rounded-xl hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> กำลังยกเลิก...</> : 'ยืนยันยกเลิก'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </CustomerLayout>
   );

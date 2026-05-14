@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 
 // Mock user data for preview
 const mockUser = {

@@ -219,7 +219,6 @@ const ProjectsContent = () => {
       'single_house': "บ้านเดี่ยว",
       'twin_house': "บ้านแฝด",
       'townhome': "ทาวน์โฮม",
-      'condo': "คอนโด",
     };
     return type ? (labels[type] || type) : "-";
   };
@@ -502,7 +501,7 @@ const ProjectsContent = () => {
           setEditingProject(null);
         }}
         onProjectCreated={fetchProjects}
-        editingProject={editingProject}
+        editingProject={editingProject as any}
       />
     </div>
   );

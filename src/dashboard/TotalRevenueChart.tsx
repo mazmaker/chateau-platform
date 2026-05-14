@@ -54,7 +54,7 @@ export const TotalRevenueChart = () => {
                 borderRadius: '8px',
                 boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
               }}
-              formatter={(value) => [`$${value.toLocaleString()}`, 'Revenue']}
+              formatter={((value: any) => [`$${Number(value ?? 0).toLocaleString()}`, 'Revenue']) as any}
             />
             <Bar dataKey="value" radius={[0, 4, 4, 0]}>
               {data.map((entry, index) => (

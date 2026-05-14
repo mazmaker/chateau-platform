@@ -506,7 +506,7 @@ export class ThaiInvoicePDFGenerator {
       console.log(`✅ PDF generated successfully: ${filename}`);
     } catch (error) {
       console.error('❌ Error generating Thai PDF:', error);
-      throw new Error(`ไม่สามารถสร้าง PDF ได้: ${error.message}`);
+      throw new Error(`ไม่สามารถสร้าง PDF ได้: ${(error as Error).message}`);
     }
   }
 }

@@ -51,7 +51,7 @@ export function LogoSettings() {
     try {
       const result = await uploadCompanyLogo(currentTenant.id, file);
       if (result) {
-        await updateCompanyLogoApi(currentTenant.id, result);
+        await updateCompanyLogoApi(currentTenant.id, { logo_url: result.url, logo_storage_path: result.path });
         setLogoUrl(result.url);
 
         // Log activity for logo upload

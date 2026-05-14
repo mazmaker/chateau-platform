@@ -66,7 +66,7 @@ export const OnlineLeadsChart = ({ title, color = "hsl(180, 70%, 50%)" }: Online
               <LabelList 
                 dataKey="value" 
                 position="top" 
-                formatter={(value: number) => `${value}%`}
+                formatter={((value: any) => `${value}%`) as any}
                 style={{ fontSize: '9px', fill: 'hsl(215, 16%, 47%)' }}
               />
             </Bar>

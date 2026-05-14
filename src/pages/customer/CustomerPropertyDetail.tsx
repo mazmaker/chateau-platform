@@ -37,6 +37,8 @@ interface Unit {
   promo_price?: number | null;
   status?: string;
   thumbnail_url?: string | null;
+  tenant_id?: string;
+  project_id?: string;
 }
 
 const CustomerPropertyDetail = () => {
@@ -83,21 +85,22 @@ const CustomerPropertyDetail = () => {
     try { localStorage.setItem('customer_unit_view', mode); } catch { /* ignore */ }
   };
 
-  const toggleWish = (e: React.MouseEvent, unitId: string) => {
+  const toggleWish = async (e: React.MouseEvent, unit: Unit) => {
     e.stopPropagation();
     e.preventDefault();
     try {
-      const next = new Set(wishlistIds);
-      if (next.has(unitId)) {
-        next.delete(unitId);
-        toast.success('นำออกจากรายการแล้ว');
-      } else {
-        next.add(unitId);
-        toast.success('บันทึกในรายการที่ชอบแล้ว');
-      }
-      setWishlistIds(next);
-      localStorage.setItem('customer_wishlist', JSON.stringify(Array.from(next)));
-      window.dispatchEvent(new Event('wishlist:changed'));
+      const { toggleWishlist } = await import('@/lib/customerWishlist');
+      const nowSaved = await toggleWishlist({
+        id: unit.id,
+        tenant_id: unit.tenant_id || '',
+        project_id: unit.project_id,
+      });
+      setWishlistIds((prev) => {
+        const next = new Set(prev);
+        if (nowSaved) next.add(unit.id); else next.delete(unit.id);
+        return next;
+      });
+      toast.success(nowSaved ? 'บันทึกในรายการที่ชอบแล้ว' : 'นำออกจากรายการแล้ว');
     } catch { /* ignore */ }
   };
 
@@ -109,7 +112,7 @@ const CustomerPropertyDetail = () => {
         const [propRes, unitRes] = await Promise.all([
           (supabase.from('properties') as any).select('*').eq('id', id).single(),
           (supabase.from('units') as any)
-            .select('id, unit_number, area_sqm, bedrooms, bathrooms, price, promo_price, status, thumbnail_url')
+            .select('id, unit_number, area_sqm, bedrooms, bathrooms, price, promo_price, status, thumbnail_url, tenant_id, project_id')
             .eq('project_id', id)
             .order('unit_number'),
         ]);
@@ -222,7 +225,7 @@ const CustomerPropertyDetail = () => {
       </div>
 
       {/* Unit Filter + View Toggle */}
-      <div>
+      <div id="unit-list">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-semibold text-gray-900">ยูนิต</h2>
           <div className="flex items-center gap-3">
@@ -356,7 +359,7 @@ const CustomerPropertyDetail = () => {
                 </p>
               </div>
               <button
-                onClick={(e) => toggleWish(e, u.id)}
+                onClick={(e) => toggleWish(e, u)}
                 className={`p-2 rounded-full hover:bg-gray-100 transition-all flex-shrink-0 ${isWished ? 'text-chateau' : 'text-gray-300 hover:text-gray-500'}`}
                 title={isWished ? 'นำออกจากที่ชอบ' : 'บันทึกในที่ชอบ'}
               >
@@ -400,7 +403,7 @@ const CustomerPropertyDetail = () => {
                   )}
                   {/* Wishlist heart bottom-right */}
                   <button
-                    onClick={(e) => toggleWish(e, u.id)}
+                    onClick={(e) => toggleWish(e, u)}
                     className={`absolute bottom-2 right-2 w-8 h-8 rounded-full backdrop-blur bg-white/90 flex items-center justify-center transition-all hover:scale-110 ${isWished ? 'text-chateau' : 'text-gray-500'}`}
                   >
                     <Heart className={`w-4 h-4 ${isWished ? 'fill-current' : ''}`} />

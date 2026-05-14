@@ -49,8 +49,8 @@ const RevenueOverviewChart = () => {
 
         const chartData = Object.entries(monthlyData).map(([month, data]) => ({
           month,
-          revenue: data.revenue,
-          bookings: data.bookings
+          revenue: (data as { revenue: number; bookings: number }).revenue,
+          bookings: (data as { revenue: number; bookings: number }).bookings
         }));
 
         setRevenueData(chartData);

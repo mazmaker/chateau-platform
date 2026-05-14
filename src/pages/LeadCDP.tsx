@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { PotentialScoreCard } from '@/components/leads/PotentialScoreCard';
 import { LoanEstimationCard } from '@/components/leads/LoanEstimationCard';
+import { LeadSourceEditor } from '@/components/leads/LeadSourceEditor';
+import { getPurchasePurposeLabel as sharedGetPurchasePurposeLabel } from '@/lib/purchasePurpose';
 import { calculateLeadScore } from '@/lib/leadScoring';
 import { estimateLoan } from '@/lib/loanEstimation';
 import type { LeadScoringData, PotentialScore, LoanEstimation } from '@/types/leadScoring';
@@ -59,6 +61,47 @@ interface Lead {
   source: string;
   notes: string;
   created_at: string;
+  // Optional scoring fields (set when present in DB)
+  credit_score?: number | null;
+  monthly_income?: number | null;
+  monthly_debt?: number | null;
+  employment_type?: string | null;
+  years_employed?: number | null;
+  age?: number | null;
+  gender?: string | null;
+  marital_status?: string | null;
+  education?: string | null;
+  household_size?: number | null;
+  number_of_dependents?: number | null;
+  is_first_time_buyer?: boolean | null;
+  has_co_borrower?: boolean | null;
+  existing_properties?: number | null;
+  down_payment_ready?: number | null;
+  savings?: number | null;
+  urgency_level?: string | null;
+  decision_maker?: boolean | null;
+  financing_approved?: boolean | null;
+  website_visits?: number | null;
+  pages_viewed?: number | null;
+  time_on_site?: number | null;
+  brochure_downloads?: number | null;
+  site_visit_attended?: boolean | null;
+  sold_property_recently?: boolean | null;
+  workplace?: string | null;
+  company_name?: string | null;
+  priority?: string | null;
+  estimated_value?: number | null;
+  expected_close_date?: string | null;
+  last_contact_date?: string | null;
+  next_follow_up?: string | null;
+  potential_score?: number | null;
+  financial_score?: number | null;
+  engagement_score?: number | null;
+  urgency_score?: number | null;
+  fit_score?: number | null;
+  conversion_probability?: number | null;
+  // Catch-all for misc DB columns referenced by scoring/loan calculators
+  [key: string]: any;
 }
 
 interface Customer {
@@ -247,40 +290,36 @@ const LeadCDP = () => {
     const prefs = customer.preferences || {};
     const currentInterest = selectedInterest;
 
-    // Prepare lead scoring data - now using lead table columns directly
+    // Prepare lead scoring data — DB columns return null, scoring type expects undefined
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const scoringData: LeadScoringData = {
-      // From lead table (new columns from migration)
-      credit_score: lead.credit_score,
-      monthly_income: lead.monthly_income,
-      monthly_debt: lead.monthly_debt,
-      employment_type: lead.employment_type,
-      years_employed: lead.years_employed,
+      credit_score: lead.credit_score ?? undefined,
+      monthly_income: lead.monthly_income ?? undefined,
+      monthly_debt: lead.monthly_debt ?? undefined,
+      employment_type: (lead.employment_type ?? undefined) as any,
+      years_employed: lead.years_employed ?? undefined,
 
-      // Demographics (from lead table)
-      age: lead.age,
-      gender: lead.gender,
-      marital_status: lead.marital_status,
-      education: lead.education,
-      household_size: lead.household_size,
+      age: lead.age ?? undefined,
+      gender: (lead.gender ?? undefined) as any,
+      marital_status: (lead.marital_status ?? undefined) as any,
+      education: (lead.education ?? undefined) as any,
+      household_size: lead.household_size ?? undefined,
 
-      // Financial (from lead table)
-      down_payment_ready: lead.down_payment_ready,
-      savings: lead.savings,
+      down_payment_ready: lead.down_payment_ready ?? undefined,
+      savings: lead.savings ?? undefined,
 
       // Behavioral (mock data for now - would come from tracking)
       website_visits: 5,
       pages_viewed: 15,
       time_on_site: 30,
 
-      // Interest signals
       urgency_level: currentInterest?.interest_level === 'high' ? 'high' :
                      currentInterest?.interest_level === 'low' ? 'low' : 'medium',
       interest_level: currentInterest?.interest_level || 'medium',
 
-      // Budget (from property/unit price)
-      budget_max: currentInterest?.unit?.price || property?.price || 0,
+      budget_max: (currentInterest?.unit as any)?.price || (property as any)?.base_price || 0,
       purchase_timeline: '3_months',
-    };
+    } as any;
 
     // Calculate potential score
     try {
@@ -295,14 +334,14 @@ const LeadCDP = () => {
     if (lead.monthly_income && currentInterest?.unit?.price) {
       try {
         const estimation = estimateLoan({
-          monthly_income: lead.monthly_income,
+          monthly_income: lead.monthly_income ?? undefined,
           monthly_debt: lead.monthly_debt || 0,
-          property_value: currentInterest.unit.price,
+          property_value: (currentInterest.unit as any).price,
           down_payment: lead.down_payment_ready || 0,
           credit_score: lead.credit_score || 700,
-          age: lead.age,
-          employment_type: lead.employment_type,
-          years_employed: lead.years_employed,
+          age: lead.age ?? undefined,
+          employment_type: (lead.employment_type ?? undefined) as any,
+          years_employed: lead.years_employed ?? undefined,
         });
         setLoanEstimation(estimation);
       } catch (error) {
@@ -345,13 +384,7 @@ const LeadCDP = () => {
     return labels[edu || ''] || '-';
   };
 
-  const getPurchasePurposeLabel = (purpose?: string) => {
-    const labels: Record<string, string> = {
-      residence: 'เพื่ออยู่อาศัย', speculation: 'เก็งกำไร', monthly_rent: 'ปล่อยเช่ารายเดือน',
-      daily_rent: 'ปล่อยเช่ารายวัน', investment: 'ลงทุน', children: 'ซื้อให้บุตรหลาน'
-    };
-    return labels[purpose || ''] || '-';
-  };
+  const getPurchasePurposeLabel = (purpose?: string) => sharedGetPurchasePurposeLabel(purpose);
 
   const getSourceLabel = (source?: string) => {
     const labels: Record<string, string> = {
@@ -496,9 +529,17 @@ const LeadCDP = () => {
                       </div>
                       <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
                         <Globe className="w-5 h-5 text-cyan-500" />
-                        <div>
-                          <p className="text-xs text-gray-500">แหล่งที่มาของ Lead</p>
-                          <Badge variant="outline" className="mt-1">{getSourceLabel(lead?.source)}</Badge>
+                        <div className="min-w-0">
+                          <p className="text-xs text-gray-500 mb-1">แหล่งที่มาของ Lead</p>
+                          {lead?.id && (
+                            <LeadSourceEditor
+                              leadId={lead.id}
+                              currentSource={lead.source}
+                              onUpdated={(newSource) => {
+                                setLead((prev: any) => prev ? { ...prev, source: newSource } : prev);
+                              }}
+                            />
+                          )}
                         </div>
                       </div>
                     </div>
@@ -568,7 +609,7 @@ const LeadCDP = () => {
                         <div className="flex-1">
                           <p className="font-medium text-sm">{property?.name || '-'}</p>
                           <p className="text-xs text-gray-500">ยูนิต {unit?.unit_number || '-'}</p>
-                          <p className="text-xs font-semibold text-chateau">{formatCurrency(unitPrice)}</p>
+                          <p className="text-xs font-semibold text-chateau">{formatCurrency((unit as any)?.price || 0)}</p>
                         </div>
                       </div>
                     </div>

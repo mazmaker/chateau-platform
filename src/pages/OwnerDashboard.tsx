@@ -185,7 +185,7 @@ const OwnerDashboard = () => {
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
         const churnedTenants = tenantList.filter(t =>
-          t.status === 'cancelled' && new Date(t.updated_at || t.created_at) >= thirtyDaysAgo
+          t.status === 'cancelled' && new Date((t as any).updated_at || t.created_at) >= thirtyDaysAgo
         ).length;
         const realChurnRate = tenantList.length > 0 ? (churnedTenants / tenantList.length) * 100 : 0;
 
@@ -577,7 +577,7 @@ const OwnerDashboard = () => {
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                     <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                    <Tooltip contentStyle={kkTooltipStyle} formatter={(v: number) => [formatCurrency(v), 'MRR']} />
+                    <Tooltip contentStyle={kkTooltipStyle} formatter={((v: any) => [formatCurrency(Number(v ?? 0)), 'MRR']) as any} />
                     <Area type="monotone" dataKey="revenue" stroke={KK.red} strokeWidth={2.5} fill="url(#ownerRevGrad)" dot={false} activeDot={{ r: 4, fill: KK.red, stroke: '#fff', strokeWidth: 2 }} />
                   </AreaChart>
                 </ResponsiveContainer>

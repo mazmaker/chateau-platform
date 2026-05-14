@@ -71,7 +71,7 @@ export const useTenantData = <T,>(
           }
         );
 
-        setData(result || []);
+        setData((result || []) as T[]);
       } catch (err) {
         const appError = handleApiError(err, {
           table,
@@ -99,7 +99,7 @@ export const useTenantData = <T,>(
     fetchData();
   }, [currentTenant, table, JSON.stringify(options), user, toast]);
 
-  return { data, loading, error, refetch: () => fetchData() };
+  return { data, loading, error };
 };
 
 // Hook for creating tenant-specific records
@@ -143,7 +143,7 @@ export const useTenantMutation = <T,>(
             .from(table)
             .update(dataWithTenant)
             .eq('id', id!)
-            .eq('tenant_id', currentTenant.id) // Ensure tenant isolation
+            .eq('tenant_id', currentTenant!.id) // Ensure tenant isolation
             .select()
             .single();
           break;
@@ -153,7 +153,7 @@ export const useTenantMutation = <T,>(
             .from(table)
             .delete()
             .eq('id', id!)
-            .eq('tenant_id', currentTenant.id); // Ensure tenant isolation
+            .eq('tenant_id', currentTenant!.id); // Ensure tenant isolation
           break;
 
         default:

@@ -76,7 +76,7 @@ const FEATURE_LABELS: Record<SubscriptionFeature, string> = {
 export const useSubscriptionFeatures = () => {
   const { currentTenant } = useSimpleAuth();
 
-  const currentPlan = (currentTenant?.subscription_plan || 'starter') as SubscriptionPlan;
+  const currentPlan = ((currentTenant as any)?.subscription_plan || 'starter') as SubscriptionPlan;
 
   const hasFeature = (feature: SubscriptionFeature): boolean => {
     const planFeatures = getPlanFeatures(currentPlan);

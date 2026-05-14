@@ -830,7 +830,7 @@ const CampaignManagement = () => {
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                       <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={kkTooltipStyle} formatter={(v: number) => [`${v}%`, 'CTR LINE']} />
+                      <Tooltip contentStyle={kkTooltipStyle} formatter={((v: any) => [`${v}%`, 'CTR LINE']) as any} />
                       <Area type="monotone" dataKey="line" stroke={KK.red} strokeWidth={2.5} fill="url(#ctrGrad)" dot={false} activeDot={{ r: 4, fill: KK.red, stroke: '#fff', strokeWidth: 2 }} />
                     </AreaChart>
                   </ResponsiveContainer>

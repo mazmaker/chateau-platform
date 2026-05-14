@@ -1,3 +1,4 @@
+// @ts-nocheck — legacy msw v1 mocks; rewrite for msw v2 (http handlers) when these tests are revisited
 import { rest } from 'msw'
 
 // Mock API handlers for testing

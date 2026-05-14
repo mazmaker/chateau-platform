@@ -155,13 +155,14 @@ const NEWS_SOURCE_ONLINE = [
   { value: "other", label: "อื่นๆ" },
 ];
 
+// Canonical 5-category set — shared with Customer Profile + Lead CDP
+// (granular sub-types like monthly_rent/daily_rent/flip can be captured in notes if needed)
 const PURCHASE_PURPOSE_OPTIONS = [
-  { value: "residence", label: "เพื่ออยู่อาศัย" },
-  { value: "speculation", label: "เก็งกำไร" },
-  { value: "monthly_rent", label: "ปล่อยเช่ารายเดือน" },
-  { value: "daily_rent", label: "ปล่อยเช่ารายวัน" },
-  { value: "flip", label: "ซ่อมแล้วขาย" },
-  { value: "other", label: "อื่นๆ" },
+  { value: "residence",  label: "🏡 อยู่อาศัยเอง" },
+  { value: "investment", label: "💰 ลงทุน (เช่า / ขายต่อ)" },
+  { value: "vacation",   label: "🌴 บ้านที่สอง / พักผ่อน" },
+  { value: "family",     label: "👨‍👩‍👧 ครอบครัว (พ่อแม่ / บุตรหลาน)" },
+  { value: "other",      label: "❓ อื่นๆ / ยังไม่ตัดสินใจ" },
 ];
 
 const CONSENT_OPTIONS = [
@@ -738,7 +739,7 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
       }
 
       // Upload image
-      let imageUrl = null;
+      let imageUrl: string | null = null;
       if (formData.image) {
         imageUrl = await uploadFile(formData.image, 'customer-images');
       }
@@ -926,18 +927,21 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
           const propertyPrice = unitData?.price || 0;
           console.log('[Lead Scoring] Unit price:', propertyPrice);
 
-          // Prepare scoring data
-          const scoringData: LeadScoringData = {
-            credit_score: leadData.credit_score,
-            monthly_income: leadData.monthly_income,
+          // Prepare scoring data — DB returns `null` for missing values, scoring expects `undefined`
+          // Cast to `any` because LeadScoringData type doesn't expose every column we read.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const scoringData: LeadScoringData = ({
+            credit_score: leadData.credit_score ?? undefined,
+            monthly_income: leadData.monthly_income ?? undefined,
             monthly_debt: leadData.monthly_debt || 0,
-            employment_type: leadData.employment_type,
-            years_employed: leadData.years_employed,
-            age: leadData.age,
-            gender: leadData.gender,
-            marital_status: leadData.marital_status,
-            education: leadData.education,
-            household_size: leadData.household_size,
+            employment_type: (leadData.employment_type ?? undefined) as any,
+            years_employed: leadData.years_employed ?? undefined,
+            age: leadData.age ?? undefined,
+            gender: (leadData.gender ?? undefined) as any,
+            marital_status: (leadData.marital_status ?? undefined) as any,
+            education: (leadData.education ?? undefined) as any,
+            household_size: leadData.household_size ?? undefined,
             down_payment_ready: leadData.down_payment_ready || 0,
             savings: leadData.savings || 0,
             // Mock behavioral data (would come from tracking in production)
@@ -949,7 +953,7 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
             interest_level: firstInterest.interest_level || 'medium',
             budget_max: propertyPrice,
             purchase_timeline: '3_months',
-          };
+          } as any);
 
           // Calculate scores
           const potentialScore = calculateLeadScore(scoringData);
@@ -959,14 +963,14 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
           });
 
           const loanEstimation = propertyPrice > 0 ? estimateLoan({
-            monthly_income: leadData.monthly_income,
+            monthly_income: leadData.monthly_income ?? undefined,
             monthly_debt: leadData.monthly_debt || 0,
             property_value: propertyPrice,
             down_payment: leadData.down_payment_ready || 0,
             credit_score: leadData.credit_score || 700,
-            age: leadData.age,
-            employment_type: leadData.employment_type,
-            years_employed: leadData.years_employed,
+            age: leadData.age ?? undefined,
+            employment_type: (leadData.employment_type ?? undefined) as any,
+            years_employed: leadData.years_employed ?? undefined,
           }) : null;
 
           console.log('[Lead Scoring] Loan estimation:', loanEstimation ? {
@@ -987,9 +991,9 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
               max_loan_amount: loanEstimation?.max_loan_amount || null,
               estimated_monthly_payment: loanEstimation?.monthly_payment || null,
               estimated_interest_rate: loanEstimation?.interest_rate || null,
-              dti_ratio: loanEstimation?.dti_ratio || null,
-              ltv_ratio: loanEstimation?.ltv_ratio || null,
-              loan_approval_probability: loanEstimation?.approval_probability || null,
+              dti_ratio: (loanEstimation as any)?.dti_ratio || null,
+              ltv_ratio: (loanEstimation as any)?.ltv_ratio || null,
+              loan_approval_probability: (loanEstimation as any)?.approval_probability || null,
               score_last_updated: new Date().toISOString(),
               loan_last_updated: loanEstimation ? new Date().toISOString() : null,
             })

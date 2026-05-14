@@ -1214,7 +1214,7 @@ const PropertyManagement = () => {
       // Log activity for unit deletion
       try {
         await supabase.rpc('log_activity', {
-          p_tenant_id: currentTenant.id,
+          p_tenant_id: currentTenant!.id,
           p_user_id: null,
           p_activity_type: 'unit_deleted',
           p_description: `ลบยูนิต: ${deletingUnit.unit_number} (${selectedProperty.name})`,

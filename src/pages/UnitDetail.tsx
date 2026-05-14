@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/select';
 import {
   Building2, Bed, Bath, Square, MapPin, Layers, DollarSign, Eye,
-  Calendar, Check, AlertTriangle, ArrowLeft, UserPlus, ImageIcon, Loader2, Edit, Share2, Heart, Send,
+  Calendar, Check, ArrowLeft, UserPlus, Loader2, Edit, Share2, Heart, Send, Users,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -87,6 +87,12 @@ const UnitDetail = () => {
   const [siblingUnits, setSiblingUnits] = useState<{ id: string; unit_number: string; status?: string }[]>([]);
   const [unitLeads, setUnitLeads] = useState<any[]>([]);
   const [responsibleSales, setResponsibleSales] = useState<{ id: string; name: string }[]>([]);
+  // Active booking for this unit (tracks deposit confirmation state)
+  const [activeBooking, setActiveBooking] = useState<{ id: string; status: string; total_amount: number } | null>(null);
+  // Inline viewing-date editor state (Sales schedules a visit from the unit page)
+  const [editingVisitInterestId, setEditingVisitInterestId] = useState<string | null>(null);
+  const [visitDraft, setVisitDraft] = useState<string>('');
+  const [savingVisit, setSavingVisit] = useState(false);
   const [allTenantLeads, setAllTenantLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -140,8 +146,8 @@ const UnitDetail = () => {
     setLoading(true);
     setMasterPlanImgError(false);
     try {
-      const { data: unitData, error: unitErr } = await supabase
-        .from('units')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: unitData, error: unitErr } = await (supabase.from('units') as any)
         .select('*')
         .eq('id', unitId)
         .single();
@@ -151,19 +157,20 @@ const UnitDetail = () => {
         return;
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const [{ data: propData }, { data: sibs }, { data: leadsData }] = await Promise.all([
-        supabase.from('properties').select('*').eq('id', unitData.project_id).single(),
-        supabase.from('units').select('id, unit_number, status').eq('project_id', unitData.project_id),
-        supabase
-          .from('lead_interests')
-          .select('*, leads:lead_id(id, status, assigned_to, customers:customer_id(id, full_name, email, phone))')
-          .eq('unit_id', unitId),
+        (supabase.from('properties') as any).select('*').eq('id', unitData.project_id).single(),
+        (supabase.from('units') as any).select('id, unit_number, status').eq('project_id', unitData.project_id),
+        (supabase.from('lead_interests') as any)
+          .select('id, status, interest_level, viewing_date, notes, leads:lead_id(id, status, assigned_to, customers:customer_id(id, full_name, email, phone))')
+          .eq('unit_id', unitId)
+          .not('status', 'in', '("dropped","lost")'),
       ]);
 
       let lockedByName: string | null = null;
       if (unitData.locked_by) {
-        const { data: u } = await supabase
-          .from('users')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: u } = await (supabase.from('users') as any)
           .select('full_name, email')
           .eq('id', unitData.locked_by)
           .single();
@@ -175,17 +182,29 @@ const UnitDetail = () => {
       setSiblingUnits(sibs || []);
       setUnitLeads(leadsData || []);
 
+      // Load the active (non-cancelled) booking for this unit so we can show
+      // the "ยืนยันรับเงิน" CTA only when there's a pending booking to confirm.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: activeBookings } = await (supabase.from('bookings') as any)
+        .select('id, status, total_amount')
+        .eq('tenant_id', unitData.tenant_id)
+        .filter('notes->>unit_id', 'eq', unitId)
+        .not('status', 'in', '("cancelled","checked_out")')
+        .order('created_at', { ascending: false })
+        .limit(1);
+      setActiveBooking((activeBookings as any[])?.[0] || null);
+
       // Fetch responsible sales (for Admin/Owner)
       if (userRole === 'owner' || userRole === 'admin') {
-        const { data: assignments } = await supabase
-          .from('sales_unit_assignments')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: assignments } = await (supabase.from('sales_unit_assignments') as any)
           .select('sales_user_id')
           .eq('unit_id', unitId)
           .is('revoked_at', null);
         const ids = (assignments || []).map((a: any) => a.sales_user_id).filter(Boolean);
         if (ids.length > 0) {
-          const { data: salesUsers } = await supabase
-            .from('users')
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: salesUsers } = await (supabase.from('users') as any)
             .select('id, full_name, email')
             .in('id', ids);
           setResponsibleSales(
@@ -255,6 +274,51 @@ const UnitDetail = () => {
 
   const isAgentUser = userRole === 'agent';
 
+  // Format ISO date as "YYYY-MM-DDTHH:mm" for <input type="datetime-local">
+  const toLocalInputValue = (iso?: string | null): string => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  // Save / clear viewing_date for a lead_interest on this unit, with smart status promotion:
+  //   - Setting date when status='interested' → upgrade to 'viewing_scheduled'
+  //   - Clearing date when status='viewing_scheduled' → revert to 'interested'
+  //   - Other statuses are left as-is (don't downgrade negotiating/reserved/won)
+  const saveLeadVisit = async (interestId: string, currentStatus: string | undefined) => {
+    setSavingVisit(true);
+    try {
+      const isoValue = visitDraft ? new Date(visitDraft).toISOString() : null;
+      const updates: Record<string, any> = {
+        viewing_date: isoValue,
+        updated_at: new Date().toISOString(),
+      };
+      if (isoValue && currentStatus === 'interested') {
+        updates.status = 'viewing_scheduled';
+      } else if (!isoValue && currentStatus === 'viewing_scheduled') {
+        updates.status = 'interested';
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from('lead_interests') as any)
+        .update(updates).eq('id', interestId);
+      if (error) throw error;
+      setUnitLeads((prev) => prev.map((li: any) =>
+        li.id === interestId
+          ? { ...li, viewing_date: isoValue, status: updates.status ?? li.status }
+          : li
+      ));
+      setEditingVisitInterestId(null);
+      setVisitDraft('');
+      toast.success(isoValue ? 'บันทึกนัดดูเรียบร้อย' : 'ลบนัดดูแล้ว');
+    } catch (e: any) {
+      console.error('Save viewing date failed:', e);
+      toast.error('บันทึกไม่สำเร็จ: ' + (e?.message || 'unknown'));
+    } finally {
+      setSavingVisit(false);
+    }
+  };
+
   // My active leads on this unit (for Handoff button)
   const myLeadsOnUnit = unitLeads
     .map((li: any) => li.leads)
@@ -288,8 +352,8 @@ const UnitDetail = () => {
 
   const fetchAllTenantLeads = async () => {
     if (!currentTenant?.id) return;
-    const { data } = await supabase
-      .from('leads')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from('leads') as any)
       .select('id, status, assigned_to, customer_id, customer:customers(id, full_name, phone, email)')
       .eq('tenant_id', currentTenant.id)
       .order('created_at', { ascending: false });
@@ -317,8 +381,8 @@ const UnitDetail = () => {
     try {
       const nowDate = new Date();
       const lockedUntil = new Date(nowDate.getTime() + bookingForm.expiry_days * 86400000).toISOString();
-      const { data, error } = await supabase
-        .from('units')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.from('units') as any)
         .update({
           status: 'reserved',
           locked_by: user.id,
@@ -335,11 +399,13 @@ const UnitDetail = () => {
       if (error) throw error;
       if (!data || data.length === 0) throw new Error('ไม่มีสิทธิ์บันทึกการจอง');
 
-      await supabase.from('leads').update({ status: 'won' }).eq('id', lead.id);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase.from('leads') as any).update({ status: 'won' }).eq('id', lead.id);
 
       const alreadyInterested = unitLeads.some((li: any) => li.leads?.id === lead.id);
       if (!alreadyInterested) {
-        await supabase.from('lead_interests').insert({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('lead_interests') as any).insert({
           lead_id: lead.id, unit_id: unit.id, property_id: unit.project_id,
           tenant_id: currentTenant?.id, interest_level: 'high', status: 'reserved',
         });
@@ -423,19 +489,45 @@ const UnitDetail = () => {
     }
   };
 
+  // Confirm deposit received — booking pending → confirmed
+  // (called from the Reserved-unit card when Sales has received the deposit but hasn't closed the sale yet)
+  const handleConfirmPayment = async () => {
+    if (!unit || !activeBooking) return;
+    if (activeBooking.status !== 'pending') {
+      toast.info('การจองนี้ยืนยันรับเงินแล้ว');
+      return;
+    }
+    if (!confirm(`ยืนยันรับเงินมัดจำสำหรับยูนิต ${unit.unit_number}? (สถานะการจองจะเปลี่ยนเป็น "ชำระแล้ว")`)) return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.from('bookings') as any)
+        .update({ status: 'confirmed', updated_at: new Date().toISOString() })
+        .eq('id', activeBooking.id)
+        .select('id');
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error('ไม่มีสิทธิ์ยืนยัน');
+      // Sync lead_interest forward too (reserved → still reserved, no downgrade)
+      toast.success(`✓ ยืนยันรับเงินมัดจำ ยูนิต ${unit.unit_number}`);
+      await loadAll();
+    } catch (err: any) {
+      toast.error(err.message || 'ยืนยันไม่สำเร็จ');
+    }
+  };
+
   const handleMarkAsSold = async () => {
     if (!unit) return;
     if (!confirm(`ปิดการขายยูนิต ${unit.unit_number}? (สถานะจะเปลี่ยนเป็น "ขายแล้ว")`)) return;
     try {
-      const { data, error } = await supabase
-        .from('units')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.from('units') as any)
         .update({ status: 'sold', locked_until: null, sold_at: new Date().toISOString() })
         .eq('id', unit.id)
         .select('id');
       if (error) throw error;
       if (!data || data.length === 0) throw new Error('ไม่มีสิทธิ์ปิดการขาย');
       if (unit.reserved_customer_lead_id) {
-        await supabase.from('leads').update({ status: 'won' }).eq('id', unit.reserved_customer_lead_id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('leads') as any).update({ status: 'won' }).eq('id', unit.reserved_customer_lead_id);
         // Sync the matching lead_interest → 'won' so customer timeline reflects the close
         await (supabase.from('lead_interests') as any)
           .update({ status: 'won' })
@@ -459,8 +551,8 @@ const UnitDetail = () => {
     if (!unit) return;
     if (!confirm('ยกเลิกการจองยูนิตนี้? (ข้อมูลผู้จอง + เงินจองจะถูกลบ)')) return;
     try {
-      const { data, error } = await supabase
-        .from('units')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.from('units') as any)
         .update({
           status: 'available', locked_by: null, locked_until: null,
           reservation_date: null, reserved_customer_name: null, reserved_customer_phone: null,
@@ -686,13 +778,24 @@ const UnitDetail = () => {
             <Card className="border-2 border-amber-200 bg-amber-50/30">
               <CardHeader className="bg-amber-50 border-b border-amber-200 pb-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
-                  <CardTitle className="text-base font-semibold text-amber-900 flex items-center gap-2">
+                  <CardTitle className="text-base font-semibold text-amber-900 flex items-center gap-2 flex-wrap">
                     <Calendar className="w-5 h-5" />
                     ข้อมูลผู้จอง
+                    {activeBooking?.status === 'pending' && (
+                      <Badge className="bg-orange-100 text-orange-800 border-orange-200">💰 รอชำระมัดจำ</Badge>
+                    )}
+                    {activeBooking?.status === 'confirmed' && (
+                      <Badge className="bg-blue-100 text-blue-800 border-blue-200">✓ ชำระมัดจำแล้ว</Badge>
+                    )}
                     {expired && <Badge className="bg-red-100 text-red-700 border-red-200">หมดอายุแล้ว</Badge>}
                   </CardTitle>
                   {canManage && (
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
+                      {activeBooking?.status === 'pending' && (
+                        <Button size="sm" onClick={handleConfirmPayment} className="bg-blue-600 hover:bg-blue-700 text-white">
+                          <Check className="w-4 h-4 mr-1" /> ยืนยันรับเงิน
+                        </Button>
+                      )}
                       <Button size="sm" onClick={handleMarkAsSold} className="bg-green-600 hover:bg-green-700 text-white">
                         <Check className="w-4 h-4 mr-1" /> ปิดการขาย
                       </Button>
@@ -779,6 +882,124 @@ const UnitDetail = () => {
               </CardContent>
             </Card>
           )}
+
+          {/* Leads interested — placed prominently right after the unit status banner
+              because Sales reaches for "who's coming to see this unit" daily, more often than spec details. */}
+          <Card className="border border-gray-200">
+            <CardHeader className="bg-gradient-to-r from-rose-50 to-rose-100/50 border-b border-rose-100 pb-3">
+              <CardTitle className="text-base font-semibold flex items-center gap-2 justify-between">
+                <span className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-chateau" />
+                  Leads ที่สนใจยูนิตนี้
+                </span>
+                <Badge variant="secondary" className="bg-white text-chateau border border-chateau-100 font-bold">
+                  {unitLeads.length}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              {unitLeads.length === 0 ? (
+                <div className="text-center py-8">
+                  <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">ยังไม่มี Lead ที่สนใจยูนิตนี้</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {unitLeads.map((li: any) => {
+                    const lead = li.leads;
+                    if (!lead) return null;
+                    const isEditing = editingVisitInterestId === li.id;
+                    const canEdit = userRole === 'owner' || userRole === 'admin' || userRole === 'sales' || userRole === 'agent';
+                    const hasVisit = !!li.viewing_date;
+                    return (
+                      <div key={li.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                        {/* Header — name + status + click-to-open lead */}
+                        <button
+                          onClick={() => navigate(`/leads/${lead.id}`)}
+                          className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+                          title="เปิด Lead Detail"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 truncate">{lead.customers?.full_name || '-'}</p>
+                            <p className="text-xs text-gray-500">{lead.customers?.phone || '-'}</p>
+                          </div>
+                          <Badge className="bg-amber-100 text-amber-800 flex-shrink-0">{leadStatusLabel(lead.status)}</Badge>
+                        </button>
+
+                        {/* Visit-date section — distinct visual bar so Sales can't miss it */}
+                        {isEditing ? (
+                          <div className="flex items-center gap-2 px-4 py-3 bg-amber-50/70 border-t border-amber-100">
+                            <Calendar className="w-4 h-4 text-amber-700 flex-shrink-0" />
+                            <Input
+                              type="datetime-local"
+                              value={visitDraft}
+                              onChange={(e) => setVisitDraft(e.target.value)}
+                              className="h-9 text-sm flex-1"
+                              disabled={savingVisit}
+                            />
+                            <Button size="sm" onClick={() => saveLeadVisit(li.id, li.status)} disabled={savingVisit} className="h-9 bg-amber-600 hover:bg-amber-700 text-white">
+                              บันทึก
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => { setEditingVisitInterestId(null); setVisitDraft(''); }} disabled={savingVisit} className="h-9">
+                              ยกเลิก
+                            </Button>
+                          </div>
+                        ) : hasVisit ? (
+                          /* Visit already scheduled — amber prominent strip */
+                          <div className="flex items-center justify-between gap-2 px-4 py-3 bg-amber-50/70 border-t border-amber-100">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-9 h-9 rounded-full bg-amber-500 text-white flex items-center justify-center flex-shrink-0">
+                                <Calendar className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[10px] uppercase font-bold tracking-wide text-amber-700">นัดดู</p>
+                                <p className="text-sm font-bold text-amber-900">
+                                  {new Date(li.viewing_date).toLocaleString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                            </div>
+                            {canEdit && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => { setEditingVisitInterestId(li.id); setVisitDraft(toLocalInputValue(li.viewing_date)); }}
+                                className="h-8 text-xs border-amber-300 text-amber-800 hover:bg-amber-100 flex-shrink-0"
+                              >
+                                <Edit className="w-3 h-3 mr-1" /> แก้นัด
+                              </Button>
+                            )}
+                          </div>
+                        ) : (
+                          /* No visit yet — same layout as scheduled but in muted "empty" state with a clear outline action */
+                          <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-gray-100 bg-gray-50/60">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-9 h-9 rounded-full bg-white border border-gray-200 text-gray-400 flex items-center justify-center flex-shrink-0">
+                                <Calendar className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[10px] uppercase font-bold tracking-wide text-gray-400">นัดดู</p>
+                                <p className="text-sm font-medium text-gray-500">ยังไม่ได้นัด</p>
+                              </div>
+                            </div>
+                            {canEdit && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => { setEditingVisitInterestId(li.id); setVisitDraft(toLocalInputValue(li.viewing_date)); }}
+                                className="h-8 text-xs border-amber-300 text-amber-700 hover:bg-amber-50 flex-shrink-0"
+                              >
+                                <Calendar className="w-3 h-3 mr-1" /> บันทึกนัด
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Sales responsibility (Admin/Owner view) */}
           {(userRole === 'owner' || userRole === 'admin') && (
@@ -1079,38 +1300,6 @@ const UnitDetail = () => {
             </Card>
           )}
 
-          {/* Leads interested */}
-          <Card className="border border-gray-200">
-            <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
-              <CardTitle className="text-base font-semibold flex items-center gap-2 justify-between">
-                <span>Leads ที่สนใจยูนิตนี้</span>
-                <Badge variant="secondary" className="bg-chateau-50 text-chateau border border-chateau-100">
-                  {unitLeads.length} รายการ
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4">
-              {unitLeads.length === 0 ? (
-                <div className="text-center py-8 text-gray-500 text-sm">ยังไม่มี Lead ที่สนใจยูนิตนี้</div>
-              ) : (
-                <div className="space-y-2">
-                  {unitLeads.map((li: any) => {
-                    const lead = li.leads;
-                    if (!lead) return null;
-                    return (
-                      <div key={li.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{lead.customers?.full_name || '-'}</p>
-                          <p className="text-xs text-gray-500">{lead.customers?.phone || ''}</p>
-                        </div>
-                        <Badge className="bg-amber-100 text-amber-800">{leadStatusLabel(lead.status)}</Badge>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </main>
       </div>
 

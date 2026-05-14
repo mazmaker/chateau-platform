@@ -5,9 +5,7 @@ import {
   Upload,
   Plus,
   Trash2,
-  Link,
   FileText,
-  Image,
   Building2,
   MapPin,
   Settings,
@@ -87,12 +85,6 @@ interface SubDistrict {
   name_en: string;
   district_id: number;
   province_id: number;
-}
-
-interface Zipcode {
-  id: number;
-  sub_district_code: string;
-  zipcode: string;
 }
 
 const PROJECT_TYPES = [
@@ -258,10 +250,12 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
           // Migrate legacy keys into the new documents array on edit-load
           documents: (() => {
             const links = editingProject.information_links || {};
-            if (Array.isArray(links.documents) && links.documents.length > 0) return links.documents;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const linksAny = links as any;
+            if (Array.isArray(linksAny.documents) && linksAny.documents.length > 0) return linksAny.documents;
             const legacy: { label: string; url: string }[] = [];
-            if (links.fact_sheet) legacy.push({ label: 'Fact Sheet', url: links.fact_sheet });
-            if (links.roi_calculator) legacy.push({ label: 'ROI Calculator', url: links.roi_calculator });
+            if (linksAny.fact_sheet) legacy.push({ label: 'Fact Sheet', url: linksAny.fact_sheet });
+            if (linksAny.roi_calculator) legacy.push({ label: 'ROI Calculator', url: linksAny.roi_calculator });
             return legacy;
           })(),
           is_active: editingProject.is_active ?? true,
@@ -324,8 +318,8 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
 
   const fetchProvinces = async () => {
     try {
-      const { data, error } = await supabase
-        .from('th_provinces')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.from('th_provinces') as any)
         .select('*')
         .order('name_th');
 
@@ -339,16 +333,16 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
   const fetchDistricts = async (provinceId: number): Promise<District[]> => {
     try {
       console.log('Fetching districts for province:', provinceId);
-      const { data, error } = await supabase
-        .from('th_districts')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.from('th_districts') as any)
         .select('*')
         .eq('province_id', provinceId)
         .order('name_th');
 
       if (error) throw error;
-      const districtsList = data || [];
+      const districtsList = (data || []) as District[];
       setDistricts(districtsList);
-      console.log('Loaded districts:', districtsList.length, 'items', districtsList.slice(0, 3).map(d => ({ id: d.id, name: d.name_th })));
+      console.log('Loaded districts:', districtsList.length, 'items', districtsList.slice(0, 3).map((d: District) => ({ id: d.id, name: d.name_th })));
       return districtsList;
     } catch (err) {
       console.error('Error fetching districts:', err);
@@ -358,16 +352,16 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
 
   const fetchSubDistricts = async (districtId: number): Promise<SubDistrict[]> => {
     try {
-      const { data, error } = await supabase
-        .from('th_sub_districts')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.from('th_sub_districts') as any)
         .select('*')
         .eq('district_id', districtId)
         .order('name_th');
 
       if (error) throw error;
-      const subDistrictsList = data || [];
+      const subDistrictsList = (data || []) as SubDistrict[];
       setSubDistricts(subDistrictsList);
-      console.log('Loaded subDistricts:', subDistrictsList.length, 'items', subDistrictsList.map(sd => ({ id: sd.id, idStr: sd.id.toString(), name: sd.name_th })));
+      console.log('Loaded subDistricts:', subDistrictsList.length, 'items', subDistrictsList.map((sd: SubDistrict) => ({ id: sd.id, idStr: sd.id.toString(), name: sd.name_th })));
       return subDistrictsList;
     } catch (err) {
       console.error('Error fetching sub-districts:', err);
@@ -381,15 +375,15 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
       const subDistrict = subDistricts.find(sd => sd.id === parseInt(subDistrictId));
       if (!subDistrict) return;
 
-      const { data, error } = await supabase
-        .from('th_zipcodes')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.from('th_zipcodes') as any)
         .select('*')
         .eq('sub_district_code', subDistrict.code)
         .limit(1);
 
       if (error) throw error;
       if (data && data.length > 0) {
-        setFormData(prev => ({ ...prev, postal_code: data[0].zipcode }));
+        setFormData(prev => ({ ...prev, postal_code: (data[0] as any).zipcode }));
       }
     } catch (err) {
       console.error('Error fetching zipcode:', err);
@@ -622,16 +616,16 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
       let dbError;
       if (isEditing && editingProject) {
         // Update existing project in properties table
-        const { error } = await supabase
-          .from('properties')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase.from('properties') as any)
           .update(projectData)
           .eq('id', editingProject.id);
         dbError = error;
 
         // Also update in projects table for units foreign key
         if (!error) {
-          await supabase
-            .from('projects')
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase.from('projects') as any)
             .update({
               name: projectData.name,
               address: projectData.address,
@@ -640,8 +634,8 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
         }
       } else {
         // Insert new project into properties table
-        const { data: insertedProperty, error } = await supabase
-          .from('properties')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: insertedProperty, error } = await (supabase.from('properties') as any)
           .insert([projectData])
           .select()
           .single();
@@ -649,10 +643,10 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
 
         // Also insert into projects table for units foreign key
         if (!error && insertedProperty) {
-          await supabase
-            .from('projects')
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase.from('projects') as any)
             .insert([{
-              id: insertedProperty.id,
+              id: (insertedProperty as any).id,
               tenant_id: projectData.tenant_id,
               name: projectData.name,
               address: projectData.address,

@@ -2,11 +2,10 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Building2, Bed, Bath, Square, Layers, MapPin, Heart, Loader2, Sun, ParkingCircle, Check,
-  ChevronLeft, ChevronRight, Phone, MessageCircle, Calendar, Calculator, Share2,
+  ChevronLeft, ChevronRight, Calendar, Calculator, Share2,
   ChevronDown, View, Sparkles, Receipt, XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -104,9 +103,6 @@ const CustomerUnitDetail = () => {
   const [isWishlisted, setIsWishlisted] = useState(false);
 
   // Dialogs
-  const [showContactDialog, setShowContactDialog] = useState(false);
-  const [showVisitDialog, setShowVisitDialog] = useState(false);
-  const [visitDate, setVisitDate] = useState('');
   const [showInterestConfirm, setShowInterestConfirm] = useState(false);
 
   const loadAll = async () => {
@@ -207,15 +203,17 @@ const CustomerUnitDetail = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const toggleWishlist = () => {
+  const toggleWishlist = async () => {
     if (!unit) return;
     try {
-      const wl: string[] = JSON.parse(localStorage.getItem('customer_wishlist') || '[]');
-      const next = wl.includes(unit.id) ? wl.filter((x) => x !== unit.id) : [...wl, unit.id];
-      localStorage.setItem('customer_wishlist', JSON.stringify(next));
-      setIsWishlisted(next.includes(unit.id));
-      window.dispatchEvent(new Event('wishlist:changed'));
-      toast.success(next.includes(unit.id) ? 'บันทึกในรายการที่ชอบแล้ว' : 'นำออกจากรายการแล้ว');
+      const { toggleWishlist: toggle } = await import('@/lib/customerWishlist');
+      const nowSaved = await toggle({
+        id: unit.id,
+        tenant_id: (unit as any).tenant_id,
+        project_id: (unit as any).project_id,
+      });
+      setIsWishlisted(nowSaved);
+      toast.success(nowSaved ? 'บันทึกในรายการที่ชอบแล้ว' : 'นำออกจากรายการแล้ว');
     } catch { /* ignore */ }
   };
 
@@ -413,55 +411,6 @@ const CustomerUnitDetail = () => {
     }
   };
 
-  const handleScheduleVisit = async () => {
-    if (!unit || !visitDate) return;
-    setSubmitting(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { navigate('/customer/login'); return; }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: customer } = await (supabase.from('customers') as any)
-        .select('id').eq('auth_user_id', user.id).maybeSingle();
-      if (!customer) { toast.error('ไม่พบข้อมูลลูกค้า'); return; }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let { data: lead } = await (supabase.from('leads') as any)
-        .select('id').eq('customer_id', (customer as any).id).eq('tenant_id', unit.tenant_id).maybeSingle();
-      if (!lead) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: newLead } = await (supabase.from('leads') as any)
-          .insert({
-            tenant_id: unit.tenant_id, customer_id: (customer as any).id,
-            property_id: unit.project_id, unit_id: unit.id,
-            status: 'new', source: 'customer_self', priority: 'high',
-            notes: 'ลูกค้าขอนัดดูยูนิต',
-          }).select('id').single();
-        lead = newLead;
-      }
-      const isoDate = new Date(visitDate).toISOString();
-      if (myInterest) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.from('lead_interests') as any)
-          .update({ viewing_date: isoDate, status: 'viewing_scheduled' })
-          .eq('id', myInterest.id);
-      } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.from('lead_interests') as any).insert({
-          tenant_id: unit.tenant_id, lead_id: (lead as any).id,
-          property_id: unit.project_id, unit_id: unit.id,
-          status: 'viewing_scheduled', interest_level: 'high', viewing_date: isoDate,
-          notes: 'ลูกค้านัดดูยูนิตเอง',
-        });
-      }
-      toast.success('นัดดูยูนิตเรียบร้อย — Sales จะติดต่อยืนยัน');
-      setShowVisitDialog(false);
-      setVisitDate('');
-      await loadAll();
-    } catch (err: any) {
-      toast.error(err.message || 'นัดดูไม่สำเร็จ');
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -767,30 +716,6 @@ const CustomerUnitDetail = () => {
         </div>
       )}
 
-      {/* === Quick Actions === */}
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          onClick={() => setShowContactDialog(true)}
-          className="bg-white border border-gray-100 rounded-2xl p-4 hover:border-chateau hover:bg-rose-50/30 transition-all text-left active:scale-[0.99]"
-        >
-          <div className="w-10 h-10 rounded-full bg-rose-50 text-chateau flex items-center justify-center mb-2">
-            <MessageCircle className="w-5 h-5" />
-          </div>
-          <p className="text-sm font-semibold text-gray-900">คุยกับ Sales</p>
-          <p className="text-[11px] text-gray-500 mt-0.5">โทร / LINE / Email</p>
-        </button>
-        <button
-          onClick={() => setShowVisitDialog(true)}
-          className="bg-white border border-gray-100 rounded-2xl p-4 hover:border-chateau hover:bg-rose-50/30 transition-all text-left active:scale-[0.99]"
-        >
-          <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center mb-2">
-            <Calendar className="w-5 h-5" />
-          </div>
-          <p className="text-sm font-semibold text-gray-900">นัดดูยูนิต</p>
-          <p className="text-[11px] text-gray-500 mt-0.5">เลือกวันเวลาที่สะดวก</p>
-        </button>
-      </div>
-
       {/* === Specs === */}
       <div className="bg-white border border-gray-100 rounded-2xl p-5">
         <h2 className="text-sm font-semibold text-gray-900 mb-4">รายละเอียดยูนิต</h2>
@@ -936,13 +861,10 @@ const CustomerUnitDetail = () => {
               </p>
             </div>
 
-            {/* CTA — talk to sales */}
-            <button
-              onClick={() => setShowContactDialog(true)}
-              className="w-full text-xs font-semibold text-chateau hover:underline text-center py-1"
-            >
-              💬 อยากได้ตัวเลขจริง? คุยกับ Sales เรา →
-            </button>
+            {/* Info — sales will confirm real numbers */}
+            <p className="text-xs text-gray-500 text-center pt-1">
+              💬 Sales จะคำนวณตัวเลขจริงให้เมื่อนัดดูยูนิต
+            </p>
           </div>
         )}
       </div>
@@ -1129,58 +1051,6 @@ const CustomerUnitDetail = () => {
         </div>
       )}
 
-      {/* === Contact Sales Dialog === */}
-      <Dialog open={showContactDialog} onOpenChange={setShowContactDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MessageCircle className="w-5 h-5 text-chateau" /> ติดต่อ Sales
-            </DialogTitle>
-            <DialogDescription>
-              {assignedSales ? `Sales ของคุณ: ${assignedSales.full_name || '-'}` : 'ทีม Sales จะติดต่อกลับโดยเร็วที่สุด'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 py-2">
-            {assignedSales?.phone && (
-              <a href={`tel:${assignedSales.phone}`} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:border-chateau hover:bg-rose-50/30 transition-all">
-                <div className="w-9 h-9 rounded-full bg-green-50 text-green-600 flex items-center justify-center"><Phone className="w-4 h-4" /></div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-500">โทรหา</p>
-                  <p className="text-sm font-semibold text-gray-900">{assignedSales.phone}</p>
-                </div>
-              </a>
-            )}
-            <button
-              onClick={() => { toast.info('LINE Integration เร็วๆ นี้'); }}
-              className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:border-chateau hover:bg-rose-50/30 transition-all"
-            >
-              <div className="w-9 h-9 rounded-full bg-[#06C755]/10 text-[#06C755] flex items-center justify-center font-bold">L</div>
-              <div className="flex-1 min-w-0 text-left">
-                <p className="text-xs text-gray-500">LINE Chat</p>
-                <p className="text-sm font-semibold text-gray-900">เริ่มแชทกับ Sales</p>
-              </div>
-            </button>
-            {assignedSales?.email && (
-              <a href={`mailto:${assignedSales.email}`} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:border-chateau hover:bg-rose-50/30 transition-all">
-                <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">@</div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-500">ส่งอีเมล</p>
-                  <p className="text-sm font-semibold text-gray-900 truncate">{assignedSales.email}</p>
-                </div>
-              </a>
-            )}
-            {!assignedSales && (
-              <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl">
-                <p className="text-xs text-amber-900">ยังไม่ได้รับมอบหมาย Sales — กด "สนใจยูนิตนี้" เพื่อให้ระบบจัดสรร Sales ให้คุณ</p>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowContactDialog(false)}>ปิด</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* === Interest Confirmation Modal === */}
       <Dialog open={showInterestConfirm} onOpenChange={setShowInterestConfirm}>
         <DialogContent className="sm:max-w-md">
@@ -1197,111 +1067,38 @@ const CustomerUnitDetail = () => {
           </DialogHeader>
 
           <div className="space-y-3 py-2">
-            {/* SLA timer */}
+            {/* SLA timer — passive, no clickable contact (Sales reaches out) */}
             <div className="bg-gradient-to-br from-rose-50 to-pink-50/50 border border-rose-100 rounded-xl p-4">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center flex-shrink-0 shadow-sm">
-                  <Phone className="w-5 h-5 text-chateau" />
+                <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center flex-shrink-0 shadow-sm text-2xl">
+                  ⏱️
                 </div>
                 <div className="flex-1">
                   <p className="text-[11px] text-gray-500 mb-0.5">Sales จะติดต่อกลับภายใน</p>
-                  <p className="text-lg font-bold text-chateau">2 ชั่วโมงทำการ</p>
+                  <p className="text-lg font-bold text-chateau">24 ชั่วโมง</p>
                 </div>
               </div>
             </div>
-
-            {/* Quick contact (if Sales already assigned) */}
-            {assignedSales && (
-              <div className="border-t border-gray-100 pt-3">
-                <p className="text-xs text-gray-500 mb-2 font-medium">หรือคุยกับ Sales ของคุณตอนนี้</p>
-                <div className="flex gap-2">
-                  {assignedSales.phone && (
-                    <a href={`tel:${assignedSales.phone}`} className="flex-1 flex items-center justify-center gap-2 h-10 rounded-xl bg-green-50 text-green-700 hover:bg-green-100 font-semibold text-xs transition-colors">
-                      <Phone className="w-4 h-4" /> โทร
-                    </a>
-                  )}
-                  <button
-                    onClick={() => toast.info('LINE Integration เร็วๆ นี้')}
-                    className="flex-1 flex items-center justify-center gap-2 h-10 rounded-xl bg-[#06C755]/10 text-[#06C755] hover:bg-[#06C755]/20 font-semibold text-xs transition-colors"
-                  >
-                    <span className="font-bold">L</span> LINE
-                  </button>
-                  {assignedSales.email && (
-                    <a href={`mailto:${assignedSales.email}`} className="flex-1 flex items-center justify-center gap-2 h-10 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold text-xs transition-colors">
-                      <MessageCircle className="w-4 h-4" /> Email
-                    </a>
-                  )}
-                </div>
-              </div>
-            )}
 
             {/* Next steps hint */}
             <div className="bg-gray-50 rounded-xl p-3">
               <p className="text-[11px] text-gray-600 leading-relaxed">
-                💡 <strong>ขั้นตอนต่อไป:</strong> ลูกค้าสามารถนัดดูยูนิตเอง หรือรอ Sales ติดต่อกลับ — ดูสถานะคำขอได้จากบนหน้านี้
+                💡 <strong>ขั้นตอนต่อไป:</strong> Sales จะโทร / LINE เพื่อนัดวันเวลาดูยูนิตจริง — ระบบหา Sales ที่ว่างให้คุณอัตโนมัติ
               </p>
             </div>
           </div>
 
-          <DialogFooter className="flex-row gap-2">
+          <DialogFooter>
             <Button
-              variant="outline"
               onClick={() => setShowInterestConfirm(false)}
-              className="flex-1"
+              className="w-full bg-chateau hover:bg-chateau-700 text-white"
             >
               ตกลง
             </Button>
-            <Button
-              onClick={() => { setShowInterestConfirm(false); setShowVisitDialog(true); }}
-              className="flex-1 bg-chateau hover:bg-chateau-700 text-white"
-            >
-              <Calendar className="w-4 h-4 mr-1.5" /> นัดดูยูนิตเลย
-            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* === Schedule Visit Dialog === */}
-      <Dialog open={showVisitDialog} onOpenChange={setShowVisitDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-amber-600" /> นัดดูยูนิต
-            </DialogTitle>
-            <DialogDescription>
-              เลือกวันและเวลาที่สะดวก — Sales จะติดต่อกลับเพื่อยืนยัน
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div>
-              <Label className="text-xs text-gray-500 mb-1.5">วันและเวลาที่สะดวก</Label>
-              <Input
-                type="datetime-local"
-                value={visitDate}
-                onChange={(e) => setVisitDate(e.target.value)}
-                min={new Date().toISOString().slice(0, 16)}
-              />
-            </div>
-            <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
-              <p className="text-xs text-blue-900">
-                📍 {property?.name} · ยูนิต {unit.unit_number}<br />
-                🕐 Sales จะติดต่อยืนยันภายใน 24 ชม.
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowVisitDialog(false)} disabled={submitting}>ยกเลิก</Button>
-            <Button
-              onClick={handleScheduleVisit}
-              disabled={!visitDate || submitting}
-              className="bg-chateau hover:bg-chateau-700 text-white"
-            >
-              {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              ยืนยันนัด
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </CustomerLayout>
   );
 };

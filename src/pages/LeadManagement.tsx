@@ -1,11 +1,13 @@
 ﻿import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { SalesGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import AddLeadModal from '@/components/leads/AddLeadModal';
 import EditLeadModal from '@/components/leads/EditLeadModal';
+import { LeadSourceEditor } from '@/components/leads/LeadSourceEditor';
+import { getPurchasePurposeLabel as sharedGetPurchasePurposeLabel } from '@/lib/purchasePurpose';
 import PaymentModal from '@/components/leads/PaymentModal';
 import HandoffLeadDialog from '@/components/leads/HandoffLeadDialog';
 import { toast } from 'sonner';
@@ -68,7 +70,8 @@ import {
   AlertTriangle,
   Target,
   CreditCard,
-  Send
+  Send,
+  ChevronRight
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -108,8 +111,8 @@ interface LeadInterestWithDetails {
   };
 }
 
-// Lead Status for Real Estate Sales
-type LeadStatus = 'new' | 'contacted' | 'qualified' | 'proposal' | 'negotiation' | 'closed' | 'lost';
+// Lead Status — keep legacy values + add modern DB values (negotiating/won) for compatibility
+type LeadStatus = 'new' | 'contacted' | 'qualified' | 'proposal' | 'negotiation' | 'negotiating' | 'closed' | 'won' | 'lost';
 
 interface Lead {
   id: string;
@@ -125,8 +128,13 @@ interface Lead {
   notes: string;
   assigned_to?: string;
   next_follow_up?: string;
+  last_contact_date?: string | null;
+  priority?: string | null;
+  estimated_value?: number | null;
   created_at: string;
   updated_at: string;
+  // Catch-all for additional DB columns
+  [key: string]: any;
 }
 
 interface CustomerPreferences {
@@ -200,6 +208,21 @@ const LeadManagement = () => {
   // Dialog states
   const [showLeadDialog, setShowLeadDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const { id: routeLeadId } = useParams<{ id?: string }>();
+
+  // Auto-open Lead Detail panel when arriving via a deep-link like /leads/:id
+  // (e.g. clicking a notification "มีคนสนใจยูนิตใหม่" should land directly on the lead, not the list)
+  useEffect(() => {
+    if (!routeLeadId || leads.length === 0) return;
+    const target = leads.find((l) => l.id === routeLeadId);
+    if (target) {
+      setSelectedLead(target);
+      fetchLeadInterests(target.id);
+      fetchLeadActivities(target.id);
+      setShowDetailDialog(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeLeadId, leads]);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -229,13 +252,36 @@ const LeadManagement = () => {
     setSavingVisit(true);
     try {
       const isoValue = visitDateDraft ? new Date(visitDateDraft).toISOString() : null;
+      // Find current status so we know whether to bump it
+      const current = selectedLeadInterests.find((i) => i.id === interestId);
+      const currentStatus = current?.status;
+
+      // Status transition rules — keep edits non-destructive:
+      //   - Setting a date when status is 'interested' → upgrade to 'viewing_scheduled'
+      //   - Clearing a date when status is 'viewing_scheduled' → revert to 'interested'
+      //   - All other statuses (viewed/negotiating/reserved/won/lost/dropped) stay as-is
+      const updates: Record<string, any> = {
+        viewing_date: isoValue,
+        updated_at: new Date().toISOString(),
+      };
+      if (isoValue && currentStatus === 'interested') {
+        updates.status = 'viewing_scheduled';
+      } else if (!isoValue && currentStatus === 'viewing_scheduled') {
+        updates.status = 'interested';
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.from('lead_interests') as any)
-        .update({ viewing_date: isoValue, updated_at: new Date().toISOString() })
+        .update(updates)
         .eq('id', interestId);
       if (error) throw error;
+
       setSelectedLeadInterests((prev) =>
-        prev.map((i) => (i.id === interestId ? { ...i, viewing_date: isoValue || undefined } : i))
+        prev.map((i) =>
+          i.id === interestId
+            ? { ...i, viewing_date: isoValue || undefined, status: (updates.status ?? i.status) as typeof i.status }
+            : i
+        )
       );
       setEditingVisitId(null);
       setVisitDateDraft('');
@@ -809,20 +855,8 @@ const LeadManagement = () => {
   };
 
   const getPurchasePurposeLabel = (purpose: string) => {
-    if (!purpose) return '-';
-    const labels: Record<string, string> = {
-      residence: 'เพื่ออยู่อาศัย',
-      speculation: 'เก็งกำไร',
-      monthly_rent: 'ปล่อยเช่ารายเดือน',
-      daily_rent: 'ปล่อยเช่ารายวัน',
-      flip: 'ซ่อมแล้วขาย',
-      investment: 'ลงทุน/ปล่อยเช่า',
-      children: 'ซื้อให้บุตรหลาน',
-      parents: 'ซื้อให้พ่อแม่'
-    };
-    if (labels[purpose]) return labels[purpose];
-    if (purpose.startsWith('other:')) return purpose.replace('other:', 'อื่นๆ: ').trim();
-    if (purpose.startsWith('other')) return 'อื่นๆ';
+    const shared = sharedGetPurchasePurposeLabel(purpose);
+    if (shared !== '-' && !shared.endsWith(purpose)) return shared;
     return purpose;
   };
 
@@ -1391,120 +1425,158 @@ const LeadManagement = () => {
 
                   {/* Project Interest Section */}
                   <div className="bg-white border border-gray-100 rounded-xl p-5">
-                    <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                      <Building2 className="w-4 h-4 text-gray-500" />
-                      ยูนิตที่สนใจ
-                      <span className="text-xs font-normal text-gray-400 ml-1">
-                        ({loadingInterests ? '...' : selectedLeadInterests.length > 0 ? selectedLeadInterests.length : 1} รายการ)
-                      </span>
-                    </h3>
+                    {(() => {
+                      // Split active vs dropped/lost — Sales only cares about active in main list,
+                      // but history is kept in a collapsible footer for traceability.
+                      const activeInterests = selectedLeadInterests.filter(
+                        (i) => i.status !== 'dropped' && i.status !== 'lost'
+                      );
+                      const droppedInterests = selectedLeadInterests.filter(
+                        (i) => i.status === 'dropped' || i.status === 'lost'
+                      );
 
-                    {loadingInterests ? (
-                      <div className="flex items-center justify-center py-6">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2" style={{ borderColor: '#3b82f6' }}></div>
-                      </div>
-                    ) : selectedLeadInterests.length > 0 ? (
-                      <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                        {selectedLeadInterests.map((interest) => {
-                          const statusOption = INTEREST_STATUS_OPTIONS.find(o => o.value === interest.status);
-                          const levelOption = INTEREST_LEVEL_OPTIONS.find(o => o.value === interest.interest_level);
-                          return (
-                            <div key={interest.id} className="p-3 border border-gray-100 rounded-lg bg-gray-50/40 hover:bg-gray-50 transition-colors">
+                      const renderCard = (interest: typeof selectedLeadInterests[0], dim = false) => {
+                        const statusOption = INTEREST_STATUS_OPTIONS.find(o => o.value === interest.status);
+                        const levelOption = INTEREST_LEVEL_OPTIONS.find(o => o.value === interest.interest_level);
+                        return (
+                          <div
+                            key={interest.id}
+                            onClick={() => navigate(`/units/${interest.unit_id}`)}
+                            className={`p-3 border border-gray-100 rounded-lg ${dim ? 'bg-gray-50/60 opacity-75' : 'bg-gray-50/40 hover:bg-gray-50 hover:border-chateau/30'} transition-all cursor-pointer active:scale-[0.99]`}
+                            title="กดเพื่อดูรายละเอียดยูนิต"
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-white border border-gray-200">
+                                <Building2 className="w-4 h-4 text-gray-500" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between mb-1 gap-2">
+                                  <p className="text-sm font-semibold text-gray-900 truncate">
+                                    {interest.property?.name || 'โครงการ'}
+                                  </p>
+                                  <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-md flex-shrink-0 ${dim ? 'bg-gray-200 text-gray-600' : 'bg-white border border-gray-200 text-gray-700'}`}>
+                                    {statusOption?.label || interest.status}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3 text-xs text-gray-600">
+                                  <span>ยูนิต <span className="font-semibold text-gray-800">{interest.unit?.unit_number || '-'}</span></span>
+                                  {interest.unit?.price && (
+                                    <span className="font-bold text-gray-900 tabular-nums">
+                                      {new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', minimumFractionDigits: 0 }).format(interest.unit.price)}
+                                    </span>
+                                  )}
+                                  {levelOption && <span className="text-gray-500">· {levelOption.label}</span>}
+                                </div>
+                                {!dim && editingVisitId === interest.id ? (
+                                  <div className="flex items-center gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
+                                    <Input
+                                      type="datetime-local"
+                                      value={visitDateDraft}
+                                      onChange={(e) => setVisitDateDraft(e.target.value)}
+                                      className="h-8 text-xs flex-1"
+                                      disabled={savingVisit}
+                                    />
+                                    <Button
+                                      size="sm"
+                                      onClick={() => saveVisitDate(interest.id)}
+                                      disabled={savingVisit}
+                                      className="h-8 text-xs"
+                                    >
+                                      บันทึก
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => { setEditingVisitId(null); setVisitDateDraft(''); }}
+                                      disabled={savingVisit}
+                                      className="h-8 text-xs"
+                                    >
+                                      ยกเลิก
+                                    </Button>
+                                  </div>
+                                ) : !dim ? (
+                                  <div className="flex items-center gap-2 mt-1">
+                                    {interest.viewing_date ? (
+                                      <p className="text-[11px] text-amber-700 font-medium">
+                                        📅 นัดดู {new Date(interest.viewing_date).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                      </p>
+                                    ) : (
+                                      <span className="text-[11px] text-gray-400">ยังไม่มีนัด</span>
+                                    )}
+                                    {(userRole === 'agent' || userRole === 'sales' || userRole === 'admin' || userRole === 'owner') && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); setEditingVisitId(interest.id); setVisitDateDraft(toLocalInputValue(interest.viewing_date)); }}
+                                        className="text-[11px] text-chateau hover:underline font-medium"
+                                      >
+                                        {interest.viewing_date ? 'แก้นัด' : '+ นัดดู'}
+                                      </button>
+                                    )}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      };
+
+                      return (
+                        <>
+                          <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <Building2 className="w-4 h-4 text-gray-500" />
+                            ยูนิตที่สนใจ
+                            <span className="text-xs font-normal text-gray-400 ml-1">
+                              ({loadingInterests ? '...' : activeInterests.length} รายการ)
+                            </span>
+                          </h3>
+
+                          {loadingInterests ? (
+                            <div className="flex items-center justify-center py-6">
+                              <div className="animate-spin rounded-full h-6 w-6 border-b-2" style={{ borderColor: '#3b82f6' }}></div>
+                            </div>
+                          ) : activeInterests.length > 0 ? (
+                            <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                              {activeInterests.map((interest) => renderCard(interest))}
+                            </div>
+                          ) : (
+                            <div className="p-3 border border-gray-100 rounded-lg bg-gray-50/40">
                               <div className="flex items-start gap-3">
                                 <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-white border border-gray-200">
                                   <Building2 className="w-4 h-4 text-gray-500" />
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between mb-1 gap-2">
-                                    <p className="text-sm font-semibold text-gray-900 truncate">
-                                      {interest.property?.name || 'โครงการ'}
-                                    </p>
-                                    <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white border border-gray-200 text-gray-700 flex-shrink-0">
-                                      {statusOption?.label || interest.status}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-3 text-xs text-gray-600">
-                                    <span>ยูนิต <span className="font-semibold text-gray-800">{interest.unit?.unit_number || '-'}</span></span>
-                                    {interest.unit?.price && (
-                                      <span className="font-bold text-gray-900 tabular-nums">
-                                        {new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', minimumFractionDigits: 0 }).format(interest.unit.price)}
-                                      </span>
-                                    )}
-                                    {levelOption && <span className="text-gray-500">· {levelOption.label}</span>}
-                                  </div>
-                                  {editingVisitId === interest.id ? (
-                                    <div className="flex items-center gap-2 mt-2">
-                                      <Input
-                                        type="datetime-local"
-                                        value={visitDateDraft}
-                                        onChange={(e) => setVisitDateDraft(e.target.value)}
-                                        className="h-8 text-xs flex-1"
-                                        disabled={savingVisit}
-                                      />
-                                      <Button
-                                        size="sm"
-                                        onClick={() => saveVisitDate(interest.id)}
-                                        disabled={savingVisit}
-                                        className="h-8 text-xs"
-                                      >
-                                        บันทึก
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => { setEditingVisitId(null); setVisitDateDraft(''); }}
-                                        disabled={savingVisit}
-                                        className="h-8 text-xs"
-                                      >
-                                        ยกเลิก
-                                      </Button>
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center gap-2 mt-1">
-                                      {interest.viewing_date ? (
-                                        <p className="text-[11px] text-amber-700 font-medium">
-                                          📅 นัดดู {new Date(interest.viewing_date).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                                        </p>
-                                      ) : (
-                                        <span className="text-[11px] text-gray-400">ยังไม่มีนัด</span>
-                                      )}
-                                      {(userRole === 'agent' || userRole === 'sales' || userRole === 'admin' || userRole === 'owner') && (
-                                        <button
-                                          onClick={() => { setEditingVisitId(interest.id); setVisitDateDraft(toLocalInputValue(interest.viewing_date)); }}
-                                          className="text-[11px] text-chateau hover:underline font-medium"
-                                        >
-                                          {interest.viewing_date ? 'แก้นัด' : '+ นัดดู'}
-                                        </button>
-                                      )}
-                                    </div>
-                                  )}
+                                <div className="flex-1">
+                                  <p className="text-sm text-gray-500">ยังไม่มียูนิตที่สนใจ</p>
                                 </div>
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="p-3 border border-gray-100 rounded-lg bg-gray-50/40">
-                        <div className="flex items-start gap-3">
-                          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-white border border-gray-200">
-                            <Building2 className="w-4 h-4 text-gray-500" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-semibold text-gray-900">{getPropertyName(selectedLead)}</p>
-                            <p className="text-xs text-gray-600 mt-0.5">ยูนิต {getUnitNumber(selectedLead.unit_id)}</p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                          )}
+
+                          {/* Dropped / lost interests — kept as collapsible history (Sales can still see them but they don't clutter the main list) */}
+                          {droppedInterests.length > 0 && (
+                            <details className="mt-3 group">
+                              <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 select-none">
+                                <ChevronRight className="w-3 h-3 transition-transform group-open:rotate-90" />
+                                ยกเลิกความสนใจแล้ว ({droppedInterests.length})
+                              </summary>
+                              <div className="space-y-2 mt-2 max-h-[200px] overflow-y-auto">
+                                {droppedInterests.map((interest) => renderCard(interest, true))}
+                              </div>
+                            </details>
+                          )}
+                        </>
+                      );
+                    })()}
 
                     {/* Lead Info - source, purpose, follow-up */}
                     <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-100">
                       <div>
                         <p className="text-[11px] text-gray-400 uppercase font-medium tracking-wide mb-1">แหล่งที่มา</p>
-                        <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-md bg-gray-50 border border-gray-200 text-gray-700">
-                          {getSourceLabel(selectedLead.source)}
-                        </span>
+                        <LeadSourceEditor
+                          leadId={selectedLead.id}
+                          currentSource={selectedLead.source}
+                          onUpdated={(newSource) => {
+                            setSelectedLead((prev: any) => prev ? { ...prev, source: newSource } : prev);
+                          }}
+                        />
                       </div>
                       <div>
                         <p className="text-[11px] text-gray-400 uppercase font-medium tracking-wide mb-1">จุดประสงค์การซื้อ</p>

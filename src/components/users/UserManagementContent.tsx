@@ -104,7 +104,7 @@ const UserManagementContent = () => {
   const fetchUsers = useCallback(async (tenantsData?: Tenant[]) => {
     // Owner can fetch users without currentTenant, others need it
     if (!isOwner && !currentTenant) {
-      console.log('🚫 FetchUsers: Skipping - not owner and no currentTenant', { isOwner, currentTenant: currentTenant?.id });
+      console.log('🚫 FetchUsers: Skipping - not owner and no currentTenant', { isOwner, currentTenant: (currentTenant as any)?.id });
       return;
     }
 

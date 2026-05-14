@@ -313,7 +313,7 @@ export class SimpleThaiInvoicePDF {
 
     } catch (error) {
       console.error('❌ Error generating simple Thai PDF:', error);
-      throw new Error(`ไม่สามารถสร้าง PDF ได้: ${error.message}`);
+      throw new Error(`ไม่สามารถสร้าง PDF ได้: ${(error as Error).message}`);
     }
   }
 }

@@ -59,8 +59,8 @@ const MarketingAnalytics = () => {
     const load = async () => {
       if (!currentTenant?.id) { setLoading(false); return; }
       try {
-        const { data, error } = await supabase
-          .from('campaigns')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase.from('campaigns') as any)
           .select('id, campaign_name, status, recipients_count, impressions_count, clicks_count, ctr, start_date, created_at')
           .eq('tenant_id', currentTenant.id)
           .order('created_at', { ascending: false });

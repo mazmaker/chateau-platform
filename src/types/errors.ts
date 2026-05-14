@@ -597,7 +597,4 @@ export function logError(error: unknown, context?: Record<string, any>): void {
   }
 }
 
-// Export all types
-export type {
-  AppErrorMeta,
-};
+// (AppErrorMeta is already exported at its declaration above)

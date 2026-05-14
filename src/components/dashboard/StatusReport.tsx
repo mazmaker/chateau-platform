@@ -36,7 +36,7 @@ export const StatusReport = () => {
         }, {} as Record<string, number>);
 
         const total = invoices.length;
-        const maxVal = Math.max(...Object.values(statusCount));
+        const maxVal = Math.max(...(Object.values(statusCount) as number[]));
 
         const statusMapping = [
           { key: 'pending', label: "รอชำระ", color: "hsl(276, 42%, 53%)" },

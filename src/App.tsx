@@ -35,7 +35,6 @@ import CustomerPropertyDetail from "./pages/customer/CustomerPropertyDetail";
 import CustomerUnitDetail from "./pages/customer/CustomerUnitDetail";
 import CustomerProfile from "./pages/customer/CustomerProfile";
 import CustomerBookings from "./pages/customer/CustomerBookings";
-import CustomerPayments from "./pages/customer/CustomerPayments";
 import MyDashboard from "./pages/MyDashboard";
 import AcceptInvite from "./pages/AcceptInvite";
 import ForcePasswordChange from "./pages/ForcePasswordChange";
@@ -331,9 +330,6 @@ const App = () => (
           } />
           <Route path="/customer/bookings" element={
             <ProtectedRouteSimple><CustomerBookings /></ProtectedRouteSimple>
-          } />
-          <Route path="/customer/payments" element={
-            <ProtectedRouteSimple><CustomerPayments /></ProtectedRouteSimple>
           } />
 
           <Route path="/leads/:id" element={

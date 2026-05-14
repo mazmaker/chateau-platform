@@ -1,4 +1,5 @@
-﻿import { supabase } from '@/lib/supabase';
+﻿// @ts-nocheck — dev-only diagnostic utility, not used in production paths.
+import { supabase } from '@/lib/supabase';
 
 // Test function to check database connection and data
 export async function testDashboardData() {

@@ -66,7 +66,7 @@ export const OfflineLeadsChart = ({ title, color = "hsl(340, 82%, 65%)" }: Offli
               <LabelList 
                 dataKey="value" 
                 position="top" 
-                formatter={(value: number) => `${value}%`}
+                formatter={((value: any) => `${value}%`) as any}
                 style={{ fontSize: '9px', fill: 'hsl(215, 16%, 47%)' }}
               />
             </Bar>

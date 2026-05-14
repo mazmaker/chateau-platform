@@ -895,7 +895,7 @@ const TenantManagement = () => {
         }
       ];
 
-      setTenantBills(mockBills);
+      setTenantBills(mockBills as any);
     } catch (error) {
       console.error('Error loading bill data:', error);
       setTenantBills([]);
@@ -1787,10 +1787,11 @@ const TenantManagement = () => {
                             setSelectedTenant(selectedTenantFromUrl);
                             setFormData({
                               name: selectedTenantFromUrl.name,
+                              slug: selectedTenantFromUrl.slug || '',
                               status: selectedTenantFromUrl.status,
                               subscription_plan: selectedTenantFromUrl.subscription_plan,
-                              max_properties: selectedTenantFromUrl.max_properties?.toString() || '',
-                              max_users: selectedTenantFromUrl.max_users?.toString() || '',
+                              max_properties: Number(selectedTenantFromUrl.max_properties) || 0,
+                              max_users: Number(selectedTenantFromUrl.max_users) || 0,
                               billing_address: selectedTenantFromUrl.billing_address || '',
                               billing_email: selectedTenantFromUrl.billing_email || '',
                               billing_phone: selectedTenantFromUrl.billing_phone || '',
@@ -2661,7 +2662,7 @@ const TenantManagement = () => {
                               {tenantBills.map((bill) => (
                                 <tr key={bill.id} className="border-t">
                                   <td className="px-4 py-3 font-mono text-xs">{bill.invoice_number}</td>
-                                  <td className="px-4 py-3">{bill.billing_period || '-'}</td>
+                                  <td className="px-4 py-3">{(bill as any).billing_period || '-'}</td>
                                   <td className="px-4 py-3 font-medium">
                                     {formatCurrency(bill.amount)}
                                   </td>
