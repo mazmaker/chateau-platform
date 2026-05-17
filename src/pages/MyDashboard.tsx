@@ -37,20 +37,6 @@ const C = {
   border:     '#e5e7eb',
 };
 
-// Industry-standard commission rate for Thai real estate sales (placeholder)
-const COMMISSION_RATE_SALES = 0.015; // 1.5% — in-house sales
-const COMMISSION_RATE_AGENT = 0.025; // 2.5% — external broker (typical industry rate)
-
-// Stage → close probability (used for projected commission)
-const STAGE_PROBABILITY: Record<string, number> = {
-  new:         0.05,
-  contacted:   0.15,
-  qualified:   0.35,
-  negotiating: 0.65,
-  won:         1.00,
-  lost:        0.00,
-};
-
 const formatTHB = (n: number) => {
   if (n >= 1_000_000) return `฿${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `฿${(n / 1_000).toFixed(0)}K`;
@@ -397,14 +383,6 @@ const MyDashboard = () => {
     ? (referralsWon.length / myReferrals.length) * 100
     : 0;
 
-  // Commission projection — different rate per role
-  const commissionRate = userRole === 'agent' ? COMMISSION_RATE_AGENT : COMMISSION_RATE_SALES;
-  const confirmedCommission = myWonValueMTD * commissionRate;
-  const projectedCommission = myOpenLeads.reduce((s, l) => {
-    const prob = STAGE_PROBABILITY[l.status || ''] || 0;
-    return s + (Number(l.estimated_value || 0) * prob * commissionRate);
-  }, 0);
-
   // Stage badge color
   const stageBadge = (status: string | null) => {
     switch (status) {
@@ -435,8 +413,8 @@ const MyDashboard = () => {
             </h1>
             <p className="text-[15px] text-gray-500 mt-1.5">
               {userRole === 'agent'
-                ? 'ยูนิตที่ดูแล · ลูกค้าที่ส่งต่อให้ Sales · ค่าคอมจาก referrals'
-                : 'ผลงานของคุณ · งานที่ต้องทำวันนี้ · ค่าคอมที่จะได้'}
+                ? 'ยูนิตที่ดูแล · ลูกค้าที่ส่งต่อให้ Sales · ผลงานของคุณ'
+                : 'ผลงานของคุณ · งานที่ต้องทำวันนี้ · ลีดที่ต้องตาม'}
             </p>
           </div>
 
@@ -451,8 +429,8 @@ const MyDashboard = () => {
             </div>
           ) : (
             <>
-              {/* Row 1: Personal KPIs */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Row 1: Personal KPIs — Sales sees 3 cards (no ranking), Agent/Admin/Owner see 4 */}
+              <div className={`grid grid-cols-2 gap-4 ${userRole === 'sales' ? 'md:grid-cols-3' : 'md:grid-cols-4'}`}>
                 {userRole === 'agent' ? (
                   <>
                     <KpiCard
@@ -504,7 +482,8 @@ const MyDashboard = () => {
                       icon={Flame}
                       color={C.redDeep}
                       bg={C.redDeepLight}
-                      sub={<span className="text-xs text-gray-500">ระดับความสำคัญสูง</span>}
+                      sub={<span className="text-xs text-gray-500">{myHotLeads.length > 0 ? 'คลิกดูรายชื่อ →' : 'ระดับความสำคัญสูง'}</span>}
+                      onClick={myHotLeads.length > 0 ? () => navigate('/leads?priority=high') : undefined}
                     />
                   </>
                 )}
@@ -521,7 +500,9 @@ const MyDashboard = () => {
                         : <span className="text-xs text-gray-400">ยังไม่มี referrals</span>
                     }
                   />
-                ) : (
+                ) : (userRole === 'admin' || userRole === 'owner') ? (
+                  /* Ranking is supervisor info only — Sales focuses on their own performance,
+                     not comparison to peers (industry practice: Sansiri/AP keep this off Sales view) */
                   <KpiCard
                     title="อันดับในทีม"
                     value={myRank ? `#${myRank}` : '—'}
@@ -534,7 +515,7 @@ const MyDashboard = () => {
                         : <span className="text-xs text-gray-400">ยังไม่มีดีลปิด</span>
                     }
                   />
-                )}
+                ) : null}
               </div>
 
               {/* Row 2: Today's Tasks */}
@@ -914,43 +895,6 @@ const MyDashboard = () => {
                 </div>
               )}
 
-              {/* Row 4: Commission Projection */}
-              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
-                <div className="flex items-center gap-2 mb-1">
-                  <Trophy className="w-4 h-4" style={{ color: C.amber }} />
-                  <h2 className="text-base font-bold text-gray-900">คาดการณ์ค่าคอม</h2>
-                </div>
-                <p className="text-xs text-gray-500 mb-5">
-                  คำนวณที่ commission rate {(commissionRate * 100).toFixed(1)}%
-                  {userRole === 'agent' ? ' (อัตรานายหน้าภายนอก — ของจริงตามสัญญา)' : ' (ของจริงให้ confirm กับ HR)'}
-                </p>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="rounded-xl p-4" style={{ backgroundColor: C.greenLight }}>
-                    <p className="text-xs text-gray-600 mb-1">💵 ปิดได้แล้ว (เดือนนี้)</p>
-                    <p className="text-2xl font-bold tabular-nums" style={{ color: C.green }}>
-                      {formatTHB(confirmedCommission)}
-                    </p>
-                    <p className="text-[11px] text-gray-500 mt-1">{myWonMTD.length} ดีล · ฿{(myWonValueMTD / 1_000_000).toFixed(1)}M ยอดขาย</p>
-                  </div>
-
-                  <div className="rounded-xl p-4" style={{ backgroundColor: C.amberLight }}>
-                    <p className="text-xs text-gray-600 mb-1">📊 คาดการณ์จาก pipeline</p>
-                    <p className="text-2xl font-bold tabular-nums" style={{ color: C.amber }}>
-                      {formatTHB(projectedCommission)}
-                    </p>
-                    <p className="text-[11px] text-gray-500 mt-1">ถ่วงน้ำหนักด้วย probability ตาม stage</p>
-                  </div>
-
-                  <div className="rounded-xl p-4" style={{ backgroundColor: C.redLight }}>
-                    <p className="text-xs text-gray-600 mb-1">🎯 รวมถ้าทุกอย่างผ่าน</p>
-                    <p className="text-2xl font-bold tabular-nums" style={{ color: C.red }}>
-                      {formatTHB(confirmedCommission + projectedCommission)}
-                    </p>
-                    <p className="text-[11px] text-gray-500 mt-1">เป้าหมายเดือนนี้</p>
-                  </div>
-                </div>
-              </div>
             </>
           )}
         </main>
@@ -968,10 +912,15 @@ interface KpiCardProps {
   color: string;
   bg: string;
   sub?: React.ReactNode;
+  onClick?: () => void;
 }
 
-const KpiCard = ({ title, value, icon: Icon, color, bg, sub }: KpiCardProps) => (
-  <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200">
+const KpiCard = ({ title, value, icon: Icon, color, bg, sub, onClick }: KpiCardProps) => (
+  <div
+    onClick={onClick}
+    className={`bg-white border border-gray-100 rounded-2xl p-6 shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 ${onClick ? 'cursor-pointer hover:border-gray-200' : ''}`}
+    title={onClick ? 'คลิกเพื่อดูรายการ' : undefined}
+  >
     <div className="flex items-start justify-between mb-4">
       <p className="text-sm font-medium text-gray-500 leading-tight pt-1.5">{title}</p>
       <div

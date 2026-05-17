@@ -89,6 +89,10 @@ const UnitDetail = () => {
   const [responsibleSales, setResponsibleSales] = useState<{ id: string; name: string }[]>([]);
   // Active booking for this unit (tracks deposit confirmation state)
   const [activeBooking, setActiveBooking] = useState<{ id: string; status: string; total_amount: number } | null>(null);
+  // Revert-sale dialog state (Admin/Owner only — voids a sold unit back to reserved)
+  const [showRevertSaleDialog, setShowRevertSaleDialog] = useState(false);
+  const [revertReason, setRevertReason] = useState('');
+  const [reverting, setReverting] = useState(false);
   // Inline viewing-date editor state (Sales schedules a visit from the unit page)
   const [editingVisitInterestId, setEditingVisitInterestId] = useState<string | null>(null);
   const [visitDraft, setVisitDraft] = useState<string>('');
@@ -162,7 +166,7 @@ const UnitDetail = () => {
         (supabase.from('properties') as any).select('*').eq('id', unitData.project_id).single(),
         (supabase.from('units') as any).select('id, unit_number, status').eq('project_id', unitData.project_id),
         (supabase.from('lead_interests') as any)
-          .select('id, status, interest_level, viewing_date, notes, leads:lead_id(id, status, assigned_to, customers:customer_id(id, full_name, email, phone))')
+          .select('id, status, interest_level, viewing_date, viewed_at, notes, leads:lead_id(id, status, assigned_to, customers:customer_id(id, full_name, email, phone))')
           .eq('unit_id', unitId)
           .not('status', 'in', '("dropped","lost")'),
       ]);
@@ -286,6 +290,36 @@ const UnitDetail = () => {
   //   - Setting date when status='interested' → upgrade to 'viewing_scheduled'
   //   - Clearing date when status='viewing_scheduled' → revert to 'interested'
   //   - Other statuses are left as-is (don't downgrade negotiating/reserved/won)
+  // Explicit "ยกเลิกนัด" — clears viewing_date and reverts status to 'interested' (only when still in scheduled state).
+  const cancelLeadVisit = async (interestId: string, currentStatus: string | undefined) => {
+    if (!confirm('ยกเลิกการนัดดูยูนิตนี้?')) return;
+    setSavingVisit(true);
+    try {
+      const updates: Record<string, any> = {
+        viewing_date: null,
+        updated_at: new Date().toISOString(),
+      };
+      if (currentStatus === 'viewing_scheduled') {
+        updates.status = 'interested';
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from('lead_interests') as any)
+        .update(updates).eq('id', interestId);
+      if (error) throw error;
+      setUnitLeads((prev) => prev.map((li: any) =>
+        li.id === interestId
+          ? { ...li, viewing_date: null, status: updates.status ?? li.status }
+          : li
+      ));
+      toast.success('ยกเลิกนัดดูแล้ว');
+    } catch (e: any) {
+      console.error('Cancel viewing failed:', e);
+      toast.error('ยกเลิกไม่สำเร็จ: ' + (e?.message || 'unknown'));
+    } finally {
+      setSavingVisit(false);
+    }
+  };
+
   const saveLeadVisit = async (interestId: string, currentStatus: string | undefined) => {
     setSavingVisit(true);
     try {
@@ -313,6 +347,59 @@ const UnitDetail = () => {
       toast.success(isoValue ? 'บันทึกนัดดูเรียบร้อย' : 'ลบนัดดูแล้ว');
     } catch (e: any) {
       console.error('Save viewing date failed:', e);
+      toast.error('บันทึกไม่สำเร็จ: ' + (e?.message || 'unknown'));
+    } finally {
+      setSavingVisit(false);
+    }
+  };
+
+  // Sales confirms the customer physically viewed the unit. Closes the gap
+  // between viewing_scheduled (appointment set) and negotiating (talking price).
+  const markVisitConfirmed = async (interestId: string) => {
+    setSavingVisit(true);
+    try {
+      const nowIso = new Date().toISOString();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from('lead_interests') as any)
+        .update({ status: 'viewed', viewed_at: nowIso, updated_at: nowIso })
+        .eq('id', interestId);
+      if (error) throw error;
+      setUnitLeads((prev) => prev.map((li: any) =>
+        li.id === interestId ? { ...li, status: 'viewed', viewed_at: nowIso } : li
+      ));
+      toast.success('✓ ยืนยันลูกค้ามาดูแล้ว');
+    } catch (e: any) {
+      console.error('Mark visit confirmed failed:', e);
+      toast.error('บันทึกไม่สำเร็จ: ' + (e?.message || 'unknown'));
+    } finally {
+      setSavingVisit(false);
+    }
+  };
+
+  // Promote viewed → negotiating once Sales starts discussing price.
+  const markStartNegotiating = async (interestId: string, leadId: string | undefined) => {
+    setSavingVisit(true);
+    try {
+      const nowIso = new Date().toISOString();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from('lead_interests') as any)
+        .update({ status: 'negotiating', updated_at: nowIso })
+        .eq('id', interestId);
+      if (error) throw error;
+      // Keep leads.status in lock-step so pipeline reports reflect the move.
+      if (leadId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('leads') as any)
+          .update({ status: 'negotiating' })
+          .eq('id', leadId)
+          .in('status', ['new', 'contacted', 'qualified']);
+      }
+      setUnitLeads((prev) => prev.map((li: any) =>
+        li.id === interestId ? { ...li, status: 'negotiating' } : li
+      ));
+      toast.success('🤝 เริ่มเจรจาแล้ว');
+    } catch (e: any) {
+      console.error('Mark start negotiating failed:', e);
       toast.error('บันทึกไม่สำเร็จ: ' + (e?.message || 'unknown'));
     } finally {
       setSavingVisit(false);
@@ -399,8 +486,11 @@ const UnitDetail = () => {
       if (error) throw error;
       if (!data || data.length === 0) throw new Error('ไม่มีสิทธิ์บันทึกการจอง');
 
+      // Reservation = customer agreed to buy + paid small holding deposit (not yet contracted).
+      // 'won' is reserved for handleMarkAsSold (after contract + transfer). Setting it here
+      // breaks pipeline conversion reports.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase.from('leads') as any).update({ status: 'won' }).eq('id', lead.id);
+      await (supabase.from('leads') as any).update({ status: 'negotiating' }).eq('id', lead.id);
 
       const alreadyInterested = unitLeads.some((li: any) => li.leads?.id === lead.id);
       if (!alreadyInterested) {
@@ -506,7 +596,19 @@ const UnitDetail = () => {
         .select('id');
       if (error) throw error;
       if (!data || data.length === 0) throw new Error('ไม่มีสิทธิ์ยืนยัน');
-      // Sync lead_interest forward too (reserved → still reserved, no downgrade)
+
+      // Self-heal: force lead_interest → 'reserved' for this unit's reserved lead, in case
+      // it drifted (e.g. legacy data, manual edits in Lead Management page, or earlier
+      // bookings created before sync logic existed).
+      if (unit.reserved_customer_lead_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('lead_interests') as any)
+          .update({ status: 'reserved' })
+          .eq('lead_id', unit.reserved_customer_lead_id)
+          .eq('unit_id', unit.id)
+          .not('status', 'in', '("won","lost","dropped")');
+      }
+
       toast.success(`✓ ยืนยันรับเงินมัดจำ ยูนิต ${unit.unit_number}`);
       await loadAll();
     } catch (err: any) {
@@ -544,6 +646,72 @@ const UnitDetail = () => {
       await loadAll();
     } catch (err: any) {
       toast.error(err.message || 'ปิดการขายไม่สำเร็จ');
+    }
+  };
+
+  // Revert a sold unit — Owner/Admin only.
+  // Use cases: wrong unit recorded, contract voided, customer defaulted, deed registration failed.
+  // Reason is required; logged to activity_logs for audit trail.
+  const handleRevertSale = async () => {
+    if (!unit) return;
+    if (!revertReason.trim()) { toast.error('กรุณาระบุเหตุผล'); return; }
+    setReverting(true);
+    try {
+      // 1) Unit: sold → reserved + clear sold_at
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.from('units') as any)
+        .update({ status: 'reserved', sold_at: null, updated_at: new Date().toISOString() })
+        .eq('id', unit.id)
+        .select('id');
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error('ไม่มีสิทธิ์ยกเลิกการขาย (เฉพาะ Admin/Owner)');
+
+      // 2) Lead: won → negotiating (deal reopens)
+      if (unit.reserved_customer_lead_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('leads') as any)
+          .update({ status: 'negotiating', updated_at: new Date().toISOString() })
+          .eq('id', unit.reserved_customer_lead_id);
+        // 3) Lead interest: won → reserved
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('lead_interests') as any)
+          .update({ status: 'reserved', updated_at: new Date().toISOString() })
+          .eq('lead_id', unit.reserved_customer_lead_id)
+          .eq('unit_id', unit.id);
+      }
+
+      // 4) Booking: checked_in → confirmed (deposit was paid, contract voided)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase.from('bookings') as any)
+        .update({ status: 'confirmed', updated_at: new Date().toISOString() })
+        .eq('tenant_id', currentTenant?.id)
+        .filter('notes->>unit_id', 'eq', unit.id)
+        .in('status', ['checked_in']);
+
+      // 5) Audit log — who reverted, why, what unit
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase.from('activity_logs') as any).insert({
+        tenant_id: currentTenant?.id,
+        user_id: user?.id,
+        activity_type: 'sale_reverted',
+        description: `ยกเลิกการขายยูนิต ${unit.unit_number} — ${revertReason.trim()}`,
+        metadata: {
+          unit_id: unit.id,
+          unit_number: unit.unit_number,
+          customer_name: unit.reserved_customer_name,
+          lead_id: unit.reserved_customer_lead_id,
+          reason: revertReason.trim(),
+        },
+      });
+
+      toast.success(`ยกเลิกการขายยูนิต ${unit.unit_number} สำเร็จ — กลับสู่สถานะ "จอง"`);
+      setShowRevertSaleDialog(false);
+      setRevertReason('');
+      await loadAll();
+    } catch (err: any) {
+      toast.error(err.message || 'ยกเลิกการขายไม่สำเร็จ');
+    } finally {
+      setReverting(false);
     }
   };
 
@@ -758,10 +926,22 @@ const UnitDetail = () => {
           {isSold && (
             <Card className="border-2 border-green-200 bg-green-50/30">
               <CardHeader className="bg-green-50 border-b border-green-200 pb-3">
-                <CardTitle className="text-base font-semibold text-green-900 flex items-center gap-2">
-                  <Check className="w-5 h-5" />
-                  ปิดการขายแล้ว
-                </CardTitle>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <CardTitle className="text-base font-semibold text-green-900 flex items-center gap-2">
+                    <Check className="w-5 h-5" />
+                    ปิดการขายแล้ว
+                  </CardTitle>
+                  {(userRole === 'owner' || userRole === 'admin') && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowRevertSaleDialog(true)}
+                      className="text-red-700 border-red-200 hover:bg-red-50 text-xs"
+                    >
+                      ↩️ ยกเลิกการขาย
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="pt-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -911,6 +1091,11 @@ const UnitDetail = () => {
                     const isEditing = editingVisitInterestId === li.id;
                     const canEdit = userRole === 'owner' || userRole === 'admin' || userRole === 'sales' || userRole === 'agent';
                     const hasVisit = !!li.viewing_date;
+                    const visitDate = li.viewing_date ? new Date(li.viewing_date) : null;
+                    const isPastVisit = !!visitDate && visitDate.getTime() < Date.now();
+                    const isAdvanced = ['viewed', 'negotiating', 'reserved', 'won'].includes(li.status);
+                    const viewedAtDate = li.viewed_at ? new Date(li.viewed_at) : null;
+                    const visitFmt = (d: Date) => d.toLocaleString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
                     return (
                       <div key={li.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                         {/* Header — name + status + click-to-open lead */}
@@ -926,7 +1111,12 @@ const UnitDetail = () => {
                           <Badge className="bg-amber-100 text-amber-800 flex-shrink-0">{leadStatusLabel(lead.status)}</Badge>
                         </button>
 
-                        {/* Visit-date section — distinct visual bar so Sales can't miss it */}
+                        {/* Visit-date section — 5 states:
+                            (1) editing date input
+                            (2) advanced status (viewed/negotiating/reserved/won) — green history strip + optional "เริ่มเจรจา"
+                            (3) viewing_scheduled + past date — orange overdue strip + "✓ มาแล้ว" / "เลื่อน"
+                            (4) viewing_scheduled + future date — amber active strip + "แก้นัด"
+                            (5) no date — gray empty state + "บันทึกนัด" */}
                         {isEditing ? (
                           <div className="flex items-center gap-2 px-4 py-3 bg-amber-50/70 border-t border-amber-100">
                             <Calendar className="w-4 h-4 text-amber-700 flex-shrink-0" />
@@ -944,8 +1134,75 @@ const UnitDetail = () => {
                               ยกเลิก
                             </Button>
                           </div>
+                        ) : isAdvanced ? (
+                          /* Past visit — customer already viewed; show history + "เริ่มเจรจา" prompt if still at viewed */
+                          <div className="flex items-center justify-between gap-2 px-4 py-3 bg-green-50/70 border-t border-green-100">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-9 h-9 rounded-full bg-green-500 text-white flex items-center justify-center flex-shrink-0">
+                                <Check className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[10px] uppercase font-bold tracking-wide text-green-700">ลูกค้ามาดูแล้ว</p>
+                                <p className="text-sm font-bold text-green-900">
+                                  {viewedAtDate ? visitFmt(viewedAtDate) : visitDate ? visitFmt(visitDate) : 'ไม่ระบุวัน'}
+                                </p>
+                              </div>
+                            </div>
+                            {canEdit && li.status === 'viewed' && (
+                              <Button
+                                size="sm"
+                                onClick={() => markStartNegotiating(li.id, lead.id)}
+                                disabled={savingVisit}
+                                className="h-8 text-xs bg-amber-600 hover:bg-amber-700 text-white flex-shrink-0"
+                              >
+                                🤝 เริ่มเจรจา
+                              </Button>
+                            )}
+                          </div>
+                        ) : hasVisit && isPastVisit ? (
+                          /* Overdue appointment — needs Sales action */
+                          <div className="flex items-center justify-between gap-2 px-4 py-3 bg-orange-50/70 border-t border-orange-100">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-9 h-9 rounded-full bg-orange-500 text-white flex items-center justify-center flex-shrink-0">
+                                <Calendar className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[10px] uppercase font-bold tracking-wide text-orange-700">นัดเลยกำหนด</p>
+                                <p className="text-sm font-bold text-orange-900">{visitFmt(visitDate!)}</p>
+                              </div>
+                            </div>
+                            {canEdit && (
+                              <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                                <Button
+                                  size="sm"
+                                  onClick={() => markVisitConfirmed(li.id)}
+                                  disabled={savingVisit}
+                                  className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white"
+                                >
+                                  <Check className="w-3 h-3 mr-1" /> มาแล้ว
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => { setEditingVisitInterestId(li.id); setVisitDraft(toLocalInputValue(li.viewing_date)); }}
+                                  className="h-8 text-xs border-orange-300 text-orange-800 hover:bg-orange-100"
+                                >
+                                  <Edit className="w-3 h-3 mr-1" /> เลื่อน
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => cancelLeadVisit(li.id, li.status)}
+                                  disabled={savingVisit}
+                                  className="h-8 text-xs border-red-200 text-red-600 hover:bg-red-50"
+                                >
+                                  ยกเลิกนัด
+                                </Button>
+                              </div>
+                            )}
+                          </div>
                         ) : hasVisit ? (
-                          /* Visit already scheduled — amber prominent strip */
+                          /* Future appointment — amber active strip */
                           <div className="flex items-center justify-between gap-2 px-4 py-3 bg-amber-50/70 border-t border-amber-100">
                             <div className="flex items-center gap-3 min-w-0">
                               <div className="w-9 h-9 rounded-full bg-amber-500 text-white flex items-center justify-center flex-shrink-0">
@@ -953,24 +1210,33 @@ const UnitDetail = () => {
                               </div>
                               <div className="min-w-0">
                                 <p className="text-[10px] uppercase font-bold tracking-wide text-amber-700">นัดดู</p>
-                                <p className="text-sm font-bold text-amber-900">
-                                  {new Date(li.viewing_date).toLocaleString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                                </p>
+                                <p className="text-sm font-bold text-amber-900">{visitFmt(visitDate!)}</p>
                               </div>
                             </div>
                             {canEdit && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => { setEditingVisitInterestId(li.id); setVisitDraft(toLocalInputValue(li.viewing_date)); }}
-                                className="h-8 text-xs border-amber-300 text-amber-800 hover:bg-amber-100 flex-shrink-0"
-                              >
-                                <Edit className="w-3 h-3 mr-1" /> แก้นัด
-                              </Button>
+                              <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => { setEditingVisitInterestId(li.id); setVisitDraft(toLocalInputValue(li.viewing_date)); }}
+                                  className="h-8 text-xs border-amber-300 text-amber-800 hover:bg-amber-100"
+                                >
+                                  <Edit className="w-3 h-3 mr-1" /> แก้นัด
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => cancelLeadVisit(li.id, li.status)}
+                                  disabled={savingVisit}
+                                  className="h-8 text-xs border-red-200 text-red-600 hover:bg-red-50"
+                                >
+                                  ยกเลิกนัด
+                                </Button>
+                              </div>
                             )}
                           </div>
                         ) : (
-                          /* No visit yet — same layout as scheduled but in muted "empty" state with a clear outline action */
+                          /* No visit yet — muted empty state with action */
                           <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-gray-100 bg-gray-50/60">
                             <div className="flex items-center gap-3 min-w-0">
                               <div className="w-9 h-9 rounded-full bg-white border border-gray-200 text-gray-400 flex items-center justify-center flex-shrink-0">
@@ -1323,7 +1589,15 @@ const UnitDetail = () => {
                   <p className="text-xs text-amber-800">กดปิดและใช้ปุ่ม "+ เพิ่ม Lead ใหม่"</p>
                 </div>
               ) : (() => {
-                const activeLeads = allTenantLeads.filter(
+                // Role-based scope: Sales/Agent see only their own leads.
+                // Admin/Owner see all (supervisor view) — matches Sansiri / AP industry practice
+                // where a Sales rep can only book for their own customers (commission stays correct).
+                const isSupervisor = userRole === 'admin' || userRole === 'owner';
+                const myUserId = user?.id;
+                const scopedLeads = isSupervisor
+                  ? allTenantLeads
+                  : allTenantLeads.filter((l: any) => l.assigned_to === myUserId);
+                const activeLeads = scopedLeads.filter(
                   (l: any) => l.status !== 'won' && l.status !== 'lost' && l.status !== 'closed'
                 );
                 const interestedIds = new Set(unitLeads.map((li: any) => li.leads?.id).filter(Boolean));
@@ -1332,8 +1606,12 @@ const UnitDetail = () => {
                 if (activeLeads.length === 0) {
                   return (
                     <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                      <p className="text-sm text-amber-900 font-medium">⚠️ ไม่มี Lead ที่ active</p>
-                      <p className="text-xs text-amber-800">Lead ทุกคนปิดดีล/สูญเสียไปแล้ว — กด "+ เพิ่ม Lead ใหม่"</p>
+                      <p className="text-sm text-amber-900 font-medium">⚠️ ยังไม่มี Lead ของคุณที่ active</p>
+                      <p className="text-xs text-amber-800">
+                        {isSupervisor
+                          ? 'Lead ทุกคนปิดดีล/สูญเสียไปแล้ว — กด "+ เพิ่ม Lead ใหม่"'
+                          : 'ลูกค้าของคุณยังไม่มีหรือปิดดีลไปแล้ว — กด "+ เพิ่ม Lead ใหม่" ถ้าเป็น walk-in'}
+                      </p>
                     </div>
                   );
                 }
@@ -1359,7 +1637,7 @@ const UnitDetail = () => {
                       {others.length > 0 && (
                         <>
                           <div className="px-2 py-1.5 text-xs font-semibold text-gray-600 bg-gray-50 sticky top-0">
-                            👥 Lead อื่นใน tenant ({others.length})
+                            {isSupervisor ? `👥 Lead อื่นใน tenant (${others.length})` : `👤 Lead ของฉัน (${others.length})`}
                           </div>
                           {others.map((lead: any) => (
                             <SelectItem key={lead.id} value={lead.id}>
@@ -1581,6 +1859,63 @@ const UnitDetail = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowHandoffPicker(false)}>ยกเลิก</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Revert Sale Dialog — Admin/Owner only, voids a closed sale and reopens the deal */}
+      <Dialog open={showRevertSaleDialog} onOpenChange={(o) => { if (!reverting) setShowRevertSaleDialog(o); }}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-700">
+              ↩️ ยกเลิกการขายยูนิต {unit.unit_number}
+            </DialogTitle>
+            <DialogDescription>
+              การยกเลิกจะทำให้ยูนิตกลับสู่สถานะ "จอง" และเปิดดีลใหม่ — ใช้เฉพาะกรณีจำเป็น เช่น บันทึกผิดยูนิต, สัญญาเป็นโมฆะ, ลูกค้าผิดสัญญา
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="p-3 bg-red-50 border border-red-100 rounded-lg">
+              <p className="text-xs text-red-900 font-semibold mb-1">⚠️ ผลที่จะเกิดขึ้น:</p>
+              <ul className="text-xs text-red-800 space-y-0.5 list-disc list-inside">
+                <li>ยูนิต: ขายแล้ว → จอง (รอชำระ)</li>
+                <li>Lead: ปิดดีล → กำลังเจรจา</li>
+                <li>Booking: โอนแล้ว → ชำระมัดจำแล้ว</li>
+                <li>บันทึก audit log ระบุผู้กระทำ + เหตุผล</li>
+              </ul>
+            </div>
+            <div>
+              <Label className="text-xs font-medium text-gray-700 mb-1.5 block">
+                เหตุผล <span className="text-red-500">*</span>
+              </Label>
+              <textarea
+                value={revertReason}
+                onChange={(e) => setRevertReason(e.target.value)}
+                rows={3}
+                maxLength={300}
+                placeholder="เช่น บันทึกผิดยูนิต / ลูกค้าผิดสัญญา / กรมที่ดินไม่อนุมัติโอน..."
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-100 focus:border-red-300 resize-none"
+              />
+              <p className="text-[10px] text-gray-400 mt-1 text-right">{revertReason.length}/300</p>
+            </div>
+          </div>
+          <DialogFooter className="flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowRevertSaleDialog(false)}
+              disabled={reverting}
+              className="flex-1"
+            >
+              ปิด
+            </Button>
+            <Button
+              onClick={handleRevertSale}
+              disabled={reverting || !revertReason.trim()}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+            >
+              {reverting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              ยืนยันยกเลิกการขาย
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

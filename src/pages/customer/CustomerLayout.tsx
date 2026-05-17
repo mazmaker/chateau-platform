@@ -157,6 +157,8 @@ const CustomerLayout = ({ children, title, subtitle, showBack = false, backTo, h
             }
             // Always re-load notification list to stay in sync
             loadNotifications();
+            // Tell Dashboard / other listeners to refresh their wishlist + engagement badges
+            window.dispatchEvent(new Event('wishlist:changed'));
           }
         )
         .subscribe();

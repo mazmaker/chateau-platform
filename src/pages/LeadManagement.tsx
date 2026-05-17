@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { SalesGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
@@ -7,6 +7,7 @@ import Header from '@/components/dashboard/Header';
 import AddLeadModal from '@/components/leads/AddLeadModal';
 import EditLeadModal from '@/components/leads/EditLeadModal';
 import { LeadSourceEditor } from '@/components/leads/LeadSourceEditor';
+import { LeadPriorityEditor } from '@/components/leads/LeadPriorityEditor';
 import { getPurchasePurposeLabel as sharedGetPurchasePurposeLabel } from '@/lib/purchasePurpose';
 import PaymentModal from '@/components/leads/PaymentModal';
 import HandoffLeadDialog from '@/components/leads/HandoffLeadDialog';
@@ -201,6 +202,9 @@ const LeadManagement = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
+  // Priority filter — read from URL ?priority=high so MyDashboard's "ลูกค้าด่วน" card can deep-link in
+  const [searchParams] = useSearchParams();
+  const priorityFilter = searchParams.get('priority') || 'all';
   const [activeTab, setActiveTab] = useState<'all' | 'my' | 'team'>(() =>
     ['sales', 'agent'].includes(userRole || '') ? 'my' : 'all'
   );
@@ -246,6 +250,38 @@ const LeadManagement = () => {
     const d = new Date(iso);
     const tz = d.getTimezoneOffset() * 60000;
     return new Date(d.getTime() - tz).toISOString().slice(0, 16);
+  };
+
+  // Explicit cancel — clears viewing_date and reverts status if it was viewing_scheduled
+  const cancelVisitDate = async (interestId: string) => {
+    if (!confirm('ยกเลิกการนัดดูยูนิตนี้?')) return;
+    setSavingVisit(true);
+    try {
+      const current = selectedLeadInterests.find((i) => i.id === interestId);
+      const updates: Record<string, any> = {
+        viewing_date: null,
+        updated_at: new Date().toISOString(),
+      };
+      if (current?.status === 'viewing_scheduled') {
+        updates.status = 'interested';
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from('lead_interests') as any)
+        .update(updates).eq('id', interestId);
+      if (error) throw error;
+      setSelectedLeadInterests((prev) =>
+        prev.map((i) =>
+          i.id === interestId
+            ? { ...i, viewing_date: undefined, status: (updates.status ?? i.status) as typeof i.status }
+            : i
+        )
+      );
+    } catch (e: any) {
+      console.error('Cancel visit failed:', e);
+      alert('ยกเลิกไม่สำเร็จ: ' + (e?.message || 'unknown'));
+    } finally {
+      setSavingVisit(false);
+    }
   };
 
   const saveVisitDate = async (interestId: string) => {
@@ -352,6 +388,7 @@ const LeadManagement = () => {
         budget_max: item.estimated_value,
         preferred_location: undefined,
         notes: item.notes || '',
+        priority: item.priority,
         assigned_to: item.assigned_to,
         next_follow_up: item.next_follow_up,
         created_at: item.created_at,
@@ -905,7 +942,12 @@ const LeadManagement = () => {
                          propertyName.includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
     const matchesSource = sourceFilter === 'all' || lead.source === sourceFilter;
-    return matchesSearch && matchesStatus && matchesSource;
+    // URL-driven priority filter (from MyDashboard "ลูกค้าด่วน" deep-link).
+    // For "high" we also hide closed/lost so the result matches the dashboard count.
+    const openSet = new Set(['new','contacted','qualified','negotiating']);
+    const matchesPriority = priorityFilter === 'all'
+      || (lead.priority === priorityFilter && (priorityFilter !== 'high' || openSet.has(lead.status || '')));
+    return matchesSearch && matchesStatus && matchesSource && matchesPriority;
   });
 
   // Calculate stats
@@ -1045,6 +1087,20 @@ const LeadManagement = () => {
                   )}
                 </TabsList>
               </Tabs>
+
+              {priorityFilter !== 'all' && (
+                <div className="flex items-center justify-between gap-3 px-4 py-3 bg-rose-50 border border-rose-100 rounded-lg">
+                  <p className="text-sm text-rose-900">
+                    🔥 กำลังแสดงเฉพาะ <span className="font-semibold">ลูกค้าด่วน (priority: {priorityFilter})</span>
+                  </p>
+                  <button
+                    onClick={() => navigate('/leads')}
+                    className="text-xs font-medium text-rose-700 hover:text-rose-900 hover:underline"
+                  >
+                    ล้างตัวกรอง
+                  </button>
+                </div>
+              )}
 
               <div className="flex gap-4">
                 <div className="flex-1 relative">
@@ -1500,16 +1556,30 @@ const LeadManagement = () => {
                                       <p className="text-[11px] text-amber-700 font-medium">
                                         📅 นัดดู {new Date(interest.viewing_date).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                                       </p>
+                                    ) : ['viewed', 'negotiating', 'reserved', 'won'].includes(interest.status as string) ? (
+                                      // Lead progressed past viewing — must have already viewed even without a date row
+                                      <span className="text-[11px] text-green-700 font-medium">✓ ลูกค้าดูแล้ว</span>
                                     ) : (
                                       <span className="text-[11px] text-gray-400">ยังไม่มีนัด</span>
                                     )}
                                     {(userRole === 'agent' || userRole === 'sales' || userRole === 'admin' || userRole === 'owner') && (
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); setEditingVisitId(interest.id); setVisitDateDraft(toLocalInputValue(interest.viewing_date)); }}
-                                        className="text-[11px] text-chateau hover:underline font-medium"
-                                      >
-                                        {interest.viewing_date ? 'แก้นัด' : '+ นัดดู'}
-                                      </button>
+                                      <>
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); setEditingVisitId(interest.id); setVisitDateDraft(toLocalInputValue(interest.viewing_date)); }}
+                                          className="text-[11px] text-chateau hover:underline font-medium"
+                                        >
+                                          {interest.viewing_date ? 'แก้นัด' : '+ นัดดู'}
+                                        </button>
+                                        {interest.viewing_date && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); cancelVisitDate(interest.id); }}
+                                            disabled={savingVisit}
+                                            className="text-[11px] text-red-600 hover:underline font-medium"
+                                          >
+                                            ยกเลิกนัด
+                                          </button>
+                                        )}
+                                      </>
                                     )}
                                   </div>
                                 ) : null}
@@ -1566,8 +1636,20 @@ const LeadManagement = () => {
                       );
                     })()}
 
-                    {/* Lead Info - source, purpose, follow-up */}
-                    <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-100">
+                    {/* Lead Info - priority, source, purpose, follow-up */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-100">
+                      <div>
+                        <p className="text-[11px] text-gray-400 uppercase font-medium tracking-wide mb-1">ความสำคัญ</p>
+                        <LeadPriorityEditor
+                          leadId={selectedLead.id}
+                          currentPriority={selectedLead.priority}
+                          onUpdated={(newPriority) => {
+                            setSelectedLead((prev: any) => prev ? { ...prev, priority: newPriority } : prev);
+                            // Also update the row in the list so the dashboard count stays in sync
+                            setLeads((prev: any[]) => prev.map((l) => l.id === selectedLead.id ? { ...l, priority: newPriority } : l));
+                          }}
+                        />
+                      </div>
                       <div>
                         <p className="text-[11px] text-gray-400 uppercase font-medium tracking-wide mb-1">แหล่งที่มา</p>
                         <LeadSourceEditor
@@ -1645,7 +1727,7 @@ const LeadManagement = () => {
 
                     if (createdDays <= 7) segs.push({ icon: '🌱', label: 'ลูกค้าใหม่ภายใน 7 วัน', reason: `${createdDays} วันที่แล้ว`, cat: 'lifecycle' });
 
-                    if ((selectedLead.status === 'qualified' || selectedLead.status === 'negotiating') && selectedLead.priority === 'high') {
+                    if (selectedLead.priority === 'high') {
                       segs.push({ icon: '🔥', label: 'ลูกค้าด่วน', reason: 'ความสำคัญสูง', cat: 'critical' });
                     }
                     if (lastContactDays !== null && lastContactDays >= 30 && selectedLead.status !== 'lost' && selectedLead.status !== 'won') {

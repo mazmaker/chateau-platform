@@ -60,6 +60,9 @@ const CustomerDashboard = () => {
 
       // Load all "active" lead_interests for this customer (DB source of truth)
       const dbInterestMap = new Map<string, { status: string; viewing_date: string | null; tenant_id: string; project_id: string }>();
+      // Also load active bookings so the engagement badge reflects payment progress —
+      // booking.status is the only signal that deposit was actually paid (lead_interest stays at 'reserved' even after).
+      const bookingByUnit = new Map<string, { status: string }>();
       if (customerId) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: leads } = await (supabase.from('leads') as any).select('id').eq('customer_id', customerId);
@@ -77,6 +80,15 @@ const CustomerDashboard = () => {
             });
           });
         }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: dbBookings } = await (supabase.from('bookings') as any)
+          .select('status, notes')
+          .eq('customer_id', customerId)
+          .neq('status', 'cancelled');
+        ((dbBookings as any[]) || []).forEach((b: any) => {
+          const uid = b.notes?.unit_id;
+          if (uid) bookingByUnit.set(uid, { status: b.status });
+        });
       }
 
       // Union of unit ids from BOTH sources
@@ -101,17 +113,26 @@ const CustomerDashboard = () => {
         ((props as any[]) || []).forEach((p: any) => propsMap.set(p.id, { id: p.id, name: p.name }));
       }
       const merged: WishlistUnit[] = unitList.map((u: any) => {
-        const engagement = dbInterestMap.get(u.id);
+        const interest = dbInterestMap.get(u.id);
+        const booking = bookingByUnit.get(u.id);
+        // booking.status takes priority over lead_interest.status once a booking exists,
+        // so the customer sees "✓ ชำระแล้ว" the moment Sales clicks "ยืนยันรับเงิน"
+        // (lead_interest stays at 'reserved' indefinitely — it doesn't track payment state).
+        const synthesizedStatus =
+          booking?.status === 'checked_in' || booking?.status === 'checked_out' ? 'won' :
+          booking?.status === 'confirmed' ? 'deposit_paid' :  // synthetic — displayed as "✓ ชำระแล้ว"
+          booking?.status === 'pending'   ? 'reserved'      :
+          interest?.status                ?? undefined;
         return {
           ...u,
           property: propsMap.get(u.project_id) || null,
-          engagement: engagement ? { status: engagement.status, viewing_date: engagement.viewing_date } : undefined,
+          engagement: synthesizedStatus ? { status: synthesizedStatus, viewing_date: interest?.viewing_date ?? null } : undefined,
         };
       });
       // Stable order: most engaged first (won → reserved → negotiating → viewing_scheduled → interested → none)
       const rank = (e?: { status: string }) => {
         if (!e) return 99;
-        const order = ['won', 'reserved', 'negotiating', 'viewing_scheduled', 'interested'];
+        const order = ['won', 'deposit_paid', 'reserved', 'negotiating', 'viewed', 'viewing_scheduled', 'interested'];
         const i = order.indexOf(e.status);
         return i === -1 ? 50 : i;
       };
@@ -217,6 +238,7 @@ const CustomerDashboard = () => {
     if (s === 'viewed') return { label: '✓ ดูแล้ว', color: 'text-blue-700 bg-blue-50' };
     if (s === 'negotiating') return { label: '🤝 กำลังเจรจา', color: 'text-amber-800 bg-amber-100' };
     if (s === 'reserved') return { label: '💰 รอชำระมัดจำ', color: 'text-orange-800 bg-orange-100' };
+    if (s === 'deposit_paid') return { label: '✓ ชำระมัดจำแล้ว', color: 'text-emerald-700 bg-emerald-50' };
     if (s === 'won') return { label: '✓ ปิดดีลแล้ว', color: 'text-green-800 bg-green-100' };
     return { label: s || '—', color: 'text-gray-600 bg-gray-100' };
   };
@@ -300,17 +322,14 @@ const CustomerDashboard = () => {
 
           {/* Saved units — split into 2 sub-sections so customer can tell apart "active engagement" vs "just bookmarked" */}
           {wishlist.length > 0 && (() => {
-            const ACTIVE_STATUSES = ['viewing_scheduled', 'negotiating', 'reserved', 'won'];
+            const ACTIVE_STATUSES = ['viewing_scheduled', 'viewed', 'negotiating', 'reserved', 'deposit_paid', 'won'];
             const activeUnits = wishlist.filter((u) => u.engagement && ACTIVE_STATUSES.includes(u.engagement.status));
             const savedUnits = wishlist.filter((u) => !u.engagement || !ACTIVE_STATUSES.includes(u.engagement.status));
 
             // Per-status visual style for the active section (border + glow + section icon)
-            const activeStyle = (status?: string) => {
-              if (status === 'won' || status === 'reserved') return { border: 'border-orange-300 ring-1 ring-orange-100', accent: 'bg-orange-50' };
-              if (status === 'negotiating') return { border: 'border-amber-300 ring-1 ring-amber-100', accent: 'bg-amber-50' };
-              if (status === 'viewing_scheduled') return { border: 'border-blue-300 ring-1 ring-blue-100', accent: 'bg-blue-50' };
-              return { border: 'border-gray-100', accent: 'bg-white' };
-            };
+            // Subtle, professional look — thin border + neutral background.
+            // Status is communicated by the badge, not by loud card chrome.
+            const activeStyle = (_status?: string) => ({ border: 'border-gray-200', accent: 'bg-white' });
 
             return (
               <>

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   Building2, Bed, Bath, Square, Layers, MapPin, Heart, Loader2, Sun, ParkingCircle, Check,
   ChevronLeft, ChevronRight, Calendar, Calculator, Share2,
-  ChevronDown, View, Sparkles, Receipt, XCircle,
+  ChevronDown, View, Sparkles, XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -443,12 +443,6 @@ const CustomerUnitDetail = () => {
     ? loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, totalMonths)) / (Math.pow(1 + monthlyRate, totalMonths) - 1)
     : loanAmount / totalMonths;
 
-  // Total cost breakdown
-  const transferFee = finalPrice * 0.02;
-  const mortgageFee = finalPrice * 0.01;
-  const miscFee = 10000;
-  const totalCost = finalPrice + transferFee + mortgageFee + miscFee;
-
   const nearbyArr: any[] = Array.isArray(property?.nearby) ? property!.nearby : [];
 
   return (
@@ -582,7 +576,12 @@ const CustomerUnitDetail = () => {
             <Sparkles className="w-4 h-4 text-chateau" /> สถานะคำขอของคุณ
           </h2>
           {(() => {
-            const hasVisit = !!myInterest.viewing_date;
+            // Step "นัดดูยูนิต" = customer has either booked a date OR already progressed past it.
+            // Lead funnel goes: viewing_scheduled → viewed → negotiating → reserved → won.
+            // Reaching any of viewed+ means the visit already happened, even if no explicit date row exists
+            // (e.g. walk-in customer that Sales moved straight to negotiating).
+            const advancedPastVisit = ['viewed', 'negotiating', 'reserved', 'won'].includes(myInterest.status);
+            const hasVisit = !!myInterest.viewing_date || advancedPastVisit;
             // Treat unit-level reservation/sale for this customer's lead as a positive signal
             const unitReservedForMyLead = !!(myLead?.id && unit.reserved_customer_lead_id === myLead.id);
             const hasReserved = myInterest.status === 'reserved' || (unitReservedForMyLead && unit.status === 'reserved');
@@ -632,8 +631,20 @@ const CustomerUnitDetail = () => {
                     : 'รอ Sales รับงาน',
                 done: salesContacted,
               },
-              { key: 'visit', label: 'นัดดูยูนิต', sub: hasVisit ? new Date(myInterest.viewing_date!).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'ยังไม่นัด', done: hasVisit },
-              { key: 'negotiate', label: 'เจรจา / Sales ล็อคยูนิต', sub: hasReserved || hasWon ? 'Sales จองให้แล้ว' : hasNegotiating ? 'กำลังเจรจา' : 'ขั้นต่อไป', done: hasReserved || hasWon || hasNegotiating },
+              {
+                key: 'visit',
+                label: 'นัดดูยูนิต',
+                sub: myInterest.viewing_date
+                  ? new Date(myInterest.viewing_date).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                  : advancedPastVisit ? 'ดูเรียบร้อย' : 'ยังไม่นัด',
+                done: hasVisit,
+              },
+              {
+                key: 'negotiate',
+                label: 'เจรจา',
+                sub: hasReserved || hasWon ? 'เจรจาเรียบร้อย' : hasNegotiating ? 'กำลังเจรจา' : 'ขั้นต่อไป',
+                done: hasReserved || hasWon || hasNegotiating,
+              },
               {
                 key: 'deposit',
                 label: 'ชำระมัดจำ',
@@ -869,24 +880,6 @@ const CustomerUnitDetail = () => {
         )}
       </div>
 
-      {/* === Total Cost === */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-5">
-        <h2 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Receipt className="w-4 h-4 text-gray-600" /> สรุปค่าใช้จ่ายโดยประมาณ
-        </h2>
-        <div className="space-y-2.5">
-          <CostRow label="ราคายูนิต" value={finalPrice} />
-          <CostRow label="ค่าโอนกรรมสิทธิ์ (2%)" value={transferFee} />
-          <CostRow label="ค่าจดจำนอง (1%)" value={mortgageFee} />
-          <CostRow label="ค่าธรรมเนียม / อากร" value={miscFee} />
-          <div className="pt-3 mt-3 border-t border-gray-100 flex items-center justify-between">
-            <span className="text-sm font-semibold text-gray-900">รวมเงินที่ต้องเตรียม</span>
-            <span className="text-lg font-bold text-chateau">{fmt(totalCost)}</span>
-          </div>
-        </div>
-        <p className="text-[11px] text-gray-400 mt-3">* ค่าธรรมเนียมจริงอาจแตกต่างขึ้นกับกรมที่ดิน</p>
-      </div>
-
       {/* === Master Plan (ผังโครงการทั้งหมด) === */}
       {property?.master_plan_url && (
         <div className="bg-white border border-gray-100 rounded-2xl p-5">
@@ -1120,13 +1113,6 @@ const SpecItem = ({ icon: Icon, label, value }: { icon: any; label: string; valu
 
 const Tag = ({ children }: { children: React.ReactNode }) => (
   <span className="text-xs bg-gray-50 text-gray-700 border border-gray-100 px-3 py-1 rounded-full">{children}</span>
-);
-
-const CostRow = ({ label, value }: { label: string; value: number }) => (
-  <div className="flex items-center justify-between text-sm">
-    <span className="text-gray-600">{label}</span>
-    <span className="font-semibold text-gray-900">฿{Math.round(value).toLocaleString()}</span>
-  </div>
 );
 
 const FAQ = ({ q, a }: { q: string; a: string }) => {

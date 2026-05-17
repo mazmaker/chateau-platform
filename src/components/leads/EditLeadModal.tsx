@@ -201,6 +201,10 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
     marital_status: "",
     monthly_income: "",
     monthly_debt: "",
+    down_payment_ready: "",     // เงินดาวน์พร้อม — Sales ถามตั้งแต่นัดดู
+    employment_type: "",        // ประเภทงาน — ส่งผลต่อการอนุมัติสินเชื่อ
+    years_employed: "",         // อายุงาน
+    max_loan_amount_manual: "", // วงเงินจากธนาคาร (manual override)
     family_members: "",
     education: "",
     workplace: "",
@@ -318,8 +322,12 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
         email: customer?.email || "",
         occupation: prefs.occupation || "",
         marital_status: prefs.marital_status || "",
-        monthly_income: prefs.monthly_income?.toString() || "",
-        monthly_debt: prefs.monthly_debt?.toString() || "",
+        monthly_income: prefs.monthly_income?.toString() || (lead as any).monthly_income?.toString() || "",
+        monthly_debt: prefs.monthly_debt?.toString() || (lead as any).monthly_debt?.toString() || "",
+        down_payment_ready: (lead as any).down_payment_ready?.toString() || "",
+        employment_type: (lead as any).employment_type || "",
+        years_employed: (lead as any).years_employed?.toString() || "",
+        max_loan_amount_manual: (lead as any).max_loan_amount?.toString() || "",
         family_members: prefs.family_members?.toString() || "",
         education: prefs.education || "",
         workplace: prefs.workplace || "",
@@ -593,8 +601,10 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
 
       if (customerError) throw customerError;
 
-      // Update lead data
-      const leadUpdate = {
+      // Update lead data — financial fields are stored on leads (not customers.preferences)
+      // so that PotentialScore/loan calculations and recomputeLeadScore see the latest values.
+      const manualLoan = formData.max_loan_amount_manual ? parseFloat(formData.max_loan_amount_manual) : null;
+      const leadUpdate: Record<string, any> = {
         property_id: formData.property_id,
         unit_id: formData.unit_id || null,
         status: formData.status,
@@ -602,7 +612,19 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
         assigned_to: formData.assigned_to || null,
         notes: formData.lead_notes,
         next_follow_up: formData.next_follow_up || null,
+        // Financial data — mirrored so the scoring + loan engine can read from leads.*
+        monthly_income: formData.monthly_income ? parseFloat(formData.monthly_income) : null,
+        monthly_debt: formData.monthly_debt ? parseFloat(formData.monthly_debt) : null,
+        down_payment_ready: formData.down_payment_ready ? parseFloat(formData.down_payment_ready) : null,
+        employment_type: formData.employment_type || null,
+        years_employed: formData.years_employed ? parseFloat(formData.years_employed) : null,
       };
+      // Manual override for bank pre-approval — when Sales has the actual approval letter,
+      // they enter that exact figure here and it takes priority over the computed estimate.
+      if (manualLoan != null && !isNaN(manualLoan)) {
+        leadUpdate.max_loan_amount = manualLoan;
+        leadUpdate.loan_last_updated = new Date().toISOString();
+      }
 
       const { error: leadError } = await supabase
         .from('leads')
@@ -610,6 +632,13 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
         .eq('id', lead.id);
 
       if (leadError) throw leadError;
+
+      // Recompute potential_score + max_loan_amount from the new data — fire-and-forget,
+      // never blocks the save flow.
+      try {
+        const { recomputeLeadScore } = await import('@/lib/recomputeLeadScore');
+        await recomputeLeadScore(lead.id);
+      } catch { /* non-fatal */ }
 
       onLeadUpdated();
       onClose();
@@ -992,6 +1021,61 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                               disabled={loading}
                               className="mt-1.5"
                             />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">เงินดาวน์ที่พร้อม (บาท)</Label>
+                            <Input
+                              type="number"
+                              value={formData.down_payment_ready}
+                              onChange={(e) => setFormData(prev => ({ ...prev, down_payment_ready: e.target.value }))}
+                              placeholder="เช่น 1,500,000"
+                              disabled={loading}
+                              className="mt-1.5"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">ประเภทอาชีพ</Label>
+                            <Select
+                              value={formData.employment_type}
+                              onValueChange={(v) => setFormData(prev => ({ ...prev, employment_type: v }))}
+                              disabled={loading}
+                            >
+                              <SelectTrigger className="mt-1.5">
+                                <SelectValue placeholder="เลือก" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="government">ข้าราชการ / รัฐวิสาหกิจ</SelectItem>
+                                <SelectItem value="private">พนักงานบริษัทเอกชน</SelectItem>
+                                <SelectItem value="business">ธุรกิจส่วนตัว</SelectItem>
+                                <SelectItem value="freelance">Freelance / รับจ้างอิสระ</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">อายุงาน (ปี)</Label>
+                            <Input
+                              type="number"
+                              value={formData.years_employed}
+                              onChange={(e) => setFormData(prev => ({ ...prev, years_employed: e.target.value }))}
+                              placeholder="เช่น 5"
+                              disabled={loading}
+                              className="mt-1.5"
+                            />
+                          </div>
+                          <div className="md:col-span-2">
+                            <Label className="text-sm font-medium flex items-center gap-1.5">
+                              วงเงินกู้ที่ธนาคารอนุมัติ (บาท)
+                              <span className="text-[10px] font-normal text-gray-400">— ระบุเมื่อมี Pre-approval Letter</span>
+                            </Label>
+                            <Input
+                              type="number"
+                              value={formData.max_loan_amount_manual}
+                              onChange={(e) => setFormData(prev => ({ ...prev, max_loan_amount_manual: e.target.value }))}
+                              placeholder="ปล่อยว่างให้ระบบคำนวณอัตโนมัติ"
+                              disabled={loading}
+                              className="mt-1.5"
+                            />
+                            <p className="text-[11px] text-gray-500 mt-1">💡 ถ้ามีจดหมาย Pre-approval จากธนาคาร ใส่ตัวเลขจริงจะแทนค่าที่ระบบคำนวณ</p>
                           </div>
                           <div>
                             <Label className="text-sm font-medium">สมาชิกในครอบครัว (คน)</Label>

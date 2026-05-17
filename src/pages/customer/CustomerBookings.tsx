@@ -87,6 +87,9 @@ const CustomerBookings = () => {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let channel: any = null;
+
     const load = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -99,13 +102,25 @@ const CustomerBookings = () => {
         const { data: customer } = await (supabase.from('customers') as any)
           .select('id').eq('auth_user_id', user.id).maybeSingle();
         if (!customer) { setLoading(false); return; }
+        const customerId = (customer as any).id;
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data } = await (supabase.from('bookings') as any)
           .select('id, status, total_amount, currency, check_in_date, created_at, notes, property:properties(id, name, thumbnail_url)')
-          .eq('customer_id', (customer as any).id)
+          .eq('customer_id', customerId)
           .order('created_at', { ascending: false });
         setBookings((data || []) as Booking[]);
+
+        // Realtime: live-refresh this list when Sales/Admin updates any of THIS customer's bookings
+        // (status pending → confirmed → checked_in / cancelled).
+        channel = (supabase as any)
+          .channel(`customer-bookings-list-${customerId}`)
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'bookings', filter: `customer_id=eq.${customerId}` },
+            () => { reloadBookings(); }
+          )
+          .subscribe();
       } catch (err) {
         console.error('Load bookings error:', err);
       } finally {
@@ -113,6 +128,7 @@ const CustomerBookings = () => {
       }
     };
     load();
+    return () => { if (channel) (supabase as any).removeChannel(channel); };
   }, [navigate]);
 
   const fmt = (n: number) => `${(n / 1_000_000).toFixed(2)} ล้าน`;
@@ -185,8 +201,24 @@ const CustomerBookings = () => {
                 const Icon = info.icon;
                 const depositAmount = b.notes?.deposit_amount;
                 const unitNumber = b.notes?.unit_number;
+                const unitId = b.notes?.unit_id;
+                const isClickable = !!unitId;
                 return (
-                  <div key={b.id} className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+                  <div
+                    key={b.id}
+                    onClick={() => { if (unitId) navigate(`/customer/units/${unitId}`); }}
+                    role={isClickable ? 'button' : undefined}
+                    tabIndex={isClickable ? 0 : undefined}
+                    onKeyDown={(e) => {
+                      if (isClickable && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault();
+                        navigate(`/customer/units/${unitId}`);
+                      }
+                    }}
+                    className={`bg-white border border-gray-100 rounded-2xl overflow-hidden transition-all ${
+                      isClickable ? 'cursor-pointer hover:border-chateau hover:shadow-sm' : ''
+                    }`}
+                  >
                     {/* Header — status banner */}
                     <div className={`px-4 py-2.5 border-b ${info.color} flex items-center gap-2`}>
                       <Icon className="w-4 h-4" />
@@ -239,7 +271,7 @@ const CustomerBookings = () => {
                       {b.status === 'pending' && (
                         <div className="mt-3 flex justify-end">
                           <button
-                            onClick={() => setCancellingBooking(b)}
+                            onClick={(e) => { e.stopPropagation(); setCancellingBooking(b); }}
                             className="text-xs font-medium text-red-600 hover:bg-red-50 text-center py-2 px-3 rounded-lg border border-red-100"
                           >
                             ยกเลิกการจอง

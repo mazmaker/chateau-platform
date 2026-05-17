@@ -23,6 +23,9 @@ import {
   Users,
   Briefcase,
   Trophy,
+  DollarSign,
+  TrendingUp,
+  Wallet,
 } from 'lucide-react';
 
 const KK = {
@@ -123,17 +126,33 @@ const STATUS_COLOR_TEXT: Record<string, string> = {
 };
 
 const SOURCE_LABEL: Record<string, string> = {
+  // Online channels
   online_facebook: 'Facebook',
   online_google: 'Google',
   online_line: 'LINE',
+  // Offline channels — 'offline' and 'walk_in' both mean customer came in person; unify under one label
+  offline: 'Walk-in',
+  walk_in: 'Walk-in',
+  // Referrals
   agent_referral: 'นายหน้าแนะนำ',
-  offline: 'Walk-in / Offline',
+  // Catch-all for sources that don't fit a primary channel (TikTok, YouTube, brochure variants, etc.)
+  other: 'อื่นๆ',
 };
 
 const sourceShort = (raw: string | null) => {
   if (!raw) return 'ไม่ระบุ';
   if (SOURCE_LABEL[raw]) return SOURCE_LABEL[raw];
-  if (raw.startsWith('other_')) return raw.replace('other_other:', 'อื่นๆ:').replace('other_', '');
+  // Handle malformed "other_other: other_other: foo" → "อื่นๆ: foo" (legacy dirty data)
+  if (raw.startsWith('other_') || raw.startsWith('other:')) {
+    let cleaned = raw;
+    // Strip up to 5 levels of nested "other_" / "other:" prefixes
+    for (let i = 0; i < 5; i++) {
+      const next = cleaned.replace(/^other_|^other:\s*/i, '').trim();
+      if (next === cleaned) break;
+      cleaned = next;
+    }
+    return cleaned ? `อื่นๆ: ${cleaned}` : 'อื่นๆ';
+  }
   return raw;
 };
 
@@ -241,20 +260,71 @@ const Analytics = () => {
   const totalWon = leads.filter((l) => l.status === 'won').length;
   const conversionRate = totalClosed > 0 ? (totalWon / totalClosed) * 100 : 0;
 
+  // ─── KPI: Pipeline Value (snapshot, no period — sum of estimated_value across open leads)
+  const openStatusSet = new Set(['new', 'contacted', 'qualified', 'negotiating']);
+  const pipelineValue = leads
+    .filter((l) => openStatusSet.has(l.status || ''))
+    .reduce((sum, l) => sum + Number(l.estimated_value || 0), 0);
+  const pipelineLeadCount = leads.filter((l) => openStatusSet.has(l.status || '')).length;
+
+  // ─── KPI: Revenue + Avg Deal Size (won leads, filtered by period via updated_at fallback to created_at)
+  const wonInPeriod = leads.filter((l) => {
+    if (l.status !== 'won') return false;
+    const closedAt = new Date((l as any).updated_at || l.created_at);
+    return closedAt >= periodStart;
+  });
+  const totalRevenue = wonInPeriod.reduce((sum, l) => sum + Number(l.estimated_value || 0), 0);
+  const avgDealSize = wonInPeriod.length > 0 ? totalRevenue / wonInPeriod.length : 0;
+
+  // ─── Cumulative funnel reach (used to compute stage-to-stage pass %)
+  // A lead has "reached" stage X if its current status is X or any later stage in the forward chain.
+  // Lost is treated as a parallel exit (not part of the forward chain).
+  const forwardChain = ['new', 'contacted', 'qualified', 'negotiating', 'won'] as const;
+  const reachedBeyond: Record<string, number> = {};
+  forwardChain.forEach((stage, idx) => {
+    const stagesAtOrBeyond = forwardChain.slice(idx);
+    reachedBeyond[stage] = leads.filter((l) => (stagesAtOrBeyond as readonly string[]).includes(l.status || '')).length;
+  });
+  // Helper for funnel widget: "% of those who reached the previous stage who also reached this stage"
+  const stagePassRate = (currentStage: string): number | null => {
+    const idx = forwardChain.indexOf(currentStage as any);
+    if (idx <= 0) return null; // first stage or not in forward chain
+    const prevReach = reachedBeyond[forwardChain[idx - 1]];
+    if (!prevReach) return null;
+    return (reachedBeyond[currentStage] / prevReach) * 100;
+  };
+
+  // Money formatter (THB short form: ฿1.2M, ฿340K)
+  const fmtMoney = (n: number) => {
+    if (n >= 1_000_000) return `฿${(n / 1_000_000).toFixed(2)}M`;
+    if (n >= 1_000) return `฿${(n / 1_000).toFixed(0)}K`;
+    return `฿${n.toFixed(0)}`;
+  };
+
   // ─── Funnel ──
+  // Cross-section counts (kept around for "lost" which is a terminal exit, not in forward chain)
   const funnelCounts: Record<string, number> = {};
   STATUS_ORDER.forEach((s) => { funnelCounts[s] = 0; });
   leads.forEach((l) => {
     const s = l.status || 'new';
     if (s in funnelCounts) funnelCounts[s]++;
   });
-  const funnelData = STATUS_ORDER.map((s) => ({
-    stage: STATUS_LABEL[s],
-    key: s,
-    count: funnelCounts[s] || 0,
-    color: STATUS_COLOR[s],
-    textColor: STATUS_COLOR_TEXT[s],
-  }));
+  // Bars use CUMULATIVE reach (true funnel shape — always narrowing) for forward-chain stages.
+  // For 'lost' (parallel exit), keep the cross-section count.
+  // reachedBeyond is computed earlier from the same forwardChain.
+  const funnelData = STATUS_ORDER.map((s) => {
+    const isForward = (forwardChain as readonly string[]).includes(s);
+    const count = isForward ? (reachedBeyond[s] || 0) : (funnelCounts[s] || 0);
+    return {
+      stage: STATUS_LABEL[s],
+      key: s,
+      count,
+      currentCount: funnelCounts[s] || 0,
+      isForward,
+      color: STATUS_COLOR[s],
+      textColor: STATUS_COLOR_TEXT[s],
+    };
+  });
   const maxFunnel = Math.max(...funnelData.map((d) => d.count), 1);
 
   // ─── Source breakdown ──
@@ -404,6 +474,30 @@ const Analytics = () => {
       color: KK.green,
       bg: KK.greenLight,
     },
+    {
+      title: 'Pipeline Value',
+      value: fmtMoney(pipelineValue),
+      sub: `${pipelineLeadCount} ลีดที่ยังเปิดอยู่`,
+      icon: TrendingUp,
+      color: KK.blue,
+      bg: KK.blueLight,
+    },
+    {
+      title: 'รายได้รวม',
+      value: fmtMoney(totalRevenue),
+      sub: `${wonInPeriod.length} ดีล · ${periodDays} วันล่าสุด`,
+      icon: DollarSign,
+      color: KK.green,
+      bg: KK.greenLight,
+    },
+    {
+      title: 'ดีลเฉลี่ย',
+      value: fmtMoney(avgDealSize),
+      sub: wonInPeriod.length > 0 ? `จาก ${wonInPeriod.length} ดีลที่ปิด` : 'ยังไม่มีดีลในช่วงนี้',
+      icon: Wallet,
+      color: KK.purple,
+      bg: KK.purpleLight,
+    },
   ];
 
   return (
@@ -470,31 +564,39 @@ const Analytics = () => {
 
         {/* Row 1: Funnel + Source */}
         <div className={`grid grid-cols-1 xl:grid-cols-3 gap-6 ${loading ? 'opacity-30 pointer-events-none' : ''}`}>
-          <div className="xl:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+          <div className="xl:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-6 flex flex-col">
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h3 className="text-base font-bold text-gray-900">Lead Funnel</h3>
-                <p className="text-xs text-gray-500 mt-0.5">กรวยปิดดีล · ลีดทั้งหมด {leads.length} คน</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  กรวยปิดดีล · ลีดทั้งหมด {leads.length} คน · ตัวเลข = ลีดที่<strong>เคยผ่าน</strong> stage นี้ ('เสียดีล' = นับเฉพาะปัจจุบัน)
+                </p>
               </div>
             </div>
-            <div className="flex items-end justify-between gap-3 sm:gap-4 h-56 px-2 pt-6">
-              {funnelData.map((f, i) => {
+            <div className="flex-1 flex items-end justify-between gap-3 sm:gap-4 min-h-[14rem] px-2 pt-6 pb-2">
+              {funnelData.map((f) => {
                 const heightPct = (f.count / maxFunnel) * 100;
-                const prev = i > 0 ? funnelData[i - 1].count : 0;
-                const drop = prev > 0 && f.count < prev ? ((prev - f.count) / prev) * 100 : 0;
                 const totalPct = leads.length > 0 ? (f.count / leads.length) * 100 : 0;
+                const pass = stagePassRate(f.key);
+                // For forward-chain stages, show "ค้างอยู่ N" if some leads are still parked at this stage
+                const showCurrent = f.isForward && f.currentCount > 0 && f.currentCount !== f.count;
                 return (
                   <div key={f.key} className="flex-1 flex flex-col items-center justify-end h-full min-w-0">
                     {/* Count on top */}
                     <div className="flex flex-col items-center mb-1.5">
                       <span className="text-sm font-bold text-gray-900 tabular-nums leading-none">{f.count}</span>
                       <span className="text-[10px] text-gray-600 tabular-nums mt-0.5">{totalPct.toFixed(0)}%</span>
+                      {showCurrent && (
+                        <span className="text-[9px] text-gray-400 tabular-nums mt-0.5" title="ลีดที่ยังอยู่ที่ stage นี้ตอนนี้ (ไม่นับที่เลื่อนไปข้างหน้าแล้ว)">
+                          ค้าง {f.currentCount}
+                        </span>
+                      )}
                     </div>
                     {/* Bar */}
                     <div className="w-full max-w-[64px] rounded-t-md transition-all"
                       style={{
                         height: `${Math.max(heightPct, 3)}%`,
-                        backgroundColor: '#f87171',
+                        backgroundColor: f.key === 'lost' ? '#9ca3af' : '#f87171',
                         minHeight: f.count > 0 ? '6px' : '2px',
                         opacity: f.count > 0 ? 1 : 0.3,
                       }}
@@ -502,8 +604,13 @@ const Analytics = () => {
                     {/* Label below */}
                     <div className="mt-2 flex flex-col items-center min-h-[34px]">
                       <span className="text-[11px] font-semibold text-gray-800 text-center leading-tight">{f.stage}</span>
-                      {drop > 0 && (
-                        <span className="text-[9px] font-semibold text-rose-600 mt-0.5">↓ ตก {drop.toFixed(0)}%</span>
+                      {pass !== null && (
+                        <span
+                          className={`text-[9px] font-semibold mt-0.5 ${pass >= 50 ? 'text-emerald-600' : pass >= 25 ? 'text-amber-600' : 'text-rose-600'}`}
+                          title="อัตราที่ลีดผ่านจาก stage ก่อนหน้ามาถึง stage นี้ (cumulative)"
+                        >
+                          → ผ่าน {pass.toFixed(0)}%
+                        </span>
                       )}
                     </div>
                   </div>
@@ -686,7 +793,7 @@ const Analytics = () => {
           </div>
           <p className="text-xs text-gray-500 mb-5">ยูนิตที่มีคนสนใจมากสุด · top 6</p>
           {hotListings.length === 0 ? (
-            <div className="h-[180px] flex items-center justify-center text-sm text-gray-400">ยังไม่มี inquiry บนยูนิตใด</div>
+            <div className="h-[180px] flex items-center justify-center text-sm text-gray-400">ยังไม่มียูนิตที่มีคนสนใจ</div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               {hotListings.map((u, i) => {
@@ -717,7 +824,7 @@ const Analytics = () => {
                       <p className="text-xs font-bold text-gray-900 truncate">{u.unitNumber}</p>
                       <p className="text-[11px] text-gray-500 truncate">{u.propName}</p>
                       <p className="text-[11px] mt-1 tabular-nums" style={{ color: KK.red }}>
-                        🔥 {u.inquiries} inquiries · {u.uniqueLeads} leads
+                        🔥 ดู {u.inquiries} ครั้ง · {u.uniqueLeads} คน
                       </p>
                     </div>
                   </button>
@@ -735,17 +842,17 @@ const Analytics = () => {
           </div>
           <p className="text-xs text-gray-500 mb-5">ผลงานทีมขาย — ตามมูลค่าดีลที่ปิดได้</p>
           {leaderboard.length === 0 ? (
-            <div className="h-[180px] flex items-center justify-center text-sm text-gray-400">ยังไม่มี sales rep ที่มี deals</div>
+            <div className="h-[180px] flex items-center justify-center text-sm text-gray-400">ยังไม่มีพนักงานขายที่ปิดดีล</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-xs text-gray-500 border-b border-gray-100">
                     <th className="text-left py-2 px-3 font-medium">อันดับ</th>
-                    <th className="text-left py-2 px-3 font-medium">Sales Rep</th>
+                    <th className="text-left py-2 px-3 font-medium">พนักงานขาย</th>
                     <th className="text-right py-2 px-3 font-medium">ดีลปิดได้</th>
                     <th className="text-right py-2 px-3 font-medium">มูลค่ารวม</th>
-                    <th className="text-right py-2 px-3 font-medium">Leads ดูแลอยู่</th>
+                    <th className="text-right py-2 px-3 font-medium">ลีดที่ดูแลอยู่</th>
                   </tr>
                 </thead>
                 <tbody>
