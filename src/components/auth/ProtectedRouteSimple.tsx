@@ -23,9 +23,18 @@ export const ProtectedRouteSimple = ({
       navigate('/', { replace: true })
     }
 
-    // For protected routes, redirect to login if not authenticated
+    // For protected routes, redirect to login if not authenticated.
+    // Route to the appropriate login surface based on the URL space the user is in:
+    //   /customer/* → customer login (passwordless OTP / LINE)
+    //   everything else → staff login (email + password)
+    // Also preserve the originally-requested URL via ?return= so we can bounce them
+    // back after auth — same pattern as handleExpressInterest.
     if (!onlyGuests && authChecked && !user) {
-      navigate('/auth/login', { replace: true })
+      const currentPath = window.location.pathname + window.location.search
+      const isCustomerRoute = window.location.pathname.startsWith('/customer/')
+      const loginPath = isCustomerRoute ? '/customer/login' : '/auth/login'
+      const returnTo = isCustomerRoute ? `?return=${encodeURIComponent(currentPath)}` : ''
+      navigate(`${loginPath}${returnTo}`, { replace: true })
     }
 
     // Check if user needs to change password (but not on change-password page itself)

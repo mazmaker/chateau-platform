@@ -1,4 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
+import { startViewTracking } from '@/lib/viewTracking';
+import SitePlanViewer from '@/components/properties/SitePlanViewer';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Building2, MapPin, Bed, Bath, Square, Loader2, ChevronRight, LayoutGrid, List as ListIcon, Heart, SlidersHorizontal, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -127,6 +129,20 @@ const CustomerPropertyDetail = () => {
     load();
   }, [id]);
 
+  // Funnel-layer-1 tracking for property-level browse. Records once the property
+  // has loaded so we have tenant_id. Same anonymous visitor_id is reused across
+  // property → unit transitions, so we can chain "viewed project then drilled into A-101".
+  useEffect(() => {
+    if (!id || !property) return;
+    const tracker = startViewTracking({
+      tenantId: (property as any).tenant_id,
+      propertyId: id,
+      unitId: null,
+      pagePath: window.location.pathname,
+    });
+    return () => tracker.flush();
+  }, [id, property?.id]);
+
   // Apply: (1) status pill, (2) budget filter, (3) bedroom filter
   // Must be declared BEFORE any conditional early returns to satisfy Rules of Hooks.
   const visible = useMemo(() => {
@@ -223,6 +239,11 @@ const CustomerPropertyDetail = () => {
         <StatBlock value={counts.reserved} label="จอง" tone="amber" />
         <StatBlock value={counts.sold} label="ขายแล้ว" tone="gray" />
       </div>
+
+      {/* Site Plan — multi-plan tabbed viewer with clickable hotspots. Component
+          self-hides when the project has no plans, so this is safe to always render.
+          Clicking a pin navigates to /customer/units/:id (handled inside the viewer). */}
+      {id && <SitePlanViewer propertyId={id} />}
 
       {/* Unit Filter + View Toggle */}
       <div id="unit-list">

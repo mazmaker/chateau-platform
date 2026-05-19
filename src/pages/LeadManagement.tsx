@@ -11,6 +11,7 @@ import { LeadPriorityEditor } from '@/components/leads/LeadPriorityEditor';
 import { getPurchasePurposeLabel as sharedGetPurchasePurposeLabel } from '@/lib/purchasePurpose';
 import PaymentModal from '@/components/leads/PaymentModal';
 import HandoffLeadDialog from '@/components/leads/HandoffLeadDialog';
+import QuickReserveDialog from '@/components/leads/QuickReserveDialog';
 import { toast } from 'sonner';
 import {
   Card,
@@ -244,6 +245,9 @@ const LeadManagement = () => {
   const [editingVisitId, setEditingVisitId] = useState<string | null>(null);
   const [visitDateDraft, setVisitDateDraft] = useState<string>('');
   const [savingVisit, setSavingVisit] = useState(false);
+  // Quick Reserve — close-deal-from-lead flow (matches Sansiri/AP "on-the-spot" pattern)
+  const [reserveInterest, setReserveInterest] = useState<LeadInterestWithDetails | null>(null);
+  const [showReserveDialog, setShowReserveDialog] = useState(false);
 
   const toLocalInputValue = (iso?: string) => {
     if (!iso) return '';
@@ -608,9 +612,16 @@ const LeadManagement = () => {
     setUpdatingStatus(true);
     try {
       const nowIso = new Date().toISOString();
+      // Status only auto-bumps from "new" to "contacted" on the first call so we don't
+      // overwrite later stages (negotiating/reserved/won). Every subsequent click just
+      // refreshes last_contact_date — this is the "I just called again" semantics that
+      // keeps Hot Leads' "ติดต่อล่าสุด" accurate.
+      const updates: Record<string, any> = { last_contact_date: nowIso };
+      if (lead.status === 'new') updates.status = 'contacted';
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.from('leads') as any)
-        .update({ status: 'contacted', last_contact_date: nowIso }).eq('id', lead.id);
+        .update(updates).eq('id', lead.id);
       if (error) throw error;
       // Log activity
       const customerName = getCustomerName(lead);
@@ -622,7 +633,7 @@ const LeadManagement = () => {
         description: `ติดต่อลูกค้า ${customerName}`,
         metadata: { lead_id: lead.id, customer_id: lead.customer_id },
       });
-      setSelectedLead({ ...lead, status: 'contacted', last_contact_date: nowIso } as any);
+      setSelectedLead({ ...lead, ...updates } as any);
       await fetchLeads();
       await fetchLeadActivities(lead.id);
     } catch (err: any) {
@@ -799,17 +810,6 @@ const LeadManagement = () => {
       <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md ${cfg.badge}`}>
         <Icon className="w-3 h-3" />
         {cfg.label}
-      </span>
-    );
-  };
-
-  // Compact inline (used inside dropdown trigger — no nested borders)
-  const getStatusInline = (status: LeadStatus) => {
-    const cfg = STATUS_CONFIG[status] || { label: status || 'ไม่ระบุ', shortLabel: undefined, dot: '#6b7280' };
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-800">
-        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: cfg.dot }} />
-        <span className="truncate">{cfg.shortLabel || cfg.label}</span>
       </span>
     );
   };
@@ -1199,55 +1199,8 @@ const LeadManagement = () => {
                           <span className="text-muted-foreground">-</span>
                         )}
                       </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <Select
-                          value={lead.status}
-                          onValueChange={(value: LeadStatus) => handleUpdateStatus(lead, value)}
-                        >
-                          <SelectTrigger className="w-[150px] h-8 text-xs bg-white">
-                            <SelectValue>
-                              {getStatusInline(lead.status)}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="new">
-                              <div className="flex items-center gap-2">
-                                <FileText className="w-3 h-3" />
-                                <span>ใหม่</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="contacted">
-                              <div className="flex items-center gap-2">
-                                <Phone className="w-3 h-3" />
-                                <span>ติดต่อแล้ว</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="qualified">
-                              <div className="flex items-center gap-2">
-                                <CheckCircle className="w-3 h-3" />
-                                <span>มีคุณสมบัติ</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="negotiating">
-                              <div className="flex items-center gap-2">
-                                <TrendingUp className="w-3 h-3" />
-                                <span>กำลังเจรจา</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="won">
-                              <div className="flex items-center gap-2">
-                                <CheckCircle className="w-3 h-3 text-green-600" />
-                                <span>ปิดการขายสำเร็จ</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="lost">
-                              <div className="flex items-center gap-2">
-                                <XCircle className="w-3 h-3 text-red-600" />
-                                <span>สูญเสีย</span>
-                              </div>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
+                      <TableCell>
+                        {getStatusBadge(lead.status)}
                       </TableCell>
                       <TableCell>
                         {/* Real Potential Score from database */}
@@ -1447,6 +1400,14 @@ const LeadManagement = () => {
                       {customer?.phone && (
                         <a
                           href={`tel:${customer.phone}`}
+                          onClick={() => {
+                            // Auto-log contact when Sales clicks the call button. Fire-and-forget
+                            // so we don't block the tel: navigation that takes the user to their
+                            // dialer. The handler also bumps status to 'contacted' on first call.
+                            // Caveat: we register a click attempt, not a successful conversation —
+                            // Phase 2 (Twilio/Aircall integration) will capture real call duration.
+                            void markLeadContacted(selectedLead);
+                          }}
                           className="flex-1 min-w-[100px] flex items-center justify-center gap-1.5 h-10 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 font-semibold text-xs transition-colors"
                         >
                           <Phone className="w-3.5 h-3.5" /> โทร
@@ -1466,16 +1427,19 @@ const LeadManagement = () => {
                           <Mail className="w-3.5 h-3.5" /> อีเมล
                         </a>
                       )}
-                      {selectedLead.status === 'new' && (
-                        <button
-                          onClick={() => markLeadContacted(selectedLead)}
-                          disabled={updatingStatus}
-                          className="flex-1 min-w-[140px] flex items-center justify-center gap-1.5 h-10 rounded-lg bg-chateau text-white hover:bg-chateau-700 font-semibold text-xs transition-colors disabled:opacity-50"
-                        >
-                          <CheckCircle className="w-3.5 h-3.5" />
-                          {updatingStatus ? 'กำลังบันทึก...' : 'บันทึก "ติดต่อแล้ว"'}
-                        </button>
-                      )}
+                      {/* Repeatable contact-log button. Always visible regardless of lead status —
+                          Sales clicks it after every phone call / LINE chat to refresh
+                          last_contact_date. On the first click for a "new" lead, the markLeadContacted
+                          handler also bumps status to "contacted". */}
+                      <button
+                        onClick={() => markLeadContacted(selectedLead)}
+                        disabled={updatingStatus}
+                        className="flex-1 min-w-[140px] flex items-center justify-center gap-1.5 h-10 rounded-lg bg-chateau text-white hover:bg-chateau-700 font-semibold text-xs transition-colors disabled:opacity-50"
+                        title="บันทึกว่าเพิ่งติดต่อลูกค้ารายนี้ — กดได้ทุกครั้งที่โทร/แชท"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        {updatingStatus ? 'กำลังบันทึก...' : 'บันทึกการติดต่อ'}
+                      </button>
                     </div>
                   </div>
 
@@ -1551,35 +1515,73 @@ const LeadManagement = () => {
                                     </Button>
                                   </div>
                                 ) : !dim ? (
-                                  <div className="flex items-center gap-2 mt-1">
-                                    {interest.viewing_date ? (
-                                      <p className="text-[11px] text-amber-700 font-medium">
-                                        📅 นัดดู {new Date(interest.viewing_date).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                                      </p>
-                                    ) : ['viewed', 'negotiating', 'reserved', 'won'].includes(interest.status as string) ? (
-                                      // Lead progressed past viewing — must have already viewed even without a date row
-                                      <span className="text-[11px] text-green-700 font-medium">✓ ลูกค้าดูแล้ว</span>
-                                    ) : (
-                                      <span className="text-[11px] text-gray-400">ยังไม่มีนัด</span>
-                                    )}
+                                  // Two-row layout: status line on top, primary action + overflow menu below.
+                                  // Keeps "บันทึกการจอง" (primary) prominent on the right while secondary
+                                  // visit-scheduling actions live inside the ⋯ menu — reduces visual noise
+                                  // for the most common case where Agent only needs to record a reservation.
+                                  <div className="mt-1 space-y-1">
+                                    <div className="text-[11px]">
+                                      {interest.viewing_date ? (
+                                        <span className="text-amber-700 font-medium">
+                                          📅 นัดดู {new Date(interest.viewing_date).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                      ) : ['viewed', 'negotiating', 'reserved', 'won'].includes(interest.status as string) ? (
+                                        <span className="text-green-700 font-medium">✓ ลูกค้าดูแล้ว</span>
+                                      ) : (
+                                        <span className="text-gray-400">ยังไม่มีนัด</span>
+                                      )}
+                                    </div>
                                     {(userRole === 'agent' || userRole === 'sales' || userRole === 'admin' || userRole === 'owner') && (
-                                      <>
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); setEditingVisitId(interest.id); setVisitDateDraft(toLocalInputValue(interest.viewing_date)); }}
-                                          className="text-[11px] text-chateau hover:underline font-medium"
-                                        >
-                                          {interest.viewing_date ? 'แก้นัด' : '+ นัดดู'}
-                                        </button>
-                                        {interest.viewing_date && (
+                                      <div className="flex items-center gap-2">
+                                        {/* Primary action: Quick Reserve. Hidden when interest is reserved/won/lost/dropped
+                                            OR when the unit is no longer 'available'. Atomic check on the backend is the
+                                            authoritative guard; this is UX to avoid offering a doomed click. */}
+                                        {!['reserved', 'won', 'lost', 'dropped'].includes(interest.status as string)
+                                          && interest.unit?.status === 'available' && (
                                           <button
-                                            onClick={(e) => { e.stopPropagation(); cancelVisitDate(interest.id); }}
-                                            disabled={savingVisit}
-                                            className="text-[11px] text-red-600 hover:underline font-medium"
+                                            onClick={(e) => { e.stopPropagation(); setReserveInterest(interest); setShowReserveDialog(true); }}
+                                            className="text-[11px] text-green-700 hover:underline font-semibold"
+                                            title="ล็อกยูนิตและรับเงินมัดจำให้ลูกค้ารายนี้"
                                           >
-                                            ยกเลิกนัด
+                                            บันทึกการจอง
                                           </button>
                                         )}
-                                      </>
+                                        {!['reserved', 'won', 'lost', 'dropped'].includes(interest.status as string)
+                                          && interest.unit?.status && interest.unit.status !== 'available' && (
+                                          <span className="text-[11px] text-gray-400 italic" title={`สถานะยูนิต: ${interest.unit.status}`}>
+                                            ยูนิตไม่ว่าง
+                                          </span>
+                                        )}
+
+                                        {/* Overflow menu: nat-scheduling actions. Cancel is destructive so it stays
+                                            visually distinct (red) inside the menu rather than next to the primary. */}
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger asChild>
+                                            <button
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="ml-auto p-1 rounded hover:bg-gray-200 text-gray-500"
+                                              aria-label="ตัวเลือกเพิ่มเติม"
+                                            >
+                                              <MoreHorizontal className="w-3.5 h-3.5" />
+                                            </button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditingVisitId(interest.id); setVisitDateDraft(toLocalInputValue(interest.viewing_date)); }}>
+                                              <Calendar className="w-3.5 h-3.5 mr-2" />
+                                              {interest.viewing_date ? 'แก้นัดดู' : 'นัดดู'}
+                                            </DropdownMenuItem>
+                                            {interest.viewing_date && (
+                                              <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); cancelVisitDate(interest.id); }}
+                                                disabled={savingVisit}
+                                                className="text-red-600 focus:text-red-700"
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5 mr-2" /> ยกเลิกนัด
+                                              </DropdownMenuItem>
+                                            )}
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
+                                      </div>
                                     )}
                                   </div>
                                 ) : null}
@@ -2029,6 +2031,29 @@ const LeadManagement = () => {
             leadName={getCustomerName(selectedLeadForPayment)}
           />
         )}
+
+        {/* Quick Reserve Dialog — close-deal-from-lead (matches Sansiri/AP on-the-spot reservation pattern) */}
+        <QuickReserveDialog
+          open={showReserveDialog}
+          onOpenChange={(open) => {
+            setShowReserveDialog(open);
+            if (!open) setReserveInterest(null);
+          }}
+          lead={selectedLead ? { id: selectedLead.id, customer_id: selectedLead.customer_id, tenant_id: selectedLead.tenant_id } : null}
+          interest={reserveInterest}
+          customerName={selectedLead ? getCustomerName(selectedLead) : ''}
+          customerPhone={selectedLead ? (customers.find(c => c.id === selectedLead.customer_id)?.phone) : undefined}
+          userId={userProfile?.id || ''}
+          isAgent={userRole === 'agent'}
+          onSuccess={() => {
+            if (selectedLead) {
+              fetchLeadInterests(selectedLead.id);
+              fetchLeadActivities(selectedLead.id);
+            }
+            fetchLeads();
+            fetchInterestCounts();
+          }}
+        />
 
         {/* Handoff Dialog (Agent → Sales) */}
         <HandoffLeadDialog

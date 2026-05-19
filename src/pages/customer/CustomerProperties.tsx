@@ -278,7 +278,10 @@ const CustomerProperties = () => {
           )}
         </div>
       ) : (
-        <div className="space-y-3">
+        // Grid layout matches the units grid pattern (CustomerPropertyDetail) so the
+        // customer's eye doesn't have to readjust between project list and unit list.
+        // 1-column on mobile (cards stay legible), 2-column from sm: breakpoint up.
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {filtered.map(({ p, allUnits, matchedUnits }) => {
             const unitFilterActive = budgetFilter !== 'all' || bedFilter !== 'all';
             const displayUnits = unitFilterActive ? matchedUnits : allUnits;
@@ -295,67 +298,72 @@ const CustomerProperties = () => {
                   const search = qs.toString();
                   navigate(`/customer/properties/${p.id}${search ? `?${search}` : ''}`);
                 }}
-                className="w-full bg-white border border-gray-100 rounded-2xl overflow-hidden hover:border-gray-200 hover:shadow-sm transition-all text-left active:scale-[0.99]"
+                className="group bg-white rounded-2xl overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:shadow-[0_12px_28px_rgba(0,0,0,0.12)] hover:-translate-y-1 transition-all duration-300 ease-out text-left flex flex-col"
               >
-                {/* Image */}
-                <div className="relative h-44 bg-gray-100">
+                {/* Image with subtle zoom-on-hover (overflow-hidden clips the scaled child).
+                    Gradient overlay improves badge contrast on bright photos. */}
+                <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden">
                   {p.thumbnail_url ? (
-                    <img src={p.thumbnail_url} alt={p.name} className="w-full h-full object-cover" />
+                    <img
+                      src={p.thumbnail_url}
+                      alt={p.name}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                    />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <Building2 className="w-12 h-12 text-gray-300" />
                     </div>
                   )}
+                  {/* Subtle gradient bottom so the price chip we'll overlay later (or unit count)
+                      reads against bright photos. Also gives the card a more "magazine" feel. */}
+                  <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/30 to-transparent pointer-events-none" />
+
                   {p.is_featured && (
-                    <span className="absolute top-3 left-3 bg-amber-400 text-amber-900 text-[10px] font-bold px-2.5 py-1 rounded-full shadow">
+                    <span className="absolute top-2.5 left-2.5 bg-amber-400 text-amber-900 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md backdrop-blur-sm">
                       ⭐ แนะนำ
                     </span>
                   )}
                   {p.type && TYPE_LABEL[p.type] && (
-                    <span className="absolute top-3 right-3 bg-white/95 backdrop-blur text-gray-800 text-[10px] font-semibold px-2.5 py-1 rounded-full shadow">
+                    <span className="absolute top-2.5 right-2.5 bg-white/95 backdrop-blur text-gray-800 text-[10px] font-semibold px-2.5 py-1 rounded-full shadow-md">
                       {TYPE_LABEL[p.type]}
                     </span>
                   )}
+                  {/* Price tag overlaid on image (bottom-left) — far more eye-catching than buried in a row below. */}
+                  {minP != null && (
+                    <div className="absolute bottom-2.5 left-2.5 text-white">
+                      <p className="text-[10px] font-medium leading-none mb-0.5 text-white/90">
+                        {minP === maxP ? 'ราคา' : 'เริ่มต้น'}
+                      </p>
+                      <p className="text-base font-bold leading-tight drop-shadow">
+                        {fmtPrice(minP)}
+                      </p>
+                    </div>
+                  )}
+                  {/* Unit count chip bottom-right of image */}
+                  <span className="absolute bottom-2.5 right-2.5 bg-white/95 backdrop-blur text-gray-800 text-[10px] font-semibold px-2 py-0.5 rounded-full shadow-md flex items-center gap-1">
+                    <Square className="w-2.5 h-2.5" /> {allUnits.length} ยูนิต
+                  </span>
                 </div>
 
-                {/* Info */}
-                <div className="p-4">
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <h3 className="text-base font-bold text-gray-900 truncate">{p.name}</h3>
-                  </div>
-                  {p.developer && <p className="text-xs text-gray-500 mb-2">โดย {p.developer}</p>}
+                {/* Info — leaner now that price+unit-count moved onto the image. */}
+                <div className="p-3.5 flex-1 flex flex-col">
+                  <h3 className="text-sm font-bold text-gray-900 truncate group-hover:text-chateau transition-colors">{p.name}</h3>
+                  {p.developer && <p className="text-[11px] text-gray-500 truncate mt-0.5">โดย {p.developer}</p>}
 
                   {addr(p.address) && (
-                    <p className="text-xs text-gray-600 flex items-center gap-1 mb-3">
-                      <MapPin className="w-3 h-3 text-gray-400" /> {addr(p.address)}
+                    <p className="text-[11px] text-gray-600 flex items-center gap-1 mt-2 truncate">
+                      <MapPin className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                      <span className="truncate">{addr(p.address)}</span>
                     </p>
                   )}
 
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="flex items-center gap-1 text-gray-500">
-                        <Square className="w-3 h-3" /> {allUnits.length} ยูนิตว่าง
+                  {unitFilterActive && (
+                    <div className="mt-2">
+                      <span className="bg-chateau/10 text-chateau text-[10px] font-semibold px-2 py-0.5 rounded-full">
+                        {matchedUnits.length} ยูนิตตรงเงื่อนไข
                       </span>
-                      {unitFilterActive && (
-                        <span className="bg-chateau/10 text-chateau font-semibold px-2 py-0.5 rounded-full">
-                          {matchedUnits.length} ตรงเงื่อนไข
-                        </span>
-                      )}
                     </div>
-                    {minP != null && (
-                      <p className="text-sm font-bold text-gray-900">
-                        {minP === maxP ? (
-                          <span className="text-chateau">{fmtPrice(minP)}</span>
-                        ) : (
-                          <>
-                            <span className="text-chateau">{fmtPrice(minP)}</span>
-                            <span className="text-gray-400 mx-1">-</span>
-                            <span className="text-chateau">{fmtPrice(maxP!)}</span>
-                          </>
-                        )}
-                      </p>
-                    )}
-                  </div>
+                  )}
                 </div>
               </button>
             );

@@ -1,17 +1,34 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Phone, ArrowRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { captureReferralFromUrl } from '@/lib/referralCode';
 
 const CustomerLogin = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // `return` param sent by anon visitors who tried a gated action (e.g. "ฉันสนใจ")
+  // on a public page. After successful login we bounce them back so they don't lose
+  // their browsing context. Restricted to /customer/* paths to prevent open-redirect.
+  const rawReturn = searchParams.get('return');
+  const returnTo = rawReturn && rawReturn.startsWith('/customer/') && !rawReturn.includes('//')
+    ? rawReturn
+    : '/customer';
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Capture ?ref=AG-2026-NNN if customer arrived here via an Agent link
+  // (either landed directly on /customer/login?ref=... or was bounced from a
+  // protected route that preserved the query string). Stored silently in
+  // sessionStorage; read back when the customer creates their first lead.
+  useEffect(() => {
+    captureReferralFromUrl();
+  }, []);
 
   const handleLineLogin = () => {
     // LINE Channel ID is public — safe to expose in frontend.
@@ -58,7 +75,7 @@ const CustomerLogin = () => {
       if (setErr) throw setErr;
 
       toast.success(result.isNew ? 'ยินดีต้อนรับสู่ Chateau' : `สวัสดี ${result.full_name || 'คุณ'}`);
-      navigate('/customer', { replace: true });
+      navigate(returnTo, { replace: true });
     } catch (err: any) {
       console.error('Customer login error:', err);
       setError(err.message || 'เกิดข้อผิดพลาด');

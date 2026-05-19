@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   X,
   Save,
@@ -52,6 +53,7 @@ interface EditingProject {
   };
   is_active?: boolean;
   is_featured?: boolean;
+  commission_rate_agent_pct?: number;
 }
 
 interface CreateProjectModalProps {
@@ -100,6 +102,7 @@ interface TenantOption {
 }
 
 const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject, scrollToSection, pageMode = false }: CreateProjectModalProps) => {
+  const navigate = useNavigate();
   const { currentTenant, userRole } = useSimpleAuth();
   const isEditing = !!editingProject;
   const isOwner = userRole === 'owner';
@@ -138,7 +141,8 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
     master_plan_url: "",
     location_lat: "",
     location_lng: "",
-    nearby: [] as { name: string; type: string; distance_km: number }[]
+    nearby: [] as { name: string; type: string; distance_km: number }[],
+    commission_rate_agent_pct: "3.00",
   });
 
   const [loading, setLoading] = useState(false);
@@ -263,7 +267,8 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
           master_plan_url: (editingProject as any).master_plan_url || "",
           location_lat: (editingProject as any).location_lat?.toString() || "",
           location_lng: (editingProject as any).location_lng?.toString() || "",
-          nearby: ((editingProject as any).nearby as any[]) || []
+          nearby: ((editingProject as any).nearby as any[]) || [],
+          commission_rate_agent_pct: editingProject.commission_rate_agent_pct?.toString() || "3.00",
         });
 
         // Reset flag after form has been populated
@@ -460,7 +465,8 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
       master_plan_url: "",
       location_lat: "",
       location_lng: "",
-      nearby: []
+      nearby: [],
+      commission_rate_agent_pct: "3.00",
     });
     setDistricts([]);
     setSubDistricts([]);
@@ -610,7 +616,10 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
         master_plan_url: formData.master_plan_url || null,
         location_lat: formData.location_lat ? parseFloat(formData.location_lat) : null,
         location_lng: formData.location_lng ? parseFloat(formData.location_lng) : null,
-        nearby: formData.nearby.length > 0 ? formData.nearby : null
+        nearby: formData.nearby.length > 0 ? formData.nearby : null,
+        commission_rate_agent_pct: formData.commission_rate_agent_pct
+          ? Math.min(30, Math.max(0, parseFloat(formData.commission_rate_agent_pct)))
+          : 3.00,
       };
 
       let dbError;
@@ -836,6 +845,25 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
                         disabled={loading}
                         className="mt-1.5"
                       />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="commission_rate_agent_pct" className="text-sm font-medium">
+                        ค่าคอม Agent (%) <span className="text-gray-400 text-xs font-normal">— ใช้คำนวณเงินคอมเมื่อปิดการขาย</span>
+                      </Label>
+                      <Input
+                        id="commission_rate_agent_pct"
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="30"
+                        value={formData.commission_rate_agent_pct}
+                        onChange={(e) => setFormData(prev => ({ ...prev, commission_rate_agent_pct: e.target.value }))}
+                        placeholder="3.00"
+                        disabled={loading}
+                        className="mt-1.5"
+                      />
+                      <p className="text-[11px] text-gray-500 mt-1">ค่าเริ่มต้น 3% (ตามมาตรฐาน Sansiri/AP) — Agent ภายนอกได้รับเปอร์เซ็นต์ของราคาขาย</p>
                     </div>
 
                     <div>
@@ -1222,27 +1250,43 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
                   </div>
                 </div>
                 <div className="p-5 space-y-4">
-                  {/* Master plan URL */}
-                  <div>
-                    <Label htmlFor="master_plan_url" className="text-sm font-medium">ผังโครงการ (URL รูป)</Label>
-                    <Input
-                      id="master_plan_url"
-                      type="url"
-                      value={formData.master_plan_url}
-                      onChange={(e) => setFormData(prev => ({ ...prev, master_plan_url: e.target.value }))}
-                      placeholder="https://... (รูป master plan ของโครงการ)"
-                      disabled={loading}
-                      className="mt-1.5"
-                    />
-                    {formData.master_plan_url && (
-                      <img
-                        src={formData.master_plan_url}
-                        alt="Master plan preview"
-                        className="mt-2 w-full max-h-48 object-cover rounded-lg border border-gray-200"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                      />
-                    )}
-                  </div>
+                  {/* Site Plans — moved to a dedicated editor that supports multiple
+                      plans + clickable hotspots. The old single-URL field here was
+                      removed because it can't model floor plans and there's no good
+                      authoring UX for placing pins inside a modal. The button below
+                      opens the standalone editor; only available after the project
+                      has been created (needs an id). */}
+                  {isEditing && editingProject?.id ? (
+                    <div className="rounded-xl border border-dashed border-chateau/30 bg-chateau/5 p-4">
+                      <div className="flex items-start gap-3">
+                        <MapPin className="w-5 h-5 text-chateau flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900">ผังโครงการ (Site Plan)</p>
+                          <p className="text-xs text-gray-600 mt-0.5">
+                            อัปโหลดได้หลายผัง (ผังรวม / ผังชั้น) · ปักหมุดแต่ละยูนิตให้คลิกได้
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            if (editingProject?.id) navigate(`/properties/${editingProject.id}/plans`);
+                          }}
+                          className="flex-shrink-0"
+                        >
+                          จัดการผัง
+                          <ExternalLink className="w-3.5 h-3.5 ml-1.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
+                      <p className="text-xs text-gray-500 flex items-center gap-2">
+                        <MapPin className="w-4 h-4" />
+                        บันทึกโครงการก่อน แล้วเข้ามาแก้ไขเพื่อจัดการผังโครงการได้
+                      </p>
+                    </div>
+                  )}
 
                   {/* Interactive map picker */}
                   <div>
@@ -1306,15 +1350,15 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="shopping">🏬 ห้าง / shopping</SelectItem>
-                                <SelectItem value="transit">🚇 รถไฟฟ้า / transit</SelectItem>
-                                <SelectItem value="hospital">🏥 โรงพยาบาล</SelectItem>
-                                <SelectItem value="school">🏫 โรงเรียน</SelectItem>
-                                <SelectItem value="airport">✈️ สนามบิน</SelectItem>
-                                <SelectItem value="beach">🏖 ชายหาด</SelectItem>
-                                <SelectItem value="market">🍜 ตลาด</SelectItem>
-                                <SelectItem value="landmark">🛕 สถานที่สำคัญ</SelectItem>
-                                <SelectItem value="leisure">⛳ พักผ่อน</SelectItem>
+                                <SelectItem value="shopping">ห้าง / Shopping</SelectItem>
+                                <SelectItem value="transit">รถไฟฟ้า / Transit</SelectItem>
+                                <SelectItem value="hospital">โรงพยาบาล</SelectItem>
+                                <SelectItem value="school">โรงเรียน</SelectItem>
+                                <SelectItem value="airport">สนามบิน</SelectItem>
+                                <SelectItem value="beach">ชายหาด</SelectItem>
+                                <SelectItem value="market">ตลาด</SelectItem>
+                                <SelectItem value="landmark">สถานที่สำคัญ</SelectItem>
+                                <SelectItem value="leisure">พักผ่อน</SelectItem>
                               </SelectContent>
                             </Select>
                             <Input

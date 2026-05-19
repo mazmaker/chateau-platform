@@ -22,6 +22,8 @@ import {
   Zap,
   Trophy,
   UserCheck,
+  Wallet,
+  Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -48,9 +50,9 @@ interface NavGroup {
 
 // Top items (no group label) + Collapsible groups (KK style)
 const NAV_GROUPS: NavGroup[] = [
-  { id: "top",       label: null,              hrefs: ["/", "/owner", "/analytics", "/my-dashboard"] },
+  { id: "top",       label: null,              hrefs: ["/", "/owner", "/analytics", "/my-dashboard", "/my-commissions"] },
   { id: "platform",  label: "PLATFORM CORE",   icon: Building,  hrefs: ["/tenants", "/payments", "/properties"] },
-  { id: "crm",       label: "CRM & SALES",     icon: Users,     hrefs: ["/leads"] },
+  { id: "crm",       label: "CRM & SALES",     icon: Users,     hrefs: ["/leads", "/commissions"] },
   { id: "marketing", label: "MARKETING",       icon: Megaphone, hrefs: ["/campaigns", "/builder", "/triggers", "/marketing-analytics"] },
   { id: "admin",     label: "ADMIN",           icon: Wrench,    hrefs: ["/users", "/permissions", "/customization", "/settings"] },
 ];
@@ -58,12 +60,14 @@ const NAV_GROUPS: NavGroup[] = [
 const getAllNavItems = (): NavItem[] => [
   { icon: LayoutDashboard, label: "Executive Dashboard", href: "/",            requiredRoles: ["OWNER", "ADMIN"] },
   { icon: TrendingUp,      label: "Platform Overview",   href: "/owner",         requiredRoles: ["OWNER"] },
-  { icon: Trophy,          label: "Dashboard ของฉัน",    href: "/my-dashboard",  requiredRoles: ["SALES", "AGENT"] },
+  { icon: Trophy,          label: "แดชบอร์ดส่วนตัว",      href: "/my-dashboard",  requiredRoles: ["SALES", "AGENT"] },
+  { icon: Wallet,          label: "ค่าคอมมิชชั่น",         href: "/my-commissions", requiredRoles: ["AGENT"] },
   { icon: BarChart3,       label: "Analytics",           href: "/analytics",     requiredRoles: ["OWNER", "ADMIN"], requiredFeature: "analytics", isPremium: true },
   { icon: Building2,       label: "จัดการบริษัท",         href: "/tenants",       requiredRoles: ["OWNER"] },
   { icon: CreditCard,      label: "การชำระเงิน",          href: "/payments",      requiredRoles: ["OWNER"] },
   { icon: Building2,       label: "โครงการ",             href: "/properties",    requiredRoles: ["OWNER", "ADMIN", "SALES", "AGENT"] },
   { icon: FileText,        label: "Leads",              href: "/leads",         requiredRoles: ["OWNER", "ADMIN", "SALES", "AGENT"] },
+  { icon: Receipt,         label: "การอนุมัติค่าคอมมิชชั่น", href: "/commissions",   requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Megaphone,       label: "Campaigns",          href: "/campaigns",     requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Wand2,           label: "Builder Wizard",     href: "/builder",       requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Zap,             label: "Triggers",           href: "/triggers",      requiredRoles: ["OWNER", "ADMIN"] },

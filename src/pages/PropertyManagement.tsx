@@ -1657,6 +1657,10 @@ const PropertyManagement = () => {
                   </div>
                   <ManagePropertiesGuard fallback={null} showMessage={false}>
                     <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => navigate(`/properties/${selectedProperty.id}/plans`)}>
+                        <MapPin className="w-4 h-4 mr-2" />
+                        ผังโครงการ
+                      </Button>
                       <Button variant="outline" size="sm" onClick={() => navigate(`/properties/${selectedProperty.id}/edit`)}>
                         <Edit className="w-4 h-4 mr-2" />
                         แก้ไข
@@ -3253,26 +3257,6 @@ const PropertyManagement = () => {
                       </div>
                     )}
 
-                    {/* Feature chips */}
-                    {(viewingUnit.balcony || viewingUnit.garden || viewingUnit.pool || viewingUnit.building) && (
-                      <div>
-                        <p className="text-xs font-semibold text-slate-700 mb-2">คุณสมบัติ</p>
-                        <div className="flex flex-wrap gap-2">
-                          {viewingUnit.pool && (
-                            <Badge variant="secondary" className="bg-cyan-100 text-cyan-800 hover:bg-cyan-200">🏊 มีสระว่ายน้ำ</Badge>
-                          )}
-                          {viewingUnit.garden && (
-                            <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-200">🌿 มีสวน</Badge>
-                          )}
-                          {viewingUnit.balcony && (
-                            <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-200">🪟 มีระเบียง</Badge>
-                          )}
-                          {viewingUnit.building && (
-                            <Badge variant="outline" className="border-orange-300 text-orange-700">🏢 อาคาร {viewingUnit.building}</Badge>
-                          )}
-                        </div>
-                      </div>
-                    )}
 
                     {/* Layout description */}
                     {viewingUnit.layout_description && (
@@ -3310,7 +3294,7 @@ const PropertyManagement = () => {
                           href={viewingUnit.tour_3d_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-medium text-sm shadow-sm hover:shadow-md transition-shadow"
+                          className="inline-flex items-center gap-2 px-4 py-2.5 bg-rose-500 hover:bg-rose-600 text-white rounded-lg font-medium text-sm transition-colors"
                         >
                           <Eye className="w-4 h-4" />
                           เปิด 3D Virtual Tour
@@ -3412,42 +3396,6 @@ const PropertyManagement = () => {
                   </Card>
                 )}
 
-                {/* Nearby places */}
-                {selectedProperty?.nearby && selectedProperty.nearby.length > 0 && (
-                  <Card className="border border-gray-200">
-                    <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
-                      <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                        <MapPin className="w-5 h-5 text-chateau" />
-                        ทำเลใกล้เคียง
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {selectedProperty.nearby.map((place, idx) => {
-                          const icon =
-                            place.type === 'shopping' ? '🏬' :
-                            place.type === 'transit' ? '🚇' :
-                            place.type === 'hospital' ? '🏥' :
-                            place.type === 'school' ? '🏫' :
-                            place.type === 'airport' ? '✈️' :
-                            place.type === 'beach' ? '🏖' :
-                            place.type === 'market' ? '🍜' :
-                            place.type === 'landmark' ? '🛕' :
-                            place.type === 'leisure' ? '⛳' : '📍';
-                          return (
-                            <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
-                              <span className="text-xl flex-shrink-0">{icon}</span>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-900 truncate">{place.name}</p>
-                                <p className="text-xs text-gray-500">{place.distance_km} กม.</p>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
 
                 {/* Leads Interested in This Unit */}
                 <Card className="border border-gray-200">

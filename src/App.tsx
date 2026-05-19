@@ -36,6 +36,9 @@ import CustomerUnitDetail from "./pages/customer/CustomerUnitDetail";
 import CustomerProfile from "./pages/customer/CustomerProfile";
 import CustomerBookings from "./pages/customer/CustomerBookings";
 import MyDashboard from "./pages/MyDashboard";
+import MyCommissions from "./pages/MyCommissions";
+import CommissionApproval from "./pages/CommissionApproval";
+import PropertyPlansEditor from "./pages/PropertyPlansEditor";
 import AcceptInvite from "./pages/AcceptInvite";
 import ForcePasswordChange from "./pages/ForcePasswordChange";
 import { ProtectedRouteSimple } from "@/components/auth/ProtectedRouteSimple";
@@ -256,6 +259,19 @@ const App = () => (
             </ErrorBoundary>
           } />
 
+          <Route path="/properties/:id/plans" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้าจัดการผังโครงการได้"
+              context={{ page: 'property-plans-editor' }}
+            >
+              <ProtectedRouteSimple>
+                <PropertyPlansEditor />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
           <Route path="/properties/:id/edit" element={
             <ErrorBoundary
               showRetry={true}
@@ -310,21 +326,47 @@ const App = () => (
             </ErrorBoundary>
           } />
 
+          <Route path="/my-commissions" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้าเงินคอมของฉันได้"
+              context={{ page: 'my-commissions' }}
+            >
+              <ProtectedRouteSimple>
+                <MyCommissions />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/commissions" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้าค่าคอมมิชชั่นได้"
+              context={{ page: 'commission-approval' }}
+            >
+              <ProtectedRouteSimple>
+                <CommissionApproval />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
           {/* Customer Portal — public login + protected pages */}
           <Route path="/customer/login" element={<CustomerLogin />} />
           <Route path="/customer/line-callback" element={<CustomerLineCallback />} />
-          <Route path="/customer" element={
-            <ProtectedRouteSimple><CustomerDashboard /></ProtectedRouteSimple>
-          } />
-          <Route path="/customer/properties" element={
-            <ProtectedRouteSimple><CustomerProperties /></ProtectedRouteSimple>
-          } />
-          <Route path="/customer/properties/:id" element={
-            <ProtectedRouteSimple><CustomerPropertyDetail /></ProtectedRouteSimple>
-          } />
-          <Route path="/customer/units/:id" element={
-            <ProtectedRouteSimple><CustomerUnitDetail /></ProtectedRouteSimple>
-          } />
+          {/* Customer Portal entry point. Renders TWO modes from one component:
+                - Anonymous: public welcome / featured projects / wishlist (localStorage) / recently-viewed (from property_views)
+                - Authenticated: personal dashboard with bookings + saved units
+              CustomerDashboard internally branches on auth.getUser(). This unifies the
+              "organic visitor lands on chateau.com/customer" UX with the logged-in dashboard.
+          */}
+          <Route path="/customer" element={<CustomerDashboard />} />
+          {/* Public browse — anonymous visitors can view properties/units (Funnel layer 1).
+              Gated actions (express interest, contact) trigger a login modal inline. */}
+          <Route path="/customer/properties" element={<CustomerProperties />} />
+          <Route path="/customer/properties/:id" element={<CustomerPropertyDetail />} />
+          <Route path="/customer/units/:id" element={<CustomerUnitDetail />} />
           <Route path="/customer/profile" element={
             <ProtectedRouteSimple><CustomerProfile /></ProtectedRouteSimple>
           } />

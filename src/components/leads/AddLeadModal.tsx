@@ -852,6 +852,27 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
 
       // Create lead (use first interest for legacy property_id/unit_id fields)
       const firstInterest = interests[0];
+      // Commission attribution — set referred_by_agent_id at creation time.
+      // Rules: (a) if the lead is being assigned to an Agent → that Agent is the referrer.
+      //        (b) if the creator is themselves an Agent and no one else is being assigned → creator is the referrer.
+      // The DB trigger guard_lead_referred_by_immutable() locks this once set, so handoff to Sales
+      // later won't reroute commission credit. See migration 20260519000001.
+      let referredByAgentId: string | null = null;
+      const assignedToId = formData.assigned_to || null;
+      if (assignedToId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: assignee } = await (supabase.from('users') as any)
+          .select('role')
+          .eq('id', assignedToId)
+          .maybeSingle();
+        if (assignee?.role === 'agent') {
+          referredByAgentId = assignedToId;
+        }
+      }
+      if (!referredByAgentId && userRole === 'agent' && userProfile?.id) {
+        referredByAgentId = userProfile.id;
+      }
+
       const leadData = {
         tenant_id: currentTenant?.id,
         customer_id: customer.id,
@@ -859,7 +880,8 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
         unit_id: firstInterest.unit_id,
         status: 'new',
         source: newsSource,
-        assigned_to: formData.assigned_to || null,
+        assigned_to: assignedToId,
+        referred_by_agent_id: referredByAgentId,
         notes: `จุดประสงค์: ${purchasePurpose}`,
         // Lead Scoring - Financial fields
         credit_score: formData.credit_score ? parseInt(formData.credit_score) : null,

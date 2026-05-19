@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Heart, Calendar, ArrowRight, X, Sparkles, ChevronRight } from 'lucide-react';
+import { Building2, Heart, Calendar, ArrowRight, X, Sparkles, ChevronRight, Search, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { addToWishlist, removeFromWishlist as removeFromWishlistDb } from '@/lib/customerWishlist';
+import { getOrCreateVisitorId } from '@/lib/viewTracking';
 import CustomerLayout from './CustomerLayout';
 
 interface CustomerProfile {
@@ -48,8 +49,12 @@ const CustomerDashboard = () => {
   const navigate = useNavigate();
   const [, setProfile] = useState<CustomerProfile | null>(null);
   const [customerId, setCustomerId] = useState<string | null>(null);
+  const [isAnon, setIsAnon] = useState<boolean>(false);
   const [interests, setInterests] = useState<InterestRow[]>([]);
   const [wishlist, setWishlist] = useState<WishlistUnit[]>([]);
+  // Anon-only: featured projects + recently-viewed units (from property_views tracking).
+  const [featuredProperties, setFeaturedProperties] = useState<Array<{ id: string; name: string; thumbnail_url: string | null; base_price: number | null }>>([]);
+  const [recentlyViewed, setRecentlyViewed] = useState<Array<{ id: string; unit_number: string; price: number | null; thumbnail_url: string | null; property_name: string }>>([]);
   const [loading, setLoading] = useState(true);
 
   // Loads the unified "saved units" list — pulls from BOTH localStorage AND lead_interests (DB).
@@ -181,17 +186,82 @@ const CustomerDashboard = () => {
     const load = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
+
         if (!user) {
-          navigate('/customer/login', { replace: true });
+          // Anonymous visitor — render public landing instead of redirecting.
+          // Featured projects = is_active + is_featured (fallback: most-recent active).
+          // Recently viewed = property_views joined by current localStorage visitor_id.
+          setIsAnon(true);
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const featRes = await (supabase.from('properties') as any)
+            .select('id, name, thumbnail_url, base_price, is_active, is_featured')
+            .eq('is_active', true)
+            .order('is_featured', { ascending: false })
+            .order('created_at', { ascending: false })
+            .limit(4);
+          setFeaturedProperties(((featRes.data as any[]) || []).map((p: any) => ({
+            id: p.id, name: p.name, thumbnail_url: p.thumbnail_url, base_price: p.base_price,
+          })));
+
+          // Recently-viewed: last 5 unique units from this visitor's property_views.
+          // Skipped silently if no visitor_id (first ever load).
+          const vid = getOrCreateVisitorId();
+          if (vid) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: viewRows } = await (supabase.from('property_views') as any)
+              .select('unit_id, visited_at')
+              .eq('visitor_id', vid)
+              .not('unit_id', 'is', null)
+              .order('visited_at', { ascending: false })
+              .limit(20);
+            const seenUnits = new Set<string>();
+            const uniqueUnitIds: string[] = [];
+            for (const v of (viewRows || []) as any[]) {
+              if (!seenUnits.has(v.unit_id)) {
+                seenUnits.add(v.unit_id);
+                uniqueUnitIds.push(v.unit_id);
+                if (uniqueUnitIds.length >= 5) break;
+              }
+            }
+            if (uniqueUnitIds.length > 0) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const { data: unitRows } = await (supabase.from('units') as any)
+                .select('id, unit_number, price, thumbnail_url, project_id')
+                .in('id', uniqueUnitIds);
+              const propIds = Array.from(new Set(((unitRows as any[]) || []).map((u: any) => u.project_id)));
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const { data: propRows } = await (supabase.from('properties') as any)
+                .select('id, name').in('id', propIds);
+              const propMap = new Map<string, string>(((propRows as any[]) || []).map((p: any) => [p.id, p.name]));
+              // Preserve the ordering by visited_at (most recent first) — Map lookups instead of re-sort
+              const byId = new Map<string, any>(((unitRows as any[]) || []).map((u: any) => [u.id, u]));
+              setRecentlyViewed(uniqueUnitIds
+                .map((uid) => byId.get(uid))
+                .filter(Boolean)
+                .map((u: any) => ({
+                  id: u.id, unit_number: u.unit_number, price: u.price, thumbnail_url: u.thumbnail_url,
+                  property_name: propMap.get(u.project_id) || '',
+                })));
+            }
+          }
+
+          // Wishlist still works for anon — it pulls from localStorage (the function
+          // handles missing customer_id gracefully — only the DB-merge branch is skipped).
+          await loadWishlist(undefined);
           return;
         }
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: customer } = await (supabase.from('customers') as any)
           .select('id, full_name, email, phone').eq('auth_user_id', user.id).maybeSingle();
         if (!customer) {
+          // User is authed but no customer row — this is the rare invite-flow drift bug.
+          // Sign them out so they retry, but DON'T redirect to login (we now render anon mode
+          // gracefully here instead of bouncing).
           toast.error('ไม่พบข้อมูลลูกค้า');
           await supabase.auth.signOut();
-          navigate('/customer/login', { replace: true });
+          setIsAnon(true);
           return;
         }
         setProfile(customer as CustomerProfile);
@@ -248,6 +318,131 @@ const CustomerDashboard = () => {
   const nextVisitDate = nextVisit?.viewing_date ? new Date(nextVisit.viewing_date) : null;
   const visitDiffDays = nextVisitDate ? Math.ceil((nextVisitDate.getTime() - Date.now()) / 86400000) : 0;
   const visitIsToday = nextVisitDate?.toDateString() === new Date().toDateString();
+
+  // Anonymous landing — public-friendly version of the dashboard. Same shell, same
+  // CustomerLayout, no personal data. Mirrors the section rhythm of the authed view
+  // so the page feels coherent when the same visitor logs in later.
+  if (!loading && isAnon) {
+    return (
+      <CustomerLayout>
+        <>
+          {/* 1. Welcome hero — no name, focus on the action (browse) */}
+          <section className="bg-gradient-to-br from-rose-50/40 to-white border border-gray-100 rounded-2xl p-5">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-lg bg-chateau/10 flex items-center justify-center flex-shrink-0">
+                <Sparkles className="w-5 h-5 text-chateau" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-gray-900">ยินดีต้อนรับสู่ Chateau</p>
+                <p className="text-xs text-gray-600 mt-0.5">ค้นหาบ้านในฝัน · ดูยูนิตจริง · บันทึกเก็บไว้ดูทีหลัง</p>
+              </div>
+            </div>
+            <Button
+              onClick={() => navigate('/customer/properties')}
+              className="w-full mt-4 h-11 bg-chateau hover:bg-chateau-700 text-white"
+            >
+              <Search className="w-4 h-4 mr-2" /> ดูทุกโครงการ
+            </Button>
+          </section>
+
+          {/* 2. Featured projects — 2-up grid, large enough to feel like a marketing piece */}
+          {featuredProperties.length > 0 && (
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-chateau" /> โครงการแนะนำ
+                </h2>
+                <button
+                  onClick={() => navigate('/customer/properties')}
+                  className="text-xs text-chateau hover:underline font-medium flex items-center gap-1"
+                >
+                  ดูทั้งหมด <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {featuredProperties.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => navigate(`/customer/properties/${p.id}`)}
+                    className="group text-left bg-white rounded-2xl overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:shadow-[0_12px_28px_rgba(0,0,0,0.12)] hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col"
+                  >
+                    <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden">
+                      {p.thumbnail_url ? (
+                        <img src={p.thumbnail_url} alt={p.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Building2 className="w-8 h-8 text-gray-300" />
+                        </div>
+                      )}
+                      <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/30 to-transparent pointer-events-none" />
+                      {p.base_price ? (
+                        <div className="absolute bottom-2 left-2 text-white">
+                          <p className="text-[9px] font-medium leading-none mb-0.5 text-white/90">เริ่มต้น</p>
+                          <p className="text-sm font-bold drop-shadow">{fmt(p.base_price)}</p>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="p-3">
+                      <p className="text-sm font-semibold text-gray-900 truncate group-hover:text-chateau transition-colors">{p.name}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* 3. Recently viewed — pulled from property_views.visitor_id (anonymous tracking).
+              Powerful re-engagement: "you looked at this 2 days ago, still interested?" */}
+          {recentlyViewed.length > 0 && (
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-chateau" /> เพิ่งดู
+                </h2>
+              </div>
+              <div className="space-y-2.5">
+                {recentlyViewed.map((u) => (
+                  <button
+                    key={u.id}
+                    onClick={() => navigate(`/customer/units/${u.id}`)}
+                    className="group w-full flex items-center gap-3 bg-white rounded-2xl p-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:shadow-[0_8px_20px_rgba(0,0,0,0.1)] hover:-translate-y-0.5 transition-all duration-300 ease-out text-left"
+                  >
+                    <div className="w-20 h-20 rounded-xl bg-gray-100 flex-shrink-0 overflow-hidden">
+                      {u.thumbnail_url ? (
+                        <img src={u.thumbnail_url} alt={u.unit_number} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Building2 className="w-6 h-6 text-gray-300" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate group-hover:text-chateau transition-colors">ยูนิต {u.unit_number}</p>
+                      <p className="text-xs text-gray-500 truncate mt-0.5">{u.property_name}</p>
+                      {u.price ? (
+                        <p className="text-sm font-bold text-chateau tabular-nums mt-1">{fmt(u.price)}</p>
+                      ) : null}
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0 group-hover:text-chateau group-hover:translate-x-0.5 transition-all" />
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Wishlist is intentionally not shown on the anon dashboard. Anonymous traffic
+              comes here to browse projects, not to manage a personal collection — and
+              surfacing leftover localStorage from a prior logged-in session is confusing
+              ("how do I have saved items when I'm not logged in?"). Wishlist becomes
+              visible after login; the ♡ control on unit detail will move behind a login
+              gate in a separate task. */}
+
+          {/* Login surfaced via the header "เข้าสู่ระบบ" button (CustomerLayout) — no
+              bottom CTA needed. Anon page stays focused on browsing. */}
+        </>
+      </CustomerLayout>
+    );
+  }
 
   return (
     <CustomerLayout>

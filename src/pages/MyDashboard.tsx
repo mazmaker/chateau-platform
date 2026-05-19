@@ -8,6 +8,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
+  Eye,
   Flame,
   Megaphone,
   Send,
@@ -35,6 +36,7 @@ const C = {
   gray:       '#94a3b8',
   grayLight:  '#fafafa',
   border:     '#e5e7eb',
+  indigo:     '#4f46e5',
 };
 
 const formatTHB = (n: number) => {
@@ -108,6 +110,14 @@ const MyDashboard = () => {
   const [myLockedUnits, setMyLockedUnits] = useState<UnitLockedRow[]>([]);
   const [myAssignedUnits, setMyAssignedUnits] = useState<UnitLockedRow[]>([]);
   const [myReferrals, setMyReferrals] = useState<ReferralLead[]>([]);
+  // Funnel layer 1: anonymous views attributed to this Agent's ref_code over the last 30 days.
+  const [viewStats, setViewStats] = useState<{
+    totalViews: number;
+    uniqueVisitors: number;
+    returningVisitors: number;
+    avgDurationSec: number;
+    topUnits: Array<{ unit_id: string | null; unit_number: string; views: number }>;
+  }>({ totalViews: 0, uniqueVisitors: 0, returningVisitors: 0, avgDurationSec: 0, topUnits: [] });
   const [properties, setProperties] = useState<PropertyRow[]>([]);
   const [upcomingVisits, setUpcomingVisits] = useState<Array<{
     id: string;
@@ -194,6 +204,54 @@ const MyDashboard = () => {
               .select('id, status, estimated_value, updated_at, assigned_to, customers(full_name)')
               .in('id', myHandoffLeadIds);
             setMyReferrals((refLeads || []) as ReferralLead[]);
+          }
+
+          // Funnel-layer-1 stats — anonymous visitor views attributed to this Agent
+          // via property_views.ref_agent_id (set when ?ref=AG-2026-NNN matched on visit).
+          // 30-day window matches the "ผลงาน 30 วัน" KPI cards above.
+          const since = new Date(Date.now() - 30 * 86400000).toISOString();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: viewRows } = await (supabase.from('property_views') as any)
+            .select('visitor_id, unit_id, duration_sec, visited_at')
+            .eq('ref_agent_id', myId)
+            .gte('visited_at', since);
+          const views = (viewRows || []) as Array<{ visitor_id: string; unit_id: string | null; duration_sec: number | null; visited_at: string }>;
+          if (views.length > 0) {
+            const visitorCounts = new Map<string, number>();
+            const unitCounts = new Map<string, number>();
+            let durationSum = 0;
+            let durationN = 0;
+            for (const v of views) {
+              visitorCounts.set(v.visitor_id, (visitorCounts.get(v.visitor_id) || 0) + 1);
+              if (v.unit_id) unitCounts.set(v.unit_id, (unitCounts.get(v.unit_id) || 0) + 1);
+              if (typeof v.duration_sec === 'number') {
+                durationSum += v.duration_sec;
+                durationN += 1;
+              }
+            }
+            // Resolve unit numbers for the top units list (single round-trip)
+            const topUnitEntries = Array.from(unitCounts.entries())
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 5);
+            let unitLookup = new Map<string, string>();
+            if (topUnitEntries.length > 0) {
+              const ids = topUnitEntries.map(([id]) => id);
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const { data: unitsResolve } = await (supabase.from('units') as any)
+                .select('id, unit_number').in('id', ids);
+              unitLookup = new Map((unitsResolve || []).map((u: any) => [u.id, u.unit_number]));
+            }
+            setViewStats({
+              totalViews: views.length,
+              uniqueVisitors: visitorCounts.size,
+              returningVisitors: Array.from(visitorCounts.values()).filter((c) => c >= 2).length,
+              avgDurationSec: durationN > 0 ? Math.round(durationSum / durationN) : 0,
+              topUnits: topUnitEntries.map(([unitId, count]) => ({
+                unit_id: unitId,
+                unit_number: unitLookup.get(unitId) || '—',
+                views: count,
+              })),
+            });
           }
         }
 
@@ -582,7 +640,7 @@ const MyDashboard = () => {
                         return (
                           <button
                             key={l.id}
-                            onClick={() => navigate(`/leads?lead=${l.id}`)}
+                            onClick={() => navigate(`/leads/${l.id}`)}
                             className="w-full flex items-start justify-between gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left"
                           >
                             <div className="min-w-0 flex-1">
@@ -749,7 +807,7 @@ const MyDashboard = () => {
                           {myReferrals.map((r) => {
                             const badge = stageBadge(r.status);
                             return (
-                              <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/leads?lead=${r.id}`)}>
+                              <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/leads/${r.id}`)}>
                                 <td className="py-3 px-3 font-medium text-gray-900">{r.customers?.full_name || '(ไม่ระบุ)'}</td>
                                 <td className="py-3 px-3 text-gray-700 text-xs">{r.assigned_to ? '✓ ส่งต่อแล้ว' : '— รอ Sales'}</td>
                                 <td className="py-3 px-3">
@@ -797,7 +855,7 @@ const MyDashboard = () => {
                           {activeDeals.map((l) => {
                             const badge = stageBadge(l.status);
                             return (
-                              <tr key={l.id} className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/leads?lead=${l.id}`)}>
+                              <tr key={l.id} className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/leads/${l.id}`)}>
                                 <td className="py-3 px-3 font-medium text-gray-900">{l.customers?.full_name || '(ไม่ระบุ)'}</td>
                                 <td className="py-3 px-3 text-gray-700">{l.property_id ? propById.get(l.property_id) || '—' : '—'}</td>
                                 <td className="py-3 px-3">
@@ -814,6 +872,72 @@ const MyDashboard = () => {
                           })}
                         </tbody>
                       </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Agent: Funnel-layer-1 view stats (anonymous visitors attributed via ?ref=AG-XXXX).
+                  Sits above the lead detail tables so Agents see "did my marketing work" before
+                  drilling into individual leads. Only shows when Agent has at least 1 view —
+                  empty state would be unhelpful clutter for new Agents. */}
+              {userRole === 'agent' && viewStats.totalViews > 0 && (
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Eye className="w-4 h-4" style={{ color: C.indigo }} />
+                    <h2 className="text-base font-bold text-gray-900">ผู้สนใจจากลิงก์ของคุณ</h2>
+                    <span className="ml-auto text-xs text-gray-500">30 วันล่าสุด</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-5">
+                    คนที่กดลิงก์จากคุณแล้วเข้ามาดูยูนิต/โครงการ — ก่อนกลายเป็น Lead
+                  </p>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+                    <div className="rounded-xl border border-gray-100 bg-gray-50/40 p-4">
+                      <p className="text-[11px] text-gray-500 font-medium">การเข้าชม</p>
+                      <p className="text-2xl font-bold text-gray-900 tabular-nums mt-1">{viewStats.totalViews}</p>
+                    </div>
+                    <div className="rounded-xl border border-gray-100 bg-gray-50/40 p-4">
+                      <p className="text-[11px] text-gray-500 font-medium">ผู้ใช้ไม่ซ้ำ</p>
+                      <p className="text-2xl font-bold text-gray-900 tabular-nums mt-1">{viewStats.uniqueVisitors}</p>
+                    </div>
+                    <div className="rounded-xl border border-gray-100 bg-gray-50/40 p-4">
+                      <p className="text-[11px] text-gray-500 font-medium">กลับมาดูซ้ำ</p>
+                      <p className="text-2xl font-bold text-amber-700 tabular-nums mt-1">{viewStats.returningVisitors}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">สัญญาณสนใจสูง</p>
+                    </div>
+                    <div className="rounded-xl border border-gray-100 bg-gray-50/40 p-4">
+                      <p className="text-[11px] text-gray-500 font-medium">เวลาเฉลี่ย</p>
+                      <p className="text-2xl font-bold text-gray-900 tabular-nums mt-1">
+                        {viewStats.avgDurationSec >= 60
+                          ? `${Math.floor(viewStats.avgDurationSec / 60)}:${String(viewStats.avgDurationSec % 60).padStart(2, '0')}`
+                          : `${viewStats.avgDurationSec}s`}
+                      </p>
+                    </div>
+                  </div>
+
+                  {viewStats.topUnits.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-700 mb-2">ยูนิตที่ถูกดูมากที่สุด</p>
+                      <div className="space-y-1.5">
+                        {viewStats.topUnits.map((u) => {
+                          const maxViews = viewStats.topUnits[0]?.views || 1;
+                          const pct = Math.round((u.views / maxViews) * 100);
+                          return (
+                            <button
+                              key={u.unit_id || u.unit_number}
+                              onClick={() => u.unit_id && navigate(`/units/${u.unit_id}`)}
+                              className="w-full flex items-center gap-3 text-left rounded-lg px-3 py-2 hover:bg-gray-50"
+                            >
+                              <span className="text-xs font-medium text-gray-700 min-w-[80px]">ยูนิต {u.unit_number}</span>
+                              <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: C.indigo }} />
+                              </div>
+                              <span className="text-xs tabular-nums text-gray-600 min-w-[40px] text-right">{u.views}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>

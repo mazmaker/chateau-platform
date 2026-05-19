@@ -13,6 +13,9 @@ import {
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import CustomerLayout from './CustomerLayout';
+import { getStoredReferralCode, clearStoredReferralCode } from '@/lib/referralCode';
+import { startViewTracking } from '@/lib/viewTracking';
+import SitePlanViewer from '@/components/properties/SitePlanViewer';
 
 interface Unit {
   id: string;
@@ -203,6 +206,21 @@ const CustomerUnitDetail = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // Funnel-layer-1 tracking. Records the view + duration + scroll depth in
+  // property_views when the visitor leaves this page or navigates away. Anonymous
+  // visitors get a stable visitor_id in localStorage so return-visit metrics work.
+  // We start tracking AFTER the unit has loaded so we know tenant/property/unit ids.
+  useEffect(() => {
+    if (!unit) return;
+    const tracker = startViewTracking({
+      tenantId: (unit as any).tenant_id,
+      propertyId: unit.project_id,
+      unitId: unit.id,
+      pagePath: window.location.pathname,
+    });
+    return () => tracker.flush();
+  }, [unit?.id]);
+
   const toggleWishlist = async () => {
     if (!unit) return;
     try {
@@ -234,7 +252,14 @@ const CustomerUnitDetail = () => {
     setSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { navigate('/customer/login'); return; }
+      if (!user) {
+        // Anonymous visitor — bounce to login with a return URL so they come back
+        // to this exact unit after auth. Bookmarks/share-back stay intact because
+        // captureReferralFromUrl() ran on the public mount and stripped ?ref already.
+        const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+        navigate(`/customer/login?return=${returnTo}`);
+        return;
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: customer } = await (supabase.from('customers') as any)
         .select('id, full_name').eq('auth_user_id', user.id).maybeSingle();
@@ -296,9 +321,29 @@ const CustomerUnitDetail = () => {
         }
       }
 
+      // Silent agent attribution — if customer arrived via ?ref=AG-2026-NNN, the code
+      // was captured into sessionStorage on first page load. Resolve it to an Agent
+      // user.id now and stamp the new lead, before clearing the session token. We do
+      // this ONLY when creating a brand-new lead — never overwriting an existing one.
+      let referredByAgentId: string | null = null;
+      const storedRef = getStoredReferralCode();
+      if (storedRef) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: agentRow } = await (supabase.from('users') as any)
+          .select('id, role, tenant_id')
+          .eq('referral_code', storedRef)
+          .eq('role', 'agent')
+          .maybeSingle();
+        // Only attribute when the agent belongs to the same tenant as the unit —
+        // prevents cross-tenant credit leakage.
+        if (agentRow && (agentRow as any).tenant_id === unit.tenant_id) {
+          referredByAgentId = (agentRow as any).id;
+        }
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let { data: lead } = await (supabase.from('leads') as any)
-        .select('id, assigned_to').eq('customer_id', (customer as any).id).eq('tenant_id', unit.tenant_id).maybeSingle();
+        .select('id, assigned_to, referred_by_agent_id').eq('customer_id', (customer as any).id).eq('tenant_id', unit.tenant_id).maybeSingle();
       if (!lead) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: newLead, error: leadErr } = await (supabase.from('leads') as any)
@@ -307,14 +352,21 @@ const CustomerUnitDetail = () => {
             customer_id: (customer as any).id,
             property_id: unit.project_id,
             unit_id: unit.id,
-            status: 'new', source: 'customer_self', priority: 'medium',
+            status: 'new', source: referredByAgentId ? 'agent_referral' : 'customer_self', priority: 'medium',
             assigned_to: salesUserId, // 🆕 Auto-assign if Sales found
-            notes: 'ลูกค้ากดสนใจจาก Customer Portal',
-          }).select('id, assigned_to').single();
+            referred_by_agent_id: referredByAgentId,
+            notes: referredByAgentId
+              ? 'ลูกค้ากดสนใจจาก Customer Portal (referral)'
+              : 'ลูกค้ากดสนใจจาก Customer Portal',
+          }).select('id, assigned_to, referred_by_agent_id').single();
         if (leadErr) throw leadErr;
         lead = newLead;
+        // Consume the session token once the attribution is locked in DB, so a
+        // subsequent visit doesn't double-attribute or surprise the customer.
+        if (referredByAgentId) clearStoredReferralCode();
       } else if (!(lead as any).assigned_to && salesUserId) {
-        // Existing lead without Sales — auto-assign now
+        // Existing lead without Sales — auto-assign now (does NOT touch referred_by_agent_id;
+        // immutability trigger would reject it anyway).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase.from('leads') as any).update({ assigned_to: salesUserId }).eq('id', (lead as any).id);
       }
@@ -443,7 +495,6 @@ const CustomerUnitDetail = () => {
     ? loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, totalMonths)) / (Math.pow(1 + monthlyRate, totalMonths) - 1)
     : loanAmount / totalMonths;
 
-  const nearbyArr: any[] = Array.isArray(property?.nearby) ? property!.nearby : [];
 
   return (
     <CustomerLayout title={`ยูนิต ${unit.unit_number}`} subtitle={property?.name} showBack backTo={property ? `/customer/properties/${property.id}` : '/customer/properties'}>
@@ -880,24 +931,15 @@ const CustomerUnitDetail = () => {
         )}
       </div>
 
-      {/* === Master Plan (ผังโครงการทั้งหมด) === */}
-      {property?.master_plan_url && (
-        <div className="bg-white border border-gray-100 rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-gray-600" /> ผังโครงการ Master Plan
-            </h2>
-            <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-              ภาพรวมทั้งโครงการ
-            </span>
-          </div>
-          <div className="rounded-xl overflow-hidden border border-gray-100">
-            <img src={property.master_plan_url} alt="master plan" className="w-full block" />
-          </div>
-          <p className="text-[11px] text-gray-500 mt-3 leading-relaxed">
-            🗺️ ดูตำแหน่งของยูนิต {unit.unit_number} ในโครงการ · สิ่งอำนวยความสะดวก · พื้นที่สีเขียว · ทางเข้า-ออก
-          </p>
-        </div>
+      {/* === Site Plan === Replaces the old static master_plan_url <img>.
+          Same component used on the property page — multi-plan tabbed viewer with
+          clickable hotspots. The current unit is highlighted (pulsing pin) so the
+          customer can spot where THIS unit sits within the project. */}
+      {property?.id && (
+        <SitePlanViewer
+          propertyId={property.id}
+          highlightUnitId={unit.id}
+        />
       )}
 
       {/* === Unit Plan (แบบห้องของฉัน) + 3D Tour === */}
@@ -928,16 +970,17 @@ const CustomerUnitDetail = () => {
             </div>
           )}
 
-          {/* Prominent 3D Tour CTA */}
+          {/* 3D Tour CTA — restyled in Chateau brand red (less loud than the previous
+              purple gradient) and shrunk one size step. Brand consistency over flashy. */}
           {unit.tour_3d_url && (
             <a
               href={unit.tour_3d_url}
               target="_blank" rel="noopener noreferrer"
-              className="mt-3 w-full inline-flex items-center justify-center gap-2 px-4 h-12 rounded-xl bg-gradient-to-br from-purple-600 to-purple-700 text-white font-semibold text-sm shadow-md shadow-purple-200 hover:shadow-lg hover:scale-[1.01] transition-all"
+              className="mt-3 inline-flex items-center justify-center gap-2 px-4 h-10 rounded-lg bg-rose-500 text-white font-semibold text-xs hover:bg-rose-600 transition-colors"
             >
-              <View className="w-5 h-5" />
-              เปิดดูแบบเสมือนจริง 3D Tour
-              <span className="text-[11px] bg-white/20 px-1.5 py-0.5 rounded">เปิดในแท็บใหม่</span>
+              <View className="w-4 h-4" />
+              เปิดดู 3D Tour
+              <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded">แท็บใหม่</span>
             </a>
           )}
 
@@ -949,34 +992,22 @@ const CustomerUnitDetail = () => {
         </div>
       )}
 
-      {/* === Location === */}
-      {(property?.location_lat && property?.location_lng) || nearbyArr.length > 0 ? (
+      {/* === Location === Map only — nearby-places list removed per UX request */}
+      {property?.location_lat && property?.location_lng && (
         <div className="bg-white border border-gray-100 rounded-2xl p-5">
           <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-gray-600" /> ทำเล + รอบบริเวณ
+            <MapPin className="w-4 h-4 text-gray-600" /> ทำเลโครงการ
           </h2>
-          {property?.location_lat && property?.location_lng && (
-            <div className="rounded-xl overflow-hidden border border-gray-100 mb-3">
-              <iframe
-                title="map"
-                width="100%" height="220" loading="lazy"
-                src={`https://maps.google.com/maps?q=${property.location_lat},${property.location_lng}&z=15&output=embed`}
-                style={{ border: 0 }}
-              />
-            </div>
-          )}
-          {nearbyArr.length > 0 && (
-            <div className="space-y-2">
-              {nearbyArr.slice(0, 6).map((n: any, i: number) => (
-                <div key={i} className="flex items-center justify-between py-1.5 text-sm">
-                  <span className="text-gray-700">{n.icon || '📍'} {n.name || n.label}</span>
-                  <span className="text-xs text-gray-500">{n.distance || ''}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="rounded-xl overflow-hidden border border-gray-100">
+            <iframe
+              title="map"
+              width="100%" height="220" loading="lazy"
+              src={`https://maps.google.com/maps?q=${property.location_lat},${property.location_lng}&z=15&output=embed`}
+              style={{ border: 0 }}
+            />
+          </div>
         </div>
-      ) : null}
+      )}
 
       {/* === Similar units === */}
       {similarUnits.length > 0 && (

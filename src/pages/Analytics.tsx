@@ -26,6 +26,7 @@ import {
   DollarSign,
   TrendingUp,
   Wallet,
+  Eye,
 } from 'lucide-react';
 
 const KK = {
@@ -36,6 +37,7 @@ const KK = {
   orange: '#f97316', orangeLight: '#fff7ed',
   amber: '#f59e0b', amberLight: '#fffbeb',
   gray: '#6b7280', grayLight: '#f3f4f6',
+  indigo: '#4f46e5', indigoLight: '#eef2ff',
 };
 
 const tooltipStyle = {
@@ -95,6 +97,11 @@ interface UserRow {
   full_name: string | null;
   email: string;
   role: string;
+}
+
+interface PropertyViewRow {
+  unit_id: string | null;
+  visitor_id: string;
 }
 
 const STATUS_ORDER = ['new', 'contacted', 'qualified', 'negotiating', 'won', 'lost'] as const;
@@ -172,6 +179,9 @@ const Analytics = () => {
   const [units, setUnits] = useState<UnitRow[]>([]);
   const [properties, setProperties] = useState<PropertyRow[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
+  // Anonymous browse signals (Funnel layer 1). Used by Hot Listings to show real
+  // traffic per unit alongside lead_interests (committed interest).
+  const [propertyViews, setPropertyViews] = useState<PropertyViewRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
 
@@ -180,7 +190,7 @@ const Analytics = () => {
     try {
       setLoading(true);
       const tid = currentTenant.id;
-      const [leadsRes, actsRes, intRes, unitsRes, propsRes, usersRes] = await Promise.all([
+      const [leadsRes, actsRes, intRes, unitsRes, propsRes, usersRes, viewsRes] = await Promise.all([
         (supabase.from('leads') as any)
           .select('id, customer_id, status, source, priority, urgency_level, potential_score, estimated_value, last_contact_date, assigned_to, property_id, unit_id, created_at, customer:customers(full_name, phone)')
           .eq('tenant_id', tid)
@@ -203,6 +213,14 @@ const Analytics = () => {
         (supabase.from('users') as any)
           .select('id, full_name, email, role')
           .eq('tenant_id', tid),
+        // Anonymous + authed property views — used to compute browse stats per unit
+        // (Hot Listings funnel). Limit to ~10k to bound payload; for active tenants
+        // we'd add a since=last-90-days filter, but for demo full-history is fine.
+        (supabase.from('property_views') as any)
+          .select('unit_id, visitor_id')
+          .eq('tenant_id', tid)
+          .not('unit_id', 'is', null)
+          .limit(10000),
       ]);
       setLeads((leadsRes.data || []) as LeadRow[]);
       setActivities((actsRes.data || []) as ActivityRow[]);
@@ -210,6 +228,7 @@ const Analytics = () => {
       setUnits((unitsRes.data || []) as UnitRow[]);
       setProperties((propsRes.data || []) as PropertyRow[]);
       setUsers((usersRes.data || []) as UserRow[]);
+      setPropertyViews((viewsRes.data || []) as PropertyViewRow[]);
     } catch (e) {
       console.error('Analytics load failed:', e);
     } finally {
@@ -218,6 +237,16 @@ const Analytics = () => {
   };
 
   useEffect(() => { load(); }, [currentTenant?.id]);
+
+  // Re-load when the user returns to this tab/window so adding a hot lead in
+  // /leads and coming back here updates the count + list immediately. Cheap:
+  // the focus event fires only on the active tab and load() is bounded by tenant.
+  useEffect(() => {
+    const onFocus = () => { load(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTenant?.id]);
 
   // ─── Period window ─────────────────────────────────────
   const periodDays = period === '7d' ? 7 : period === '30d' ? 30 : 90;
@@ -362,12 +391,16 @@ const Analytics = () => {
   }, [leads, activities, periodDays]);
 
   // ─── Hot Leads ──
+  // Manual flag from Sales is the single source of truth here. Algorithm scores
+  // (potential_score) and urgency_level checkboxes were removed because the team
+  // on the ground reads conversation context the score model can't see — a lead
+  // saying "I'm getting married next month" is hot even with a 40 score.
+  // Sales toggles l.priority='high' from LeadPriorityEditor; this surface
+  // updates in real time.
   const hotLeads = leads
     .filter((l) => {
       if (l.status === 'won' || l.status === 'lost') return false;
-      const high = l.urgency_level === 'high' || l.priority === 'high';
-      const score = (l.potential_score || 0) >= 70;
-      return high || score;
+      return l.priority === 'high';
     })
     .map((l) => ({
       ...l,
@@ -375,8 +408,16 @@ const Analytics = () => {
       propName: l.property_id ? propById.get(l.property_id)?.name || null : null,
       unitNumber: l.unit_id ? unitById.get(l.unit_id)?.unit_number || null : null,
     }))
-    .sort((a, b) => (b.potential_score || 0) - (a.potential_score || 0))
-    .slice(0, 8);
+    // Most recent first — Sales just flagged this lead = top of the list.
+    // (Lead type doesn't include updated_at in this view; last_contact_date is the
+    // best signal of recent Sales attention, falling back to created_at.)
+    // No more slice — show ALL hot leads; the container below is scrollable so
+    // a long Hot Leads list doesn't push the rest of the page down.
+    .sort((a, b) => {
+      const ta = new Date(a.last_contact_date || a.created_at).getTime();
+      const tb = new Date(b.last_contact_date || b.created_at).getTime();
+      return tb - ta;
+    });
 
   // ─── Silent Leads list ──
   const silentList = silent7
@@ -390,10 +431,14 @@ const Analytics = () => {
         propName: l.property_id ? propById.get(l.property_id)?.name || null : null,
       };
     })
-    .sort((a, b) => b.daysCount - a.daysCount)
-    .slice(0, 8);
+    .sort((a, b) => b.daysCount - a.daysCount);
 
   // ─── Hot Listings ──
+  // Combines two signals so the card tells a full funnel story:
+  //   (1) property_views   — browse events (anonymous + authed) per unit
+  //   (2) lead_interests   — committed interest (Sales/Admin/Agent registered)
+  // Sorted by views (top-of-funnel signal) since the section is about discovery
+  // intent; the inquiry chip alongside shows how well those views convert.
   const unitInquiryMap = new Map<string, { count: number; leadIds: Set<string> }>();
   interests.forEach((i) => {
     if (!i.unit_id) return;
@@ -402,22 +447,47 @@ const Analytics = () => {
     if (i.lead_id) existing.leadIds.add(i.lead_id);
     unitInquiryMap.set(i.unit_id, existing);
   });
-  const hotListings = Array.from(unitInquiryMap.entries())
-    .map(([unitId, { count, leadIds }]) => {
+
+  const unitViewMap = new Map<string, { views: number; visitorIds: Set<string> }>();
+  propertyViews.forEach((v) => {
+    if (!v.unit_id) return;
+    const e = unitViewMap.get(v.unit_id) || { views: 0, visitorIds: new Set<string>() };
+    e.views++;
+    if (v.visitor_id) e.visitorIds.add(v.visitor_id);
+    unitViewMap.set(v.unit_id, e);
+  });
+
+  // Build candidate set from BOTH sources so a unit with views but no leads
+  // still surfaces (early funnel) and a unit with leads but no tracked views
+  // (e.g., walk-in registered without browsing first) still shows up.
+  const candidateUnitIds = new Set<string>([
+    ...unitInquiryMap.keys(),
+    ...unitViewMap.keys(),
+  ]);
+
+  const hotListings = Array.from(candidateUnitIds)
+    .map((unitId) => {
       const unit = unitById.get(unitId);
       if (!unit) return null;
+      const inq = unitInquiryMap.get(unitId);
+      const vw = unitViewMap.get(unitId);
       return {
         unitId,
         unitNumber: unit.unit_number,
         thumbnail: unit.thumbnail_url,
         status: unit.status,
         propName: propById.get(unit.project_id)?.name || '(ไม่ระบุโครงการ)',
-        inquiries: count,
-        uniqueLeads: leadIds.size,
+        inquiries: inq?.count || 0,
+        uniqueLeads: inq?.leadIds.size || 0,
+        views: vw?.views || 0,
+        uniqueVisitors: vw?.visitorIds.size || 0,
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null)
-    .sort((a, b) => b.inquiries - a.inquiries)
+    // Composite score — heavily weight views (top-of-funnel discovery) but use
+    // committed-interest counts as a strong secondary signal so a unit with
+    // 1 view but 5 leads (sales-driven inquiry) still ranks above 5 views with 0 leads.
+    .sort((a, b) => (b.views + b.uniqueLeads * 10) - (a.views + a.uniqueLeads * 10))
     .slice(0, 6);
 
   // ─── Sales Leaderboard ──
@@ -699,21 +769,24 @@ const Analytics = () => {
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
                 <Flame className="w-4 h-4" style={{ color: KK.red }} />
-                <h3 className="text-base font-bold text-gray-900">ลีดร้อน (Hot Leads)</h3>
+                <h3 className="text-base font-bold text-gray-900">Hot Leads</h3>
               </div>
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: KK.red, backgroundColor: KK.redLight }}>
                 {hotLeads.length} ต้องตามด่วน
               </span>
             </div>
-            <p className="text-xs text-gray-500 mb-4">score ≥ 70 หรือ urgency = high · กดเพื่อเปิด lead</p>
+            <p className="text-xs text-gray-500 mb-4">ลีดที่ทีมขายติ๊กว่าด่วน (priority = สูง) · กดเพื่อเปิด lead</p>
             {hotLeads.length === 0 ? (
               <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ไม่มีลีดร้อนตอนนี้ 🎉</div>
             ) : (
-              <div className="space-y-2">
+              // Scrollable so an unbounded number of hot leads doesn't push the rest
+              // of the page down. ~500px ≈ 8 rows visible; the user scrolls inside the
+              // panel to see more.
+              <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
                 {hotLeads.map((l) => (
                   <button
                     key={l.id}
-                    onClick={() => navigate(`/leads?lead=${l.id}`)}
+                    onClick={() => navigate(`/leads/${l.id}`)}
                     className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-gray-50 border border-gray-50 text-left"
                   >
                     <div className="flex items-center gap-3 min-w-0">
@@ -729,8 +802,27 @@ const Analytics = () => {
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0 ml-2">
-                      <p className="text-sm font-bold tabular-nums" style={{ color: KK.red }}>{l.potential_score || 0}</p>
-                      <p className="text-[10px] text-gray-400">score</p>
+                      {/* "Last touch" — when Sales last contacted this hot lead. Replaces
+                          the legacy potential_score readout, which was misleading once we
+                          switched to manual priority flagging (a 39-score lead could still
+                          be Hot if Sales flagged it). Sales scanning this list cares about
+                          "who haven't I called in a while" far more than the model score. */}
+                      {l.last_contact_date ? (() => {
+                        const days = Math.floor((Date.now() - new Date(l.last_contact_date).getTime()) / 86400000);
+                        return (
+                          <>
+                            <p className="text-sm font-bold tabular-nums" style={{ color: days >= 7 ? KK.red : days >= 3 ? '#d97706' : '#475569' }}>
+                              {days === 0 ? 'วันนี้' : `${days} วัน`}
+                            </p>
+                            <p className="text-[10px] text-gray-400">ติดต่อล่าสุด</p>
+                          </>
+                        );
+                      })() : (
+                        <>
+                          <p className="text-sm font-bold tabular-nums" style={{ color: KK.red }}>ยังไม่ได้ติดต่อ</p>
+                          <p className="text-[10px] text-gray-400">รีบโทร</p>
+                        </>
+                      )}
                     </div>
                   </button>
                 ))}
@@ -742,7 +834,7 @@ const Analytics = () => {
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4" style={{ color: KK.orange }} />
-                <h3 className="text-base font-bold text-gray-900">ลีดเงียบ ต้องตามด่วน</h3>
+                <h3 className="text-base font-bold text-gray-900">Silent Leads</h3>
               </div>
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: KK.orange, backgroundColor: KK.orangeLight }}>
                 {silentList.length} เสี่ยงหลุด
@@ -752,13 +844,13 @@ const Analytics = () => {
             {silentList.length === 0 ? (
               <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ไม่มีลีดเงียบ — ทีมขายทำดีมาก 🎉</div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
                 {silentList.map((l) => {
                   const sev = l.daysCount >= 30 ? KK.red : l.daysCount >= 14 ? KK.orange : KK.amber;
                   return (
                     <button
                       key={l.id}
-                      onClick={() => navigate(`/leads?lead=${l.id}`)}
+                      onClick={() => navigate(`/leads/${l.id}`)}
                       className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-gray-50 border border-gray-50 text-left"
                     >
                       <div className="flex items-center gap-3 min-w-0">
@@ -791,7 +883,7 @@ const Analytics = () => {
             <Briefcase className="w-4 h-4" style={{ color: KK.red }} />
             <h3 className="text-base font-bold text-gray-900">Hot Listings</h3>
           </div>
-          <p className="text-xs text-gray-500 mb-5">ยูนิตที่มีคนสนใจมากสุด · top 6</p>
+          <p className="text-xs text-gray-500 mb-5">ยูนิตที่มี traffic + ความสนใจสูงสุด · top 6</p>
           {hotListings.length === 0 ? (
             <div className="h-[180px] flex items-center justify-center text-sm text-gray-400">ยังไม่มียูนิตที่มีคนสนใจ</div>
           ) : (
@@ -823,9 +915,24 @@ const Analytics = () => {
                     <div className="p-2.5">
                       <p className="text-xs font-bold text-gray-900 truncate">{u.unitNumber}</p>
                       <p className="text-[11px] text-gray-500 truncate">{u.propName}</p>
-                      <p className="text-[11px] mt-1 tabular-nums" style={{ color: KK.red }}>
-                        🔥 ดู {u.inquiries} ครั้ง · {u.uniqueLeads} คน
-                      </p>
+                      {/* Two-row funnel readout. Top: anonymous browse traffic (property_views).
+                          Bottom: committed interest (lead_interests). Tells the funnel story
+                          "X people looked · Y of them became leads." Either row is hidden when
+                          the underlying count is 0 to avoid noisy 0s on fresh units. */}
+                      <div className="mt-1 space-y-0.5">
+                        {u.views > 0 && (
+                          <p className="text-[11px] tabular-nums text-gray-600 flex items-center gap-1">
+                            <Eye className="w-3 h-3" style={{ color: KK.indigo }} />
+                            <span>{u.views} ดู · {u.uniqueVisitors} คน</span>
+                          </p>
+                        )}
+                        {u.uniqueLeads > 0 && (
+                          <p className="text-[11px] tabular-nums flex items-center gap-1" style={{ color: KK.red }}>
+                            <Flame className="w-3 h-3" />
+                            <span>{u.uniqueLeads} Lead สนใจ</span>
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </button>
                 );

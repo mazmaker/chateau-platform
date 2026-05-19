@@ -17,14 +17,18 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Building2, Bed, Bath, Square, MapPin, Layers, DollarSign, Eye,
-  Calendar, Check, ArrowLeft, UserPlus, Loader2, Edit, Share2, Heart, Send, Users,
+  Calendar, Check, ArrowLeft, UserPlus, Loader2, Edit, Share2, Heart, Send, Users, MoreHorizontal, Trash2,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import MasterPlanSVG from '@/components/properties/MasterPlanSVG';
 import AddLeadModal from '@/components/leads/AddLeadModal';
 import HandoffLeadDialog from '@/components/leads/HandoffLeadDialog';
+import SitePlanViewer from '@/components/properties/SitePlanViewer';
 
 interface Unit {
   id: string;
@@ -100,6 +104,9 @@ const UnitDetail = () => {
   const [allTenantLeads, setAllTenantLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Agent's own referral code — appended to share URLs so Quick Reserve attribution
+  // travels with every shared link. null for non-agent roles or before fetch resolves.
+  const [myReferralCode, setMyReferralCode] = useState<string | null>(null);
 
   // Reservation
   const [showReserveDialog, setShowReserveDialog] = useState(false);
@@ -117,8 +124,6 @@ const UnitDetail = () => {
   // Add Lead
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
 
-  // Master plan image error fallback
-  const [masterPlanImgError, setMasterPlanImgError] = useState(false);
 
   // Sales designated units
   const [mySalesUnitIds, setMySalesUnitIds] = useState<Set<string>>(new Set());
@@ -148,7 +153,6 @@ const UnitDetail = () => {
   const loadAll = async () => {
     if (!unitId) return;
     setLoading(true);
-    setMasterPlanImgError(false);
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: unitData, error: unitErr } = await (supabase.from('units') as any)
@@ -261,6 +265,13 @@ const UnitDetail = () => {
           .eq('agent_user_id', user.id)
           .is('revoked_at', null);
         setMyAgentUnitIds(new Set((data || []).map((r: any) => r.unit_id)));
+        // Also fetch this Agent's referral_code so we can append ?ref= to shared links.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: meRow } = await (supabase.from('users') as any)
+          .select('referral_code')
+          .eq('id', user.id)
+          .maybeSingle();
+        setMyReferralCode((meRow as any)?.referral_code || null);
       })();
     }
   }, [userRole, user?.id]);
@@ -618,7 +629,7 @@ const UnitDetail = () => {
 
   const handleMarkAsSold = async () => {
     if (!unit) return;
-    if (!confirm(`ปิดการขายยูนิต ${unit.unit_number}? (สถานะจะเปลี่ยนเป็น "ขายแล้ว")`)) return;
+    if (!confirm(`บันทึกการขายสำเร็จยูนิต ${unit.unit_number}? (สถานะจะเปลี่ยนเป็น "ขายแล้ว")`)) return;
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase.from('units') as any)
@@ -626,7 +637,7 @@ const UnitDetail = () => {
         .eq('id', unit.id)
         .select('id');
       if (error) throw error;
-      if (!data || data.length === 0) throw new Error('ไม่มีสิทธิ์ปิดการขาย');
+      if (!data || data.length === 0) throw new Error('ไม่มีสิทธิ์บันทึกการขาย');
       if (unit.reserved_customer_lead_id) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase.from('leads') as any).update({ status: 'won' }).eq('id', unit.reserved_customer_lead_id);
@@ -635,6 +646,47 @@ const UnitDetail = () => {
           .update({ status: 'won' })
           .eq('lead_id', unit.reserved_customer_lead_id)
           .eq('unit_id', unit.id);
+
+        // Commission accrual — credit goes to the ORIGINAL Agent who referred the customer,
+        // not to whoever is assigned_to at close time. After a handoff Agent → Sales,
+        // assigned_to points to Sales, but referred_by_agent_id is locked to the Agent
+        // (enforced by the DB trigger guard_lead_referred_by_immutable). This is the
+        // industry-standard broker attribution model.
+        // Snapshot rate + price so future rate edits don't mutate historical commissions.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: leadRow } = await (supabase.from('leads') as any)
+            .select('referred_by_agent_id')
+            .eq('id', unit.reserved_customer_lead_id)
+            .maybeSingle();
+          const referredByAgentId = leadRow?.referred_by_agent_id as string | undefined;
+          if (referredByAgentId) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: proj } = await (supabase.from('properties') as any)
+              .select('commission_rate_agent_pct')
+              .eq('id', unit.project_id)
+              .maybeSingle();
+            const ratePct = Number(proj?.commission_rate_agent_pct ?? 3);
+            const salePrice = Number(unit.price ?? 0);
+            const amount = Math.round((salePrice * ratePct) / 100);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase.from('agent_commissions') as any).insert({
+              tenant_id: currentTenant?.id,
+              agent_user_id: referredByAgentId,
+              lead_id: unit.reserved_customer_lead_id,
+              unit_id: unit.id,
+              property_id: unit.project_id,
+              sale_price: salePrice,
+              rate_pct: ratePct,
+              amount,
+              status: 'pending',
+              notes: `ปิดการขาย ${unit.unit_number} (${property?.name || ''})`,
+            });
+          }
+        } catch (commErr) {
+          // Don't fail the sale close if commission accrual hiccups — log silently.
+          console.warn('Commission accrual skipped:', commErr);
+        }
       }
       // Promote pending booking → confirmed (customer sees: ชำระแล้ว · ทำสัญญา)
       await (supabase.from('bookings') as any)
@@ -642,10 +694,10 @@ const UnitDetail = () => {
         .eq('tenant_id', currentTenant?.id)
         .filter('notes->>unit_id', 'eq', unit.id)
         .in('status', ['pending']);
-      toast.success(`ปิดการขายยูนิต ${unit.unit_number} สำเร็จ`);
+      toast.success(`บันทึกการขายยูนิต ${unit.unit_number} เรียบร้อย`);
       await loadAll();
     } catch (err: any) {
-      toast.error(err.message || 'ปิดการขายไม่สำเร็จ');
+      toast.error(err.message || 'บันทึกการขายไม่สำเร็จ');
     }
   };
 
@@ -758,6 +810,16 @@ const UnitDetail = () => {
   };
 
   /* ─── LINE share ─── */
+  // Build the customer-facing URL that the recipient should see. Always points to
+  // /customer/units/:id (not the staff /units/:id route) so the link works for
+  // anyone — and silently appends ?ref=AG-2026-NNN when the sharer is an Agent
+  // so commission attribution is captured on the customer's first lead creation.
+  const buildShareUrl = (): string => {
+    if (!unit) return '';
+    const base = `${window.location.origin}/customer/units/${unit.id}`;
+    return myReferralCode ? `${base}?ref=${encodeURIComponent(myReferralCode)}` : base;
+  };
+
   const buildShareMessage = (): string => {
     if (!unit || !property) return '';
     const priceM = (unit.promo_price && unit.promo_price < unit.price)
@@ -776,7 +838,7 @@ const UnitDetail = () => {
       specs.join(' · '),
       unit.view ? `🌅 ${unit.view}` : null,
       '',
-      `ดูรายละเอียดเพิ่ม: ${window.location.origin}/units/${unit.id}`,
+      `ดูรายละเอียดเพิ่ม: ${buildShareUrl()}`,
     ].filter(Boolean);
     return lines.join('\n');
   };
@@ -788,10 +850,13 @@ const UnitDetail = () => {
   };
 
   const handleCopyLink = async () => {
-    const link = `${window.location.origin}/units/${unit?.id}`;
+    const link = buildShareUrl();
     try {
       await navigator.clipboard.writeText(link);
-      toast.success('คัดลอกลิงก์เรียบร้อย');
+      toast.success(myReferralCode
+        ? 'คัดลอกลิงก์เรียบร้อย (ผูกรหัสนายหน้าของคุณแล้ว)'
+        : 'คัดลอกลิงก์เรียบร้อย'
+      );
     } catch {
       toast.error('คัดลอกไม่สำเร็จ');
     }
@@ -834,6 +899,10 @@ const UnitDetail = () => {
   const isReservedActive = unit.status === 'reserved' && !!unit.reserved_customer_name;
   const isSold = unit.status === 'sold' && !!unit.reserved_customer_name;
   const canManage = canManageUnit(unit.id, unit.project_id) || userRole === 'owner' || userRole === 'admin';
+  // Closing a sale = SPA signed + ownership transfer registered.
+  // Global broker pattern (Sansiri/AP/Knight Frank): only in-house Sales/Admin/Owner can do this.
+  // External Agents can reserve + confirm deposit, but must hand off to Sales for the actual sale close.
+  const canCloseSale = canManage && userRole !== 'agent';
 
   return (
     <div className="min-h-screen bg-[#f8fafc]">
@@ -971,17 +1040,31 @@ const UnitDetail = () => {
                   </CardTitle>
                   {canManage && (
                     <div className="flex gap-2 flex-wrap">
+                      {/* Primary booking actions kept prominent. Destructive "ยกเลิกการจอง" is
+                          intentionally buried in the overflow menu so it can't be clicked by
+                          mistake while reaching for the confirm/close-sale buttons next to it. */}
                       {activeBooking?.status === 'pending' && (
                         <Button size="sm" onClick={handleConfirmPayment} className="bg-blue-600 hover:bg-blue-700 text-white">
                           <Check className="w-4 h-4 mr-1" /> ยืนยันรับเงิน
                         </Button>
                       )}
-                      <Button size="sm" onClick={handleMarkAsSold} className="bg-green-600 hover:bg-green-700 text-white">
-                        <Check className="w-4 h-4 mr-1" /> ปิดการขาย
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={handleCancelReservation} className="text-red-600 border-red-200 hover:bg-red-50">
-                        ยกเลิกการจอง
-                      </Button>
+                      {canCloseSale && (
+                        <Button size="sm" onClick={handleMarkAsSold} className="bg-green-600 hover:bg-green-700 text-white">
+                          <Check className="w-4 h-4 mr-1" /> บันทึกการขายสำเร็จ
+                        </Button>
+                      )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" aria-label="ตัวเลือกเพิ่มเติม">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={handleCancelReservation} className="text-red-600 focus:text-red-700">
+                            <Trash2 className="w-4 h-4 mr-2" /> ยกเลิกการจอง
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   )}
                 </div>
@@ -1035,12 +1118,25 @@ const UnitDetail = () => {
                   <div className="flex gap-2 flex-wrap">
                     {isAgentUser ? (
                       <>
-                        <Button variant="outline" onClick={async () => { await fetchAllTenantLeads(); setShowQuickInterestDialog(true); }} className="border-rose-200 text-rose-700 hover:bg-rose-50">
-                          <Heart className="w-4 h-4 mr-1" /> ลูกค้าสนใจ
-                        </Button>
-                        <Button variant="outline" onClick={() => setShowAddLeadModal(true)}>
-                          <UserPlus className="w-4 h-4 mr-1" /> เพิ่ม Lead ใหม่
-                        </Button>
+                        {/* Merged Lead-entry control. Agents want either "this customer is new"
+                            or "this customer already has a Lead, just record interest in this unit".
+                            Previously these were two separate buttons — too noisy. The dropdown keeps
+                            both reachable but presents a single primary CTA on the card. */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline">
+                              <UserPlus className="w-4 h-4 mr-1" /> เพิ่ม Lead
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setShowAddLeadModal(true)}>
+                              <UserPlus className="w-4 h-4 mr-2" /> ลูกค้าใหม่
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={async () => { await fetchAllTenantLeads(); setShowQuickInterestDialog(true); }}>
+                              <Heart className="w-4 h-4 mr-2 text-rose-600" /> ลูกค้าที่มีอยู่ (บันทึกความสนใจ)
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                         {myLeadsOnUnit.length > 0 && (
                           <Button onClick={openHandoffFlow} className="bg-chateau hover:bg-chateau-600 text-white">
                             <Send className="w-4 h-4 mr-1" /> ส่งต่อให้ Sales{myLeadsOnUnit.length > 1 ? ` (${myLeadsOnUnit.length})` : ''}
@@ -1050,7 +1146,7 @@ const UnitDetail = () => {
                     ) : (
                       <>
                         <Button variant="outline" onClick={() => setShowAddLeadModal(true)}>
-                          <UserPlus className="w-4 h-4 mr-1" /> เพิ่ม Lead ใหม่
+                          <UserPlus className="w-4 h-4 mr-1" /> เพิ่ม Lead
                         </Button>
                         <Button onClick={openReserveDialog} className="bg-amber-500 hover:bg-amber-600 text-white">
                           <Calendar className="w-4 h-4 mr-1" /> บันทึกการจอง
@@ -1387,17 +1483,6 @@ const UnitDetail = () => {
                     </p>
                   </div>
                 )}
-                {(unit.pool || unit.garden || unit.balcony || unit.building) && (
-                  <div>
-                    <p className="text-xs font-semibold text-slate-700 mb-2">คุณสมบัติ</p>
-                    <div className="flex flex-wrap gap-2">
-                      {unit.pool && <Badge className="bg-cyan-100 text-cyan-800 hover:bg-cyan-200">🏊 มีสระว่ายน้ำ</Badge>}
-                      {unit.garden && <Badge className="bg-green-100 text-green-800 hover:bg-green-200">🌿 มีสวน</Badge>}
-                      {unit.balcony && <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-200">🪟 มีระเบียง</Badge>}
-                      {unit.building && <Badge variant="outline" className="border-orange-300 text-orange-700">🏢 อาคาร {unit.building}</Badge>}
-                    </div>
-                  </div>
-                )}
                 {unit.layout_description && (
                   <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
                     <p className="text-xs font-semibold text-slate-700 mb-2">รายละเอียด</p>
@@ -1433,7 +1518,7 @@ const UnitDetail = () => {
                     href={unit.tour_3d_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-medium text-sm shadow-sm hover:shadow-md transition-shadow"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-rose-500 hover:bg-rose-600 text-white rounded-lg font-medium text-sm transition-colors"
                   >
                     <Eye className="w-4 h-4" /> เปิด 3D Virtual Tour
                   </a>
@@ -1442,49 +1527,42 @@ const UnitDetail = () => {
             </Card>
           )}
 
-          {/* Project Site Plan */}
-          <Card className="border border-gray-200">
-            <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
-                <Layers className="w-5 h-5 text-chateau" />
-                ผังโครงการ
-                {unit.plot_number && (
-                  <Badge variant="outline" className="ml-2 border-chateau text-chateau">
-                    แปลง {unit.plot_number}
-                  </Badge>
-                )}
-                {(!property.master_plan_url || property.master_plan_url.includes('placehold.co') || masterPlanImgError) && (
+          {/* Project Site Plan — uses the same SitePlanViewer as the customer side
+              so hotspots placed in the Plans Editor show up here too. Falls back to
+              the auto-generated MasterPlanSVG when the project has no real plan image
+              (component returns null when empty + we render the SVG fallback alongside). */}
+          <SitePlanViewer
+            propertyId={unit.project_id}
+            highlightUnitId={unit.id}
+            hideWhenEmpty={true}
+          />
+          {/* Fallback synthetic site plan — shown only when the project has no real
+              plan image at all. Cheap visual placeholder for projects that haven't
+              been authored yet in the new editor. */}
+          {!property.master_plan_url && (
+            <Card className="border border-gray-200">
+              <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-chateau" />
+                  ผังโครงการ
+                  {unit.plot_number && (
+                    <Badge variant="outline" className="ml-2 border-chateau text-chateau">
+                      แปลง {unit.plot_number}
+                    </Badge>
+                  )}
                   <Badge variant="outline" className="ml-2 border-amber-300 text-amber-700 bg-amber-50">
                     ผังจำลอง
                   </Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4">
-              {property.master_plan_url && !property.master_plan_url.includes('placehold.co') && !masterPlanImgError ? (
-                <>
-                  <a href={property.master_plan_url} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden border border-gray-200 hover:border-chateau">
-                    <img
-                      src={property.master_plan_url}
-                      alt={`Master plan ${property.name}`}
-                      className="w-full max-h-[520px] object-cover"
-                      onError={() => setMasterPlanImgError(true)}
-                    />
-                  </a>
-                  <p className="text-xs text-gray-500 mt-2">คลิกเพื่อดูภาพขนาดเต็ม</p>
-                </>
-              ) : (
-                <>
-                  <MasterPlanSVG units={siblingUnits} highlightedUnitId={unit.id} projectName={property.name} />
-                  <p className="text-xs text-amber-700 mt-2">
-                    {masterPlanImgError
-                      ? '⚠ URL ที่ใส่ไม่ใช่รูปภาพโดยตรง — ผังจำลองสร้างจากข้อมูลยูนิต'
-                      : '💡 ผังนี้สร้างจากข้อมูลยูนิตจริง — admin upload ผังจริงผ่านฟอร์มแก้ไขโครงการได้'}
-                  </p>
-                </>
-              )}
-            </CardContent>
-          </Card>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <MasterPlanSVG units={siblingUnits} highlightedUnitId={unit.id} projectName={property.name} />
+                <p className="text-xs text-amber-700 mt-2">
+                  💡 ผังนี้สร้างจากข้อมูลยูนิตจริง — upload ผังจริงผ่านปุ่ม "ผังโครงการ" ในหน้าโครงการ
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Map */}
           <Card className="border border-gray-200">
@@ -1534,37 +1612,6 @@ const UnitDetail = () => {
             </CardContent>
           </Card>
 
-          {/* Nearby */}
-          {property.nearby && property.nearby.length > 0 && (
-            <Card className="border border-gray-200">
-              <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <MapPin className="w-5 h-5 text-chateau" /> ทำเลใกล้เคียง
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {property.nearby.map((place, idx) => {
-                    const icon =
-                      place.type === 'shopping' ? '🏬' : place.type === 'transit' ? '🚇' :
-                      place.type === 'hospital' ? '🏥' : place.type === 'school' ? '🏫' :
-                      place.type === 'airport' ? '✈️' : place.type === 'beach' ? '🏖' :
-                      place.type === 'market' ? '🍜' : place.type === 'landmark' ? '🛕' :
-                      place.type === 'leisure' ? '⛳' : '📍';
-                    return (
-                      <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
-                        <span className="text-xl flex-shrink-0">{icon}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">{place.name}</p>
-                          <p className="text-xs text-gray-500">{place.distance_km} กม.</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
         </main>
       </div>

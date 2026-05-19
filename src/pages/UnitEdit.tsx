@@ -467,18 +467,9 @@ const UnitEdit = () => {
             iconBg="bg-amber-600"
             icon={<Layers className="w-3.5 h-3.5 text-white" />}
             title="รายละเอียดเสริม"
-            subtitle="โปรโมชั่น แปลง วิว ตกแต่ง คุณสมบัติ แผนผัง 3D"
+            subtitle="โปรโมชั่น แปลง วิว ตกแต่ง แผนผัง 3D"
             tone="amber"
           >
-            <div>
-              <Label className="text-sm font-medium mb-2 block">คุณสมบัติพิเศษ</Label>
-              <div className="grid grid-cols-3 gap-3">
-                <CheckCard label="🏊 มีสระว่ายน้ำ" checked={form.pool} onChange={(v) => setForm({ ...form, pool: v })} />
-                <CheckCard label="🌿 มีสวน" checked={form.garden} onChange={(v) => setForm({ ...form, garden: v })} />
-                <CheckCard label="🪟 มีระเบียง" checked={form.balcony} onChange={(v) => setForm({ ...form, balcony: v })} />
-              </div>
-            </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label={<span className="flex items-center gap-1"><DollarSign className="w-3.5 h-3.5 text-amber-500"/> ราคาโปรโมชั่น (บาท)</span>}>
                 <Input
@@ -600,18 +591,6 @@ const Field = ({ label, required, colSpan, children }: { label: React.ReactNode;
     </Label>
     {children}
   </div>
-);
-
-const CheckCard = ({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) => (
-  <label className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50">
-    <input
-      type="checkbox"
-      checked={checked}
-      onChange={(e) => onChange(e.target.checked)}
-      className="w-4 h-4 accent-chateau"
-    />
-    <span className="text-sm">{label}</span>
-  </label>
 );
 
 export default UnitEdit;

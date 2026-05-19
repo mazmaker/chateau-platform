@@ -445,7 +445,7 @@ const SalesOperations = () => {
                       {hotLeads.map((l) => (
                         <button
                           key={l.id}
-                          onClick={() => navigate(`/leads?lead=${l.id}`)}
+                          onClick={() => navigate(`/leads/${l.id}`)}
                           className="w-full flex items-start justify-between gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left"
                         >
                           <div className="min-w-0 flex-1">
@@ -487,7 +487,7 @@ const SalesOperations = () => {
                       {inactiveLeads.map((l) => (
                         <button
                           key={l.id}
-                          onClick={() => navigate(`/leads?lead=${l.id}`)}
+                          onClick={() => navigate(`/leads/${l.id}`)}
                           className="w-full flex items-start justify-between gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left"
                         >
                           <div className="min-w-0 flex-1">

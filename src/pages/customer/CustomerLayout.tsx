@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Building2, User, ArrowLeft, LogOut, FileText, Bell, Heart, Calendar, CheckCircle2, Sparkles, XCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { captureReferralFromUrl } from '@/lib/referralCode';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
@@ -32,12 +33,21 @@ const CustomerLayout = ({ children, title, subtitle, showBack = false, backTo, h
   const location = useLocation();
   const [profile, setProfile] = useState<{ full_name: string | null; initials: string } | null>(null);
   const [notifs, setNotifs] = useState<NotifItem[]>([]);
+  // Tracks whether we've confirmed the visitor is unauthenticated. Used to hide the
+  // "การจอง" tab for anonymous visitors — they have no bookings to view, and bouncing
+  // them to login on tap is bad UX for browsing-only traffic.
+  // null = still checking, true = anon, false = authed
+  const [isAnon, setIsAnon] = useState<boolean | null>(null);
 
   // Loads profile + builds notifications from latest booking/interest state.
   // Called on mount AND on every realtime change (subscribed below).
   const loadNotifications = async (): Promise<{ customerId: string } | null> => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
+    if (!user) {
+      setIsAnon(true);
+      return null;
+    }
+    setIsAnon(false);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: cust } = await (supabase.from('customers') as any)
       .select('id, full_name').eq('auth_user_id', user.id).maybeSingle();
@@ -134,6 +144,13 @@ const CustomerLayout = ({ children, title, subtitle, showBack = false, backTo, h
     return { customerId: (cust as any).id };
   };
 
+  // Capture ?ref=AG-2026-NNN once per session — strips from URL and persists silently.
+  // Runs on every customer-layout mount so deep-links into property/unit/booking pages
+  // all get a chance to attribute the Agent before the customer creates their first lead.
+  useEffect(() => {
+    captureReferralFromUrl();
+  }, []);
+
   useEffect(() => {
     let channel: any = null;
     (async () => {
@@ -212,18 +229,36 @@ const CustomerLayout = ({ children, title, subtitle, showBack = false, backTo, h
             ) : (
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <div className="w-10 h-10 rounded-full bg-chateau text-white flex items-center justify-center text-sm font-semibold flex-shrink-0">
-                  {profile?.initials || 'C'}
+                  {isAnon ? <Building2 className="w-5 h-5" /> : (profile?.initials || 'C')}
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-gray-900 truncate">
-                    สวัสดี, {profile?.full_name?.replace(/^คุณ\s*/, '').split(' ')[0] || 'คุณลูกค้า'}
+                    {isAnon
+                      ? 'CHATEAU'
+                      : `สวัสดี, ${profile?.full_name?.replace(/^คุณ\s*/, '').split(' ')[0] || 'คุณลูกค้า'}`
+                    }
                   </p>
-                  <p className="text-xs text-gray-500">CHATEAU — Customer Portal</p>
+                  <p className="text-xs text-gray-500">
+                    {isAnon ? 'ค้นหาบ้านในฝัน' : 'CHATEAU — Customer Portal'}
+                  </p>
                 </div>
               </div>
             )}
             <div className="flex items-center gap-1">
-              {!showBack && (
+              {/* Anon visitors get a single prominent "เข้าสู่ระบบ" button in the header
+                  instead of the (meaningless) bell + profile icons. This is the primary
+                  login surface for browsing visitors — far more discoverable than the
+                  card at the bottom of the dashboard. */}
+              {isAnon && !showBack && (
+                <button
+                  onClick={() => navigate('/customer/login')}
+                  className="px-3 h-9 rounded-lg bg-chateau text-white text-xs font-semibold hover:bg-chateau-700 transition-colors flex items-center gap-1.5"
+                >
+                  <User className="w-3.5 h-3.5" />
+                  เข้าสู่ระบบ
+                </button>
+              )}
+              {!isAnon && !showBack && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className="relative p-2 hover:bg-gray-100 rounded-lg text-gray-700">
@@ -269,33 +304,36 @@ const CustomerLayout = ({ children, title, subtitle, showBack = false, backTo, h
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    className="p-2 hover:bg-gray-100 rounded-lg text-gray-700"
-                    title="โปรไฟล์"
-                  >
-                    <User className="w-5 h-5" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    onClick={() => navigate('/customer/profile')}
-                  >
-                    <User className="w-4 h-4 mr-2" />
-                    โปรไฟล์ของฉัน
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="cursor-pointer text-red-600 focus:text-red-700 focus:bg-red-50"
-                    onClick={handleLogout}
-                  >
-                    <LogOut className="w-4 h-4 mr-2" />
-                    ออกจากระบบ
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {/* Profile dropdown only when authed (anon has no session to manage) */}
+              {!isAnon && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className="p-2 hover:bg-gray-100 rounded-lg text-gray-700"
+                      title="โปรไฟล์"
+                    >
+                      <User className="w-5 h-5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem
+                      className="cursor-pointer"
+                      onClick={() => navigate('/customer/profile')}
+                    >
+                      <User className="w-4 h-4 mr-2" />
+                      โปรไฟล์ของฉัน
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="cursor-pointer text-red-600 focus:text-red-700 focus:bg-red-50"
+                      onClick={handleLogout}
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      ออกจากระบบ
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
           </div>
         </header>
@@ -303,12 +341,19 @@ const CustomerLayout = ({ children, title, subtitle, showBack = false, backTo, h
 
       <main className="max-w-2xl mx-auto px-5 py-5 space-y-5 pb-28">{children}</main>
 
-      {/* Bottom nav — 3 tabs (Profile moved to header dropdown) */}
+      {/* Bottom nav — tab set depends on auth.
+            Authed: 3 tabs (หน้าหลัก, โครงการ, การจอง)
+            Anon:   2 tabs only — "การจอง" is hidden because the visitor has no
+                    bookings to view AND we'd rather not interrupt browsing with a
+                    login prompt. Once they have a reason to authenticate (e.g.
+                    expressing interest), the existing inline gates handle it. */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-20">
-        <div className="max-w-2xl mx-auto grid grid-cols-3">
+        <div className={`max-w-2xl mx-auto grid ${isAnon ? 'grid-cols-2' : 'grid-cols-3'}`}>
           <NavBtn icon={Home} label="หน้าหลัก" active={isActive('/customer') && location.pathname === '/customer'} onClick={() => navigate('/customer')} />
           <NavBtn icon={Building2} label="โครงการ" active={isActive('/customer/properties')} onClick={() => navigate('/customer/properties')} />
-          <NavBtn icon={FileText} label="การจอง" active={isActive('/customer/bookings')} onClick={() => navigate('/customer/bookings')} />
+          {!isAnon && (
+            <NavBtn icon={FileText} label="การจอง" active={isActive('/customer/bookings')} onClick={() => navigate('/customer/bookings')} />
+          )}
         </div>
       </nav>
     </div>
