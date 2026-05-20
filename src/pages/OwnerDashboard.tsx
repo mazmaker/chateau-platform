@@ -508,14 +508,6 @@ const OwnerDashboard = () => {
                 <h1 className="text-[34px] font-bold text-gray-900 leading-tight tracking-tight">Platform Overview</h1>
                 <p className="text-[15px] text-gray-500 mt-1.5">ภาพรวมระบบ SaaS Platform · MRR / ARR / Tenants / Churn · อัปเดตล่าสุด {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
               </div>
-              <div className="flex gap-2.5">
-                <Button variant="outline" className="rounded-xl text-sm h-11 px-5 border-gray-200">
-                  <RefreshCw className="w-4 h-4 mr-1.5" /> Refresh
-                </Button>
-                <Button onClick={() => navigate('/tenants')} style={{ backgroundColor: KK.red, color: '#fff', border: 'none' }} className="rounded-xl text-sm h-11 px-5 hover:opacity-90 transition-opacity">
-                  <Plus className="w-4 h-4 mr-1.5" /> เพิ่มบริษัท
-                </Button>
-              </div>
             </div>
 
             {/* === KPI Row (5 cards) === */}

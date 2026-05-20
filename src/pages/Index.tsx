@@ -483,17 +483,11 @@ const Index = () => {
                     <FunnelStep label="ปิดดีลแล้ว" value={leadsWon} max={Math.max(leadsTotal, 1)} color={C.green} />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 mt-5 pt-5 border-t border-gray-100">
+                  <div className="mt-5 pt-5 border-t border-gray-100">
                     <div className="rounded-xl p-3" style={{ backgroundColor: C.greenLight }}>
                       <p className="text-xs text-gray-600">อัตราปิดดีล</p>
                       <p className="text-2xl font-bold tabular-nums" style={{ color: C.green }}>
                         {conversionRate.toFixed(1)}<span className="text-sm">%</span>
-                      </p>
-                    </div>
-                    <div className="rounded-xl p-3" style={{ backgroundColor: C.charcoalLight }}>
-                      <p className="text-xs text-gray-600">ค่าเฉลี่ยอุตสาหกรรม</p>
-                      <p className="text-2xl font-bold tabular-nums" style={{ color: C.charcoal }}>
-                        4-6<span className="text-sm">%</span>
                       </p>
                     </div>
                   </div>

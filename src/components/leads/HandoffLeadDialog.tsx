@@ -15,8 +15,8 @@ import { toast } from 'sonner';
 interface HandoffLeadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  leadId: string | null;
-  customerName?: string;
+  leadIds: string[];
+  customerNames?: string[];
   /** When provided, filter Sales list to only those with permission on this unit (via unit OR project assignment). */
   unitId?: string;
   projectId?: string;
@@ -30,7 +30,7 @@ interface SalesUser {
   hasPermission?: boolean;
 }
 
-const HandoffLeadDialog = ({ open, onOpenChange, leadId, customerName, unitId, projectId, onSuccess }: HandoffLeadDialogProps) => {
+const HandoffLeadDialog = ({ open, onOpenChange, leadIds, customerNames, unitId, projectId, onSuccess }: HandoffLeadDialogProps) => {
   const { currentTenant, userProfile } = useSimpleAuth();
   const [salesUsers, setSalesUsers] = useState<SalesUser[]>([]);
   const [selectedSalesId, setSelectedSalesId] = useState<string>('');
@@ -58,7 +58,6 @@ const HandoffLeadDialog = ({ open, onOpenChange, leadId, customerName, unitId, p
       if (error) throw error;
       const list: SalesUser[] = (allSales as SalesUser[]) || [];
 
-      // If unit/project context given → mark which Sales have permission
       if ((unitId || projectId) && list.length > 0) {
         const ids = list.map((s) => s.id);
         const [unitAssigns, projAssigns] = await Promise.all([
@@ -94,47 +93,52 @@ const HandoffLeadDialog = ({ open, onOpenChange, leadId, customerName, unitId, p
   };
 
   const handleHandoff = async () => {
-    if (!leadId || !selectedSalesId) return;
+    if (leadIds.length === 0 || !selectedSalesId) return;
     setLoading(true);
     try {
       const salesUser = salesUsers.find((s) => s.id === selectedSalesId);
       const agentName = userProfile?.full_name || userProfile?.email || 'Agent';
-      const handoffNote = `\n[${new Date().toLocaleString('th-TH')}] ส่งต่อจาก ${agentName} → ${salesUser?.full_name || salesUser?.email}`;
+      const timestamp = new Date().toLocaleString('th-TH');
+      const handoffNote = `\n[${timestamp}] ส่งต่อจาก ${agentName} → ${salesUser?.full_name || salesUser?.email}`;
 
-      // Fetch existing notes to append (not overwrite)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: existing } = await (supabase.from('leads') as any)
-        .select('notes').eq('id', leadId).single();
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase.from('leads') as any)
-        .update({
-          assigned_to: selectedSalesId,
-          notes: ((existing as { notes?: string } | null)?.notes || '') + handoffNote,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', leadId);
-
-      if (error) throw error;
-
-      // Log handoff with proper metadata so Agent dashboard can track referrals
-      try {
+      await Promise.all(leadIds.map(async (leadId, idx) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.from('activity_logs') as any).insert({
-          tenant_id: currentTenant?.id,
-          user_id: userProfile?.id,
-          activity_type: 'handoff_to_sales',
-          description: `${agentName} ส่งต่อ Lead ${customerName || ''} → ${salesUser?.full_name || salesUser?.email}`,
-          metadata: {
-            lead_id: leadId,
-            from_user_id: userProfile?.id,
-            to_user_id: selectedSalesId,
-            customer_name: customerName,
-          },
-        });
-      } catch { /* non-blocking */ }
+        const { data: existing } = await (supabase.from('leads') as any)
+          .select('notes, status').eq('id', leadId).single();
 
-      toast.success(`ส่งต่อ Lead ให้ ${salesUser?.full_name || 'Sales'} สำเร็จ`);
+        const currentStatus = (existing as { notes?: string; status?: string } | null)?.status || 'new';
+        // Advance 'new' leads to 'contacted' — Agent has already engaged with the customer
+        const newStatus = currentStatus === 'new' ? 'contacted' : currentStatus;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('leads') as any)
+          .update({
+            assigned_to: selectedSalesId,
+            status: newStatus,
+            notes: ((existing as { notes?: string } | null)?.notes || '') + handoffNote,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', leadId);
+
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase.from('activity_logs') as any).insert({
+            tenant_id: currentTenant?.id,
+            user_id: userProfile?.id,
+            activity_type: 'handoff_to_sales',
+            description: `${agentName} ส่งต่อ Lead ${customerNames?.[idx] || ''} → ${salesUser?.full_name || salesUser?.email}`,
+            metadata: {
+              lead_id: leadId,
+              from_user_id: userProfile?.id,
+              to_user_id: selectedSalesId,
+              customer_name: customerNames?.[idx],
+            },
+          });
+        } catch { /* non-blocking */ }
+      }));
+
+      const label = leadIds.length > 1 ? `${leadIds.length} Lead` : (customerNames?.[0] || 'Lead');
+      toast.success(`ส่งต่อ ${label} ให้ ${salesUser?.full_name || 'Sales'} สำเร็จ`);
       onSuccess?.();
       onOpenChange(false);
     } catch (error: any) {
@@ -145,6 +149,17 @@ const HandoffLeadDialog = ({ open, onOpenChange, leadId, customerName, unitId, p
     }
   };
 
+  const needsPermissionContext = !!(unitId || projectId);
+  const hasAnyPermitted = salesUsers.some((s) => s.hasPermission);
+
+  const descriptionText = () => {
+    if (!customerNames || customerNames.length === 0) return 'เลือกพนักงานขายที่จะรับช่วงต่อ';
+    if (customerNames.length === 1) return `ลูกค้า: ${customerNames[0]}`;
+    const preview = customerNames.slice(0, 2).join(', ');
+    const extra = customerNames.length > 2 ? ` และอีก ${customerNames.length - 2} คน` : '';
+    return `${customerNames.length} Lead: ${preview}${extra}`;
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -153,16 +168,14 @@ const HandoffLeadDialog = ({ open, onOpenChange, leadId, customerName, unitId, p
             <Send className="w-5 h-5 text-chateau" />
             ส่งต่อ Lead ให้ Sales
           </DialogTitle>
-          <DialogDescription>
-            {customerName ? `ลูกค้า: ${customerName}` : 'เลือกพนักงานขายที่จะรับช่วงต่อ'}
-          </DialogDescription>
+          <DialogDescription>{descriptionText()}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex gap-2">
             <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-amber-800">
-              หลังส่งต่อแล้ว คุณจะไม่เห็น Lead นี้ในรายการ "Leads ของฉัน" แต่ยังคงดูได้ในประวัติ
+              หลังส่งต่อแล้ว Lead {leadIds.length > 1 ? 'เหล่านี้' : 'นี้'} จะย้ายออกจากรายการของคุณ — ยังดูได้ในประวัติ Referral
             </p>
           </div>
 
@@ -175,7 +188,7 @@ const HandoffLeadDialog = ({ open, onOpenChange, leadId, customerName, unitId, p
               <SelectContent>
                 {salesUsers.length === 0 ? (
                   <div className="px-2 py-3 text-sm text-gray-500 text-center">ไม่มีพนักงานขายในบริษัทนี้</div>
-                ) : (unitId || projectId) ? (() => {
+                ) : needsPermissionContext ? (() => {
                   const permitted = salesUsers.filter((s) => s.hasPermission);
                   const notPermitted = salesUsers.filter((s) => !s.hasPermission);
                   return (
@@ -196,11 +209,14 @@ const HandoffLeadDialog = ({ open, onOpenChange, leadId, customerName, unitId, p
                       {notPermitted.length > 0 && (
                         <>
                           <div className="px-2 py-1.5 text-xs font-semibold text-amber-700 bg-amber-50 sticky top-0 mt-1">
-                            ⚠️ ไม่มีสิทธิ์บนยูนิตนี้ — Admin ต้องมอบหมายก่อน ({notPermitted.length})
+                            ⚠️ ยังไม่มีสิทธิ์บนยูนิตนี้ ({notPermitted.length})
                           </div>
                           {notPermitted.map((s) => (
-                            <SelectItem key={s.id} value={s.id}>
-                              <span className="text-gray-500">{s.full_name || s.email}</span>
+                            // Disable no-permission Sales when permitted Sales exist — force correct assignment
+                            <SelectItem key={s.id} value={s.id} disabled={hasAnyPermitted}>
+                              <span className={hasAnyPermitted ? 'text-gray-400' : 'text-gray-700'}>
+                                {s.full_name || s.email}
+                              </span>
                               {s.full_name && <span className="text-gray-400 text-xs ml-2">{s.email}</span>}
                             </SelectItem>
                           ))}
@@ -223,9 +239,9 @@ const HandoffLeadDialog = ({ open, onOpenChange, leadId, customerName, unitId, p
                 )}
               </SelectContent>
             </Select>
-            {(unitId || projectId) && selectedSalesId && salesUsers.find((s) => s.id === selectedSalesId)?.hasPermission === false && (
+            {needsPermissionContext && selectedSalesId && salesUsers.find((s) => s.id === selectedSalesId)?.hasPermission === false && (
               <p className="text-xs text-amber-700 mt-1.5">
-                ⚠️ Sales คนนี้ยังไม่มีสิทธิ์บนยูนิตนี้ — ส่งต่อได้ แต่ต้องแจ้ง Admin มอบหมาย Sales บนยูนิตก่อนจึงจะบันทึกการจองได้
+                ⚠️ Sales คนนี้ยังไม่มีสิทธิ์บนยูนิตนี้ — ส่งต่อได้ แต่ต้องแจ้ง Admin มอบหมายก่อนจะบันทึกการจองได้
               </p>
             )}
           </div>
@@ -236,7 +252,11 @@ const HandoffLeadDialog = ({ open, onOpenChange, leadId, customerName, unitId, p
             ยกเลิก
           </Button>
           <Button onClick={handleHandoff} disabled={!selectedSalesId || loading}>
-            {loading ? 'กำลังส่งต่อ...' : 'ยืนยันส่งต่อ'}
+            {loading
+              ? 'กำลังส่งต่อ...'
+              : leadIds.length > 1
+                ? `ยืนยันส่งต่อ ${leadIds.length} Lead`
+                : 'ยืนยันส่งต่อ'}
           </Button>
         </DialogFooter>
       </DialogContent>

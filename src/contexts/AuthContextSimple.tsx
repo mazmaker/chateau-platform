@@ -14,7 +14,7 @@ import { useNavigate } from 'react-router-dom'
 import { getCompanySettings } from '@/lib/api/companySettings'
 
 // Types
-interface Tenant {
+export interface Tenant {
   id: string
   name: string
   slug: string
@@ -66,6 +66,7 @@ interface AuthContextType {
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>
   switchTenant: (tenantId: string) => Promise<void>
+  switchTenantAsOwner: (tenant: Tenant) => void
   refreshUser: () => Promise<void>
 }
 
@@ -328,6 +329,16 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
           localStorage.setItem('current_tenant_id', tenantToUse.tenant_id)
           // Save to cache for next time
           saveRoleToCache(tenantToUse.tenant_id, tenantToUse.role)
+        } else if (savedTenantId && profile?.role === 'owner') {
+          // Owner switched to a tenant outside their own membership — restore via RPC
+          const { data: allTenants } = await supabase.rpc('get_all_tenants_for_owner')
+          const found = ((allTenants as any[]) || []).find((t: any) => t.id === savedTenantId)
+          if (found) {
+            setCurrentTenant(found)
+            setUserRole('owner')
+            setTenantSuspended(found.status === 'suspended')
+            saveRoleToCache(found.id, 'owner')
+          }
         }
       }
     } catch (error) {
@@ -492,6 +503,16 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
     window.location.reload()
   }
 
+  // Switch to any tenant as owner (bypasses userTenants membership check)
+  const switchTenantAsOwner = (tenant: Tenant) => {
+    setCurrentTenant(tenant)
+    setUserRole('owner')
+    setTenantSuspended(tenant.status === 'suspended')
+    localStorage.setItem('current_tenant_id', tenant.id)
+    saveRoleToCache(tenant.id, 'owner')
+    window.location.reload()
+  }
+
   // Listen for auth changes
   useEffect(() => {
     initializeAuth()
@@ -555,6 +576,17 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
                 localStorage.setItem('current_tenant_id', tenantToUse.tenant_id)
                 // Save to cache for next time
                 saveRoleToCache(tenantToUse.tenant_id, tenantToUse.role)
+              } else if (savedTenantId && profile?.role === 'owner') {
+                // Owner switched to a tenant outside their own membership — restore via RPC
+                supabase.rpc('get_all_tenants_for_owner').then(({ data: allTenants }) => {
+                  const found = ((allTenants as any[]) || []).find((t: any) => t.id === savedTenantId)
+                  if (found) {
+                    setCurrentTenant(found)
+                    setUserRole('owner')
+                    setTenantSuspended(found.status === 'suspended')
+                    saveRoleToCache(found.id, 'owner')
+                  }
+                })
               }
             }
           }).catch(err => {
@@ -602,6 +634,7 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
     signOut,
     resetPassword,
     switchTenant,
+    switchTenantAsOwner,
     refreshUser
   }
 

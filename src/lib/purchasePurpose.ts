@@ -28,17 +28,17 @@ const LEGACY_MAP: Record<string, PurchasePurpose> = {
   parents:       'family',
 };
 
-/** Get full label "🏡 อยู่อาศัยเอง" — handles legacy values and free-text "other:xxx" */
+/** Get label "อยู่อาศัยเอง" — handles legacy values and free-text "other:xxx" */
 export function getPurchasePurposeLabel(value?: string | null): string {
   if (!value) return '-';
   // Handle free-text variant "other: ระยะยาว"
-  if (value.startsWith('other:')) return '❓ อื่นๆ: ' + value.replace('other:', '').trim();
-  if (value === 'other') return '❓ อื่นๆ / ยังไม่ตัดสินใจ';
+  if (value.startsWith('other:')) return 'อื่นๆ: ' + value.replace('other:', '').trim();
+  if (value === 'other') return 'อื่นๆ / ยังไม่ตัดสินใจ';
 
   // Resolve legacy → canonical
   const canonical = (LEGACY_MAP[value] || value) as PurchasePurpose;
   const opt = PURCHASE_PURPOSE_OPTIONS.find((o) => o.value === canonical);
-  return opt ? `${opt.emoji} ${opt.label}` : value;
+  return opt ? opt.label : value;
 }
 
 /** Normalize incoming value (form field) to canonical — use before writing to DB */

@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -134,9 +135,9 @@ const UnitDetail = () => {
   const [quickInterestLevel, setQuickInterestLevel] = useState<'high' | 'medium' | 'low'>('high');
   const [savingQuickInterest, setSavingQuickInterest] = useState(false);
   const [showHandoffDialog, setShowHandoffDialog] = useState(false);
-  const [handoffLeadId, setHandoffLeadId] = useState<string | null>(null);
-  const [handoffCustomerName, setHandoffCustomerName] = useState<string | undefined>();
+  const [handoffLeadIds, setHandoffLeadIds] = useState<string[]>([]);
   const [showHandoffPicker, setShowHandoffPicker] = useState(false);
+  const [pickerSelected, setPickerSelected] = useState<string[]>([]);
 
   /* ─── tick countdown every 30s ─── */
   useEffect(() => {
@@ -428,11 +429,10 @@ const UnitDetail = () => {
       return;
     }
     if (myLeadsOnUnit.length === 1) {
-      const l = myLeadsOnUnit[0];
-      setHandoffLeadId(l.id);
-      setHandoffCustomerName(l.customers?.full_name);
+      setHandoffLeadIds([myLeadsOnUnit[0].id]);
       setShowHandoffDialog(true);
     } else {
+      setPickerSelected([]);
       setShowHandoffPicker(true);
     }
   };
@@ -647,46 +647,6 @@ const UnitDetail = () => {
           .eq('lead_id', unit.reserved_customer_lead_id)
           .eq('unit_id', unit.id);
 
-        // Commission accrual — credit goes to the ORIGINAL Agent who referred the customer,
-        // not to whoever is assigned_to at close time. After a handoff Agent → Sales,
-        // assigned_to points to Sales, but referred_by_agent_id is locked to the Agent
-        // (enforced by the DB trigger guard_lead_referred_by_immutable). This is the
-        // industry-standard broker attribution model.
-        // Snapshot rate + price so future rate edits don't mutate historical commissions.
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: leadRow } = await (supabase.from('leads') as any)
-            .select('referred_by_agent_id')
-            .eq('id', unit.reserved_customer_lead_id)
-            .maybeSingle();
-          const referredByAgentId = leadRow?.referred_by_agent_id as string | undefined;
-          if (referredByAgentId) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { data: proj } = await (supabase.from('properties') as any)
-              .select('commission_rate_agent_pct')
-              .eq('id', unit.project_id)
-              .maybeSingle();
-            const ratePct = Number(proj?.commission_rate_agent_pct ?? 3);
-            const salePrice = Number(unit.price ?? 0);
-            const amount = Math.round((salePrice * ratePct) / 100);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await (supabase.from('agent_commissions') as any).insert({
-              tenant_id: currentTenant?.id,
-              agent_user_id: referredByAgentId,
-              lead_id: unit.reserved_customer_lead_id,
-              unit_id: unit.id,
-              property_id: unit.project_id,
-              sale_price: salePrice,
-              rate_pct: ratePct,
-              amount,
-              status: 'pending',
-              notes: `ปิดการขาย ${unit.unit_number} (${property?.name || ''})`,
-            });
-          }
-        } catch (commErr) {
-          // Don't fail the sale close if commission accrual hiccups — log silently.
-          console.warn('Commission accrual skipped:', commErr);
-        }
       }
       // Promote pending booking → confirmed (customer sees: ชำระแล้ว · ทำสัญญา)
       await (supabase.from('bookings') as any)
@@ -1139,7 +1099,8 @@ const UnitDetail = () => {
                         </DropdownMenu>
                         {myLeadsOnUnit.length > 0 && (
                           <Button onClick={openHandoffFlow} className="bg-chateau hover:bg-chateau-600 text-white">
-                            <Send className="w-4 h-4 mr-1" /> ส่งต่อให้ Sales{myLeadsOnUnit.length > 1 ? ` (${myLeadsOnUnit.length})` : ''}
+                            <Send className="w-4 h-4 mr-1" />
+                            {myLeadsOnUnit.length > 1 ? `เลือก Lead ส่งต่อ (${myLeadsOnUnit.length})` : 'ส่งต่อให้ Sales'}
                           </Button>
                         )}
                       </>
@@ -1865,47 +1826,87 @@ const UnitDetail = () => {
         open={showHandoffDialog}
         onOpenChange={(open) => {
           setShowHandoffDialog(open);
-          if (!open) { setHandoffLeadId(null); setHandoffCustomerName(undefined); }
+          if (!open) setHandoffLeadIds([]);
         }}
-        leadId={handoffLeadId}
-        customerName={handoffCustomerName}
+        leadIds={handoffLeadIds}
+        customerNames={handoffLeadIds.map((id) => {
+          const l = myLeadsOnUnit.find((x: any) => x.id === id);
+          return l?.customers?.full_name || '';
+        }).filter(Boolean)}
         unitId={unit.id}
         projectId={unit.project_id}
         onSuccess={() => { loadAll(); }}
       />
 
       {/* Handoff Picker — when multiple Leads of mine on this unit */}
-      <Dialog open={showHandoffPicker} onOpenChange={setShowHandoffPicker}>
+      <Dialog open={showHandoffPicker} onOpenChange={(o) => { setShowHandoffPicker(o); if (!o) setPickerSelected([]); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Send className="w-5 h-5 text-chateau" /> เลือก Lead ที่จะส่งต่อ
             </DialogTitle>
             <DialogDescription>
-              ยูนิต {unit.unit_number} มี {myLeadsOnUnit.length} Lead ของคุณ — เลือกคนที่จะส่งต่อให้ Sales
+              ยูนิต {unit.unit_number} มี {myLeadsOnUnit.length} Lead ของคุณ — เลือกได้หลายคน ส่งต่อพร้อมกันได้เลย
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2 py-2">
-            {myLeadsOnUnit.map((l: any) => (
-              <button
-                key={l.id}
-                onClick={() => {
-                  setHandoffLeadId(l.id);
-                  setHandoffCustomerName(l.customers?.full_name);
-                  setShowHandoffPicker(false);
-                  setShowHandoffDialog(true);
-                }}
-                className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-chateau hover:bg-chateau-50 transition-colors"
-              >
-                <p className="text-sm font-medium text-gray-900">{l.customers?.full_name || '(ไม่มีชื่อ)'}</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {l.customers?.phone || ''} · สถานะ {leadStatusLabel(l.status)}
-                </p>
-              </button>
-            ))}
+
+          {/* Select all toggle */}
+          <div className="flex items-center justify-between px-1 pb-1 border-b border-gray-100">
+            <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600 select-none">
+              <Checkbox
+                checked={pickerSelected.length === myLeadsOnUnit.length && myLeadsOnUnit.length > 0}
+                onCheckedChange={(checked) =>
+                  setPickerSelected(checked ? myLeadsOnUnit.map((l: any) => l.id) : [])
+                }
+              />
+              เลือกทั้งหมด
+            </label>
+            <span className="text-xs text-gray-400">{pickerSelected.length} / {myLeadsOnUnit.length} คน</span>
           </div>
+
+          <div className="space-y-1.5 py-1 max-h-64 overflow-y-auto">
+            {myLeadsOnUnit.map((l: any) => {
+              const isChecked = pickerSelected.includes(l.id);
+              return (
+                <label
+                  key={l.id}
+                  className={`flex items-start gap-3 w-full p-3 rounded-lg border cursor-pointer transition-colors select-none ${
+                    isChecked ? 'border-chateau bg-chateau-50' : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <Checkbox
+                    checked={isChecked}
+                    onCheckedChange={(checked) =>
+                      setPickerSelected((prev) =>
+                        checked ? [...prev, l.id] : prev.filter((id) => id !== l.id)
+                      )
+                    }
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900">{l.customers?.full_name || '(ไม่มีชื่อ)'}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {l.customers?.phone || ''}{l.customers?.phone ? ' · ' : ''}สถานะ {leadStatusLabel(l.status)}
+                    </p>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowHandoffPicker(false)}>ยกเลิก</Button>
+            <Button variant="outline" onClick={() => { setShowHandoffPicker(false); setPickerSelected([]); }}>ยกเลิก</Button>
+            <Button
+              disabled={pickerSelected.length === 0}
+              onClick={() => {
+                setHandoffLeadIds(pickerSelected);
+                setShowHandoffPicker(false);
+                setShowHandoffDialog(true);
+              }}
+              className="bg-chateau hover:bg-chateau-600 text-white"
+            >
+              ถัดไป — ส่งต่อ {pickerSelected.length > 0 ? `${pickerSelected.length} Lead` : ''}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,24 +1,32 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "@/components/dashboard/Sidebar";
 import Header from "@/components/dashboard/Header";
 import {
   AlertTriangle,
+  BarChart3,
   Briefcase,
   CalendarDays,
   CheckCircle2,
   Clock,
   Eye,
-  Flame,
-  Megaphone,
   Send,
   Target,
   TrendingUp,
-  Trophy,
   Wallet,
 } from "lucide-react";
+import {
+  AreaChart,
+  Area,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+} from "recharts";
 import { supabase } from "@/lib/supabase";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
+import SelfPerformanceSection from "@/components/dashboard/SelfPerformanceSection";
 
 const C = {
   red:        '#ef4444',
@@ -99,6 +107,7 @@ interface ReferralLead {
   updated_at: string;
   assigned_to: string | null;
   customers?: { full_name: string | null } | null;
+  sales_person?: { full_name: string | null } | null;
 }
 
 const MyDashboard = () => {
@@ -201,7 +210,7 @@ const MyDashboard = () => {
           if (myHandoffLeadIds.length > 0) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data: refLeads } = await (supabase.from('leads') as any)
-              .select('id, status, estimated_value, updated_at, assigned_to, customers(full_name)')
+              .select('id, status, estimated_value, updated_at, assigned_to, customers(full_name), sales_person:users!assigned_to(full_name)')
               .in('id', myHandoffLeadIds);
             setMyReferrals((refLeads || []) as ReferralLead[]);
           }
@@ -290,6 +299,32 @@ const MyDashboard = () => {
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
 
+  // 6-month revenue trend — wins by month (uses updated_at as proxy for won_at).
+  // Drives the headline area chart that replaces the old "wall of KPI cards" feel.
+  const trend6Months = useMemo(() => {
+    const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+    const out: Array<{ month: string; revenue: number; deals: number }> = [];
+    const today = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const mStart = new Date(d.getFullYear(), d.getMonth(), 1);
+      const mEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
+      // For Sales: use own won leads. For Agent: use referrals that closed (proxy for their value).
+      const source = userRole === 'agent' ? myReferrals : myLeads;
+      const won = source.filter((l) =>
+        l.status === 'won' &&
+        new Date(l.updated_at) >= mStart &&
+        new Date(l.updated_at) <= mEnd
+      );
+      out.push({
+        month: months[d.getMonth()],
+        revenue: won.reduce((s, l) => s + Number(l.estimated_value || 0), 0),
+        deals: won.length,
+      });
+    }
+    return out;
+  }, [myLeads, myReferrals, userRole]);
+
   const openStatuses = new Set(['new', 'contacted', 'qualified', 'negotiating']);
 
   // My closed deals MTD
@@ -361,8 +396,12 @@ const MyDashboard = () => {
     })),
   ];
 
-  // Inactive leads — open + no contact in 30+ days
-  const inactiveLeads = myOpenLeads.filter((l) => l.last_contact_date && new Date(l.last_contact_date) < thirtyDaysAgo);
+  // Inactive leads — open + no contact (or never contacted) in 30+ days
+  // Falls back to created_at when last_contact_date is null so never-contacted leads are included
+  const inactiveLeads = myOpenLeads.filter((l) => {
+    const ref = l.last_contact_date ? new Date(l.last_contact_date) : new Date(l.created_at);
+    return ref < thirtyDaysAgo;
+  });
 
   // Reservations expiring in the next 7 days
   const expiringSoon = myLockedUnits.filter((u) => {
@@ -386,15 +425,17 @@ const MyDashboard = () => {
   // ─── Sales personal analytics ───────────────────────────────
   // Lead Source breakdown — where my leads came from
   const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
-    online_facebook: { label: '📘 Facebook', color: '#1877f2' },
-    online_google:   { label: '🔍 Google',   color: '#fbbc04' },
-    online_line:     { label: '💬 LINE',     color: '#06c755' },
-    agent_referral:  { label: '🤝 นายหน้า',   color: '#ec4899' },
-    offline:         { label: '🚶 Walk-in',  color: C.green },
+    online_facebook: { label: 'Facebook',  color: C.indigo },
+    online_google:   { label: 'Google',    color: C.amber },
+    online_line:     { label: 'LINE',      color: C.green },
+    agent_referral:  { label: 'นายหน้า',   color: C.redDeep },
+    offline:         { label: 'Walk-in',   color: C.charcoal },
   };
   const sourceCounts: Record<string, number> = {};
   myLeads.forEach((l) => {
-    const key = (l.source || 'unknown').toLowerCase();
+    const raw = (l.source || 'unknown').toLowerCase();
+    // Collapse all "other*" variants (other, other_other: xxx, online_other: xxx) into a single bucket
+    const key = raw.startsWith('other') || raw.startsWith('online_other') || raw === 'unknown' ? 'other' : raw;
     sourceCounts[key] = (sourceCounts[key] || 0) + 1;
   });
   const mySourceBreakdown = Object.entries(sourceCounts)
@@ -471,142 +512,116 @@ const MyDashboard = () => {
             </h1>
             <p className="text-[15px] text-gray-500 mt-1.5">
               {userRole === 'agent'
-                ? 'ยูนิตที่ดูแล · ลูกค้าที่ส่งต่อให้ Sales · ผลงานของคุณ'
-                : 'ผลงานของคุณ · งานที่ต้องทำวันนี้ · ลีดที่ต้องตาม'}
+                ? 'ยูนิตที่ดูแล · รายการส่งต่อให้ Sales · สรุปผลงาน'
+                : 'ภาพรวมผลงาน · งานที่ต้องทำวันนี้ · ลีดที่ต้องติดตาม'}
             </p>
           </div>
 
           {loading ? (
             <div className="space-y-7">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[...Array(4)].map((_, i) => <div key={i} className="bg-white rounded-2xl h-[170px] animate-pulse" />)}
+              <div className="bg-white rounded-2xl h-[300px] animate-pulse" />
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                <div className="lg:col-span-2 bg-white rounded-2xl h-[300px] animate-pulse" />
+                <div className="bg-white rounded-2xl h-[300px] animate-pulse" />
               </div>
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                {[...Array(3)].map((_, i) => <div key={i} className="bg-white rounded-2xl h-[260px] animate-pulse" />)}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div className="bg-white rounded-2xl h-[260px] animate-pulse" />
+                <div className="bg-white rounded-2xl h-[260px] animate-pulse" />
               </div>
             </div>
           ) : (
             <>
-              {/* Row 1: Personal KPIs — Sales sees 3 cards (no ranking), Agent/Admin/Owner see 4 */}
-              <div className={`grid grid-cols-2 gap-4 ${userRole === 'sales' ? 'md:grid-cols-3' : 'md:grid-cols-4'}`}>
-                {userRole === 'agent' ? (
-                  <>
-                    <KpiCard
-                      title="ยูนิตที่ดูแล"
-                      value={myAssignedUnits.length.toString()}
-                      icon={Briefcase}
-                      color={C.red}
-                      bg={C.redLight}
-                      sub={<span className="text-xs text-gray-500">{unitsAvailable} ว่าง · {unitsReserved} จอง · {unitsSold} ขายแล้ว</span>}
-                    />
-                    <KpiCard
-                      title="Referrals กำลังดูแล"
-                      value={referralsOpen.length.toString()}
-                      icon={Wallet}
-                      color={C.amber}
-                      bg={C.amberLight}
-                      sub={<span className="text-xs text-gray-500">{myReferrals.length} referrals ทั้งหมด</span>}
-                    />
-                    <KpiCard
-                      title="Referrals ปิดดีลได้"
-                      value={referralsWon.length.toString()}
-                      icon={CheckCircle2}
-                      color={C.redDeep}
-                      bg={C.redDeepLight}
-                      sub={<span className="text-xs text-gray-500">{formatTHB(referralWonValueMTD)} เดือนนี้</span>}
-                    />
-                  </>
-                ) : (
-                  <>
-                    <KpiCard
-                      title="ปิดดีลได้เดือนนี้"
-                      value={myWonMTD.length.toString()}
-                      icon={CheckCircle2}
-                      color={C.red}
-                      bg={C.redLight}
-                      sub={<span className="text-xs text-gray-500">มูลค่ารวม {formatTHB(myWonValueMTD)}</span>}
-                    />
-                    <KpiCard
-                      title="มูลค่ายอดขายที่กำลังขาย"
-                      value={formatTHB(myPipelineValue)}
-                      icon={Wallet}
-                      color={C.amber}
-                      bg={C.amberLight}
-                      sub={<span className="text-xs text-gray-500">{myOpenLeads.length} ดีลที่เปิดอยู่</span>}
-                    />
-                    <KpiCard
-                      title="ลูกค้าด่วน"
-                      value={myHotLeads.length.toString()}
-                      icon={Flame}
-                      color={C.redDeep}
-                      bg={C.redDeepLight}
-                      sub={<span className="text-xs text-gray-500">{myHotLeads.length > 0 ? 'คลิกดูรายชื่อ →' : 'ระดับความสำคัญสูง'}</span>}
-                      onClick={myHotLeads.length > 0 ? () => navigate('/leads?priority=high') : undefined}
-                    />
-                  </>
-                )}
-                {userRole === 'agent' ? (
-                  <KpiCard
-                    title="อัตราการแปลง"
-                    value={`${referralConversionRate.toFixed(0)}%`}
-                    icon={TrendingUp}
-                    color={C.charcoal}
-                    bg={C.charcoalLight}
-                    sub={
-                      myReferrals.length > 0
-                        ? <span className="text-xs text-gray-500">{referralsWon.length} ปิด · {referralsLost.length} เสีย</span>
-                        : <span className="text-xs text-gray-400">ยังไม่มี referrals</span>
-                    }
-                  />
-                ) : (userRole === 'admin' || userRole === 'owner') ? (
-                  /* Ranking is supervisor info only — Sales focuses on their own performance,
-                     not comparison to peers (industry practice: Sansiri/AP keep this off Sales view) */
-                  <KpiCard
-                    title="อันดับในทีม"
-                    value={myRank ? `#${myRank}` : '—'}
-                    icon={Trophy}
-                    color={C.charcoal}
-                    bg={C.charcoalLight}
-                    sub={
-                      myRank
-                        ? <span className="text-xs text-gray-500">จาก {totalReps} คน · {formatTHB(myAllTimeWonValue)}</span>
-                        : <span className="text-xs text-gray-400">ยังไม่มีดีลปิด</span>
-                    }
-                  />
-                ) : null}
-              </div>
+              {/* SECTION 1 — Performance Scorecard (full width).
+                  Single source of truth for "how am I doing" — old MyDashboard duplicated KPIs
+                  across Row 1 (3 cards) + this section's internal cards = 8 boxes of the same shape.
+                  We now keep ONLY this card and trust it as the personal snapshot. */}
+              {myId && currentTenant?.id && (
+                <SelfPerformanceSection userId={myId} tenantId={currentTenant.id} />
+              )}
 
-              {/* Row 2: Today's Tasks */}
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                {/* Today's tasks — phone follow-ups + site visits unified */}
+              {/* SECTION 2 — Revenue trend (2/3) + Today timeline (1/3).
+                  The area chart is the headline visual variety the user asked for —
+                  was missing entirely from the old layout (which was wall-to-wall bars + cards). */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                <div className="lg:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+                  <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4" style={{ color: C.red }} />
+                      <h2 className="text-base font-bold text-gray-900">
+                        {userRole === 'agent' ? 'มูลค่า Referrals ที่ปิดได้' : 'ผลงาน 6 เดือนล่าสุด'}
+                      </h2>
+                    </div>
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: C.red, backgroundColor: C.redLight }}>
+                      6 เดือน
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-4">
+                    {trend6Months.reduce((s, m) => s + m.deals, 0) === 0
+                      ? 'ยังไม่มีดีลปิดในช่วงนี้'
+                      : `รวม ${trend6Months.reduce((s, m) => s + m.deals, 0)} ดีล · ${formatTHB(trend6Months.reduce((s, m) => s + m.revenue, 0))}`}
+                  </p>
+                  <ResponsiveContainer width="100%" height={240}>
+                    <AreaChart data={trend6Months} margin={{ top: 10, right: 8, left: -10, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="myRevGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={C.red} stopOpacity={0.32} />
+                          <stop offset="100%" stopColor={C.red} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                      <YAxis
+                        tick={{ fontSize: 11, fill: '#94a3b8' }}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(v: number) => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M` : v >= 1_000 ? `${Math.round(v / 1_000)}K` : `${v}`}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'white',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                          fontSize: '12px',
+                          padding: '8px 12px',
+                        }}
+                        formatter={(value, name) => {
+                          const v = typeof value === 'number' ? value : 0;
+                          return name === 'revenue' ? [formatTHB(v), 'มูลค่ารวม'] : [v, 'จำนวนดีล'];
+                        }}
+                      />
+                      <Area type="monotone" dataKey="revenue" stroke={C.red} strokeWidth={2.5} fill="url(#myRevGrad)" dot={false} activeDot={{ r: 4, fill: C.red, stroke: '#fff', strokeWidth: 2 }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Today timeline — compact stack of phone/visit tasks */}
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
                   <div className="flex items-center gap-2 mb-1">
                     <Clock className="w-4 h-4" style={{ color: C.red }} />
                     <h2 className="text-base font-bold text-gray-900">งานวันนี้</h2>
                     {todayTasks.length > 0 && (
                       <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.red, backgroundColor: C.redLight }}>
-                        {todayTasks.length} งาน
+                        {todayTasks.length}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mb-4">นัดโทร · นัดดูยูนิตวันนี้</p>
+                  <p className="text-xs text-gray-500 mb-4">นัดโทร · นัดดูยูนิต</p>
                   {todayTasks.length === 0 ? (
-                    <div className="h-[140px] flex items-center justify-center text-sm text-gray-400">ไม่มีงานนัดวันนี้ 🎉</div>
+                    <div className="h-[200px] flex items-center justify-center text-sm text-gray-400 text-center">ไม่มีงานนัดวันนี้</div>
                   ) : (
-                    <div className="space-y-2.5">
+                    <div className="space-y-2 max-h-[240px] overflow-y-auto">
                       {todayTasks.map((t) => (
                         <button
                           key={t.key}
-                          onClick={() => navigate(t.leadId ? `/leads?lead=${t.leadId}` : '/leads')}
-                          className="w-full flex items-start justify-between gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left"
+                          onClick={() => navigate(t.leadId ? `/leads/${t.leadId}` : '/leads')}
+                          className="w-full flex items-start justify-between gap-3 p-2.5 rounded-lg hover:bg-gray-50 transition-colors text-left"
                         >
                           <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                            <span className="text-base flex-shrink-0 mt-0.5">
-                              {t.kind === 'visit' ? '🏠' : '📞'}
-                            </span>
+                            <span className="text-base flex-shrink-0 mt-0.5">{t.kind === 'visit' ? '🏠' : '📞'}</span>
                             <div className="min-w-0">
                               <p className="text-sm font-medium text-gray-900 truncate">{t.title}</p>
-                              <p className="text-xs text-gray-500 mt-0.5">{t.sub}</p>
+                              <p className="text-xs text-gray-500 mt-0.5 truncate">{t.sub}</p>
                             </div>
                           </div>
                           <span className="text-xs font-semibold tabular-nums shrink-0" style={{ color: t.kind === 'visit' ? C.amber : C.red }}>
@@ -617,71 +632,140 @@ const MyDashboard = () => {
                     </div>
                   )}
                 </div>
+              </div>
 
-                {/* Inactive leads — Sales-only (Agent doesn't chase customers) */}
-                {userRole !== 'agent' && (
-                <div className="bg-white border rounded-2xl shadow-soft p-6" style={{ borderColor: C.amberLight }}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <AlertTriangle className="w-4 h-4" style={{ color: C.amber }} />
-                    <h2 className="text-base font-bold text-gray-900">ลูกค้าที่เงียบหาย</h2>
-                    {inactiveLeads.length > 0 && (
-                      <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.amber, backgroundColor: C.amberLight }}>
-                        {inactiveLeads.length} ราย
-                      </span>
+              {/* SECTION 3 — Source donut + Combined alerts (Sales/Admin/Owner).
+                  Replaces the old "Row 3.5 source bars" with a donut chart, and merges the
+                  old 3 alert cards (ลูกค้าเงียบหาย / การจองใกล้หมดอายุ) into one prioritized list. */}
+              {userRole !== 'agent' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  {/* Source breakdown — horizontal bars scale better than a donut once you
+                      have 5+ sources. Each row shows: label, bar (length = pct), count, pct. */}
+                  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+                    <div className="flex items-center gap-2 mb-1">
+                      <BarChart3 className="w-4 h-4" style={{ color: C.amber }} />
+                      <h2 className="text-base font-bold text-gray-900">แหล่งที่มาของลีด</h2>
+                      <span className="ml-auto text-xs text-gray-500">{myLeads.length} leads</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-5">ช่องทางไหนทำลีดให้คุณมากที่สุด</p>
+                    {mySourceBreakdown.length === 0 ? (
+                      <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ยังไม่มี source data</div>
+                    ) : (
+                      <div className="space-y-3.5">
+                        {mySourceBreakdown.map((s) => (
+                          <div key={s.key}>
+                            <div className="flex items-center justify-between mb-1.5 gap-3">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                                <span className="text-sm font-medium text-gray-700 truncate">{s.label}</span>
+                              </div>
+                              <span className="tabular-nums text-xs shrink-0 flex items-center gap-2">
+                                <span className="font-bold text-gray-900">{s.count}</span>
+                                <span className="text-gray-400 w-9 text-right">{s.pct.toFixed(0)}%</span>
+                              </span>
+                            </div>
+                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full transition-all" style={{ width: `${Math.max(s.pct, 2)}%`, backgroundColor: s.color }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mb-4">ไม่ติดต่อมา {'>'} 30 วัน</p>
-                  {inactiveLeads.length === 0 ? (
-                    <div className="h-[140px] flex items-center justify-center text-sm text-gray-400">ไม่มี — ทำงานเก่งมาก 👍</div>
-                  ) : (
-                    <div className="space-y-2.5">
-                      {inactiveLeads.slice(0, 4).map((l) => {
-                        const days = l.last_contact_date ? Math.floor((Date.now() - new Date(l.last_contact_date).getTime()) / 86400000) : 0;
-                        return (
-                          <button
-                            key={l.id}
-                            onClick={() => navigate(`/leads/${l.id}`)}
-                            className="w-full flex items-start justify-between gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left"
-                          >
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-gray-900 truncate">{l.customers?.full_name || '(ไม่ระบุชื่อ)'}</p>
-                              <p className="text-xs text-gray-500 mt-0.5">{l.property_id ? propById.get(l.property_id) || '—' : '—'}</p>
-                            </div>
-                            <span className="text-xs font-semibold tabular-nums shrink-0" style={{ color: days >= 60 ? C.red : C.amber }}>
-                              {days} วัน
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                )}
 
-                {/* Reservations expiring (Sales) | Assigned units (Agent) */}
-                {userRole === 'agent' ? (
-                  <div className="bg-white border rounded-2xl shadow-soft p-6" style={{ borderColor: C.redLight }}>
+                  {/* Combined Alerts — เงียบหาย + lock หมด rolled into one prioritized list */}
+                  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
                     <div className="flex items-center gap-2 mb-1">
-                      <Target className="w-4 h-4" style={{ color: C.redDeep }} />
+                      <AlertTriangle className="w-4 h-4" style={{ color: C.amber }} />
+                      <h2 className="text-base font-bold text-gray-900">ต้องดูด่วน</h2>
+                      {(inactiveLeads.length + expiringSoon.length) > 0 && (
+                        <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.amber, backgroundColor: C.amberLight }}>
+                          {inactiveLeads.length + expiringSoon.length}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mb-4">ลูกค้าเงียบ · ยูนิตจองใกล้หมดอายุ</p>
+                    {inactiveLeads.length === 0 && expiringSoon.length === 0 ? (
+                      <div className="h-[180px] flex items-center justify-center text-sm text-gray-400 text-center">
+                        ไม่มีเรื่องด่วน — ทำงานเก่งมาก 👍
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-[240px] overflow-y-auto">
+                        {expiringSoon.map((u) => {
+                          const days = daysFromNow(u.locked_until);
+                          const urgent = days !== null && days <= 1;
+                          return (
+                            <button
+                              key={`exp-${u.id}`}
+                              onClick={() => navigate(`/units/${u.id}`)}
+                              className="w-full flex items-start justify-between gap-3 p-2.5 rounded-lg hover:bg-gray-50 transition-colors text-left"
+                            >
+                              <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                <Target className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: urgent ? C.red : C.amber }} />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">ยูนิต {u.unit_number} · จองใกล้หมด</p>
+                                  <p className="text-xs text-gray-500 mt-0.5 truncate">{propById.get(u.project_id) || '—'} · {formatTHB(Number(u.price))}</p>
+                                </div>
+                              </div>
+                              <span className="text-xs font-semibold tabular-nums shrink-0" style={{ color: urgent ? C.red : C.amber }}>
+                                เหลือ {days ?? '—'} วัน
+                              </span>
+                            </button>
+                          );
+                        })}
+                        {inactiveLeads.slice(0, 5).map((l) => {
+                          const days = Math.floor((Date.now() - new Date(l.last_contact_date ?? l.created_at).getTime()) / 86400000);
+                          return (
+                            <button
+                              key={`silent-${l.id}`}
+                              onClick={() => navigate(`/leads/${l.id}`)}
+                              className="w-full flex items-start justify-between gap-3 p-2.5 rounded-lg hover:bg-gray-50 transition-colors text-left"
+                            >
+                              <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                <Clock className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: days >= 60 ? C.red : C.amber }} />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">{l.customers?.full_name || '(ไม่ระบุชื่อ)'} · เงียบ</p>
+                                  <p className="text-xs text-gray-500 mt-0.5 truncate">{l.property_id ? propById.get(l.property_id) || '—' : '—'}</p>
+                                </div>
+                              </div>
+                              <span className="text-xs font-semibold tabular-nums shrink-0" style={{ color: days >= 60 ? C.red : C.amber }}>
+                                {days} วัน
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION 3 (Agent) — Assigned units + Inactive leads alert */}
+              {userRole === 'agent' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  {/* Assigned Units */}
+                  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Briefcase className="w-4 h-4" style={{ color: C.redDeep }} />
                       <h2 className="text-base font-bold text-gray-900">ยูนิตที่รับมอบหมาย</h2>
                       <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.redDeep, backgroundColor: C.redDeepLight }}>
-                        {myAssignedUnits.length} ยูนิต
+                        {myAssignedUnits.length}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mb-4">ยูนิตที่ได้รับมอบหมายให้ดูแล</p>
+                    <p className="text-xs text-gray-500 mb-4">{unitsAvailable} ว่าง · {unitsReserved} จอง · {unitsSold} ขายแล้ว</p>
                     {myAssignedUnits.length === 0 ? (
-                      <div className="h-[140px] flex items-center justify-center text-sm text-gray-400">ยังไม่มียูนิตที่ได้รับมอบหมาย</div>
+                      <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ยังไม่มียูนิตที่ได้รับมอบหมาย</div>
                     ) : (
-                      <div className="space-y-2.5 max-h-[200px] overflow-y-auto">
+                      <div className="space-y-2 max-h-[240px] overflow-y-auto">
                         {myAssignedUnits.map((u) => (
                           <button
                             key={u.id}
                             onClick={() => navigate(`/units/${u.id}`)}
-                            className="w-full flex items-start justify-between gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left"
+                            className="w-full flex items-start justify-between gap-3 p-2.5 rounded-lg hover:bg-gray-50 transition-colors text-left"
                           >
                             <div className="min-w-0 flex-1">
                               <p className="text-sm font-medium text-gray-900 truncate">{u.unit_number}</p>
-                              <p className="text-xs text-gray-500 mt-0.5">{propById.get(u.project_id) || '—'} · {formatTHB(Number(u.price))}</p>
+                              <p className="text-xs text-gray-500 mt-0.5 truncate">{propById.get(u.project_id) || '—'} · {formatTHB(Number(u.price))}</p>
                             </div>
                             <span className="text-xs font-semibold tabular-nums shrink-0" style={{
                               color: u.status === 'available' ? C.green : u.status === 'reserved' ? C.amber : C.charcoal
@@ -693,36 +777,42 @@ const MyDashboard = () => {
                       </div>
                     )}
                   </div>
-                ) : (
-                  <div className="bg-white border rounded-2xl shadow-soft p-6" style={{ borderColor: C.redLight }}>
+
+                  {/* Inactive leads — leads Agent hasn't contacted in 14+ days */}
+                  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
                     <div className="flex items-center gap-2 mb-1">
-                      <Target className="w-4 h-4" style={{ color: C.redDeep }} />
-                      <h2 className="text-base font-bold text-gray-900">การจองใกล้หมดอายุ</h2>
-                      {expiringSoon.length > 0 && (
-                        <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.redDeep, backgroundColor: C.redDeepLight }}>
-                          {expiringSoon.length} ยูนิต
+                      <AlertTriangle className="w-4 h-4" style={{ color: C.amber }} />
+                      <h2 className="text-base font-bold text-gray-900">ต้องดูด่วน</h2>
+                      {inactiveLeads.length > 0 && (
+                        <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.amber, backgroundColor: C.amberLight }}>
+                          {inactiveLeads.length}
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 mb-4">ภายใน 7 วัน — ต้องปิดดีลก่อนหลุด</p>
-                    {expiringSoon.length === 0 ? (
-                      <div className="h-[140px] flex items-center justify-center text-sm text-gray-400">ไม่มีการจองที่ใกล้หมดอายุ</div>
+                    <p className="text-xs text-gray-500 mb-4">ลูกค้าที่ยังไม่ได้ติดตามนาน 30+ วัน</p>
+                    {inactiveLeads.length === 0 ? (
+                      <div className="h-[200px] flex items-center justify-center text-sm text-gray-400 text-center">
+                        ไม่มีลูกค้าที่ค้างติดตาม — ทำงานเก่งมาก
+                      </div>
                     ) : (
-                      <div className="space-y-2.5">
-                        {expiringSoon.map((u) => {
-                          const days = daysFromNow(u.locked_until);
+                      <div className="space-y-2 max-h-[240px] overflow-y-auto">
+                        {inactiveLeads.slice(0, 6).map((l) => {
+                          const days = Math.floor((Date.now() - new Date(l.last_contact_date ?? l.created_at).getTime()) / 86400000);
                           return (
                             <button
-                              key={u.id}
-                              onClick={() => navigate(`/units/${u.id}`)}
-                              className="w-full flex items-start justify-between gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left"
+                              key={`silent-${l.id}`}
+                              onClick={() => navigate(`/leads/${l.id}`)}
+                              className="w-full flex items-start justify-between gap-3 p-2.5 rounded-lg hover:bg-gray-50 transition-colors text-left"
                             >
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-gray-900 truncate">{u.unit_number}</p>
-                                <p className="text-xs text-gray-500 mt-0.5">{propById.get(u.project_id) || '—'} · {formatTHB(Number(u.price))}</p>
+                              <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                <Clock className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: days >= 60 ? C.red : C.amber }} />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">{l.customers?.full_name || '(ไม่ระบุชื่อ)'}</p>
+                                  <p className="text-xs text-gray-500 mt-0.5 truncate">{l.property_id ? propById.get(l.property_id) || '—' : '—'}</p>
+                                </div>
                               </div>
-                              <span className="text-xs font-semibold tabular-nums shrink-0" style={{ color: days !== null && days <= 1 ? C.red : C.amber }}>
-                                เหลือ {days ?? '—'} วัน
+                              <span className="text-xs font-semibold tabular-nums shrink-0" style={{ color: days >= 60 ? C.red : C.amber }}>
+                                {days} วัน
                               </span>
                             </button>
                           );
@@ -730,63 +820,18 @@ const MyDashboard = () => {
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-
-              {/* Upcoming Site Visits */}
-              <div className="bg-white border rounded-2xl shadow-soft p-6" style={{ borderColor: C.amberLight }}>
-                <div className="flex items-center gap-2 mb-1">
-                  <CalendarDays className="w-4 h-4" style={{ color: C.amber }} />
-                  <h2 className="text-base font-bold text-gray-900">นัดดูยูนิตที่กำลังจะถึง</h2>
-                  <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.amber, backgroundColor: C.amberLight }}>
-                    {upcomingVisits.length} นัด
-                  </span>
                 </div>
-                <p className="text-xs text-gray-500 mb-4">ลูกค้านัดมาดูยูนิตที่ฉันดูแล</p>
-                {upcomingVisits.length === 0 ? (
-                  <div className="h-[100px] flex items-center justify-center text-sm text-gray-400">
-                    ยังไม่มีนัดดูยูนิตที่กำลังจะถึง
-                  </div>
-                ) : (
-                  <div className="space-y-2.5 max-h-[260px] overflow-y-auto">
-                    {upcomingVisits.map((v) => {
-                      const d = new Date(v.viewing_date);
-                      const isToday = d.toDateString() === new Date().toDateString();
-                      const dateLabel = d.toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-                      return (
-                        <button
-                          key={v.id}
-                          onClick={() => navigate(`/leads`)}
-                          className="w-full flex items-start justify-between gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-gray-900 truncate">
-                              {v.customer_name || 'ลูกค้า'} · ยูนิต {v.unit_number || '—'}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-0.5">{dateLabel}</p>
-                          </div>
-                          <span className="text-xs font-semibold tabular-nums shrink-0 px-2 py-0.5 rounded-full" style={{
-                            color: isToday ? C.red : C.amber,
-                            backgroundColor: isToday ? C.redLight : C.amberLight,
-                          }}>
-                            {isToday ? 'วันนี้' : 'กำลังจะถึง'}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+              )}
 
-              {/* Row 3: Active Deals (Sales) | Referrals (Agent) */}
+              {/* SECTION 4 — Active Deals (Sales) | Referrals (Agent) */}
               {userRole === 'agent' ? (
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
                   <div className="flex items-center gap-2 mb-1">
                     <Send className="w-4 h-4" style={{ color: C.red }} />
-                    <h2 className="text-base font-bold text-gray-900">ลูกค้าที่ฉันส่งต่อ Sales</h2>
+                    <h2 className="text-base font-bold text-gray-900">รายการส่งต่อให้ Sales</h2>
                     <span className="ml-auto text-xs text-gray-500">{myReferrals.length} referrals</span>
                   </div>
-                  <p className="text-xs text-gray-500 mb-5">ติดตามสถานะ referrals ของคุณ</p>
+                  <p className="text-xs text-gray-500 mb-5">ติดตามสถานะรายการส่งต่อ</p>
                   {myReferrals.length === 0 ? (
                     <div className="h-[180px] flex items-center justify-center text-sm text-gray-400 text-center px-4">
                       ยังไม่มี referral — ส่งต่อ Lead ที่หน้า Leads ผ่านปุ่ม "ส่งต่อ Sales"
@@ -809,7 +854,7 @@ const MyDashboard = () => {
                             return (
                               <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/leads/${r.id}`)}>
                                 <td className="py-3 px-3 font-medium text-gray-900">{r.customers?.full_name || '(ไม่ระบุ)'}</td>
-                                <td className="py-3 px-3 text-gray-700 text-xs">{r.assigned_to ? '✓ ส่งต่อแล้ว' : '— รอ Sales'}</td>
+                                <td className="py-3 px-3 text-gray-700 text-xs">{r.sales_person?.full_name || (r.assigned_to ? '✓ ส่งต่อแล้ว' : '— รอ Sales')}</td>
                                 <td className="py-3 px-3">
                                   <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold" style={{ color: badge.color, backgroundColor: badge.bg }}>
                                     {badge.label}
@@ -831,10 +876,10 @@ const MyDashboard = () => {
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
                   <div className="flex items-center gap-2 mb-1">
                     <Wallet className="w-4 h-4" style={{ color: C.red }} />
-                    <h2 className="text-base font-bold text-gray-900">ดีลที่ฉันดูแลอยู่</h2>
+                    <h2 className="text-base font-bold text-gray-900">ดีลที่อยู่ในความรับผิดชอบ</h2>
                     <span className="ml-auto text-xs text-gray-500">{activeDeals.length} ดีล</span>
                   </div>
-                  <p className="text-xs text-gray-500 mb-5">เรียงตามขั้นตอนที่ใกล้ปิด</p>
+                  <p className="text-xs text-gray-500 mb-5">เรียงตามขั้นตอนการปิดดีล</p>
                   {activeDeals.length === 0 ? (
                     <div className="h-[180px] flex items-center justify-center text-sm text-gray-400">
                       ยังไม่มีดีลที่ดูแล — ขอให้แอดมินมอบหมายลูกค้าให้
@@ -877,20 +922,56 @@ const MyDashboard = () => {
                 </div>
               )}
 
-              {/* Agent: Funnel-layer-1 view stats (anonymous visitors attributed via ?ref=AG-XXXX).
-                  Sits above the lead detail tables so Agents see "did my marketing work" before
-                  drilling into individual leads. Only shows when Agent has at least 1 view —
-                  empty state would be unhelpful clutter for new Agents. */}
+              {/* SECTION 5 — Upcoming site visits (full width) */}
+              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+                <div className="flex items-center gap-2 mb-1">
+                  <CalendarDays className="w-4 h-4" style={{ color: C.amber }} />
+                  <h2 className="text-base font-bold text-gray-900">นัดดูยูนิตที่กำลังจะถึง</h2>
+                  <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.amber, backgroundColor: C.amberLight }}>
+                    {upcomingVisits.length} นัด
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mb-4">นัดเข้าชมยูนิตที่อยู่ในความดูแล</p>
+                {upcomingVisits.length === 0 ? (
+                  <div className="h-[100px] flex items-center justify-center text-sm text-gray-400">ยังไม่มีนัดดูยูนิตที่กำลังจะถึง</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[240px] overflow-y-auto">
+                    {upcomingVisits.map((v) => {
+                      const d = new Date(v.viewing_date);
+                      const isToday = d.toDateString() === new Date().toDateString();
+                      const dateLabel = d.toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+                      return (
+                        <button
+                          key={v.id}
+                          onClick={() => navigate(`/leads`)}
+                          className="w-full flex items-start justify-between gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left border border-gray-100"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 truncate">{v.customer_name || 'ลูกค้า'} · ยูนิต {v.unit_number || '—'}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{dateLabel}</p>
+                          </div>
+                          <span className="text-xs font-semibold tabular-nums shrink-0 px-2 py-0.5 rounded-full" style={{
+                            color: isToday ? C.red : C.amber,
+                            backgroundColor: isToday ? C.redLight : C.amberLight,
+                          }}>
+                            {isToday ? 'วันนี้' : 'เร็วๆนี้'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION 6 (Agent only) — View stats / audience attribution */}
               {userRole === 'agent' && viewStats.totalViews > 0 && (
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
                   <div className="flex items-center gap-2 mb-1">
                     <Eye className="w-4 h-4" style={{ color: C.indigo }} />
-                    <h2 className="text-base font-bold text-gray-900">ผู้สนใจจากลิงก์ของคุณ</h2>
+                    <h2 className="text-base font-bold text-gray-900">ผู้สนใจจากลิงก์อ้างอิง</h2>
                     <span className="ml-auto text-xs text-gray-500">30 วันล่าสุด</span>
                   </div>
-                  <p className="text-xs text-gray-500 mb-5">
-                    คนที่กดลิงก์จากคุณแล้วเข้ามาดูยูนิต/โครงการ — ก่อนกลายเป็น Lead
-                  </p>
+                  <p className="text-xs text-gray-500 mb-5">คนที่กดลิงก์จากคุณแล้วเข้ามาดูยูนิต/โครงการ — ก่อนกลายเป็น Lead</p>
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
                     <div className="rounded-xl border border-gray-100 bg-gray-50/40 p-4">
@@ -942,83 +1023,6 @@ const MyDashboard = () => {
                   )}
                 </div>
               )}
-
-              {/* Row 3.5: Sales personal analytics — source breakdown + mini funnel (Sales only) */}
-              {userRole !== 'agent' && myLeads.length > 0 && (
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                  {/* Lead Source breakdown */}
-                  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Megaphone className="w-4 h-4" style={{ color: C.amber }} />
-                      <h2 className="text-base font-bold text-gray-900">แหล่งที่มาของลีดฉัน</h2>
-                      <span className="ml-auto text-xs text-gray-500">{myLeads.length} leads</span>
-                    </div>
-                    <p className="text-xs text-gray-500 mb-5">ช่องทางไหนทำลีดฉันมามากที่สุด</p>
-                    {mySourceBreakdown.length === 0 ? (
-                      <div className="h-[160px] flex items-center justify-center text-sm text-gray-400">ยังไม่มี source data</div>
-                    ) : (
-                      <div className="space-y-3">
-                        {mySourceBreakdown.map((s) => (
-                          <div key={s.key}>
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-sm font-medium text-gray-700">{s.label}</span>
-                              <span className="text-xs tabular-nums">
-                                <span className="font-bold" style={{ color: s.color }}>{s.count}</span>
-                                <span className="text-gray-400 ml-1.5">({s.pct.toFixed(0)}%)</span>
-                              </span>
-                            </div>
-                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                              <div className="h-full rounded-full transition-all" style={{ width: `${s.pct}%`, backgroundColor: s.color }} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Mini personal funnel */}
-                  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
-                    <div className="flex items-center gap-2 mb-1">
-                      <TrendingUp className="w-4 h-4" style={{ color: C.red }} />
-                      <h2 className="text-base font-bold text-gray-900">Funnel ของฉัน</h2>
-                      <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.green, backgroundColor: C.greenLight }}>
-                        {myConversionRate.toFixed(0)}% ปิดได้
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 mb-5">เห็นภาพรวม pipeline ส่วนตัว</p>
-                    <div className="space-y-2.5">
-                      {myFunnelData.map((s, i) => {
-                        const widthPct = (s.count / myFunnelMax) * 100;
-                        const prev = i > 0 ? myFunnelData[i - 1].count : 0;
-                        const drop = prev > 0 && s.count < prev ? ((prev - s.count) / prev) * 100 : 0;
-                        return (
-                          <div key={s.key}>
-                            <div className="flex items-center justify-between mb-1">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-xs font-medium text-gray-700">{s.label}</span>
-                                {i > 0 && drop > 0 && (
-                                  <span className="text-[10px] font-medium text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded">
-                                    -{drop.toFixed(0)}%
-                                  </span>
-                                )}
-                              </div>
-                              <span className="text-xs font-bold tabular-nums" style={{ color: s.key === 'won' ? C.green : C.charcoal }}>
-                                {s.count}
-                              </span>
-                            </div>
-                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                              <div className="h-full rounded-full transition-all"
-                                style={{ width: `${Math.max(widthPct, 2)}%`, backgroundColor: s.key === 'won' ? C.green : '#fca5a5' }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
-
             </>
           )}
         </main>

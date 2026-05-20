@@ -1523,7 +1523,7 @@ const LeadManagement = () => {
                                     <div className="text-[11px]">
                                       {interest.viewing_date ? (
                                         <span className="text-amber-700 font-medium">
-                                          📅 นัดดู {new Date(interest.viewing_date).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                          นัดดู {new Date(interest.viewing_date).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                                         </span>
                                       ) : ['viewed', 'negotiating', 'reserved', 'won'].includes(interest.status as string) ? (
                                         <span className="text-green-700 font-medium">✓ ลูกค้าดูแล้ว</span>
@@ -1758,7 +1758,6 @@ const LeadManagement = () => {
                       return (
                         <div className="bg-white border border-gray-100 rounded-xl p-5">
                           <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                            <span className="text-sm">🏷️</span>
                             Segments
                           </h3>
                           <p className="text-sm text-gray-400 italic">ยังไม่สามารถจัดกลุ่มได้ — กรอกข้อมูล (อายุ/รายได้/ครอบครัว) เพิ่มเติม</p>
@@ -1770,7 +1769,6 @@ const LeadManagement = () => {
                       <div className="bg-white border border-gray-100 rounded-xl p-5">
                         <div className="flex items-center justify-between mb-3">
                           <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                            <span className="text-sm">🏷️</span>
                             Segments ที่อยู่
                             <span className="text-xs font-normal text-gray-400 ml-1">({segs.length} กลุ่ม)</span>
                           </h3>
@@ -2062,8 +2060,8 @@ const LeadManagement = () => {
             setShowHandoffDialog(open);
             if (!open) setLeadForHandoff(null);
           }}
-          leadId={leadForHandoff?.id || null}
-          customerName={leadForHandoff ? getCustomerName(leadForHandoff) : undefined}
+          leadIds={leadForHandoff ? [leadForHandoff.id] : []}
+          customerNames={leadForHandoff ? [getCustomerName(leadForHandoff)] : []}
           unitId={leadForHandoff?.unit_id}
           projectId={leadForHandoff?.property_id}
           onSuccess={() => {

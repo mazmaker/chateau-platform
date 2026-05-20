@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   Bell, Menu, Settings, LogOut, Search, ChevronDown, Building2,
   CheckCircle2, AlertTriangle, UserPlus, Calendar, Megaphone, Users,
-  Home, X
+  Home, X, Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
-import { useSimpleAuth } from "@/contexts/AuthContextSimple";
+import { useSimpleAuth, Tenant } from "@/contexts/AuthContextSimple";
 import { usePermissions } from "@/components/auth/PermissionGuard";
 import { supabase } from "@/lib/supabase";
 
@@ -108,8 +108,21 @@ const ENTITY_ICON: Record<SearchEntity, typeof Bell> = {
 
 const Header = ({ onMenuClick }: HeaderProps) => {
   const navigate = useNavigate();
-  const { user, signOut, currentTenant, userRole, userProfile } = useSimpleAuth();
+  const { user, signOut, currentTenant, userRole, userProfile, switchTenantAsOwner } = useSimpleAuth();
   const { isOwner } = usePermissions();
+
+  // All tenants list — fetched once for Owner to enable tenant switching
+  const [allTenants, setAllTenants] = useState<Tenant[]>([]);
+  useEffect(() => {
+    if (!isOwner) return;
+    let cancelled = false;
+    (async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await supabase.rpc('get_all_tenants_for_owner');
+      if (!cancelled && data) setAllTenants(data as Tenant[]);
+    })();
+    return () => { cancelled = true; };
+  }, [isOwner]);
 
   // === Notifications state — fetched from activity_logs ===
   const [notifications, setNotifications] = useState<NotifItem[]>([]);
@@ -334,10 +347,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
     }
   };
 
-  const getScopeLabel = () => {
-    if (isOwner) return "ทั้งระบบ";
-    return currentTenant?.name || "บริษัทของฉัน";
-  };
+  const getScopeLabel = () => currentTenant?.name || "บริษัทของฉัน";
 
   // Group search results by type
   const groupedResults = searchResults.reduce((acc, r) => {
@@ -365,11 +375,35 @@ const Header = ({ onMenuClick }: HeaderProps) => {
             <ChevronDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 transition-colors" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-52">
-          <DropdownMenuItem className="text-sm">
-            <Building2 className="w-4 h-4 mr-2 text-chateau" />
-            {isOwner ? "ทั้งระบบ" : currentTenant?.name || "บริษัทของฉัน"}
-          </DropdownMenuItem>
+        <DropdownMenuContent align="start" className="w-60">
+          {isOwner && allTenants.length > 0 ? (
+            <>
+              <div className="px-3 py-2 border-b border-gray-100">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">เลือกบริษัท</p>
+              </div>
+              {allTenants.map((t) => (
+                <DropdownMenuItem
+                  key={t.id}
+                  onClick={() => { if (t.id !== currentTenant?.id) switchTenantAsOwner(t); }}
+                  className="text-sm gap-2 cursor-pointer"
+                >
+                  <Building2 className="w-4 h-4 text-chateau flex-shrink-0" />
+                  <span className="flex-1 truncate">{t.name}</span>
+                  {t.status === 'suspended' && (
+                    <span className="text-[10px] font-semibold text-red-500 bg-red-50 px-1.5 py-0.5 rounded">ระงับ</span>
+                  )}
+                  {t.id === currentTenant?.id && (
+                    <Check className="w-3.5 h-3.5 text-chateau flex-shrink-0" />
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </>
+          ) : (
+            <DropdownMenuItem className="text-sm">
+              <Building2 className="w-4 h-4 mr-2 text-chateau" />
+              {currentTenant?.name || "บริษัทของฉัน"}
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

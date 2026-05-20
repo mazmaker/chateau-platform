@@ -36,9 +36,9 @@ import CustomerUnitDetail from "./pages/customer/CustomerUnitDetail";
 import CustomerProfile from "./pages/customer/CustomerProfile";
 import CustomerBookings from "./pages/customer/CustomerBookings";
 import MyDashboard from "./pages/MyDashboard";
-import MyCommissions from "./pages/MyCommissions";
-import CommissionApproval from "./pages/CommissionApproval";
 import PropertyPlansEditor from "./pages/PropertyPlansEditor";
+import TeamMemberPerformance from "./pages/TeamMemberPerformance";
+import TeamPerformance from "./pages/TeamPerformance";
 import AcceptInvite from "./pages/AcceptInvite";
 import ForcePasswordChange from "./pages/ForcePasswordChange";
 import { ProtectedRouteSimple } from "@/components/auth/ProtectedRouteSimple";
@@ -326,28 +326,28 @@ const App = () => (
             </ErrorBoundary>
           } />
 
-          <Route path="/my-commissions" element={
+          <Route path="/team" element={
             <ErrorBoundary
               showRetry={true}
               showHome={true}
-              errorMessage="ไม่สามารถโหลดหน้าเงินคอมของฉันได้"
-              context={{ page: 'my-commissions' }}
+              errorMessage="ไม่สามารถโหลดหน้าผลงานทีมได้"
+              context={{ page: 'team-performance' }}
             >
               <ProtectedRouteSimple>
-                <MyCommissions />
+                <TeamPerformance />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />
 
-          <Route path="/commissions" element={
+          <Route path="/team/:userId/performance" element={
             <ErrorBoundary
               showRetry={true}
               showHome={true}
-              errorMessage="ไม่สามารถโหลดหน้าค่าคอมมิชชั่นได้"
-              context={{ page: 'commission-approval' }}
+              errorMessage="ไม่สามารถโหลดหน้าผลงานพนักงานได้"
+              context={{ page: 'team-member-performance' }}
             >
               <ProtectedRouteSimple>
-                <CommissionApproval />
+                <TeamMemberPerformance />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />

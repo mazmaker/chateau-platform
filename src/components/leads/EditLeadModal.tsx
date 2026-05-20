@@ -143,11 +143,11 @@ const NEWS_SOURCE_ONLINE = [
 
 // Canonical 5-category set — shared with Customer Profile + Lead CDP
 const PURCHASE_PURPOSE_OPTIONS = [
-  { value: "residence",  label: "🏡 อยู่อาศัยเอง" },
-  { value: "investment", label: "💰 ลงทุน (เช่า / ขายต่อ)" },
-  { value: "vacation",   label: "🌴 บ้านที่สอง / พักผ่อน" },
-  { value: "family",     label: "👨‍👩‍👧 ครอบครัว (พ่อแม่ / บุตรหลาน)" },
-  { value: "other",      label: "❓ อื่นๆ / ยังไม่ตัดสินใจ" },
+  { value: "residence",  label: "อยู่อาศัยเอง" },
+  { value: "investment", label: "ลงทุน (เช่า / ขายต่อ)" },
+  { value: "vacation",   label: "บ้านที่สอง / พักผ่อน" },
+  { value: "family",     label: "ครอบครัว (พ่อแม่ / บุตรหลาน)" },
+  { value: "other",      label: "อื่นๆ / ยังไม่ตัดสินใจ" },
 ];
 
 const STATUS_OPTIONS = [
