@@ -548,7 +548,7 @@ const MyDashboard = () => {
                     <div className="flex items-center gap-2">
                       <TrendingUp className="w-4 h-4" style={{ color: C.red }} />
                       <h2 className="text-base font-bold text-gray-900">
-                        {userRole === 'agent' ? 'มูลค่า Referrals ที่ปิดได้' : 'ผลงาน 6 เดือนล่าสุด'}
+                        {userRole === 'agent' ? 'ดีลที่ปิดได้จากการแนะนำลูกค้า' : 'ผลงาน 6 เดือนล่าสุด'}
                       </h2>
                     </div>
                     <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: C.red, backgroundColor: C.redLight }}>

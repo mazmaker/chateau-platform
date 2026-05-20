@@ -463,10 +463,10 @@ export default function SelfPerformanceSection({ userId, tenantId, showName = fa
 
       {/* Best Source */}
       {metrics.topSource && (
-        <div className="bg-gradient-to-br from-emerald-50 to-white border border-emerald-100 rounded-xl p-4">
+        <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-1">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-            <p className="text-xs font-semibold text-emerald-800">ช่องทางที่ปิดดีลให้คุณดีสุด</p>
+            <Sparkles className="w-3.5 h-3.5 text-chateau" />
+            <p className="text-xs font-semibold text-gray-700">ช่องทางที่ปิดดีลให้คุณดีสุด</p>
           </div>
           <div className="flex items-baseline gap-2">
             <p className="text-base font-bold text-gray-900 capitalize">{metrics.topSource[0]}</p>
@@ -502,7 +502,7 @@ function TargetBar({ label, actual, target, unit = '', isCurrency = false }: {
   label: string; actual: number; target: number; unit?: string; isCurrency?: boolean;
 }) {
   const pct = target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : 0;
-  const barColor = pct >= 80 ? '#16a34a' : pct >= 50 ? '#d97706' : '#e60023';
+  const barColor = pct >= 100 ? '#16a34a' : pct >= 50 ? '#e60023' : '#ef4444';
   const fmt = (n: number) => isCurrency
     ? (n >= 1_000_000 ? `฿${(n / 1_000_000).toFixed(1)}M` : `฿${n.toLocaleString('th-TH')}`)
     : `${n} ${unit}`;

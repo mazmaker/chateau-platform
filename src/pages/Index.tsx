@@ -394,16 +394,14 @@ const Index = () => {
                   </div>
 
                   <div className="space-y-5">
-                    <div className="p-4 rounded-xl" style={{ backgroundColor: C.greenLight }}>
+                    <div className="p-4 rounded-xl bg-gray-50">
                       <p className="text-xs text-gray-600 mb-1">อัตราขายเฉลี่ย (90 วัน)</p>
                       <p className="text-3xl font-bold" style={{ color: C.green }}>
                         {sellThroughPerMonth.toFixed(1)}<span className="text-base font-medium text-gray-500 ml-1.5">ยูนิต / เดือน</span>
                       </p>
                     </div>
 
-                    <div className="p-4 rounded-xl" style={{
-                      backgroundColor: daysOfInventory && daysOfInventory > 24 ? C.redLight : daysOfInventory && daysOfInventory > 18 ? C.amberLight : C.greenLight
-                    }}>
+                    <div className="p-4 rounded-xl bg-gray-50">
                       <p className="text-xs text-gray-600 mb-1">Days of Inventory</p>
                       <p className="text-3xl font-bold" style={{
                         color: daysOfInventory && daysOfInventory > 24 ? C.red : daysOfInventory && daysOfInventory > 18 ? C.amber : C.green
@@ -484,7 +482,7 @@ const Index = () => {
                   </div>
 
                   <div className="mt-5 pt-5 border-t border-gray-100">
-                    <div className="rounded-xl p-3" style={{ backgroundColor: C.greenLight }}>
+                    <div className="rounded-xl p-3 bg-gray-50">
                       <p className="text-xs text-gray-600">อัตราปิดดีล</p>
                       <p className="text-2xl font-bold tabular-nums" style={{ color: C.green }}>
                         {conversionRate.toFixed(1)}<span className="text-sm">%</span>
