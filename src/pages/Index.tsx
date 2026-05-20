@@ -396,16 +396,14 @@ const Index = () => {
                   <div className="space-y-5">
                     <div className="p-4 rounded-xl bg-gray-50">
                       <p className="text-xs text-gray-600 mb-1">อัตราขายเฉลี่ย (90 วัน)</p>
-                      <p className="text-3xl font-bold" style={{ color: C.green }}>
+                      <p className="text-3xl font-bold text-gray-900">
                         {sellThroughPerMonth.toFixed(1)}<span className="text-base font-medium text-gray-500 ml-1.5">ยูนิต / เดือน</span>
                       </p>
                     </div>
 
                     <div className="p-4 rounded-xl bg-gray-50">
                       <p className="text-xs text-gray-600 mb-1">Days of Inventory</p>
-                      <p className="text-3xl font-bold" style={{
-                        color: daysOfInventory && daysOfInventory > 24 ? C.red : daysOfInventory && daysOfInventory > 18 ? C.amber : C.green
-                      }}>
+                      <p className="text-3xl font-bold text-gray-900">
                         {daysOfInventory !== null ? `${daysOfInventory.toFixed(0)} ` : '— '}
                         <span className="text-base font-medium text-gray-500 ml-1.5">เดือน</span>
                       </p>
