@@ -53,7 +53,6 @@ interface EditingProject {
   };
   is_active?: boolean;
   is_featured?: boolean;
-  commission_rate_agent_pct?: number;
 }
 
 interface CreateProjectModalProps {
@@ -142,7 +141,6 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
     location_lat: "",
     location_lng: "",
     nearby: [] as { name: string; type: string; distance_km: number }[],
-    commission_rate_agent_pct: "3.00",
   });
 
   const [loading, setLoading] = useState(false);
@@ -268,7 +266,6 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
           location_lat: (editingProject as any).location_lat?.toString() || "",
           location_lng: (editingProject as any).location_lng?.toString() || "",
           nearby: ((editingProject as any).nearby as any[]) || [],
-          commission_rate_agent_pct: editingProject.commission_rate_agent_pct?.toString() || "3.00",
         });
 
         // Reset flag after form has been populated
@@ -466,7 +463,6 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
       location_lat: "",
       location_lng: "",
       nearby: [],
-      commission_rate_agent_pct: "3.00",
     });
     setDistricts([]);
     setSubDistricts([]);
@@ -617,9 +613,6 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
         location_lat: formData.location_lat ? parseFloat(formData.location_lat) : null,
         location_lng: formData.location_lng ? parseFloat(formData.location_lng) : null,
         nearby: formData.nearby.length > 0 ? formData.nearby : null,
-        commission_rate_agent_pct: formData.commission_rate_agent_pct
-          ? Math.min(30, Math.max(0, parseFloat(formData.commission_rate_agent_pct)))
-          : 3.00,
       };
 
       let dbError;
@@ -845,25 +838,6 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
                         disabled={loading}
                         className="mt-1.5"
                       />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="commission_rate_agent_pct" className="text-sm font-medium">
-                        ค่าคอม Agent (%) <span className="text-gray-400 text-xs font-normal">— ใช้คำนวณเงินคอมเมื่อปิดการขาย</span>
-                      </Label>
-                      <Input
-                        id="commission_rate_agent_pct"
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="30"
-                        value={formData.commission_rate_agent_pct}
-                        onChange={(e) => setFormData(prev => ({ ...prev, commission_rate_agent_pct: e.target.value }))}
-                        placeholder="3.00"
-                        disabled={loading}
-                        className="mt-1.5"
-                      />
-                      <p className="text-[11px] text-gray-500 mt-1">ค่าเริ่มต้น 3% (ตามมาตรฐาน Sansiri/AP) — Agent ภายนอกได้รับเปอร์เซ็นต์ของราคาขาย</p>
                     </div>
 
                     <div>
@@ -1290,7 +1264,7 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
 
                   {/* Interactive map picker */}
                   <div>
-                    <Label className="text-sm font-medium mb-2 block">📍 ตำแหน่งบนแผนที่</Label>
+                    <Label className="text-sm font-medium mb-2 block">ตำแหน่งบนแผนที่</Label>
                     <LocationPicker
                       lat={formData.location_lat ? parseFloat(formData.location_lat) : null}
                       lng={formData.location_lng ? parseFloat(formData.location_lng) : null}

@@ -41,20 +41,20 @@ export interface LeadInterestWithDetails extends LeadInterest {
 }
 
 export const INTEREST_STATUS_OPTIONS: { value: InterestStatus; label: string; icon: string; color: string }[] = [
-  { value: 'interested', label: 'สนใจ', icon: '💡', color: 'bg-blue-100 text-blue-800' },
-  { value: 'viewing_scheduled', label: 'นัดดูห้อง', icon: '📅', color: 'bg-purple-100 text-purple-800' },
-  { value: 'viewed', label: 'ดูแล้ว', icon: '👁️', color: 'bg-cyan-100 text-cyan-800' },
-  { value: 'negotiating', label: 'กำลังเจรจา', icon: '🤝', color: 'bg-orange-100 text-orange-800' },
-  { value: 'reserved', label: 'จอง', icon: '🔒', color: 'bg-chateau-100 text-chateau-700' },
-  { value: 'won', label: 'ปิดการขาย', icon: '🎉', color: 'bg-green-100 text-green-800' },
-  { value: 'lost', label: 'ไม่สำเร็จ', icon: '❌', color: 'bg-red-100 text-red-800' },
-  { value: 'dropped', label: 'ไม่สนใจแล้ว', icon: '❄️', color: 'bg-gray-100 text-gray-800' },
+  { value: 'interested', label: 'สนใจ', icon: '', color: 'bg-blue-100 text-blue-800' },
+  { value: 'viewing_scheduled', label: 'นัดดูห้อง', icon: '', color: 'bg-purple-100 text-purple-800' },
+  { value: 'viewed', label: 'ดูแล้ว', icon: '', color: 'bg-cyan-100 text-cyan-800' },
+  { value: 'negotiating', label: 'กำลังเจรจา', icon: '', color: 'bg-orange-100 text-orange-800' },
+  { value: 'reserved', label: 'จอง', icon: '', color: 'bg-chateau-100 text-chateau-700' },
+  { value: 'won', label: 'ปิดการขาย', icon: '', color: 'bg-green-100 text-green-800' },
+  { value: 'lost', label: 'ไม่สำเร็จ', icon: '', color: 'bg-red-100 text-red-800' },
+  { value: 'dropped', label: 'ไม่สนใจแล้ว', icon: '', color: 'bg-gray-100 text-gray-800' },
 ];
 
 export const INTEREST_LEVEL_OPTIONS: { value: InterestLevel; label: string; icon: string; color: string }[] = [
-  { value: 'high', label: 'สนใจมาก', icon: '🔥', color: 'text-red-600' },
-  { value: 'medium', label: 'สนใจปานกลาง', icon: '⚡', color: 'text-yellow-600' },
-  { value: 'low', label: 'สนใจน้อย', icon: '❄️', color: 'text-blue-600' },
+  { value: 'high', label: 'สนใจมาก', icon: '', color: 'text-red-600' },
+  { value: 'medium', label: 'สนใจปานกลาง', icon: '', color: 'text-yellow-600' },
+  { value: 'low', label: 'สนใจน้อย', icon: '', color: 'text-blue-600' },
 ];
 
 export const getInterestStatusLabel = (status: InterestStatus): string => {

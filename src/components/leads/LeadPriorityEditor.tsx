@@ -14,9 +14,9 @@ import {
 type Priority = 'high' | 'medium' | 'low';
 
 const PRIORITY_OPTIONS: Array<{ value: Priority; label: string; emoji: string; description: string; pillClass: string }> = [
-  { value: 'high',   emoji: '🔥', label: 'ด่วน',  description: 'ติดตามก่อน — โอกาสปิดดีลสูง', pillClass: 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100 hover:border-rose-300' },
-  { value: 'medium', emoji: '🔸', label: 'ปกติ',  description: 'ติดตามตามรอบปกติ',           pillClass: 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100 hover:border-gray-300' },
-  { value: 'low',    emoji: '⬇️', label: 'ต่ำ',   description: 'รอลูกค้าตอบกลับ / ไม่เร่ง',  pillClass: 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300' },
+  { value: 'high',   emoji: '', label: 'ด่วน',  description: 'ติดตามก่อน — โอกาสปิดดีลสูง', pillClass: 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100 hover:border-rose-300' },
+  { value: 'medium', emoji: '', label: 'ปกติ',  description: 'ติดตามตามรอบปกติ',           pillClass: 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100 hover:border-gray-300' },
+  { value: 'low',    emoji: '', label: 'ต่ำ',   description: 'รอลูกค้าตอบกลับ / ไม่เร่ง',  pillClass: 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300' },
 ];
 
 interface Props {

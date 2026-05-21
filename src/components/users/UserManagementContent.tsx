@@ -275,13 +275,13 @@ const UserManagementContent = () => {
   const getRoleBadge = (role: UserRole) => {
     // Tiered hierarchy — owner = brand red strong, admin = brand red light, sales = neutral
     const config = {
-      owner:    { label: 'เจ้าของแพลตฟอร์ม', icon: '👑', className: 'bg-chateau text-white border border-chateau' },
-      admin:    { label: 'ผู้ดูแลบริษัท',     icon: '🔧', className: 'bg-chateau-50 text-chateau-700 border border-chateau-100' },
-      sales:    { label: 'พนักงานขาย',       icon: '💼', className: 'bg-gray-50 text-gray-700 border border-gray-200' },
-      agent:    { label: 'นายหน้า',           icon: '🤝', className: 'bg-amber-50 text-amber-700 border border-amber-200' },
-      customer: { label: 'ลูกค้า',            icon: '👤', className: 'bg-blue-50 text-blue-700 border border-blue-200' },
+      owner:    { label: 'เจ้าของแพลตฟอร์ม', icon: '', className: 'bg-chateau text-white border border-chateau' },
+      admin:    { label: 'ผู้ดูแลบริษัท',     icon: '', className: 'bg-chateau-50 text-chateau-700 border border-chateau-100' },
+      sales:    { label: 'พนักงานขาย',       icon: '', className: 'bg-gray-50 text-gray-700 border border-gray-200' },
+      agent:    { label: 'นายหน้า',           icon: '', className: 'bg-amber-50 text-amber-700 border border-amber-200' },
+      customer: { label: 'ลูกค้า',            icon: '', className: 'bg-blue-50 text-blue-700 border border-blue-200' },
     };
-    const c = config[role] || { label: role, icon: '👤', className: 'bg-gray-50 text-gray-700 border border-gray-200' };
+    const c = config[role] || { label: role, icon: '', className: 'bg-gray-50 text-gray-700 border border-gray-200' };
     return (
       <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md ${c.className}`}>
         {c.icon} {c.label}
@@ -306,14 +306,14 @@ const UserManagementContent = () => {
       // Brand red — needs action
       return (
         <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md bg-chateau-50 text-chateau-700 border border-chateau-100">
-          🔑 รหัสผ่านชั่วคราว
+          รหัสผ่านชั่วคราว
         </span>
       );
     }
     // Neutral — done state
     return (
       <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md bg-gray-50 text-gray-600 border border-gray-200">
-        ✅ รหัสผ่านถาวร
+        รหัสผ่านถาวร
       </span>
     );
   };
@@ -523,10 +523,10 @@ const UserManagementContent = () => {
             {isOwner && (
               <Select value={tenantFilter} onValueChange={setTenantFilter}>
                 <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="🏢 ทุกบริษัท" />
+                  <SelectValue placeholder="ทุกบริษัท" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">🏢 ทุกบริษัท</SelectItem>
+                  <SelectItem value="all">ทุกบริษัท</SelectItem>
                   {tenants.map((tenant) => (
                     <SelectItem key={tenant.id} value={tenant.id}>
                       {tenant.name}
@@ -545,13 +545,13 @@ const UserManagementContent = () => {
                 <SelectItem value="all">ทุกตำแหน่ง</SelectItem>
                 {!isAdmin && (
                   <>
-                    <SelectItem value="owner">👑 เจ้าของแพลตฟอร์ม</SelectItem>
-                    <SelectItem value="admin">🔧 ผู้ดูแลบริษัท</SelectItem>
+                    <SelectItem value="owner">เจ้าของแพลตฟอร์ม</SelectItem>
+                    <SelectItem value="admin">ผู้ดูแลบริษัท</SelectItem>
                   </>
                 )}
-                <SelectItem value="sales">💼 พนักงานขาย</SelectItem>
-                <SelectItem value="agent">🤝 นายหน้า</SelectItem>
-                {!isAdmin && <SelectItem value="customer">👤 ลูกค้า</SelectItem>}
+                <SelectItem value="sales">พนักงานขาย</SelectItem>
+                <SelectItem value="agent">นายหน้า</SelectItem>
+                {!isAdmin && <SelectItem value="customer">ลูกค้า</SelectItem>}
               </SelectContent>
             </Select>
 
@@ -577,10 +577,10 @@ const UserManagementContent = () => {
               <thead>
                 <tr className="border-b bg-gray-50">
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">ผู้ใช้</th>
-                  {isOwner && <th className="text-left py-3 px-4 font-semibold text-gray-700">🏢 บริษัท</th>}
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">👤 ตำแหน่ง (Role)</th>
+                  {isOwner && <th className="text-left py-3 px-4 font-semibold text-gray-700">บริษัท</th>}
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">ตำแหน่ง (Role)</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">สถานะ</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">🔑 รหัสผ่าน</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">รหัสผ่าน</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">เข้าร่วมเมื่อ</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">เข้าใช้ล่าสุด</th>
                   <th className="text-center py-3 px-4 font-semibold text-gray-700">จัดการ</th>
@@ -673,7 +673,7 @@ const UserManagementContent = () => {
                             }}
                             disabled={user.role === 'owner'}
                             className="p-1"
-                            title="📎 จัดการบัญชีผู้ใช้"
+                            title="จัดการบัญชีผู้ใช้"
                           >
                             <Paperclip className="w-4 h-4 text-purple-600" />
                           </Button>
@@ -687,7 +687,7 @@ const UserManagementContent = () => {
                             }}
                             disabled={user.role === 'owner'}
                             className="p-1"
-                            title="🔑 สร้างรหัสผ่านชั่วคราว"
+                            title="สร้างรหัสผ่านชั่วคราว"
                           >
                             <Key className="w-4 h-4 text-orange-600" />
                           </Button>
@@ -794,7 +794,7 @@ const UserManagementContent = () => {
             </div>
 
             <div className="bg-white shadow-sm border border-gray-200 rounded-lg p-4">
-              <h4 className="font-medium text-gray-700 mb-2">✅ ข้อมูลที่จะคงอยู่:</h4>
+              <h4 className="font-medium text-gray-700 mb-2">ข้อมูลที่จะคงอยู่:</h4>
               <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
                 <li>ข้อมูลโครงการทั้งหมด</li>
                 <li>ข้อมูล Leads และลูกค้า</li>
@@ -804,7 +804,7 @@ const UserManagementContent = () => {
             </div>
 
             <div className="bg-chateau-50 border border-chateau-100 rounded-lg p-4">
-              <h4 className="font-medium text-chateau-700 mb-2">⚠️ สิ่งที่จะถูกลบ:</h4>
+              <h4 className="font-medium text-chateau-700 mb-2">สิ่งที่จะถูกลบ:</h4>
               <ul className="text-sm text-chateau-600 space-y-1 list-disc list-inside">
                 <li><strong>บัญชีเข้าสู่ระบบเท่านั้น</strong></li>
                 <li>ผู้ใช้จะไม่สามารถล็อกอินได้</li>
@@ -818,7 +818,7 @@ const UserManagementContent = () => {
               ยกเลิก
             </Button>
             <Button variant="destructive" onClick={handleDeleteUser} className="flex-1">
-              🗑️ ลบบัญชี
+              ลบบัญชี
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -14,7 +14,6 @@ import {
 import {
   AlertTriangle,
   Briefcase,
-  Flame,
   Megaphone,
   TrendingUp,
   Trophy,
@@ -310,12 +309,12 @@ const SalesOperations = () => {
     .sort((a, b) => b.inquiries - a.inquiries)
     .slice(0, 6);
 
-  // Sales Leaderboard
-  const salesPerf = new Map<string, { name: string; deals: number; value: number; openLeads: number }>();
+  // Sales Leaderboard — keep userId so rows can deep-link to the rep's drill-down
+  const salesPerf = new Map<string, { userId: string; name: string; deals: number; value: number; openLeads: number }>();
   leads.forEach((l) => {
     if (!l.assigned_to) return;
     const name = userById.get(l.assigned_to) || 'ไม่ทราบ';
-    const existing = salesPerf.get(l.assigned_to) || { name, deals: 0, value: 0, openLeads: 0 };
+    const existing = salesPerf.get(l.assigned_to) || { userId: l.assigned_to, name, deals: 0, value: 0, openLeads: 0 };
     if (l.status === 'won') {
       existing.deals++;
       existing.value += Number(l.estimated_value || 0);
@@ -416,7 +415,7 @@ const SalesOperations = () => {
                         </div>
                       ))}
                       <div className="pt-2 mt-2 border-t border-gray-100 flex justify-between text-xs">
-                        <span className="text-gray-500">💼 Active campaigns</span>
+                        <span className="text-gray-500">Active campaigns</span>
                         <span className="font-semibold tabular-nums">{activeCampaigns}</span>
                       </div>
                     </div>
@@ -430,7 +429,6 @@ const SalesOperations = () => {
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
-                      <Flame className="w-4 h-4" style={{ color: C.red }} />
                       <h2 className="text-base font-bold text-gray-900">ลูกค้าด่วน</h2>
                     </div>
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.red, backgroundColor: C.redLight }}>
@@ -481,7 +479,7 @@ const SalesOperations = () => {
                   </div>
                   <p className="text-xs text-gray-500 mb-4">ไม่ติดต่อเกิน 30 วัน · ยังไม่ปิดดีล</p>
                   {inactiveLeads.length === 0 ? (
-                    <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ไม่มีลูกค้าที่เงียบนาน 🎉</div>
+                    <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ไม่มีลูกค้าที่เงียบนาน</div>
                   ) : (
                     <div className="space-y-2.5">
                       {inactiveLeads.map((l) => (
@@ -552,7 +550,7 @@ const SalesOperations = () => {
                             <p className="text-xs font-bold text-gray-900 truncate">{u.unitNumber}</p>
                             <p className="text-[11px] text-gray-500 truncate">{u.propName}</p>
                             <p className="text-[11px] mt-1 tabular-nums" style={{ color: C.red }}>
-                              🔥 {u.inquiries} inquiries · {u.uniqueLeads} leads
+                              {u.inquiries} inquiries · {u.uniqueLeads} leads
                             </p>
                           </div>
                         </button>
@@ -588,11 +586,16 @@ const SalesOperations = () => {
                       </thead>
                       <tbody>
                         {leaderboard.map((s, i) => (
-                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+                          <tr
+                            key={s.userId}
+                            onClick={() => navigate(`/team/${s.userId}/performance`)}
+                            className="border-b border-gray-50 hover:bg-chateau/5 cursor-pointer transition-colors"
+                            title="คลิกเพื่อดูผลงานละเอียดของพนักงานคนนี้"
+                          >
                             <td className="py-3 px-3">
                               {i === 0 ? (
                                 <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold" style={{ backgroundColor: C.amberLight, color: C.amber }}>
-                                  🏆
+                                  #1
                                 </span>
                               ) : (
                                 <span className="text-gray-500 font-semibold">#{i + 1}</span>

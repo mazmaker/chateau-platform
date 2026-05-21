@@ -58,26 +58,26 @@ const EVENT_CATALOG: EventCatalogItem[] = [
   { event_type: 'lead.inactive_30d', category: 'Lead', label: 'Lead เงียบ 30 วัน', description: 'Win-back campaign สำหรับ lead เก่า', default_template: 'เราคิดถึงคุณ! เปิดยูนิตใหม่ที่อาจจะถูกใจ — ดูได้ที่ลิงก์ด้านล่าง', icon: Clock, color: KK.gray, bg: KK.grayLight },
 
   // Viewing
-  { event_type: 'viewing.scheduled', category: 'Viewing', label: 'นัดดูบ้านสำเร็จ', description: 'ลูกค้านัดเวลาดูโครงการเรียบร้อย', default_template: '🗓️ ยืนยันนัดดูบ้าน {{property_name}}\nวันที่ {{viewing_date}} เวลา {{viewing_time}}\nเจ้าหน้าที่ดูแล: {{sales_name}}', icon: Calendar, color: KK.green, bg: KK.greenLight },
+  { event_type: 'viewing.scheduled', category: 'Viewing', label: 'นัดดูบ้านสำเร็จ', description: 'ลูกค้านัดเวลาดูโครงการเรียบร้อย', default_template: 'ยืนยันนัดดูบ้าน {{property_name}}\nวันที่ {{viewing_date}} เวลา {{viewing_time}}\nเจ้าหน้าที่ดูแล: {{sales_name}}', icon: Calendar, color: KK.green, bg: KK.greenLight },
   { event_type: 'viewing.tomorrow_reminder', category: 'Viewing', label: 'เตือนก่อนนัด 1 วัน', description: 'reminder อัตโนมัติ 24 ชม. ก่อนวันนัด', default_template: '⏰ พรุ่งนี้พบกัน!\nคุณ {{first_name}} เรานัดดู {{property_name}} วันที่ {{viewing_date}} เวลา {{viewing_time}}', icon: Clock, color: KK.amber, bg: KK.amberLight },
   { event_type: 'viewing.no_show', category: 'Viewing', label: 'ไม่มาตามนัด', description: 'ลูกค้าไม่มาตามนัดดูบ้าน', default_template: 'เสียดายที่พลาดนัดวันนี้! ไม่เป็นไรครับ — เลือกเวลาใหม่ที่สะดวกได้ที่ลิงก์ด้านล่าง', icon: AlertCircle, color: KK.orange, bg: KK.orangeLight },
 
   // Booking
-  { event_type: 'booking.deposit_paid', category: 'Booking', label: 'จ่ายเงินจอง', description: 'ลูกค้าจ่ายเงินจองยูนิตสำเร็จ', default_template: '🎉 ขอบคุณที่เลือก {{property_name}}!\nคุณ {{first_name}} ได้จองยูนิต {{unit_number}} เรียบร้อย', icon: ShoppingCart, color: KK.green, bg: KK.greenLight },
-  { event_type: 'booking.payment_due_3d', category: 'Booking', label: 'ใกล้กำหนดชำระงวด', description: 'reminder 3 วันก่อนถึงกำหนดชำระเงินดาวน์', default_template: '💰 แจ้งเตือนชำระเงินดาวน์ในอีก 3 วัน ({{due_date}})\nยอด: ฿{{amount_due}}', icon: AlertCircle, color: KK.amber, bg: KK.amberLight },
-  { event_type: 'booking.contract_signed', category: 'Booking', label: 'เซ็นสัญญาซื้อ', description: 'เซ็นสัญญาซื้อขายเรียบร้อย', default_template: '🏠 ยินดีต้อนรับสู่ครอบครัว!\nคุณ {{first_name}} ได้เซ็นสัญญา {{property_name}} เรียบร้อย', icon: FileSignature, color: KK.purple, bg: KK.purpleLight },
+  { event_type: 'booking.deposit_paid', category: 'Booking', label: 'จ่ายเงินจอง', description: 'ลูกค้าจ่ายเงินจองยูนิตสำเร็จ', default_template: 'ขอบคุณที่เลือก {{property_name}}!\nคุณ {{first_name}} ได้จองยูนิต {{unit_number}} เรียบร้อย', icon: ShoppingCart, color: KK.green, bg: KK.greenLight },
+  { event_type: 'booking.payment_due_3d', category: 'Booking', label: 'ใกล้กำหนดชำระงวด', description: 'reminder 3 วันก่อนถึงกำหนดชำระเงินดาวน์', default_template: 'แจ้งเตือนชำระเงินดาวน์ในอีก 3 วัน ({{due_date}})\nยอด: ฿{{amount_due}}', icon: AlertCircle, color: KK.amber, bg: KK.amberLight },
+  { event_type: 'booking.contract_signed', category: 'Booking', label: 'เซ็นสัญญาซื้อ', description: 'เซ็นสัญญาซื้อขายเรียบร้อย', default_template: 'ยินดีต้อนรับสู่ครอบครัว!\nคุณ {{first_name}} ได้เซ็นสัญญา {{property_name}} เรียบร้อย', icon: FileSignature, color: KK.purple, bg: KK.purpleLight },
 
   // Project
-  { event_type: 'project.construction_milestone', category: 'Project', label: 'ความคืบหน้าโครงการ', description: 'อัปเดตประจำเดือนให้ลูกค้าที่จองแล้ว', default_template: '📸 อัปเดตความคืบหน้า {{property_name}} เดือน {{current_month}} — {{progress_percent}}% แล้ว!', icon: Building2, color: KK.purple, bg: KK.purpleLight },
+  { event_type: 'project.construction_milestone', category: 'Project', label: 'ความคืบหน้าโครงการ', description: 'อัปเดตประจำเดือนให้ลูกค้าที่จองแล้ว', default_template: 'อัปเดตความคืบหน้า {{property_name}} เดือน {{current_month}} — {{progress_percent}}% แล้ว!', icon: Building2, color: KK.purple, bg: KK.purpleLight },
   { event_type: 'project.handover_ready', category: 'Project', label: 'พร้อมโอน', description: 'ยูนิตพร้อมส่งมอบ — นัดวันโอน', default_template: 'ยูนิตของคุณพร้อมส่งมอบแล้ว! กรุณานัดวันโอนได้ที่ {{sales_name}}', icon: Home, color: KK.green, bg: KK.greenLight },
 
   // Inventory
-  { event_type: 'unit.price_dropped', category: 'Inventory', label: 'ราคาลด', description: 'แจ้ง leads ที่เคยสนใจเมื่อมีโปร', default_template: '🔥 ราคาพิเศษ! {{property_name}} จาก ฿{{original_price}} เหลือ ฿{{new_price}} — ประหยัด ฿{{savings}}', icon: TrendingDown, color: KK.red, bg: KK.redLight },
-  { event_type: 'unit.last_3_remaining', category: 'Inventory', label: 'เหลือ 3 ยูนิตสุดท้าย', description: 'แจ้งความเร่งด่วนให้ leads ที่สนใจ', default_template: '⚠️ เหลือเพียง 3 ยูนิต! {{property_name}} ที่คุณเคยสนใจ รีบจองด่วน', icon: AlertTriangle, color: KK.red, bg: KK.redLight },
+  { event_type: 'unit.price_dropped', category: 'Inventory', label: 'ราคาลด', description: 'แจ้ง leads ที่เคยสนใจเมื่อมีโปร', default_template: 'ราคาพิเศษ! {{property_name}} จาก ฿{{original_price}} เหลือ ฿{{new_price}} — ประหยัด ฿{{savings}}', icon: TrendingDown, color: KK.red, bg: KK.redLight },
+  { event_type: 'unit.last_3_remaining', category: 'Inventory', label: 'เหลือ 3 ยูนิตสุดท้าย', description: 'แจ้งความเร่งด่วนให้ leads ที่สนใจ', default_template: 'เหลือเพียง 3 ยูนิต! {{property_name}} ที่คุณเคยสนใจ รีบจองด่วน', icon: AlertTriangle, color: KK.red, bg: KK.redLight },
 
   // Customer (post-sale)
-  { event_type: 'customer.birthday', category: 'Customer', label: 'วันเกิด', description: 'อวยพรวันเกิดลูกค้าทุกปี', default_template: '🎂 สุขสันต์วันเกิดคุณ {{first_name}}!\nขอให้มีความสุขมากๆ จาก {{tenant_name}}', icon: Heart, color: KK.red, bg: KK.redLight },
-  { event_type: 'customer.anniversary', category: 'Customer', label: 'ครบรอบลงทะเบียน', description: 'ครบ 1 ปีหลังจองครั้งแรก', default_template: 'ครบรอบ 1 ปีที่คุณเป็นลูกค้าของเรา ขอบคุณที่เชื่อใจ {{tenant_name}} 🙏', icon: Calendar, color: KK.purple, bg: KK.purpleLight },
+  { event_type: 'customer.birthday', category: 'Customer', label: 'วันเกิด', description: 'อวยพรวันเกิดลูกค้าทุกปี', default_template: 'สุขสันต์วันเกิดคุณ {{first_name}}!\nขอให้มีความสุขมากๆ จาก {{tenant_name}}', icon: Heart, color: KK.red, bg: KK.redLight },
+  { event_type: 'customer.anniversary', category: 'Customer', label: 'ครบรอบลงทะเบียน', description: 'ครบ 1 ปีหลังจองครั้งแรก', default_template: 'ครบรอบ 1 ปีที่คุณเป็นลูกค้าของเรา ขอบคุณที่เชื่อใจ {{tenant_name}} ', icon: Calendar, color: KK.purple, bg: KK.purpleLight },
 ];
 
 const SAMPLE_DATA: Record<string, string> = {

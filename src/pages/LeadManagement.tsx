@@ -1091,7 +1091,7 @@ const LeadManagement = () => {
               {priorityFilter !== 'all' && (
                 <div className="flex items-center justify-between gap-3 px-4 py-3 bg-rose-50 border border-rose-100 rounded-lg">
                   <p className="text-sm text-rose-900">
-                    🔥 กำลังแสดงเฉพาะ <span className="font-semibold">ลูกค้าด่วน (priority: {priorityFilter})</span>
+                    กำลังแสดงเฉพาะ <span className="font-semibold">ลูกค้าด่วน (priority: {priorityFilter})</span>
                   </p>
                   <button
                     onClick={() => navigate('/leads')}
@@ -1695,31 +1695,31 @@ const LeadManagement = () => {
                     // Demographic — อายุ
                     const age = prefs.age ? Number(prefs.age) : null;
                     if (age !== null) {
-                      if (age >= 18 && age <= 30) segs.push({ icon: '🎓', label: 'กลุ่มอายุน้อย', reason: `${age} ปี`, cat: 'demographic' });
-                      else if (age >= 31 && age <= 50) segs.push({ icon: '👨‍💼', label: 'วัยกลางคน', reason: `${age} ปี`, cat: 'demographic' });
-                      else if (age >= 51) segs.push({ icon: '👴', label: 'ผู้สูงอายุ', reason: `${age} ปี`, cat: 'demographic' });
+                      if (age >= 18 && age <= 30) segs.push({ icon: '', label: 'กลุ่มอายุน้อย', reason: `${age} ปี`, cat: 'demographic' });
+                      else if (age >= 31 && age <= 50) segs.push({ icon: '', label: 'วัยกลางคน', reason: `${age} ปี`, cat: 'demographic' });
+                      else if (age >= 51) segs.push({ icon: '', label: 'ผู้สูงอายุ', reason: `${age} ปี`, cat: 'demographic' });
                     }
 
                     // Demographic — รายได้
                     const income = prefs.monthly_income ? Number(prefs.monthly_income) : null;
                     if (income !== null) {
-                      if (income >= 100000) segs.push({ icon: '💰', label: 'รายได้สูง', reason: `฿${income.toLocaleString()}/เดือน`, cat: 'budget' });
-                      else if (income >= 30000) segs.push({ icon: '💵', label: 'รายได้ปานกลาง', reason: `฿${income.toLocaleString()}/เดือน`, cat: 'budget' });
-                      else segs.push({ icon: '💴', label: 'รายได้น้อย', reason: `฿${income.toLocaleString()}/เดือน`, cat: 'budget' });
+                      if (income >= 100000) segs.push({ icon: '', label: 'รายได้สูง', reason: `฿${income.toLocaleString()}/เดือน`, cat: 'budget' });
+                      else if (income >= 30000) segs.push({ icon: '', label: 'รายได้ปานกลาง', reason: `฿${income.toLocaleString()}/เดือน`, cat: 'budget' });
+                      else segs.push({ icon: '', label: 'รายได้น้อย', reason: `฿${income.toLocaleString()}/เดือน`, cat: 'budget' });
                     }
 
                     // Family
                     const familySize = prefs.family_members ? Number(prefs.family_members) : null;
                     if (familySize !== null) {
-                      if (familySize >= 2) segs.push({ icon: '👨‍👩‍👧', label: 'ครอบครัว', reason: `${familySize} คน`, cat: 'family' });
-                      else if (familySize === 1 || prefs.marital_status === 'single') segs.push({ icon: '🧑', label: 'โสด', reason: 'อยู่คนเดียว', cat: 'family' });
+                      if (familySize >= 2) segs.push({ icon: '', label: 'ครอบครัว', reason: `${familySize} คน`, cat: 'family' });
+                      else if (familySize === 1 || prefs.marital_status === 'single') segs.push({ icon: '', label: 'โสด', reason: 'อยู่คนเดียว', cat: 'family' });
                     }
 
                     // Buyer Type
                     const purpose = prefs.purchase_purpose || '';
-                    if (purpose === 'first_home' || purpose.includes('อยู่อาศัย')) segs.push({ icon: '🏠', label: 'บ้านหลังแรก', reason: 'อยู่อาศัย', cat: 'buyer' });
-                    else if (purpose === 'investment' || purpose.includes('ลงทุน') || purpose.includes('เก็งกำไร')) segs.push({ icon: '📈', label: 'ลงทุน', reason: 'เก็งกำไร', cat: 'buyer' });
-                    else if (purpose === 'rental' || purpose.includes('เช่า')) segs.push({ icon: '🏘️', label: 'ปล่อยเช่า', reason: 'rental', cat: 'buyer' });
+                    if (purpose === 'first_home' || purpose.includes('อยู่อาศัย')) segs.push({ icon: '', label: 'บ้านหลังแรก', reason: 'อยู่อาศัย', cat: 'buyer' });
+                    else if (purpose === 'investment' || purpose.includes('ลงทุน') || purpose.includes('เก็งกำไร')) segs.push({ icon: '', label: 'ลงทุน', reason: 'เก็งกำไร', cat: 'buyer' });
+                    else if (purpose === 'rental' || purpose.includes('เช่า')) segs.push({ icon: '', label: 'ปล่อยเช่า', reason: 'rental', cat: 'buyer' });
 
                     // Lead Lifecycle
                     const createdDays = Math.floor((Date.now() - new Date(selectedLead.created_at).getTime()) / (1000 * 60 * 60 * 24));
@@ -1727,31 +1727,31 @@ const LeadManagement = () => {
                       ? Math.floor((Date.now() - new Date(selectedLead.last_contact_date).getTime()) / (1000 * 60 * 60 * 24))
                       : null;
 
-                    if (createdDays <= 7) segs.push({ icon: '🌱', label: 'ลูกค้าใหม่ภายใน 7 วัน', reason: `${createdDays} วันที่แล้ว`, cat: 'lifecycle' });
+                    if (createdDays <= 7) segs.push({ icon: '', label: 'ลูกค้าใหม่ภายใน 7 วัน', reason: `${createdDays} วันที่แล้ว`, cat: 'lifecycle' });
 
                     if (selectedLead.priority === 'high') {
-                      segs.push({ icon: '🔥', label: 'ลูกค้าด่วน', reason: 'ความสำคัญสูง', cat: 'critical' });
+                      segs.push({ icon: '', label: 'ลูกค้าด่วน', reason: 'ความสำคัญสูง', cat: 'critical' });
                     }
                     if (lastContactDays !== null && lastContactDays >= 30 && selectedLead.status !== 'lost' && selectedLead.status !== 'won') {
-                      segs.push({ icon: '🥶', label: 'ลูกค้าเงียบหายเกิน 30 วัน', reason: `เงียบ ${lastContactDays} วัน`, cat: 'critical' });
+                      segs.push({ icon: '', label: 'ลูกค้าเงียบหายเกิน 30 วัน', reason: `เงียบ ${lastContactDays} วัน`, cat: 'critical' });
                     }
-                    if (selectedLead.status === 'lost') segs.push({ icon: '💀', label: 'สูญเสียลูกค้า', reason: 'สูญเสีย', cat: 'lifecycle' });
-                    if (selectedLead.status === 'won') segs.push({ icon: '🏆', label: 'Won Customer', reason: 'ปิดดีลแล้ว', cat: 'critical' });
+                    if (selectedLead.status === 'lost') segs.push({ icon: '', label: 'สูญเสียลูกค้า', reason: 'สูญเสีย', cat: 'lifecycle' });
+                    if (selectedLead.status === 'won') segs.push({ icon: '', label: 'Won Customer', reason: 'ปิดดีลแล้ว', cat: 'critical' });
 
                     // Budget
                     const budget = selectedLead.estimated_value ? Number(selectedLead.estimated_value) : null;
                     if (budget !== null && budget > 0) {
-                      if (budget >= 10000000) segs.push({ icon: '💎', label: 'งบ Premium 10M+', reason: `฿${budget.toLocaleString()}`, cat: 'critical' });
-                      else if (budget >= 3000000) segs.push({ icon: '💵', label: 'งบ 3-10M', reason: `฿${budget.toLocaleString()}`, cat: 'budget' });
-                      else if (budget >= 1000000) segs.push({ icon: '💴', label: 'งบ 1-3M', reason: `฿${budget.toLocaleString()}`, cat: 'budget' });
+                      if (budget >= 10000000) segs.push({ icon: '', label: 'งบ Premium 10M+', reason: `฿${budget.toLocaleString()}`, cat: 'critical' });
+                      else if (budget >= 3000000) segs.push({ icon: '', label: 'งบ 3-10M', reason: `฿${budget.toLocaleString()}`, cat: 'budget' });
+                      else if (budget >= 1000000) segs.push({ icon: '', label: 'งบ 1-3M', reason: `฿${budget.toLocaleString()}`, cat: 'budget' });
                     }
 
                     // Property type interest
                     if (selectedLeadInterests.length > 0) {
                       const types = new Set(selectedLeadInterests.map(i => i.property?.type).filter(Boolean));
-                      if (types.has('condo')) segs.push({ icon: '🏢', label: 'สนใจคอนโด', reason: 'condo', cat: 'property' });
-                      if (types.has('house')) segs.push({ icon: '🏡', label: 'สนใจบ้านเดี่ยว', reason: 'house', cat: 'property' });
-                      if (types.has('villa')) segs.push({ icon: '🏖️', label: 'สนใจ Villa', reason: 'villa', cat: 'property' });
+                      if (types.has('condo')) segs.push({ icon: '', label: 'สนใจคอนโด', reason: 'condo', cat: 'property' });
+                      if (types.has('house')) segs.push({ icon: '', label: 'สนใจบ้านเดี่ยว', reason: 'house', cat: 'property' });
+                      if (types.has('villa')) segs.push({ icon: '', label: 'สนใจ Villa', reason: 'villa', cat: 'property' });
                     }
 
                     if (segs.length === 0) {
@@ -1791,7 +1791,7 @@ const LeadManagement = () => {
                           })}
                         </div>
                         <p className="text-[11px] text-gray-400 mt-3 pt-3 border-t border-gray-100">
-                          💡 Lead นี้จะได้รับ campaign ที่ผูกกับ {segs.length} segments นี้
+                           Lead นี้จะได้รับ campaign ที่ผูกกับ {segs.length} segments นี้
                         </p>
                       </div>
                     );

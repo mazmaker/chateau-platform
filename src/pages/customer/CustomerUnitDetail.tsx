@@ -238,7 +238,7 @@ const CustomerUnitDetail = () => {
   const handleShare = async () => {
     if (!unit) return;
     const url = `${window.location.origin}/customer/units/${unit.id}`;
-    const text = `🏠 ${property?.name || ''} — ยูนิต ${unit.unit_number}\n💰 ${fmt(unit.promo_price || unit.price)}\nดูรายละเอียด: ${url}`;
+    const text = ` ${property?.name || ''} — ยูนิต ${unit.unit_number}\n ${fmt(unit.promo_price || unit.price)}\nดูรายละเอียด: ${url}`;
     if ((navigator as any).share) {
       try { await (navigator as any).share({ title: property?.name, text, url }); } catch { /* user cancelled */ }
     } else {
@@ -265,7 +265,7 @@ const CustomerUnitDetail = () => {
         .select('id, full_name').eq('auth_user_id', user.id).maybeSingle();
       if (!customer) { toast.error('ไม่พบข้อมูลลูกค้า'); return; }
 
-      // 🔍 Find Sales — Workload-balanced routing (industry-standard for Thai real estate)
+      //  Find Sales — Workload-balanced routing (industry-standard for Thai real estate)
       //
       // Priority order:
       //  (1) Sales explicitly assigned to THIS unit (sales_unit_assignments) — highest priority,
@@ -702,7 +702,7 @@ const CustomerUnitDetail = () => {
                 sub: depositPaid
                   ? '✓ ชำระแล้ว'
                   : bookingStatus === 'pending'
-                    ? `💰 รอชำระมัดจำ${myBooking?.deposit_amount ? ` ${(myBooking.deposit_amount / 1_000).toLocaleString('th-TH')}K` : ''}`
+                    ? ` รอชำระมัดจำ${myBooking?.deposit_amount ? ` ${(myBooking.deposit_amount / 1_000).toLocaleString('th-TH')}K` : ''}`
                     : 'ขั้นต่อไป',
                 done: depositPaid,
               },
@@ -798,9 +798,9 @@ const CustomerUnitDetail = () => {
           <div className="mt-5 pt-4 border-t border-gray-100">
             <p className="text-xs text-gray-500 mb-2">สิ่งอำนวยความสะดวก</p>
             <div className="flex flex-wrap gap-2">
-              {unit.balcony && <Tag>🌬 ระเบียง</Tag>}
-              {unit.garden && <Tag>🌳 สวน</Tag>}
-              {unit.pool && <Tag>🏊 สระน้ำ</Tag>}
+              {unit.balcony && <Tag> ระเบียง</Tag>}
+              {unit.garden && <Tag> สวน</Tag>}
+              {unit.pool && <Tag> สระน้ำ</Tag>}
             </div>
           </div>
         )}
@@ -853,7 +853,7 @@ const CustomerUnitDetail = () => {
                     >
                       {isRecommended && (
                         <span className="absolute -top-2 left-1/2 -translate-x-1/2 text-[9px] font-bold bg-chateau text-white px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                          ⭐ แนะนำ
+                           แนะนำ
                         </span>
                       )}
                       <p className={`text-[11px] font-semibold leading-tight ${isActive ? 'text-chateau' : 'text-gray-900'}`}>
@@ -925,7 +925,7 @@ const CustomerUnitDetail = () => {
 
             {/* Info — sales will confirm real numbers */}
             <p className="text-xs text-gray-500 text-center pt-1">
-              💬 Sales จะคำนวณตัวเลขจริงให้เมื่อนัดดูยูนิต
+               Sales จะคำนวณตัวเลขจริงให้เมื่อนัดดูยูนิต
             </p>
           </div>
         )}
@@ -986,7 +986,7 @@ const CustomerUnitDetail = () => {
 
           {unit.tour_3d_url && (
             <p className="text-[11px] text-gray-500 mt-3 leading-relaxed">
-              💡 <strong>3D Tour</strong> ให้คุณ "เดิน" สำรวจบ้านเสมือนจริง 360° — ลากเมาส์หรือไถบนมือถือเพื่อหมุนมุมมอง
+               <strong>3D Tour</strong> ให้คุณ "เดิน" สำรวจบ้านเสมือนจริง 360° — ลากเมาส์หรือไถบนมือถือเพื่อหมุนมุมมอง
             </p>
           )}
         </div>
@@ -1107,7 +1107,7 @@ const CustomerUnitDetail = () => {
             {/* Next steps hint */}
             <div className="bg-gray-50 rounded-xl p-3">
               <p className="text-[11px] text-gray-600 leading-relaxed">
-                💡 <strong>ขั้นตอนต่อไป:</strong> Sales จะโทร / LINE เพื่อนัดวันเวลาดูยูนิตจริง — ระบบหา Sales ที่ว่างให้คุณอัตโนมัติ
+                 <strong>ขั้นตอนต่อไป:</strong> Sales จะโทร / LINE เพื่อนัดวันเวลาดูยูนิตจริง — ระบบหา Sales ที่ว่างให้คุณอัตโนมัติ
               </p>
             </div>
           </div>

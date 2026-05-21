@@ -2658,7 +2658,7 @@ const PropertyManagement = () => {
                             onChange={(e) => setUnitForm({ ...unitForm, pool: e.target.checked })}
                             className="w-4 h-4 accent-chateau"
                           />
-                          <span className="text-sm">🏊 มีสระว่ายน้ำ</span>
+                          <span className="text-sm"> มีสระว่ายน้ำ</span>
                         </label>
                         <label className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50">
                           <input
@@ -2667,7 +2667,7 @@ const PropertyManagement = () => {
                             onChange={(e) => setUnitForm({ ...unitForm, garden: e.target.checked })}
                             className="w-4 h-4 accent-chateau"
                           />
-                          <span className="text-sm">🌿 มีสวน</span>
+                          <span className="text-sm"> มีสวน</span>
                         </label>
                         <label className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50">
                           <input
@@ -2676,7 +2676,7 @@ const PropertyManagement = () => {
                             onChange={(e) => setUnitForm({ ...unitForm, balcony: e.target.checked })}
                             className="w-4 h-4 accent-chateau"
                           />
-                          <span className="text-sm">🪟 มีระเบียง</span>
+                          <span className="text-sm"> มีระเบียง</span>
                         </label>
                       </div>
                     </div>
@@ -3240,7 +3240,7 @@ const PropertyManagement = () => {
                     {/* View */}
                     {viewingUnit.view && (
                       <div className="p-3 bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg border border-amber-200">
-                        <p className="text-xs font-semibold text-amber-900 mb-1">🌅 วิว</p>
+                        <p className="text-xs font-semibold text-amber-900 mb-1"> วิว</p>
                         <p className="text-sm font-medium text-amber-900">{viewingUnit.view}</p>
                       </div>
                     )}
@@ -3248,7 +3248,7 @@ const PropertyManagement = () => {
                     {/* Furnishing */}
                     {viewingUnit.furnishing && (
                       <div className="p-3 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
-                        <p className="text-xs font-semibold text-purple-900 mb-1">🛋 สถานะตกแต่ง</p>
+                        <p className="text-xs font-semibold text-purple-900 mb-1"> สถานะตกแต่ง</p>
                         <p className="text-sm font-medium text-purple-900">
                           {viewingUnit.furnishing === 'fully' && 'ตกแต่งครบ พร้อมอยู่ (Fully Furnished)'}
                           {viewingUnit.furnishing === 'partial' && 'ตกแต่งบางส่วน (Partially Furnished)'}
@@ -3280,7 +3280,7 @@ const PropertyManagement = () => {
                     <CardContent className="pt-4 space-y-3">
                       {viewingUnit.floor_plan_url && (
                         <div>
-                          <p className="text-xs font-semibold text-slate-700 mb-2">📐 ผังห้อง</p>
+                          <p className="text-xs font-semibold text-slate-700 mb-2"> ผังห้อง</p>
                           <img
                             src={viewingUnit.floor_plan_url}
                             alt="Floor plan"
@@ -3355,8 +3355,8 @@ const PropertyManagement = () => {
                             />
                             <p className="text-xs text-amber-700 mt-2">
                               {masterPlanImgError
-                                ? '⚠ URL ที่ใส่ไม่ใช่รูปภาพโดยตรง — ต้อง paste URL ที่ลงท้าย .jpg / .png / .webp (คลิกขวาที่รูปจริง → "คัดลอกที่อยู่รูปภาพ")'
-                                : '💡 ผังนี้สร้างจากข้อมูลยูนิตจริง — admin upload ผังจริงในฟอร์มแก้ไขโครงการได้'}
+                                ? 'URL ที่ใส่ไม่ใช่รูปภาพโดยตรง — ต้อง paste URL ที่ลงท้าย .jpg / .png / .webp (คลิกขวาที่รูปจริง → "คัดลอกที่อยู่รูปภาพ")'
+                                : ' ผังนี้สร้างจากข้อมูลยูนิตจริง — admin upload ผังจริงในฟอร์มแก้ไขโครงการได้'}
                             </p>
                           </>
                         )}
@@ -3387,7 +3387,7 @@ const PropertyManagement = () => {
                         />
                       </div>
                       <p className="text-xs text-gray-500 mt-2">
-                        📍 {selectedProperty.address?.street || `${selectedProperty.address?.district || ''}, ${selectedProperty.address?.province || ''}`}
+                         {selectedProperty.address?.street || `${selectedProperty.address?.district || ''}, ${selectedProperty.address?.province || ''}`}
                         <span className="ml-2 text-gray-400">
                           ({selectedProperty.location_lat}, {selectedProperty.location_lng})
                         </span>
@@ -3484,9 +3484,9 @@ const PropertyManagement = () => {
                                         ''
                                       }
                                     >
-                                      {leadInterest.interest_level === 'high' && '⭐ สูง'}
-                                      {leadInterest.interest_level === 'medium' && '⭐ กลาง'}
-                                      {leadInterest.interest_level === 'low' && '⭐ ต่ำ'}
+                                      {leadInterest.interest_level === 'high' && ' สูง'}
+                                      {leadInterest.interest_level === 'medium' && ' กลาง'}
+                                      {leadInterest.interest_level === 'low' && ' ต่ำ'}
                                     </Badge>
                                   </TableCell>
                                   <TableCell>
@@ -3561,7 +3561,7 @@ const PropertyManagement = () => {
                 <Label className="text-sm font-medium">เลือก Lead ที่จะจอง <span className="text-red-500">*</span></Label>
                 {allTenantLeads.length === 0 ? (
                   <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                    <p className="text-sm text-amber-900 font-medium mb-1">⚠️ ยังไม่มี Lead ในระบบ</p>
+                    <p className="text-sm text-amber-900 font-medium mb-1">ยังไม่มี Lead ในระบบ</p>
                     <p className="text-xs text-amber-800">
                       กดปิดและใช้ปุ่ม "+ เพิ่ม Lead ใหม่" ก่อน
                     </p>
@@ -3578,7 +3578,7 @@ const PropertyManagement = () => {
                   if (activeLeads.length === 0) {
                     return (
                       <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                        <p className="text-sm text-amber-900 font-medium">⚠️ ไม่มี Lead ที่ active</p>
+                        <p className="text-sm text-amber-900 font-medium">ไม่มี Lead ที่ active</p>
                         <p className="text-xs text-amber-800">
                           Lead ทุกคนปิดดีล/สูญเสียไปแล้ว — กด "+ เพิ่ม Lead ใหม่"
                         </p>
@@ -3598,7 +3598,7 @@ const PropertyManagement = () => {
                         {interestedLeads.length > 0 && (
                           <>
                             <div className="px-2 py-1.5 text-xs font-semibold text-amber-700 bg-amber-50 sticky top-0">
-                              🔥 สนใจยูนิตนี้แล้ว ({interestedLeads.length})
+                              สนใจยูนิตนี้แล้ว ({interestedLeads.length})
                             </div>
                             {interestedLeads.map((lead: any) => (
                               <SelectItem key={lead.id} value={lead.id}>
@@ -3613,7 +3613,7 @@ const PropertyManagement = () => {
                         {otherLeads.length > 0 && (
                           <>
                             <div className="px-2 py-1.5 text-xs font-semibold text-gray-600 bg-gray-50 sticky top-0">
-                              👥 Lead อื่นใน tenant ({otherLeads.length})
+                              Lead อื่นใน tenant ({otherLeads.length})
                             </div>
                             {otherLeads.map((lead: any) => (
                               <SelectItem key={lead.id} value={lead.id}>
@@ -3634,7 +3634,7 @@ const PropertyManagement = () => {
                   if (!selectedIsInterested) {
                     return (
                       <p className="text-xs text-blue-700 mt-1.5">
-                        💡 Lead นี้ยังไม่ได้บันทึกความสนใจในยูนิตนี้ — ระบบจะเพิ่มให้อัตโนมัติเมื่อบันทึกการจอง
+                         Lead นี้ยังไม่ได้บันทึกความสนใจในยูนิตนี้ — ระบบจะเพิ่มให้อัตโนมัติเมื่อบันทึกการจอง
                       </p>
                     );
                   }

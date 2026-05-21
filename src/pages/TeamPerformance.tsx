@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Trophy, Users, AlertTriangle, Award, ArrowUpDown, Loader2, Target, X,
+  Trophy, Users, AlertTriangle, Award, ArrowUpDown, Loader2, CheckCircle,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -44,13 +44,6 @@ interface TeamRow {
   convRate: number;       // won / leads ratio (0-100)
 }
 
-interface SalesTarget {
-  user_id: string;
-  target_deals: number;
-  target_revenue: number;
-  target_leads: number;
-}
-
 type SortKey = 'wonValue' | 'won' | 'convRate' | 'leadsThisMonth' | 'openLeads';
 type RoleFilter = 'all' | 'sales' | 'agent';
 
@@ -86,10 +79,6 @@ export default function TeamPerformance() {
   const [atRiskOnly, setAtRiskOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('wonValue');
   const [sortDesc, setSortDesc] = useState(true);
-  const [targets, setTargets] = useState<Record<string, SalesTarget>>({});
-  const [targetModal, setTargetModal] = useState<{ userId: string; name: string } | null>(null);
-  const [targetForm, setTargetForm] = useState({ target_deals: 0, target_revenue: 0, target_leads: 0 });
-  const [targetSaving, setTargetSaving] = useState(false);
 
   // "At risk" rule kept identical to the KPI definition below so the count on the
   // card and the rows the table highlights are always consistent.
@@ -102,8 +91,7 @@ export default function TeamPerformance() {
     const load = async () => {
       setLoading(true);
       try {
-        const now = new Date();
-        const [leadsRes, usersRes, targetsRes] = await Promise.all([
+        const [leadsRes, usersRes] = await Promise.all([
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from('leads') as any)
             .select('id, status, assigned_to, estimated_value, created_at, updated_at')
@@ -113,18 +101,9 @@ export default function TeamPerformance() {
             .select('id, full_name, email, role')
             .eq('tenant_id', currentTenant.id)
             .in('role', ['sales', 'agent']),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from('sales_targets') as any)
-            .select('user_id, target_deals, target_revenue, target_leads')
-            .eq('tenant_id', currentTenant.id)
-            .eq('period_year', now.getFullYear())
-            .eq('period_month', now.getMonth() + 1),
         ]);
         setLeads((leadsRes.data || []) as LeadLite[]);
         setUsers((usersRes.data || []) as UserLite[]);
-        const tMap: Record<string, SalesTarget> = {};
-        for (const t of (targetsRes.data || [])) tMap[t.user_id] = t;
-        setTargets(tMap);
       } finally {
         setLoading(false);
       }
@@ -185,41 +164,12 @@ export default function TeamPerformance() {
     }
     const topByValue = [...active].sort((a, b) => b.wonValue - a.wonValue)[0];
     const teamWonTotal = active.reduce((s, r) => s + r.wonValue, 0);
-    // "At risk" = active rep with 0 deals this month AND has open leads
+    const totalDeals = active.reduce((s, r) => s + r.won, 0);
+    const totalLeads = active.reduce((s, r) => s + r.leadsTotal, 0);
+    const teamConvRate = totalLeads > 0 ? Math.round((totalDeals / totalLeads) * 1000) / 10 : 0;
     const atRisk = active.filter(r => r.won === 0 && r.openLeads > 0).length;
-    const avgConv = active.length > 0
-      ? Math.round((active.reduce((s, r) => s + r.convRate, 0) / active.length) * 10) / 10
-      : 0;
-    return { topPerformer: topByValue, teamWonTotal, atRisk, avgConv };
+    return { topPerformer: topByValue, teamWonTotal, totalDeals, teamConvRate, totalLeads, atRisk };
   }, [filteredSortedRows]);
-
-  const openTargetModal = (e: React.MouseEvent, userId: string, name: string) => {
-    e.stopPropagation();
-    const existing = targets[userId];
-    setTargetForm({
-      target_deals: existing?.target_deals || 0,
-      target_revenue: existing?.target_revenue || 0,
-      target_leads: existing?.target_leads || 0,
-    });
-    setTargetModal({ userId, name });
-  };
-
-  const saveTarget = async () => {
-    if (!targetModal || !currentTenant?.id) return;
-    setTargetSaving(true);
-    const now = new Date();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase.from('sales_targets') as any).upsert({
-      tenant_id: currentTenant.id,
-      user_id: targetModal.userId,
-      period_year: now.getFullYear(),
-      period_month: now.getMonth() + 1,
-      ...targetForm,
-    }, { onConflict: 'tenant_id,user_id,period_year,period_month' });
-    setTargets(prev => ({ ...prev, [targetModal.userId]: { user_id: targetModal.userId, ...targetForm } }));
-    setTargetSaving(false);
-    setTargetModal(null);
-  };
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -239,12 +189,11 @@ export default function TeamPerformance() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gray-50">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="lg:ml-[260px] min-h-screen">
+      <div className="lg:pl-[260px]">
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="p-6 lg:p-8">
-          <div className="max-w-6xl mx-auto space-y-5">
+        <main className="p-6 lg:p-10 space-y-7">
             {/* Page header */}
             <Card className="bg-white border-gray-200 shadow-lg">
               <CardContent className="pt-6">
@@ -255,7 +204,7 @@ export default function TeamPerformance() {
                   <div>
                     <h1 className="text-2xl font-bold text-gray-900">ผลงานทีม</h1>
                     <p className="text-gray-600 mt-1">
-                      ภาพรวมผลงานพนักงานขายและนายหน้า · กดแถวเพื่อดูรายละเอียด
+                      ภาพรวมผลงานพนักงานขายและนายหน้า
                     </p>
                   </div>
                 </div>
@@ -278,22 +227,18 @@ export default function TeamPerformance() {
                 tone="amber"
               />
               <KpiCard
-                label="Conversion เฉลี่ย"
-                value={`${summary.avgConv}%`}
+                label="อัตราปิดดีลทีม"
+                value={`${summary.teamConvRate}%`}
+                sub={`${summary.totalDeals} ดีล จาก ${summary.totalLeads} leads`}
                 icon={ArrowUpDown}
                 tone="blue"
               />
-              {/* At-risk card is interactive: clicking it filters the table down to just
-                  the people who need help. When count = 0 the card stays passive to avoid
-                  a misleading "clickable but no result" state. */}
               <KpiCard
-                label="ต้องช่วยเหลือ"
-                value={`${summary.atRisk} คน`}
-                sub={atRiskOnly ? 'คลิกอีกครั้งเพื่อแสดงทั้งหมด' : 'คลิกเพื่อดูเฉพาะคนที่ต้องช่วย'}
-                icon={AlertTriangle}
-                tone="red"
-                onClick={summary.atRisk > 0 ? () => setAtRiskOnly(v => !v) : undefined}
-                active={atRiskOnly}
+                label="ดีลปิดรวมเดือนนี้"
+                value={`${summary.totalDeals} ดีล`}
+                sub={summary.totalDeals > 0 ? `${filteredSortedRows.filter(r => r.won > 0).length} คนปิดดีลได้` : 'ยังไม่มีดีลปิดเดือนนี้'}
+                icon={CheckCircle}
+                tone="green"
               />
             </div>
 
@@ -306,14 +251,21 @@ export default function TeamPerformance() {
                   <TabsTrigger value="agent">นายหน้า ({rows.filter(r => r.role === 'agent').length})</TabsTrigger>
                 </TabsList>
               </Tabs>
-              {atRiskOnly && (
+              {summary.atRisk > 0 && (
                 <button
-                  onClick={() => setAtRiskOnly(false)}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors"
+                  onClick={() => setAtRiskOnly(v => !v)}
+                  className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border transition-colors ${
+                    atRiskOnly
+                      ? 'bg-white text-red-800 border-red-400'
+                      : 'bg-white text-red-700 border-red-200 hover:border-red-400'
+                  }`}
                 >
                   <AlertTriangle className="w-3 h-3" />
-                  กรองเฉพาะ "ต้องช่วยเหลือ"
-                  <span className="text-red-400 ml-1">✕</span>
+                  ต้องช่วยเหลือ
+                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-600 text-white text-[10px] font-bold">
+                    {summary.atRisk}
+                  </span>
+                  {atRiskOnly && <span className="text-red-400 ml-0.5">✕</span>}
                 </button>
               )}
             </div>
@@ -339,8 +291,8 @@ export default function TeamPerformance() {
                           <th className="text-left py-3 px-3 font-medium">พนักงาน</th>
                           <th className="text-left py-3 px-3 font-medium">บทบาท</th>
                           <SortableTH label="Leads เดือนนี้" active={sortKey === 'leadsThisMonth'} desc={sortDesc} onClick={() => handleSort('leadsThisMonth')} />
-                          <SortableTH label="ปิดดีล / เป้า" active={sortKey === 'won'} desc={sortDesc} onClick={() => handleSort('won')} />
-                          <SortableTH label="ยอดขาย / เป้า" active={sortKey === 'wonValue'} desc={sortDesc} onClick={() => handleSort('wonValue')} />
+                          <SortableTH label="ปิดดีล" active={sortKey === 'won'} desc={sortDesc} onClick={() => handleSort('won')} />
+                          <SortableTH label="ยอดขาย" active={sortKey === 'wonValue'} desc={sortDesc} onClick={() => handleSort('wonValue')} />
                           <SortableTH label="Conv %" active={sortKey === 'convRate'} desc={sortDesc} onClick={() => handleSort('convRate')} />
                           <SortableTH label="กำลังดูแล" active={sortKey === 'openLeads'} desc={sortDesc} onClick={() => handleSort('openLeads')} />
                           <th className="text-right py-3 px-3 font-medium"></th>
@@ -357,7 +309,7 @@ export default function TeamPerformance() {
                             <td className="py-3 px-3">
                               {sortKey === 'wonValue' && sortDesc && i === 0 ? (
                                 <span className="inline-flex items-center justify-center w-7 h-7 rounded-full text-sm bg-amber-100 text-amber-700">
-                                  🏆
+                                  #1
                                 </span>
                               ) : (
                                 <span className="text-gray-500 font-semibold tabular-nums">#{i + 1}</span>
@@ -387,47 +339,18 @@ export default function TeamPerformance() {
                               </span>
                             </td>
                             <td className="py-3 px-3 text-right tabular-nums text-gray-700">{r.leadsThisMonth}</td>
-                            <td className="py-3 px-3 text-right">
-                              <p className="tabular-nums font-semibold text-green-700">
-                                {r.won || '—'}
-                                {targets[r.userId]?.target_deals > 0 && (
-                                  <span className="text-gray-400 font-normal">/{targets[r.userId].target_deals}</span>
-                                )}
-                              </p>
-                              {targets[r.userId]?.target_deals > 0 && (
-                                <div className="w-full h-1 bg-gray-100 rounded-full mt-1 overflow-hidden">
-                                  <div className="h-full rounded-full bg-green-500 transition-all" style={{ width: `${Math.min(100, (r.won / targets[r.userId].target_deals) * 100)}%` }} />
-                                </div>
-                              )}
+                            <td className="py-3 px-3 text-right tabular-nums font-semibold text-green-700">
+                              {r.won || '—'}
                             </td>
-                            <td className="py-3 px-3 text-right">
-                              <p className="tabular-nums font-bold text-gray-900">{formatTHB(r.wonValue)}</p>
-                              {targets[r.userId]?.target_revenue > 0 && (
-                                <>
-                                  <p className="text-[10px] text-gray-400 tabular-nums">เป้า {formatTHB(targets[r.userId].target_revenue)}</p>
-                                  <div className="w-full h-1 bg-gray-100 rounded-full mt-1 overflow-hidden">
-                                    <div className="h-full rounded-full bg-chateau transition-all" style={{ width: `${Math.min(100, (r.wonValue / targets[r.userId].target_revenue) * 100)}%` }} />
-                                  </div>
-                                </>
-                              )}
+                            <td className="py-3 px-3 text-right tabular-nums font-bold text-gray-900">
+                              {formatTHB(r.wonValue)}
                             </td>
                             <td className="py-3 px-3 text-right tabular-nums text-gray-700">{r.convRate}%</td>
                             <td className="py-3 px-3 text-right tabular-nums text-gray-700">{r.openLeads}</td>
                             <td className="py-3 px-3 text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-gray-500 hover:bg-gray-100 text-xs"
-                                  onClick={(e) => openTargetModal(e, r.userId, r.name)}
-                                  title="ตั้งเป้าหมาย"
-                                >
-                                  <Target className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button variant="ghost" size="sm" className="text-chateau hover:bg-chateau/10">
-                                  ดูละเอียด →
-                                </Button>
-                              </div>
+                              <Button variant="ghost" size="sm" className="text-chateau hover:bg-chateau/10">
+                                ดูละเอียด →
+                              </Button>
                             </td>
                           </tr>
                         ))}
@@ -437,57 +360,8 @@ export default function TeamPerformance() {
                 )}
               </CardContent>
             </Card>
-          </div>
         </main>
       </div>
-
-      {/* Target modal */}
-      {targetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setTargetModal(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4 space-y-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                  <Target className="w-4 h-4 text-chateau" /> ตั้งเป้าหมาย
-                </h3>
-                <p className="text-xs text-gray-500 mt-0.5">{targetModal.name} · เดือนนี้</p>
-              </div>
-              <button onClick={() => setTargetModal(null)} className="text-gray-400 hover:text-gray-600">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="space-y-3">
-              {[
-                { key: 'target_deals', label: 'จำนวนดีลที่ปิด (unit)', placeholder: '5' },
-                { key: 'target_revenue', label: 'ยอดขาย (บาท)', placeholder: '5000000' },
-                { key: 'target_leads', label: 'Leads ใหม่ (ราย)', placeholder: '15' },
-              ].map(f => (
-                <div key={f.key}>
-                  <label className="text-xs font-medium text-gray-700 block mb-1">{f.label}</label>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder={f.placeholder}
-                    value={(targetForm as any)[f.key] || ''}
-                    onChange={e => setTargetForm(prev => ({ ...prev, [f.key]: Number(e.target.value) || 0 }))}
-                    className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-chateau/20 focus:border-chateau"
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-2 pt-1">
-              <Button variant="outline" className="flex-1" onClick={() => setTargetModal(null)}>ยกเลิก</Button>
-              <Button
-                className="flex-1 bg-chateau hover:bg-chateau/90 text-white"
-                onClick={saveTarget}
-                disabled={targetSaving}
-              >
-                {targetSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'บันทึก'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

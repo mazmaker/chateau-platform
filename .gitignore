@@ -118,3 +118,10 @@ backups/
 
 # Personal notes (private — do not commit)
 documents/จดเอง.md
+
+#.mcp.json
+
+# ML scripts — contain API keys, never commit
+scripts/train_model.py
+scripts/model_params.json
+scripts/seed_leads.py

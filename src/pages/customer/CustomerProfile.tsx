@@ -216,7 +216,7 @@ const CustomerProfile = () => {
         </summary>
         <div className="px-5 pb-5 pt-1 border-t border-gray-100 space-y-5">
           <p className="text-[11px] text-gray-500 leading-relaxed -mt-1">
-            💡 ช่วยให้ Sales แนะนำยูนิตที่ตรงกับคุณมากขึ้น — ตอบเฉพาะที่สะดวก
+             ช่วยให้ Sales แนะนำยูนิตที่ตรงกับคุณมากขึ้น — ตอบเฉพาะที่สะดวก
           </p>
 
           {/* — อาชีพ + การเงิน — */}

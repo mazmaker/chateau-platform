@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
-  Trophy, TrendingUp, TrendingDown, Minus, Clock, Target, Award,
+  Trophy, TrendingUp, TrendingDown, Minus, Clock, Award,
   AlertTriangle, Sparkles, Loader2,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -24,11 +24,6 @@ interface Props {
   showName?: boolean;
 }
 
-interface SalesTarget {
-  target_deals: number;
-  target_revenue: number;
-  target_leads: number;
-}
 
 interface LeadLite {
   id: string;
@@ -90,15 +85,12 @@ export default function SelfPerformanceSection({ userId, tenantId, showName = fa
   const [allSalesUsers, setAllSalesUsers] = useState<UserLite[]>([]);
   const [thisUser, setThisUser] = useState<UserLite | null>(null);
   const [loading, setLoading] = useState(true);
-  const [target, setTarget] = useState<SalesTarget | null>(null);
-
   useEffect(() => {
     if (!userId || !tenantId) return;
     const load = async () => {
       setLoading(true);
       try {
-        const now = new Date();
-        const [leadsRes, usersRes, targetRes] = await Promise.all([
+        const [leadsRes, usersRes] = await Promise.all([
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from('leads') as any)
             .select('id, status, assigned_to, source, estimated_value, created_at, updated_at')
@@ -108,20 +100,11 @@ export default function SelfPerformanceSection({ userId, tenantId, showName = fa
             .select('id, full_name, email, role')
             .eq('tenant_id', tenantId)
             .in('role', ['sales', 'agent']),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from('sales_targets') as any)
-            .select('target_deals, target_revenue, target_leads')
-            .eq('tenant_id', tenantId)
-            .eq('user_id', userId)
-            .eq('period_year', now.getFullYear())
-            .eq('period_month', now.getMonth() + 1)
-            .maybeSingle(),
         ]);
         setLeads((leadsRes.data || []) as LeadLite[]);
         const users = (usersRes.data || []) as UserLite[];
         setAllSalesUsers(users);
         setThisUser(users.find(u => u.id === userId) || null);
-        setTarget(targetRes.data as SalesTarget | null);
       } catch (e) {
         console.error('SelfPerformance load failed:', e);
       } finally {
@@ -292,6 +275,7 @@ export default function SelfPerformanceSection({ userId, tenantId, showName = fa
       teamPassRate,
       topSource,
       activeLeadCount: myActiveLeads.length,
+      lostCount: myLeads.filter(l => l.status === 'lost').length,
     };
   }, [leads, allSalesUsers, userId]);
 
@@ -451,13 +435,30 @@ export default function SelfPerformanceSection({ userId, tenantId, showName = fa
                       {teamPass != null && (
                         <span className="ml-2 text-gray-400">· ทีมเฉลี่ย {teamPass}%</span>
                       )}
-                      {isWeak && <span className="ml-2 font-semibold">⚠ leak</span>}
+                      {isWeak && <span className="ml-2 font-semibold text-amber-600">leak</span>}
                     </div>
                   </div>
                 )}
               </div>
             );
           })}
+          {metrics.lostCount > 0 && (
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-medium text-gray-400 w-20 flex-shrink-0">เสียดีล</span>
+              <div className="flex-1 h-7 rounded-md bg-gray-100 overflow-hidden relative">
+                <div
+                  className="h-full"
+                  style={{
+                    width: `${Math.max(6, (metrics.lostCount / Math.max(metrics.activeLeadCount + metrics.lostCount, 1)) * 100)}%`,
+                    backgroundColor: '#d1d5db',
+                  }}
+                />
+                <span className="absolute inset-0 flex items-center px-2 text-xs font-semibold text-gray-400">
+                  {metrics.lostCount}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -476,51 +477,10 @@ export default function SelfPerformanceSection({ userId, tenantId, showName = fa
         </div>
       )}
 
-      {/* Target progress */}
-      {target && (target.target_deals > 0 || target.target_revenue > 0 || target.target_leads > 0) && (
-        <div className="border border-gray-100 rounded-xl p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-            <Target className="w-3.5 h-3.5 text-chateau" />
-            ความคืบหน้าเป้าหมายเดือนนี้
-          </h3>
-          {target.target_deals > 0 && (
-            <TargetBar label="ปิดดีล" actual={metrics.wonCount} target={target.target_deals} unit="ดีล" />
-          )}
-          {target.target_revenue > 0 && (
-            <TargetBar label="ยอดขาย" actual={metrics.wonValue} target={target.target_revenue} isCurrency />
-          )}
-          {target.target_leads > 0 && (
-            <TargetBar label="Leads ใหม่" actual={metrics.activeLeadCount} target={target.target_leads} unit="ราย" />
-          )}
-        </div>
-      )}
     </div>
   );
 }
 
-function TargetBar({ label, actual, target, unit = '', isCurrency = false }: {
-  label: string; actual: number; target: number; unit?: string; isCurrency?: boolean;
-}) {
-  const pct = target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : 0;
-  const barColor = pct >= 100 ? '#16a34a' : pct >= 50 ? '#e60023' : '#ef4444';
-  const fmt = (n: number) => isCurrency
-    ? (n >= 1_000_000 ? `฿${(n / 1_000_000).toFixed(1)}M` : `฿${n.toLocaleString('th-TH')}`)
-    : `${n} ${unit}`;
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-gray-700">{label}</span>
-        <span className="text-xs font-semibold tabular-nums text-gray-900">
-          {fmt(actual)} / {fmt(target)}{' '}
-          <span className="text-gray-400 font-normal">({pct}%)</span>
-        </span>
-      </div>
-      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: barColor }} />
-      </div>
-    </div>
-  );
-}
 
 interface KpiCardProps {
   label: string;

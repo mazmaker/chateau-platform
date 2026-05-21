@@ -18,11 +18,9 @@ import {
   Clock,
   Target,
   RefreshCw,
-  Flame,
   AlertTriangle,
   Users,
   Briefcase,
-  Trophy,
   DollarSign,
   TrendingUp,
   Wallet,
@@ -490,27 +488,6 @@ const Analytics = () => {
     .sort((a, b) => (b.views + b.uniqueLeads * 10) - (a.views + a.uniqueLeads * 10))
     .slice(0, 6);
 
-  // ─── Sales Leaderboard ──
-  const openStatuses = new Set(['new', 'contacted', 'qualified', 'negotiating']);
-  const salesPerf = new Map<string, { name: string; deals: number; value: number; openLeads: number }>();
-  leads.forEach((l) => {
-    if (!l.assigned_to) return;
-    const u = userById.get(l.assigned_to);
-    const name = u?.full_name || u?.email || 'ไม่ทราบ';
-    const existing = salesPerf.get(l.assigned_to) || { name, deals: 0, value: 0, openLeads: 0 };
-    if (l.status === 'won') {
-      existing.deals++;
-      existing.value += Number(l.estimated_value || 0);
-    }
-    if (openStatuses.has(l.status || '')) {
-      existing.openLeads++;
-    }
-    salesPerf.set(l.assigned_to, existing);
-  });
-  const leaderboard = Array.from(salesPerf.values())
-    .filter((s) => s.deals > 0 || s.openLeads > 0)
-    .sort((a, b) => b.value - a.value || b.deals - a.deals);
-
   const kpiCards = [
     {
       title: 'ลีดมาใหม่',
@@ -629,7 +606,7 @@ const Analytics = () => {
 
         {/* ═══ INSIGHT — ภาพรวมตัวเลข ═══ */}
         <div className={`space-y-2 ${loading ? 'opacity-30 pointer-events-none' : ''}`}>
-          <h2 className="text-sm font-bold uppercase tracking-wide text-gray-400">📊 INSIGHT — ภาพรวมตัวเลข</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-gray-400">INSIGHT — ภาพรวมตัวเลข</h2>
         </div>
 
         {/* Row 1: Funnel + Source */}
@@ -760,7 +737,7 @@ const Analytics = () => {
 
         {/* ═══ ACTION — คนที่ต้องตาม + ทีมขาย ═══ */}
         <div className={`space-y-2 pt-3 ${loading ? 'opacity-30 pointer-events-none' : ''}`}>
-          <h2 className="text-sm font-bold uppercase tracking-wide text-gray-400">🎯 ACTION — ลงมือเลย</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-gray-400">ACTION — ลงมือเลย</h2>
         </div>
 
         {/* Row 3: Hot Leads + Silent Leads */}
@@ -768,7 +745,6 @@ const Analytics = () => {
           <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
-                <Flame className="w-4 h-4" style={{ color: KK.red }} />
                 <h3 className="text-base font-bold text-gray-900">Hot Leads</h3>
               </div>
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: KK.red, backgroundColor: KK.redLight }}>
@@ -777,7 +753,7 @@ const Analytics = () => {
             </div>
             <p className="text-xs text-gray-500 mb-4">ลีดที่ทีมขายติ๊กว่าด่วน (priority = สูง) · กดเพื่อเปิด lead</p>
             {hotLeads.length === 0 ? (
-              <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ไม่มีลีดร้อนตอนนี้ 🎉</div>
+              <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ไม่มีลีดร้อนตอนนี้</div>
             ) : (
               // Scrollable so an unbounded number of hot leads doesn't push the rest
               // of the page down. ~500px ≈ 8 rows visible; the user scrolls inside the
@@ -842,7 +818,7 @@ const Analytics = () => {
             </div>
             <p className="text-xs text-gray-500 mb-4">ไม่ติดต่อมากกว่า 7 วัน · เรียงเก่าสุด · กดเพื่อเปิด lead</p>
             {silentList.length === 0 ? (
-              <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ไม่มีลีดเงียบ — ทีมขายทำดีมาก 🎉</div>
+              <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ไม่มีลีดเงียบ — ทีมขายทำดีมาก</div>
             ) : (
               <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
                 {silentList.map((l) => {
@@ -927,9 +903,8 @@ const Analytics = () => {
                           </p>
                         )}
                         {u.uniqueLeads > 0 && (
-                          <p className="text-[11px] tabular-nums flex items-center gap-1" style={{ color: KK.red }}>
-                            <Flame className="w-3 h-3" />
-                            <span>{u.uniqueLeads} Lead สนใจ</span>
+                          <p className="text-[11px] tabular-nums" style={{ color: KK.red }}>
+                            {u.uniqueLeads} Lead สนใจ
                           </p>
                         )}
                       </div>
@@ -941,56 +916,6 @@ const Analytics = () => {
           )}
         </div>
 
-        {/* Row 5: Sales Leaderboard */}
-        <div className={`bg-white border border-gray-100 rounded-2xl shadow-soft p-6 ${loading ? 'opacity-30 pointer-events-none' : ''}`}>
-          <div className="flex items-center gap-2 mb-1">
-            <Trophy className="w-4 h-4" style={{ color: KK.amber }} />
-            <h3 className="text-base font-bold text-gray-900">Sales Leaderboard</h3>
-          </div>
-          <p className="text-xs text-gray-500 mb-5">ผลงานทีมขาย — ตามมูลค่าดีลที่ปิดได้</p>
-          {leaderboard.length === 0 ? (
-            <div className="h-[180px] flex items-center justify-center text-sm text-gray-400">ยังไม่มีพนักงานขายที่ปิดดีล</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-gray-500 border-b border-gray-100">
-                    <th className="text-left py-2 px-3 font-medium">อันดับ</th>
-                    <th className="text-left py-2 px-3 font-medium">พนักงานขาย</th>
-                    <th className="text-right py-2 px-3 font-medium">ดีลปิดได้</th>
-                    <th className="text-right py-2 px-3 font-medium">มูลค่ารวม</th>
-                    <th className="text-right py-2 px-3 font-medium">ลีดที่ดูแลอยู่</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leaderboard.map((s, i) => (
-                    <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
-                      <td className="py-3 px-3">
-                        {i === 0 ? (
-                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold" style={{ backgroundColor: KK.amberLight, color: KK.amber }}>
-                            🏆
-                          </span>
-                        ) : (
-                          <span className="text-gray-500 font-semibold">#{i + 1}</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 font-medium text-gray-900">{s.name}</td>
-                      <td className="py-3 px-3 text-right tabular-nums font-semibold" style={{ color: s.deals > 0 ? KK.green : '#9ca3af' }}>
-                        {s.deals}
-                      </td>
-                      <td className="py-3 px-3 text-right tabular-nums font-semibold text-gray-700">
-                        {formatTHB(s.value)}
-                      </td>
-                      <td className="py-3 px-3 text-right tabular-nums text-gray-700">
-                        {s.openLeads}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
       </div>
     </SubscriptionGuard>
   );

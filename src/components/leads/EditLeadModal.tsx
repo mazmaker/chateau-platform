@@ -102,6 +102,16 @@ const OCCUPATION_OPTIONS = [
   { value: "other", label: "อื่นๆ" },
 ];
 
+const OCCUPATION_TO_EMPLOYMENT_TYPE: Record<string, string> = {
+  business_owner:   "business",
+  government:       "government",
+  state_enterprise: "government",
+  private_company:  "private",
+  farmer:           "freelance",
+  employee:         "freelance",
+  other:            "freelance",
+};
+
 const MARITAL_STATUS_OPTIONS = [
   { value: "", label: "โปรดเลือกสถานภาพ" },
   { value: "single", label: "โสด" },
@@ -616,7 +626,7 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
         monthly_income: formData.monthly_income ? parseFloat(formData.monthly_income) : null,
         monthly_debt: formData.monthly_debt ? parseFloat(formData.monthly_debt) : null,
         down_payment_ready: formData.down_payment_ready ? parseFloat(formData.down_payment_ready) : null,
-        employment_type: formData.employment_type || null,
+        employment_type: OCCUPATION_TO_EMPLOYMENT_TYPE[formData.occupation] || formData.employment_type || null,
         years_employed: formData.years_employed ? parseFloat(formData.years_employed) : null,
       };
       // Manual override for bank pre-approval — when Sales has the actual approval letter,
@@ -1034,24 +1044,6 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                             />
                           </div>
                           <div>
-                            <Label className="text-sm font-medium">ประเภทอาชีพ</Label>
-                            <Select
-                              value={formData.employment_type}
-                              onValueChange={(v) => setFormData(prev => ({ ...prev, employment_type: v }))}
-                              disabled={loading}
-                            >
-                              <SelectTrigger className="mt-1.5">
-                                <SelectValue placeholder="เลือก" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="government">ข้าราชการ / รัฐวิสาหกิจ</SelectItem>
-                                <SelectItem value="private">พนักงานบริษัทเอกชน</SelectItem>
-                                <SelectItem value="business">ธุรกิจส่วนตัว</SelectItem>
-                                <SelectItem value="freelance">Freelance / รับจ้างอิสระ</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
                             <Label className="text-sm font-medium">อายุงาน (ปี)</Label>
                             <Input
                               type="number"
@@ -1075,7 +1067,7 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                               disabled={loading}
                               className="mt-1.5"
                             />
-                            <p className="text-[11px] text-gray-500 mt-1">💡 ถ้ามีจดหมาย Pre-approval จากธนาคาร ใส่ตัวเลขจริงจะแทนค่าที่ระบบคำนวณ</p>
+                            <p className="text-[11px] text-gray-500 mt-1">ถ้ามีจดหมาย Pre-approval จากธนาคาร ใส่ตัวเลขจริงจะแทนค่าที่ระบบคำนวณ</p>
                           </div>
                           <div>
                             <Label className="text-sm font-medium">สมาชิกในครอบครัว (คน)</Label>

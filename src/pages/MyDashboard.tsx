@@ -618,7 +618,7 @@ const MyDashboard = () => {
                           className="w-full flex items-start justify-between gap-3 p-2.5 rounded-lg hover:bg-gray-50 transition-colors text-left"
                         >
                           <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                            <span className="text-base flex-shrink-0 mt-0.5">{t.kind === 'visit' ? '🏠' : '📞'}</span>
+                            <span className="text-base flex-shrink-0 mt-0.5">{t.kind === 'visit' ? '' : ''}</span>
                             <div className="min-w-0">
                               <p className="text-sm font-medium text-gray-900 truncate">{t.title}</p>
                               <p className="text-xs text-gray-500 mt-0.5 truncate">{t.sub}</p>
@@ -687,7 +687,7 @@ const MyDashboard = () => {
                     <p className="text-xs text-gray-500 mb-4">ลูกค้าเงียบ · ยูนิตจองใกล้หมดอายุ</p>
                     {inactiveLeads.length === 0 && expiringSoon.length === 0 ? (
                       <div className="h-[180px] flex items-center justify-center text-sm text-gray-400 text-center">
-                        ไม่มีเรื่องด่วน — ทำงานเก่งมาก 👍
+                        ไม่มีเรื่องด่วน — ทำงานเก่งมาก
                       </div>
                     ) : (
                       <div className="space-y-2 max-h-[240px] overflow-y-auto">

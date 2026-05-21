@@ -946,8 +946,8 @@ const CampaignManagement = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                     {filteredCampaigns.map((campaign) => {
                       const statusConfig: Record<string, { dot: string; label: string; gradient: string; emoji: string }> = {
-                        draft:     { dot: '#9ca3af', label: 'Draft',     gradient: 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)',  emoji: '📝' },
-                        active:    { dot: KK.green,  label: 'Active',    gradient: 'linear-gradient(135deg, #ef4458 0%, #e60023 100%)',  emoji: '🎯' },
+                        draft:     { dot: '#9ca3af', label: 'Draft',     gradient: 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)',  emoji: '' },
+                        active:    { dot: KK.green,  label: 'Active',    gradient: 'linear-gradient(135deg, #ef4458 0%, #e60023 100%)',  emoji: '' },
                         paused:    { dot: KK.amber,  label: 'Scheduled', gradient: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',  emoji: '⏰' },
                         completed: { dot: '#9ca3af', label: 'Ended',     gradient: 'linear-gradient(135deg, #6b7280 0%, #374151 100%)',  emoji: '✓' },
                       };

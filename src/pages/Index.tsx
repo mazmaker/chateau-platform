@@ -91,6 +91,7 @@ interface UnitRow {
 interface PropertyRow {
   id: string;
   name: string;
+  type: string | null;
 }
 
 interface LeadRow {
@@ -134,7 +135,7 @@ const Index = () => {
             .eq('tenant_id', tenantId),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from('properties') as any)
-            .select('id, name')
+            .select('id, name, type')
             .eq('tenant_id', tenantId),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from('leads') as any)
@@ -219,6 +220,36 @@ const Index = () => {
     .slice(0, 5);
   const allRevenue12mo = Array.from(projectSalesMap.values()).reduce((s, v) => s + v, 0);
 
+  const TYPE_LABEL: Record<string, string> = {
+    apartment: 'อพาร์ตเมนต์',
+    house: 'บ้าน',
+    villa: 'วิลล่า',
+    condo: 'คอนโด',
+    commercial: 'พาณิชย์',
+    single_house: 'บ้านเดี่ยว',
+    twin_house: 'บ้านแฝด',
+    townhome: 'ทาวน์โฮม',
+  };
+  const propTypeById = new Map(properties.map((p) => [p.id, p.type || 'other']));
+
+  // ASP breakdown by property type (last 90 days) — groups condo/house/etc. separately
+  const aspByType = Array.from(
+    recent90Sold.reduce((map, u) => {
+      const type = propTypeById.get(u.project_id) || 'other';
+      const e = map.get(type) || { total: 0, count: 0 };
+      e.total += Number(u.price || 0);
+      e.count++;
+      map.set(type, e);
+      return map;
+    }, new Map<string, { total: number; count: number }>())
+  )
+    .map(([type, { total, count }]) => ({
+      label: TYPE_LABEL[type] || type,
+      avg: count > 0 ? total / count : 0,
+      count,
+    }))
+    .sort((a, b) => b.avg - a.avg);
+
   // Funnel — keep pure-lead pipeline (units in DB don't have FK to leads)
   const leadsTotal = leads.length;
   const leadsContacted = leads.filter((l) => l.status === 'contacted' || l.status === 'qualified' || l.status === 'negotiating' || l.status === 'won').length;
@@ -239,19 +270,19 @@ const Index = () => {
   const insight = (() => {
     if (loading || totalUnits === 0) return null;
     if (daysOfInventory && daysOfInventory > 24) {
-      return `⚠️ Days of Inventory ${daysOfInventory.toFixed(0)} เดือน — เกินมาตรฐาน 24 เดือน พิจารณาทำ promo หรือปรับราคา`;
+      return `Days of Inventory ${daysOfInventory.toFixed(0)} เดือน — เกินมาตรฐาน 24 เดือน พิจารณาทำ promo หรือปรับราคา`;
     }
     if (topProjects.length > 0 && allRevenue12mo > 0) {
       const topShare = (topProjects[0].value / allRevenue12mo) * 100;
       if (topShare > 30) {
-        return `💡 ${topProjects[0].name} คิดเป็น ${topShare.toFixed(0)}% ของรายได้ 12 เดือน — concentration risk สูง`;
+        return `${topProjects[0].name} คิดเป็น ${topShare.toFixed(0)}% ของรายได้ 12 เดือน — concentration risk สูง`;
       }
     }
     if (momChange !== null && momChange < -10) {
-      return `📉 ยอดขายลดลง ${Math.abs(momChange).toFixed(0)}% เทียบเดือนก่อน — ต้องตรวจสอบ`;
+      return `ยอดขายลดลง ${Math.abs(momChange).toFixed(0)}% เทียบเดือนก่อน — ต้องตรวจสอบ`;
     }
     if (momChange !== null && momChange > 20) {
-      return `🚀 ยอดขายเติบโต ${momChange.toFixed(0)}% เทียบเดือนก่อน — โมเมนตัมดี`;
+      return `ยอดขายเติบโต ${momChange.toFixed(0)}% เทียบเดือนก่อน — โมเมนตัมดี`;
     }
     return null;
   })();
@@ -309,21 +340,47 @@ const Index = () => {
                   sub={yoyChange !== null ? <ChangeBadge value={yoyChange} label="YoY เดือนเดียวกัน" /> : <span className="text-xs text-gray-400">ปีก่อนไม่มียอด</span>}
                 />
                 <FinancialCard
-                  title="Pre-sales Pipeline"
+                  title="มูลค่าการจอง"
                   value={formatTHB(pipelineValue)}
                   icon={Hourglass}
                   color={C.amber}
                   bg={C.amberLight}
                   sub={<span className="text-xs text-gray-500">{pipelineCount} ดีล · มัดจำ {formatTHB(pipelineDeposit)}</span>}
                 />
-                <FinancialCard
-                  title="ราคาเฉลี่ยที่ขายได้"
-                  value={avgPrice90 > 0 ? formatTHB(avgPrice90) : '—'}
-                  icon={Tag}
-                  color={C.charcoal}
-                  bg={C.charcoalLight}
-                  sub={aspChange !== null ? <ChangeBadge value={aspChange} label="QoQ" /> : <span className="text-xs text-gray-400">90 วันล่าสุด</span>}
-                />
+                {aspByType.length > 1 ? (
+                  <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200">
+                    <div className="flex items-start justify-between mb-3">
+                      <p className="text-sm font-medium text-gray-500 leading-tight pt-1.5">ราคาเฉลี่ยที่ขายได้</p>
+                      <div
+                        className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{
+                          background: `linear-gradient(135deg, ${C.charcoalLight}f0 0%, ${C.charcoalLight} 100%)`,
+                          boxShadow: `inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 2px ${C.charcoal}15`,
+                        }}
+                      >
+                        <Tag className="w-5 h-5" style={{ color: C.charcoal }} strokeWidth={2.2} />
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-gray-400 mb-3">90 วันล่าสุด · แยกตามประเภท</p>
+                    <div className="space-y-2">
+                      {aspByType.map((p) => (
+                        <div key={p.label} className="flex justify-between items-baseline">
+                          <span className="text-sm text-gray-500">{p.label}</span>
+                          <span className="text-base font-bold text-gray-900 tabular-nums">{formatTHB(p.avg)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <FinancialCard
+                    title="ราคาเฉลี่ยที่ขายได้"
+                    value={avgPrice90 > 0 ? formatTHB(avgPrice90) : '—'}
+                    icon={Tag}
+                    color={C.charcoal}
+                    bg={C.charcoalLight}
+                    sub={aspChange !== null ? <ChangeBadge value={aspChange} label="QoQ" /> : <span className="text-xs text-gray-400">90 วันล่าสุด</span>}
+                  />
+                )}
               </div>
 
               {/* Insight strip */}
@@ -456,7 +513,7 @@ const Index = () => {
 
                       {allRevenue12mo > 0 && (
                         <p className="text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
-                          💡 {topProjects[0].name} คิดเป็น <span className="font-semibold text-gray-700">{((topProjects[0].value / allRevenue12mo) * 100).toFixed(0)}%</span> ของรายได้ 12 เดือน
+                          {topProjects[0].name} คิดเป็น <span className="font-semibold text-gray-700">{((topProjects[0].value / allRevenue12mo) * 100).toFixed(0)}%</span> ของรายได้ 12 เดือน
                         </p>
                       )}
                     </>

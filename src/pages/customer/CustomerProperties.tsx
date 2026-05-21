@@ -320,7 +320,7 @@ const CustomerProperties = () => {
 
                   {p.is_featured && (
                     <span className="absolute top-2.5 left-2.5 bg-amber-400 text-amber-900 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md backdrop-blur-sm">
-                      ⭐ แนะนำ
+                       แนะนำ
                     </span>
                   )}
                   {p.type && TYPE_LABEL[p.type] && (

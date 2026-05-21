@@ -175,7 +175,7 @@ export function LoanEstimationCard({ estimation, loading }: LoanEstimationCardPr
               className={`h-2 ${estimation.affordability.dti_ratio > 43 ? 'bg-red-100' : ''}`}
             />
             <div className="text-xs text-muted-foreground">
-              {estimation.affordability.dti_ratio <= 36 ? '✓ อยู่ในเกณฑ์ดี' : estimation.affordability.dti_ratio <= 43 ? '⚠ อยู่ในเกณฑ์พอใช้' : '✗ สูงเกินมาตรฐาน'}
+              {estimation.affordability.dti_ratio <= 36 ? '✓ อยู่ในเกณฑ์ดี' : estimation.affordability.dti_ratio <= 43 ? 'อยู่ในเกณฑ์พอใช้' : '✗ สูงเกินมาตรฐาน'}
             </div>
           </div>
 
@@ -195,7 +195,7 @@ export function LoanEstimationCard({ estimation, loading }: LoanEstimationCardPr
               className={`h-2 ${estimation.affordability.ltv_ratio > 90 ? 'bg-red-100' : ''}`}
             />
             <div className="text-xs text-muted-foreground">
-              {estimation.affordability.ltv_ratio <= 80 ? '✓ อยู่ในเกณฑ์ดี' : estimation.affordability.ltv_ratio <= 90 ? '⚠ อยู่ในเกณฑ์พอใช้' : '✗ สูงเกินมาตรฐาน'}
+              {estimation.affordability.ltv_ratio <= 80 ? '✓ อยู่ในเกณฑ์ดี' : estimation.affordability.ltv_ratio <= 90 ? 'อยู่ในเกณฑ์พอใช้' : '✗ สูงเกินมาตรฐาน'}
             </div>
           </div>
 
@@ -297,7 +297,6 @@ export function LoanEstimationCard({ estimation, loading }: LoanEstimationCardPr
             <ul className="space-y-2">
               {estimation.warnings.map((warning, index) => (
                 <li key={index} className="flex items-start gap-2 text-sm">
-                  <span className="text-red-600 mt-0.5">⚠</span>
                   <span className="text-muted-foreground">{warning}</span>
                 </li>
               ))}

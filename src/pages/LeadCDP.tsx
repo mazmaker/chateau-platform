@@ -180,6 +180,7 @@ const LeadCDP = () => {
   // Real Lead Scoring & Loan Estimation
   const [leadScore, setLeadScore] = useState<PotentialScore | null>(null);
   const [loanEstimation, setLoanEstimation] = useState<LoanEstimation | null>(null);
+  const [mlProbability, setMlProbability] = useState<number | null>(null);
 
   // Get currently selected interest
   const selectedInterest = interests.find(i => i.id === selectedInterestId);
@@ -190,12 +191,69 @@ const LeadCDP = () => {
     }
   }, [leadId, currentTenant]);
 
-  // Calculate lead score and loan estimation whenever customer or selected interest changes
+  // Calculate lead score and loan estimation whenever customer or lead data changes
   useEffect(() => {
-    if (customer && selectedInterest) {
+    if (customer && lead && (selectedInterest || unit || interests.length === 0)) {
       calculateScoresAndEstimation();
     }
-  }, [customer, selectedInterest]);
+  }, [customer, lead, selectedInterest, unit]);
+
+  // Re-apply ML probability when it arrives after initial score calculation
+  useEffect(() => {
+    if (mlProbability !== null && leadScore) {
+      setLeadScore(prev => prev ? {
+        ...prev,
+        conversion_probability: mlProbability,
+        overall_score: Math.round(mlProbability * 100),
+      } as any : prev);
+    }
+  }, [mlProbability]);
+
+  const fetchMLScore = async (leadData: Lead) => {
+    if (!currentTenant) return;
+    try {
+      const res = await fetch(
+        'https://pqnjvcbmnatrtvpqnrdx.supabase.co/functions/v1/score-lead',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenant_id: currentTenant.id,
+            features: {
+              credit_score:       leadData.credit_score       ?? null,
+              monthly_income:     leadData.monthly_income     ?? null,
+              monthly_debt:       leadData.monthly_debt       ?? null,
+              down_payment_ready: leadData.down_payment_ready ?? null,
+              savings:            leadData.savings            ?? null,
+              years_employed:     leadData.years_employed     ?? null,
+              dti_ratio:          leadData.dti_ratio          ?? null,
+              ltv_ratio:          leadData.ltv_ratio          ?? null,
+              website_visits:     leadData.website_visits     ?? null,
+              pages_viewed:       leadData.pages_viewed       ?? null,
+              time_on_site:       leadData.time_on_site       ?? null,
+              brochure_downloads: leadData.brochure_downloads ?? null,
+              site_visit_attended: leadData.site_visit_attended ? 1 : 0,
+              financial_score:    leadData.financial_score    ?? null,
+              engagement_score:   leadData.engagement_score   ?? null,
+              urgency_score:      leadData.urgency_score      ?? null,
+              fit_score:          leadData.fit_score          ?? null,
+              age:                leadData.age                ?? null,
+              decision_maker:     leadData.decision_maker     ? 1 : 0,
+              financing_approved: leadData.financing_approved ? 1 : 0,
+            },
+          }),
+        },
+      );
+      if (res.ok) {
+        const json = await res.json();
+        if (typeof json.conversion_probability === 'number') {
+          setMlProbability(json.conversion_probability);
+        }
+      }
+    } catch (err) {
+      console.error('ML scoring error:', err);
+    }
+  };
 
   const fetchLeadData = async () => {
     setLoading(true);
@@ -209,6 +267,7 @@ const LeadCDP = () => {
 
       if (leadData) {
         setLead(leadData);
+        fetchMLScore(leadData);
 
         // Fetch customer
         const { data: customerData } = await supabase
@@ -289,6 +348,8 @@ const LeadCDP = () => {
 
     const prefs = customer.preferences || {};
     const currentInterest = selectedInterest;
+    // fallback unit when no lead_interests exist
+    const effectiveUnit = currentInterest?.unit ?? unit;
 
     // Prepare lead scoring data — DB columns return null, scoring type expects undefined
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -317,13 +378,18 @@ const LeadCDP = () => {
                      currentInterest?.interest_level === 'low' ? 'low' : 'medium',
       interest_level: currentInterest?.interest_level || 'medium',
 
-      budget_max: (currentInterest?.unit as any)?.price || (property as any)?.base_price || 0,
+      budget_max: (effectiveUnit as any)?.price || (property as any)?.base_price || 0,
       purchase_timeline: '3_months',
     } as any;
 
     // Calculate potential score
     try {
       const score = calculateLeadScore(scoringData);
+      // Override with ML model result when available
+      if (mlProbability !== null) {
+        (score as any).conversion_probability = mlProbability;
+        (score as any).overall_score = Math.round(mlProbability * 100);
+      }
       setLeadScore(score);
     } catch (error) {
       console.error('Error calculating lead score:', error);
@@ -331,12 +397,12 @@ const LeadCDP = () => {
     }
 
     // Calculate loan estimation if we have enough financial data
-    if (lead.monthly_income && currentInterest?.unit?.price) {
+    if (lead.monthly_income && (effectiveUnit as any)?.price) {
       try {
         const estimation = estimateLoan({
           monthly_income: lead.monthly_income ?? undefined,
           monthly_debt: lead.monthly_debt || 0,
-          property_value: (currentInterest.unit as any).price,
+          property_value: (effectiveUnit as any).price,
           down_payment: lead.down_payment_ready || 0,
           credit_score: lead.credit_score || 700,
           age: lead.age ?? undefined,

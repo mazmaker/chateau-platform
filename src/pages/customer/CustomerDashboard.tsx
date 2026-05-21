@@ -304,10 +304,10 @@ const CustomerDashboard = () => {
   //   green = won                 (done — closed deal)
   const statusBadge = (s?: string) => {
     if (s === 'interested') return { label: 'บันทึก', color: 'text-rose-700 bg-rose-100' };
-    if (s === 'viewing_scheduled') return { label: '📅 นัดดูแล้ว', color: 'text-blue-700 bg-blue-100' };
+    if (s === 'viewing_scheduled') return { label: ' นัดดูแล้ว', color: 'text-blue-700 bg-blue-100' };
     if (s === 'viewed') return { label: '✓ ดูแล้ว', color: 'text-blue-700 bg-blue-50' };
-    if (s === 'negotiating') return { label: '🤝 กำลังเจรจา', color: 'text-amber-800 bg-amber-100' };
-    if (s === 'reserved') return { label: '💰 รอชำระมัดจำ', color: 'text-orange-800 bg-orange-100' };
+    if (s === 'negotiating') return { label: 'กำลังเจรจา', color: 'text-amber-800 bg-amber-100' };
+    if (s === 'reserved') return { label: 'รอชำระมัดจำ', color: 'text-orange-800 bg-orange-100' };
     if (s === 'deposit_paid') return { label: '✓ ชำระมัดจำแล้ว', color: 'text-emerald-700 bg-emerald-50' };
     if (s === 'won') return { label: '✓ ปิดดีลแล้ว', color: 'text-green-800 bg-green-100' };
     return { label: s || '—', color: 'text-gray-600 bg-gray-100' };
@@ -464,7 +464,7 @@ const CustomerDashboard = () => {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
                     <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
-                      {visitIsToday ? '⏰ นัดดูวันนี้' : visitDiffDays === 1 ? '⏰ นัดดูพรุ่งนี้' : `📅 อีก ${visitDiffDays} วัน`}
+                      {visitIsToday ? ' นัดดูวันนี้' : visitDiffDays === 1 ? ' นัดดูพรุ่งนี้' : ` อีก ${visitDiffDays} วัน`}
                     </p>
                   </div>
                   <h2 className="text-base font-bold text-gray-900 truncate">
@@ -533,7 +533,7 @@ const CustomerDashboard = () => {
                   <section>
                     <div className="flex items-center justify-between mb-3">
                       <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                        <span className="text-base">🔥</span> กำลังดำเนินการ
+                        <span className="text-base"></span> กำลังดำเนินการ
                       </h2>
                       <span className="text-xs text-orange-600 font-semibold">{activeUnits.length} รายการ · ต้องติดตาม</span>
                     </div>
@@ -570,7 +570,7 @@ const CustomerDashboard = () => {
                               </p>
                               {u.engagement?.viewing_date && (
                                 <p className="text-[10px] text-amber-700 mt-1 font-medium">
-                                  📅 {new Date(u.engagement.viewing_date).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                   {new Date(u.engagement.viewing_date).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                                 </p>
                               )}
                             </div>

@@ -2757,10 +2757,10 @@ const PaymentDashboard = () => {
                         {selectedCalendarEvent.tenant_name}
                       </h4>
                       <p className="text-sm text-gray-600 mb-2">
-                        {selectedCalendarEvent.type === 'overdue' ? '🔴 เกินกำหนดชำระ' :
-                         selectedCalendarEvent.type === 'due' ? '🟡 ครบกำหนดชำระ' :
-                         selectedCalendarEvent.type === 'reminder' ? '🔔 แจ้งเตือน' :
-                         '📅 กิจกรรม'}
+                        {selectedCalendarEvent.type === 'overdue' ? 'เกินกำหนดชำระ' :
+                         selectedCalendarEvent.type === 'due' ? 'ครบกำหนดชำระ' :
+                         selectedCalendarEvent.type === 'reminder' ? 'แจ้งเตือน' :
+                         'กิจกรรม'}
                       </p>
                       <p className="text-lg font-bold text-gray-900">
                         {formatCurrency(selectedCalendarEvent.amount || 0)}

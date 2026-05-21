@@ -282,14 +282,14 @@ const UserAccountManagement = ({ userId, initialData, onClose }: UserAccountMana
           </div>
           <div>
             <CardTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              📎 จัดการบัญชีผู้ใช้
+              จัดการบัญชีผู้ใช้
             </CardTitle>
             <CardDescription className="text-gray-600">
               {initialData.full_name} • {initialData.role.toUpperCase()}
               {initialData.password_set_at ? (
-                <span className="ml-2 text-green-600 font-medium">• ✅ มีรหัสผ่านแล้ว</span>
+                <span className="ml-2 text-green-600 font-medium">• มีรหัสผ่านแล้ว</span>
               ) : (
-                <span className="ml-2 text-green-600 font-medium">• 🚀 พร้อมสร้างบัญชี</span>
+                <span className="ml-2 text-green-600 font-medium">• พร้อมสร้างบัญชี</span>
               )}
             </CardDescription>
           </div>
@@ -479,7 +479,7 @@ const UserAccountManagement = ({ userId, initialData, onClose }: UserAccountMana
                     <p>• <strong>สถานะ:</strong> ผู้ใช้มีรหัสผ่านชั่วคราวแล้ว</p>
                     <p>• <strong>อีเมลสำหรับเข้าสู่ระบบ:</strong> {email}</p>
                     <p>• <strong>หากต้องการดูรหัสผ่าน:</strong> กดปุ่มรีเซ็ตรหัสผ่านเพื่อสร้างใหม่</p>
-                    <p className="text-chateau font-medium">⚠️ รหัสผ่านเดิมจะไม่สามารถแสดงได้เพื่อความปลอดภัย</p>
+                    <p className="text-chateau font-medium">รหัสผ่านเดิมจะไม่สามารถแสดงได้เพื่อความปลอดภัย</p>
                   </div>
                 )}
               </div>

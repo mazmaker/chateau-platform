@@ -147,12 +147,12 @@ const CustomerBookings = () => {
   };
 
   // Labels follow standard Thai real estate purchase journey (Sansiri/AP/Origin):
-  // pending = รอชำระมัดจำ (must match dashboard "💰 รอชำระมัดจำ" badge)
+  // pending = รอชำระมัดจำ (must match dashboard "รอชำระมัดจำ" badge)
   const statusInfo = (s: string) => {
     switch (s) {
-      case 'pending': return { label: '💰 รอชำระมัดจำ', icon: Clock, color: 'text-orange-700 bg-orange-50 border-orange-100' };
+      case 'pending': return { label: 'รอชำระมัดจำ', icon: Clock, color: 'text-orange-700 bg-orange-50 border-orange-100' };
       case 'confirmed': return { label: '✓ ชำระแล้ว · รอทำสัญญา', icon: CheckCircle2, color: 'text-blue-700 bg-blue-50 border-blue-100' };
-      case 'checked_in': return { label: '🏠 โอนกรรมสิทธิ์แล้ว', icon: Home, color: 'text-green-700 bg-green-50 border-green-100' };
+      case 'checked_in': return { label: 'โอนกรรมสิทธิ์แล้ว', icon: Home, color: 'text-green-700 bg-green-50 border-green-100' };
       case 'cancelled': return { label: 'ยกเลิก', icon: XCircle, color: 'text-gray-600 bg-gray-100 border-gray-200' };
       default: return { label: s, icon: FileText, color: 'text-gray-600 bg-gray-100 border-gray-200' };
     }
@@ -261,7 +261,7 @@ const CustomerBookings = () => {
 
                       {b.status === 'pending' && depositAmount && (
                         <div className="mt-3 p-3 bg-orange-50 border border-orange-100 rounded-xl">
-                          <p className="text-xs text-orange-900 font-semibold mb-0.5">💰 รอชำระมัดจำ</p>
+                          <p className="text-xs text-orange-900 font-semibold mb-0.5">รอชำระมัดจำ</p>
                           <p className="text-xs text-orange-700">
                             ติดต่อ Sales เพื่อชำระเงินมัดจำ {fmtTHB(depositAmount)} ภายใน 7 วัน
                           </p>
@@ -328,7 +328,7 @@ const CustomerBookings = () => {
               {/* Warning */}
               <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
                 <p className="text-xs text-amber-900">
-                  ⚠️ <span className="font-semibold">การยกเลิกไม่สามารถกู้คืนได้</span> — ยูนิตจะถูกปล่อยให้ลูกค้าคนอื่นจองต่อทันที
+                  <span className="font-semibold">การยกเลิกไม่สามารถกู้คืนได้</span> — ยูนิตจะถูกปล่อยให้ลูกค้าคนอื่นจองต่อทันที
                 </p>
               </div>
 

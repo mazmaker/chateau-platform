@@ -47,7 +47,7 @@ const mapActivityToNotif = (activity_type: string, description: string): { type:
     lead_assigned:     { type: 'lead',     title: 'มอบหมาย Lead ใหม่',                  link: '/leads' },
     lead_contacted:    { type: 'lead',     title: 'ติดต่อ Lead เรียบร้อย',              link: '/leads' },
     lead_qualified:    { type: 'lead',     title: 'Lead ผ่านคุณสมบัติ',                 link: '/leads' },
-    lead_won:          { type: 'approval', title: 'ปิดดีลสำเร็จ! 🎉',                  link: '/leads' },
+    lead_won:          { type: 'approval', title: 'ปิดดีลสำเร็จ!',                  link: '/leads' },
     interest_added:    { type: 'lead',     title: 'มีคนสนใจยูนิตใหม่',                  link: '/leads' },
     viewing_scheduled: { type: 'campaign', title: 'นัดดูยูนิตใหม่',                     link: '/leads' },
     viewing_completed: { type: 'approval', title: 'พาดูยูนิตเสร็จ',                     link: '/leads' },

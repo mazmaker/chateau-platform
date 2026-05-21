@@ -80,7 +80,7 @@ const LocationPicker = ({ lat, lng, onChange, height = 320 }: LocationPickerProp
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleSearch())}
-          placeholder="🔍 ค้นหาที่อยู่/ชื่อโครงการ (เช่น Sasara Hua Hin, ถนนสุขุมวิท)"
+          placeholder="ค้นหาที่อยู่/ชื่อโครงการ (เช่น Sasara Hua Hin, ถนนสุขุมวิท)"
           className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
         />
         <button
@@ -126,13 +126,13 @@ const LocationPicker = ({ lat, lng, onChange, height = 320 }: LocationPickerProp
 
       {/* Hint */}
       <p className="text-xs text-gray-500">
-        💡 <strong>คลิกบนแผนที่</strong>เพื่อปักหมุด หรือ<strong>ลากหมุด</strong>เพื่อย้ายตำแหน่ง / ใช้ช่องค้นหาเพื่อหาที่อยู่
+        <strong>คลิกบนแผนที่</strong>เพื่อปักหมุด หรือ<strong>ลากหมุด</strong>เพื่อย้ายตำแหน่ง / ใช้ช่องค้นหาเพื่อหาที่อยู่
       </p>
 
       {/* Read-only coordinates display */}
       {lat !== null && lng !== null && (
         <p className="text-xs text-gray-700 font-mono bg-gray-50 px-2 py-1 rounded inline-block">
-          📍 {lat.toFixed(6)}, {lng.toFixed(6)}
+          {lat.toFixed(6)}, {lng.toFixed(6)}
         </p>
       )}
     </div>

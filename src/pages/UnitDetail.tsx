@@ -409,7 +409,7 @@ const UnitDetail = () => {
       setUnitLeads((prev) => prev.map((li: any) =>
         li.id === interestId ? { ...li, status: 'negotiating' } : li
       ));
-      toast.success('🤝 เริ่มเจรจาแล้ว');
+      toast.success(' เริ่มเจรจาแล้ว');
     } catch (e: any) {
       console.error('Mark start negotiating failed:', e);
       toast.error('บันทึกไม่สำเร็จ: ' + (e?.message || 'unknown'));
@@ -788,15 +788,15 @@ const UnitDetail = () => {
     const address = property.address?.street
       || `${property.address?.district || ''} ${property.address?.province || ''}`.trim();
     const specs: string[] = [];
-    if (unit.bedrooms) specs.push(`🛏 ${unit.bedrooms} ห้องนอน`);
-    if (unit.bathrooms) specs.push(`🛁 ${unit.bathrooms} ห้องน้ำ`);
-    if (unit.area_sqm) specs.push(`📐 ${unit.area_sqm} ตร.ม.`);
+    if (unit.bedrooms) specs.push(` ${unit.bedrooms} ห้องนอน`);
+    if (unit.bathrooms) specs.push(` ${unit.bathrooms} ห้องน้ำ`);
+    if (unit.area_sqm) specs.push(` ${unit.area_sqm} ตร.ม.`);
     const lines = [
-      `🏠 ${property.name} — ยูนิต ${unit.unit_number}`,
-      address ? `📍 ${address}` : null,
-      `💰 ${priceM}`,
+      ` ${property.name} — ยูนิต ${unit.unit_number}`,
+      address ? ` ${address}` : null,
+      ` ${priceM}`,
       specs.join(' · '),
-      unit.view ? `🌅 ${unit.view}` : null,
+      unit.view ? ` ${unit.view}` : null,
       '',
       `ดูรายละเอียดเพิ่ม: ${buildShareUrl()}`,
     ].filter(Boolean);
@@ -991,7 +991,7 @@ const UnitDetail = () => {
                     <Calendar className="w-5 h-5" />
                     ข้อมูลผู้จอง
                     {activeBooking?.status === 'pending' && (
-                      <Badge className="bg-orange-100 text-orange-800 border-orange-200">💰 รอชำระมัดจำ</Badge>
+                      <Badge className="bg-orange-100 text-orange-800 border-orange-200"> รอชำระมัดจำ</Badge>
                     )}
                     {activeBooking?.status === 'confirmed' && (
                       <Badge className="bg-blue-100 text-blue-800 border-blue-200">✓ ชำระมัดจำแล้ว</Badge>
@@ -1212,7 +1212,7 @@ const UnitDetail = () => {
                                 disabled={savingVisit}
                                 className="h-8 text-xs bg-amber-600 hover:bg-amber-700 text-white flex-shrink-0"
                               >
-                                🤝 เริ่มเจรจา
+                                 เริ่มเจรจา
                               </Button>
                             )}
                           </div>
@@ -1344,7 +1344,7 @@ const UnitDetail = () => {
               <CardContent className="pt-4">
                 {responsibleSales.length === 0 ? (
                   <div className="py-4 text-center text-sm text-gray-500 italic">
-                    ⚠ ยังไม่มี Sales ที่ดูแลยูนิตนี้
+                    ยังไม่มี Sales ที่ดูแลยูนิตนี้
                     <p className="text-xs text-gray-400 mt-1">
                       กด "มอบหมาย Sales" เพื่อกำหนด — ไปที่หน้าสิทธิ์ผู้ใช้งาน → Tab "สิทธิ์ Sales ดูแลยูนิต"
                     </p>
@@ -1430,13 +1430,13 @@ const UnitDetail = () => {
               <CardContent className="pt-4 space-y-3">
                 {unit.view && (
                   <div className="p-3 border border-gray-200 rounded-lg">
-                    <p className="text-xs font-semibold text-gray-600 mb-1">🌅 วิว</p>
+                    <p className="text-xs font-semibold text-gray-600 mb-1"> วิว</p>
                     <p className="text-sm font-medium text-gray-900">{unit.view}</p>
                   </div>
                 )}
                 {unit.furnishing && (
                   <div className="p-3 border border-gray-200 rounded-lg">
-                    <p className="text-xs font-semibold text-gray-600 mb-1">🛋 สถานะตกแต่ง</p>
+                    <p className="text-xs font-semibold text-gray-600 mb-1">สถานะตกแต่ง</p>
                     <p className="text-sm font-medium text-gray-900">
                       {unit.furnishing === 'fully' && 'ตกแต่งครบ พร้อมอยู่'}
                       {unit.furnishing === 'partial' && 'ตกแต่งบางส่วน'}
@@ -1465,7 +1465,7 @@ const UnitDetail = () => {
               <CardContent className="pt-4 space-y-3">
                 {unit.floor_plan_url && (
                   <div>
-                    <p className="text-xs font-semibold text-slate-700 mb-2">📐 ผังห้อง</p>
+                    <p className="text-xs font-semibold text-slate-700 mb-2"> ผังห้อง</p>
                     <img
                       src={unit.floor_plan_url}
                       alt="Floor plan"
@@ -1519,7 +1519,7 @@ const UnitDetail = () => {
               <CardContent className="pt-4">
                 <MasterPlanSVG units={siblingUnits} highlightedUnitId={unit.id} projectName={property.name} />
                 <p className="text-xs text-amber-700 mt-2">
-                  💡 ผังนี้สร้างจากข้อมูลยูนิตจริง — upload ผังจริงผ่านปุ่ม "ผังโครงการ" ในหน้าโครงการ
+                   ผังนี้สร้างจากข้อมูลยูนิตจริง — upload ผังจริงผ่านปุ่ม "ผังโครงการ" ในหน้าโครงการ
                 </p>
               </CardContent>
             </Card>
@@ -1558,7 +1558,7 @@ const UnitDetail = () => {
                     />
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
-                    📍 {property.address?.street || `${property.address?.district || ''}, ${property.address?.province || ''}`}
+                     {property.address?.street || `${property.address?.district || ''}, ${property.address?.province || ''}`}
                   </p>
                 </>
               ) : (
@@ -1593,7 +1593,7 @@ const UnitDetail = () => {
               <Label className="text-sm font-medium">เลือก Lead ที่จะจอง <span className="text-red-500">*</span></Label>
               {allTenantLeads.length === 0 ? (
                 <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                  <p className="text-sm text-amber-900 font-medium mb-1">⚠️ ยังไม่มี Lead ในระบบ</p>
+                  <p className="text-sm text-amber-900 font-medium mb-1">ยังไม่มี Lead ในระบบ</p>
                   <p className="text-xs text-amber-800">กดปิดและใช้ปุ่ม "+ เพิ่ม Lead ใหม่"</p>
                 </div>
               ) : (() => {
@@ -1614,7 +1614,7 @@ const UnitDetail = () => {
                 if (activeLeads.length === 0) {
                   return (
                     <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                      <p className="text-sm text-amber-900 font-medium">⚠️ ยังไม่มี Lead ของคุณที่ active</p>
+                      <p className="text-sm text-amber-900 font-medium">ยังไม่มี Lead ของคุณที่ active</p>
                       <p className="text-xs text-amber-800">
                         {isSupervisor
                           ? 'Lead ทุกคนปิดดีล/สูญเสียไปแล้ว — กด "+ เพิ่ม Lead ใหม่"'
@@ -1632,7 +1632,7 @@ const UnitDetail = () => {
                       {interested.length > 0 && (
                         <>
                           <div className="px-2 py-1.5 text-xs font-semibold text-amber-700 bg-amber-50 sticky top-0">
-                            🔥 สนใจยูนิตนี้แล้ว ({interested.length})
+                             สนใจยูนิตนี้แล้ว ({interested.length})
                           </div>
                           {interested.map((lead: any) => (
                             <SelectItem key={lead.id} value={lead.id}>
@@ -1645,7 +1645,7 @@ const UnitDetail = () => {
                       {others.length > 0 && (
                         <>
                           <div className="px-2 py-1.5 text-xs font-semibold text-gray-600 bg-gray-50 sticky top-0">
-                            {isSupervisor ? `👥 Lead อื่นใน tenant (${others.length})` : `👤 Lead ของฉัน (${others.length})`}
+                            {isSupervisor ? ` Lead อื่นใน tenant (${others.length})` : ` Lead ของฉัน (${others.length})`}
                           </div>
                           {others.map((lead: any) => (
                             <SelectItem key={lead.id} value={lead.id}>
@@ -1661,7 +1661,7 @@ const UnitDetail = () => {
               })()}
               {bookingForm.lead_id && !unitLeads.some((li: any) => li.leads?.id === bookingForm.lead_id) && (
                 <p className="text-xs text-blue-700 mt-1.5">
-                  💡 Lead นี้ยังไม่ได้บันทึกความสนใจในยูนิตนี้ — ระบบจะเพิ่มให้อัตโนมัติ
+                   Lead นี้ยังไม่ได้บันทึกความสนใจในยูนิตนี้ — ระบบจะเพิ่มให้อัตโนมัติ
                 </p>
               )}
             </div>
@@ -1779,9 +1779,9 @@ const UnitDetail = () => {
               <Label className="text-sm font-medium mb-2 block">ระดับความสนใจ</Label>
               <div className="grid grid-cols-3 gap-2">
                 {([
-                  { v: 'high',   label: '🔥 สนใจมาก', selectedCls: 'border-rose-500 bg-rose-50 text-rose-900 ring-2 ring-rose-200' },
-                  { v: 'medium', label: '👀 สนใจ',      selectedCls: 'border-amber-500 bg-amber-50 text-amber-900 ring-2 ring-amber-200' },
-                  { v: 'low',    label: '💭 ดูเฉยๆ',    selectedCls: 'border-gray-500 bg-gray-100 text-gray-900 ring-2 ring-gray-200' },
+                  { v: 'high',   label: ' สนใจมาก', selectedCls: 'border-rose-500 bg-rose-50 text-rose-900 ring-2 ring-rose-200' },
+                  { v: 'medium', label: ' สนใจ',      selectedCls: 'border-amber-500 bg-amber-50 text-amber-900 ring-2 ring-amber-200' },
+                  { v: 'low',    label: ' ดูเฉยๆ',    selectedCls: 'border-gray-500 bg-gray-100 text-gray-900 ring-2 ring-gray-200' },
                 ] as const).map((opt) => (
                   <button
                     key={opt.v}
@@ -1924,7 +1924,7 @@ const UnitDetail = () => {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="p-3 bg-red-50 border border-red-100 rounded-lg">
-              <p className="text-xs text-red-900 font-semibold mb-1">⚠️ ผลที่จะเกิดขึ้น:</p>
+              <p className="text-xs text-red-900 font-semibold mb-1">ผลที่จะเกิดขึ้น:</p>
               <ul className="text-xs text-red-800 space-y-0.5 list-disc list-inside">
                 <li>ยูนิต: ขายแล้ว → จอง (รอชำระ)</li>
                 <li>Lead: ปิดดีล → กำลังเจรจา</li>

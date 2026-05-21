@@ -103,7 +103,7 @@ const MasterPlanSVG = ({ units, highlightedUnitId, projectName }: MasterPlanSVGP
                 fontWeight="bold"
                 fill="#dc2626"
               >
-                ★ ยูนิตนี้
+                ยูนิตนี้
               </text>
             )}
           </g>
@@ -131,7 +131,7 @@ const MasterPlanSVG = ({ units, highlightedUnitId, projectName }: MasterPlanSVGP
           fontWeight="bold"
           fill="#1e40af"
         >
-          🏊 สระว่ายน้ำ · 🏢 Club House · 🌳 สวนกลาง · 🚗 ที่จอดส่วนกลาง
+          สระว่ายน้ำ · Club House · สวนกลาง · ที่จอดส่วนกลาง
         </text>
       </g>
 

@@ -81,12 +81,12 @@ interface ApproverRow {
 }
 
 const CAMPAIGN_TYPES = [
-  { value: "launch",                label: "🏗️ Project Launch",         desc: "เปิดโครงการใหม่" },
-  { value: "open_house",            label: "🏠 Open House",              desc: "นัดดูบ้าน" },
-  { value: "construction_update",   label: "📈 Construction Update",     desc: "ความคืบหน้า" },
-  { value: "sales",                 label: "🔥 Sales Update",            desc: "ห้องเหลือ/โปรพิเศษ" },
-  { value: "event",                 label: "🎉 Event Invitation",        desc: "งานอีเวนต์" },
-  { value: "newsletter",            label: "📰 Newsletter",              desc: "ข่าวสารทั่วไป" },
+  { value: "launch",                label: " Project Launch",         desc: "เปิดโครงการใหม่" },
+  { value: "open_house",            label: " Open House",              desc: "นัดดูบ้าน" },
+  { value: "construction_update",   label: " Construction Update",     desc: "ความคืบหน้า" },
+  { value: "sales",                 label: " Sales Update",            desc: "ห้องเหลือ/โปรพิเศษ" },
+  { value: "event",                 label: " Event Invitation",        desc: "งานอีเวนต์" },
+  { value: "newsletter",            label: " Newsletter",              desc: "ข่าวสารทั่วไป" },
 ];
 
 const PERSONALIZATION_TOKENS = [
@@ -464,7 +464,7 @@ const CampaignBuilderWizard = () => {
                             <p className="text-sm font-semibold text-gray-900">โหลด Segments ไม่สำเร็จ</p>
                             <p className="text-xs text-gray-600 mt-1">{segmentsError}</p>
                             <p className="text-xs text-gray-500 mt-2">
-                              ⚠️ หาก table <code className="font-mono">segments</code> ยังไม่มีใน DB —
+                               หาก table <code className="font-mono">segments</code> ยังไม่มีใน DB —
                               ต้อง apply migration <code className="font-mono">20260424000002_create_marketing_tables.sql</code> ก่อน
                             </p>
                           </div>
@@ -476,7 +476,7 @@ const CampaignBuilderWizard = () => {
                         <p className="text-sm font-semibold text-gray-700 mb-1">ยังไม่มี Segments</p>
                         <p className="text-xs text-gray-500 mb-3">สร้าง segment กลุ่มเป้าหมายก่อนเริ่มแคมเปญ</p>
                         <p className="text-[11px] text-gray-400">
-                          💡 ถ้าเป็นการ demo — apply migration <code className="font-mono">20260424000003_seed_marketing_demo_data.sql</code><br/>
+                           ถ้าเป็นการ demo — apply migration <code className="font-mono">20260424000003_seed_marketing_demo_data.sql</code><br/>
                           เพื่อ seed 10 segments ตัวอย่างเข้า DB
                         </p>
                       </div>
@@ -609,7 +609,7 @@ const CampaignBuilderWizard = () => {
                       <Input
                         value={headline}
                         onChange={(e) => setHeadline(e.target.value)}
-                        placeholder="🏠 เปิดจองโครงการใหม่ — ส่วนลด 500K"
+                        placeholder=" เปิดจองโครงการใหม่ — ส่วนลด 500K"
                         maxLength={120}
                         className="mt-1.5 h-11 rounded-xl"
                       />
@@ -652,7 +652,7 @@ const CampaignBuilderWizard = () => {
                           {body.length} / 1000 ตัวอักษร · LINE Flex Message
                         </p>
                         <p className="text-[11px] text-gray-400">
-                          💡 ใช้ token ทำให้ message ส่วนตัว · CTR เพิ่ม 3-5×
+                           ใช้ token ทำให้ message ส่วนตัว · CTR เพิ่ม 3-5×
                         </p>
                       </div>
                     </div>
@@ -737,7 +737,7 @@ const CampaignBuilderWizard = () => {
                       </div>
                       {ctaUrl && /^https?:\/\//.test(ctaUrl) && (
                         <p className="text-[11px] text-gray-500 mt-2 flex items-center gap-1">
-                          ✅ Auto-tracking: <code className="font-mono text-[10px]">?utm_source=line&amp;utm_campaign=auto</code>
+                           Auto-tracking: <code className="font-mono text-[10px]">?utm_source=line&amp;utm_campaign=auto</code>
                         </p>
                       )}
                     </div>
@@ -922,18 +922,18 @@ const CampaignBuilderWizard = () => {
                     {/* Summary */}
                     <div className="rounded-xl p-4" style={{ backgroundColor: KK.greenLight, border: `1px solid ${KK.green}40` }}>
                       <p className="text-sm font-semibold flex items-center gap-2 mb-2" style={{ color: KK.green }}>
-                        ✅ สรุปก่อน Submit
+                         สรุปก่อน Submit
                       </p>
                       <ul className="text-xs text-gray-700 space-y-1">
-                        <li>📊 Audience: <span className="font-semibold">{totalReach.toLocaleString()} คน</span> ({selectedSegments.length} segments)</li>
-                        {selectedProperties.length > 0 && <li>🏠 Properties: <span className="font-semibold">{selectedProperties.length} โครงการ</span></li>}
-                        <li>📛 Type: <span className="font-semibold">{CAMPAIGN_TYPES.find(t => t.value === campaignType)?.label}</span></li>
+                        <li> Audience: <span className="font-semibold">{totalReach.toLocaleString()} คน</span> ({selectedSegments.length} segments)</li>
+                        {selectedProperties.length > 0 && <li> Properties: <span className="font-semibold">{selectedProperties.length} โครงการ</span></li>}
+                        <li> Type: <span className="font-semibold">{CAMPAIGN_TYPES.find(t => t.value === campaignType)?.label}</span></li>
                         <li>⏰ ส่ง: <span className="font-semibold">
                           {scheduleType === "now" ? "ทันทีหลัง approve" :
                            scheduleType === "schedule" ? `${scheduleDate} ${scheduleTime}` :
                            recurringPattern}
                         </span></li>
-                        {approverId && <li>👤 Approver: <span className="font-semibold">{approvers.find(a => a.id === approverId)?.full_name || approvers.find(a => a.id === approverId)?.email}</span></li>}
+                        {approverId && <li> Approver: <span className="font-semibold">{approvers.find(a => a.id === approverId)?.full_name || approvers.find(a => a.id === approverId)?.email}</span></li>}
                       </ul>
                     </div>
                   </>

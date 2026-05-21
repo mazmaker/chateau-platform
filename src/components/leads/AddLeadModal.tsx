@@ -1341,7 +1341,7 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
                                   </span>
                                 </div>
                                 {interest.notes && (
-                                  <p className="text-xs text-gray-500 mt-1 truncate">📝 {interest.notes}</p>
+                                  <p className="text-xs text-gray-500 mt-1 truncate">{interest.notes}</p>
                                 )}
                               </div>
                             </div>

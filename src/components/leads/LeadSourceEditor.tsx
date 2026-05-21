@@ -33,9 +33,9 @@ const SOURCE_OPTIONS: Array<{ value: string; label: string; group: 'online' | 'o
 ];
 
 const GROUP_LABEL = {
-  online:  '🌐 ออนไลน์',
-  offline: '🏢 ออฟไลน์',
-  other:   '👥 อื่นๆ',
+  online:  'ออนไลน์',
+  offline: 'ออฟไลน์',
+  other:   'อื่นๆ',
 };
 
 interface Props {

@@ -18,12 +18,12 @@ export function DashboardPreview() {
   const [activeTab, setActiveTab] = useState('overview')
 
   const tabs = [
-    { id: 'overview', label: 'Overview', icon: '📊' },
-    { id: 'properties', label: 'Properties', icon: '🏢' },
-    { id: 'customers', label: 'Customers', icon: '👥' },
-    { id: 'bookings', label: 'Bookings', icon: '📅' },
-    { id: 'analytics', label: 'Analytics', icon: '📈' },
-    { id: 'settings', label: 'Settings', icon: '⚙️' }
+    { id: 'overview', label: 'Overview', icon: '' },
+    { id: 'properties', label: 'Properties', icon: '' },
+    { id: 'customers', label: 'Customers', icon: '' },
+    { id: 'bookings', label: 'Bookings', icon: '' },
+    { id: 'analytics', label: 'Analytics', icon: '' },
+    { id: 'settings', label: 'Settings', icon: '' }
   ]
 
   const handleSignOut = () => {
@@ -142,7 +142,7 @@ export function DashboardPreview() {
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">Total Properties</CardTitle>
-                      <div className="h-4 w-4 text-muted-foreground">🏢</div>
+                      <div className="h-4 w-4 text-muted-foreground"></div>
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">124</div>
@@ -155,7 +155,7 @@ export function DashboardPreview() {
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">Active Customers</CardTitle>
-                      <div className="h-4 w-4 text-muted-foreground">👥</div>
+                      <div className="h-4 w-4 text-muted-foreground"></div>
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">1,284</div>
@@ -168,7 +168,7 @@ export function DashboardPreview() {
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
-                      <div className="h-4 w-4 text-muted-foreground">📅</div>
+                      <div className="h-4 w-4 text-muted-foreground"></div>
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">57</div>
@@ -181,7 +181,7 @@ export function DashboardPreview() {
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">Revenue</CardTitle>
-                      <div className="h-4 w-4 text-muted-foreground">💰</div>
+                      <div className="h-4 w-4 text-muted-foreground"></div>
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">₱2.4M</div>
@@ -233,19 +233,19 @@ export function DashboardPreview() {
                   <CardContent>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <Button variant="outline" className="h-20 flex flex-col">
-                        <span className="text-2xl mb-2">➕</span>
+                        <span className="text-2xl mb-2"></span>
                         <span className="text-sm">Add Property</span>
                       </Button>
                       <Button variant="outline" className="h-20 flex flex-col">
-                        <span className="text-2xl mb-2">👤</span>
+                        <span className="text-2xl mb-2"></span>
                         <span className="text-sm">Add Customer</span>
                       </Button>
                       <Button variant="outline" className="h-20 flex flex-col">
-                        <span className="text-2xl mb-2">📊</span>
+                        <span className="text-2xl mb-2"></span>
                         <span className="text-sm">View Reports</span>
                       </Button>
                       <Button variant="outline" className="h-20 flex flex-col">
-                        <span className="text-2xl mb-2">⚙️</span>
+                        <span className="text-2xl mb-2"></span>
                         <span className="text-sm">Settings</span>
                       </Button>
                     </div>

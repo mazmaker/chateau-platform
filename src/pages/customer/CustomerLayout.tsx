@@ -101,7 +101,7 @@ const CustomerLayout = ({ children, title, subtitle, showBack = false, backTo, h
         items.push({
           id: 'b-' + b.id,
           icon: CheckCircle2, iconColor: 'text-green-700', iconBg: 'bg-green-50',
-          title: '🎉 ปิดดีลสำเร็จ',
+          title: 'ปิดดีลสำเร็จ',
           description: `${propName} · ยูนิต ${unitNum}`,
           time: timeAgo(b.updated_at || b.created_at), unread: true,
         });
@@ -170,7 +170,7 @@ const CustomerLayout = ({ children, title, subtitle, showBack = false, backTo, h
             if (oldStatus && newStatus && oldStatus !== newStatus) {
               if (newStatus === 'confirmed') toast.success('✓ Sales ยืนยันรับเงินมัดจำของคุณแล้ว');
               else if (newStatus === 'cancelled') toast.info('การจองถูกยกเลิก');
-              else if (newStatus === 'checked_in') toast.success('🎉 ปิดดีลสำเร็จ');
+              else if (newStatus === 'checked_in') toast.success('ปิดดีลสำเร็จ');
             }
             // Always re-load notification list to stay in sync
             loadNotifications();

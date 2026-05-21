@@ -489,7 +489,7 @@ export const SalesUnitMatrix = () => {
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                      💡 รายการ unit นี้คือยูนิตในโครงการที่ sales ได้รับ assigned แล้ว
+                      รายการ unit นี้คือยูนิตในโครงการที่ sales ได้รับ assigned แล้ว
                     </p>
                   </div>
                 </div>

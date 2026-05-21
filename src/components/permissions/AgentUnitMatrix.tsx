@@ -449,7 +449,7 @@ export const AgentUnitMatrix = () => {
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                      💡 Agent เป็นนายหน้า — สามารถขาย unit ที่ admin มอบ list ให้ (cross-project ได้)
+                      Agent เป็นนายหน้า — สามารถขาย unit ที่ admin มอบ list ให้ (cross-project ได้)
                     </p>
                   </div>
                 </div>

@@ -337,17 +337,28 @@ const OwnerDashboard = () => {
           .slice(0, 5) as TenantWithStats[];
         setTopTenants(tenantsWithRealData);
 
-        // Calculate revenue by plan from real data
+        // Revenue by plan — current month only (same scope as MRR card)
+        const thisMonthStart = new Date();
+        thisMonthStart.setDate(1);
+        thisMonthStart.setHours(0, 0, 0, 0);
+        const currentMonthRevenueMap = new Map<string, number>();
+        historicalInvoices?.forEach(inv => {
+          if (new Date(inv.paid_at) >= thisMonthStart) {
+            const cur = currentMonthRevenueMap.get(inv.tenant_id) || 0;
+            currentMonthRevenueMap.set(inv.tenant_id, cur + inv.amount);
+          }
+        });
+
         const planRevenue = {
           enterprise: tenantList
             .filter(t => t.subscription_plan === 'enterprise' && t.status === 'active')
-            .reduce((sum, t) => sum + (revenueMap.get(t.id) || 0), 0),
+            .reduce((sum, t) => sum + (currentMonthRevenueMap.get(t.id) || 0), 0),
           professional: tenantList
             .filter(t => t.subscription_plan === 'professional' && t.status === 'active')
-            .reduce((sum, t) => sum + (revenueMap.get(t.id) || 0), 0),
+            .reduce((sum, t) => sum + (currentMonthRevenueMap.get(t.id) || 0), 0),
           starter: tenantList
             .filter(t => t.subscription_plan === 'starter' && t.status === 'active')
-            .reduce((sum, t) => sum + (revenueMap.get(t.id) || 0), 0)
+            .reduce((sum, t) => sum + (currentMonthRevenueMap.get(t.id) || 0), 0)
         };
         setRevenueByPlan(planRevenue);
 

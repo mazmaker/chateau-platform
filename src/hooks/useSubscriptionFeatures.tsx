@@ -160,7 +160,7 @@ export const SubscriptionGuard: React.FC<{
       )}
       <div className="flex-1">
         <h3 className="font-semibold text-chateau-800 mb-1">
-          ฟีเจอร์พิเศษ {isEnterprise ? '👑' : '🔒'}
+          ฟีเจอร์พิเศษ {isEnterprise ? '' : ''}
         </h3>
         <p className="text-sm text-chateau-700 mb-3">
           {getUpgradeMessage(feature)}
@@ -181,7 +181,7 @@ export const SubscriptionGuard: React.FC<{
             window.open('mailto:sales@chateau-platform.com?subject=อัปเกรดแพ็กเกจ', '_blank');
           }}
         >
-          {isEnterprise ? '📞 ติดต่อขาย' : '⬆️ อัปเกรด'}
+          {isEnterprise ? ' ติดต่อขาย' : ' อัปเกรด'}
         </button>
       </div>
     </div>

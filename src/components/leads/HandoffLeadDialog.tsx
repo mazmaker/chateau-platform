@@ -196,7 +196,7 @@ const HandoffLeadDialog = ({ open, onOpenChange, leadIds, customerNames, unitId,
                       {permitted.length > 0 && (
                         <>
                           <div className="px-2 py-1.5 text-xs font-semibold text-green-700 bg-green-50 sticky top-0">
-                            ✅ มีสิทธิ์บนยูนิตนี้ ({permitted.length})
+                            มีสิทธิ์บนยูนิตนี้ ({permitted.length})
                           </div>
                           {permitted.map((s) => (
                             <SelectItem key={s.id} value={s.id}>
@@ -209,7 +209,7 @@ const HandoffLeadDialog = ({ open, onOpenChange, leadIds, customerNames, unitId,
                       {notPermitted.length > 0 && (
                         <>
                           <div className="px-2 py-1.5 text-xs font-semibold text-amber-700 bg-amber-50 sticky top-0 mt-1">
-                            ⚠️ ยังไม่มีสิทธิ์บนยูนิตนี้ ({notPermitted.length})
+                            ยังไม่มีสิทธิ์บนยูนิตนี้ ({notPermitted.length})
                           </div>
                           {notPermitted.map((s) => (
                             // Disable no-permission Sales when permitted Sales exist — force correct assignment
@@ -224,7 +224,7 @@ const HandoffLeadDialog = ({ open, onOpenChange, leadIds, customerNames, unitId,
                       )}
                       {permitted.length === 0 && (
                         <div className="px-2 py-2 text-xs text-amber-700 bg-amber-50 border-t">
-                          💡 ยังไม่มี Sales ที่มีสิทธิ์บนยูนิตนี้ — แจ้ง Admin มอบหมายก่อน
+                          ยังไม่มี Sales ที่มีสิทธิ์บนยูนิตนี้ — แจ้ง Admin มอบหมายก่อน
                         </div>
                       )}
                     </>
@@ -241,7 +241,7 @@ const HandoffLeadDialog = ({ open, onOpenChange, leadIds, customerNames, unitId,
             </Select>
             {needsPermissionContext && selectedSalesId && salesUsers.find((s) => s.id === selectedSalesId)?.hasPermission === false && (
               <p className="text-xs text-amber-700 mt-1.5">
-                ⚠️ Sales คนนี้ยังไม่มีสิทธิ์บนยูนิตนี้ — ส่งต่อได้ แต่ต้องแจ้ง Admin มอบหมายก่อนจะบันทึกการจองได้
+                Sales คนนี้ยังไม่มีสิทธิ์บนยูนิตนี้ — ส่งต่อได้ แต่ต้องแจ้ง Admin มอบหมายก่อนจะบันทึกการจองได้
               </p>
             )}
           </div>
