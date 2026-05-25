@@ -3,8 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   Building2, Bed, Bath, Square, Layers, MapPin, Heart, Loader2, Sun, ParkingCircle, Check,
   ChevronLeft, ChevronRight, Calendar, Calculator, Share2,
-  ChevronDown, View, Sparkles, XCircle,
+  ChevronDown, View, Sparkles, XCircle, FileDown,
 } from 'lucide-react';
+import { incrementLeadCounter } from '@/lib/leadTracking';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
@@ -125,7 +126,7 @@ const CustomerUnitDetail = () => {
       // Similar units (same project, available, not this one)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: sims } = await (supabase.from('units') as any)
-        .select('id, unit_number, area_sqm, bedrooms, bathrooms, price, promo_price, status, thumbnail_url, project_id, tenant_id')
+        .select('id, unit_number, area_sqm, bedrooms, bathrooms, price, promo_price, status, thumbnail_url, project_id, tenant_id, floor_plan_url')
         .eq('project_id', (unitData as Unit).project_id)
         .neq('id', id)
         .eq('status', 'available')
@@ -353,7 +354,7 @@ const CustomerUnitDetail = () => {
             property_id: unit.project_id,
             unit_id: unit.id,
             status: 'new', source: referredByAgentId ? 'agent_referral' : 'customer_self', priority: 'medium',
-            assigned_to: salesUserId, // 🆕 Auto-assign if Sales found
+            assigned_to: salesUserId, // Auto-assign if Sales found
             referred_by_agent_id: referredByAgentId,
             notes: referredByAgentId
               ? 'ลูกค้ากดสนใจจาก Customer Portal (referral)'
@@ -393,7 +394,7 @@ const CustomerUnitDetail = () => {
         if (intErr) throw intErr;
       }
 
-      // 🔔 Insert activity_log so Sales bell picks it up (+ audit trail for routing decision)
+      // Insert activity_log so Sales bell picks it up (+ audit trail for routing decision)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase.from('activity_logs') as any).insert({
         tenant_id: unit.tenant_id,
@@ -811,6 +812,41 @@ const CustomerUnitDetail = () => {
             <p className="text-sm text-gray-700 leading-relaxed">{unit.layout_description}</p>
           </div>
         )}
+
+        {/* Floor Plan download — unit-level fact sheet (PDF of room layout) */}
+        <button
+          type="button"
+          onClick={async () => {
+            await incrementLeadCounter({ field: 'brochure_downloads', propertyId: unit.project_id });
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              await (supabase.from('activity_logs') as any).insert({
+                tenant_id: unit.tenant_id,
+                activity_type: 'floor_plan_downloaded',
+                description: `ลูกค้าดาวน์โหลด Floor Plan ยูนิต ${unit.unit_number}`,
+                metadata: { unit_id: unit.id, property_id: unit.project_id, source: 'customer_portal' },
+              });
+            } catch { /* non-blocking */ }
+            if (unit.floor_plan_url) {
+              window.open(unit.floor_plan_url, '_blank', 'noopener');
+              toast.success('กำลังเปิด Floor Plan...');
+            } else {
+              toast.info('Floor Plan จะถูกส่งไปทางอีเมลภายใน 5 นาที');
+            }
+          }}
+          className="mt-5 w-full bg-gradient-to-r from-rose-50 to-white border border-rose-100 rounded-xl p-3.5 hover:border-chateau/40 hover:shadow-soft transition-all text-left group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-chateau/10 flex items-center justify-center flex-shrink-0 group-hover:bg-chateau/20 transition-colors">
+              <FileDown className="w-5 h-5 text-chateau" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-gray-900">ดาวน์โหลด Floor Plan</p>
+              <p className="text-xs text-gray-500 mt-0.5">แปลนห้อง · มิติ · ทิศหน้าบ้าน ฯลฯ</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-chateau transition-colors flex-shrink-0" />
+          </div>
+        </button>
       </div>
 
       {/* === Loan Calculator === */}

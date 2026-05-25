@@ -1303,6 +1303,24 @@ const PropertyManagement = () => {
     }).format(amount);
   };
 
+  // Compact headline format matching the dashboard convention — "X ล้าน" instead of
+  // a raw 10-digit number. Use for aggregate totals (มูลค่ารวม cards); keep
+  // formatCurrency for detail rows where precision matters (per-sqm prices etc).
+  const formatTHB = (n: number) => {
+    if (n === 0) return '฿0';
+    const abs = Math.abs(n);
+    const sign = n < 0 ? '-' : '';
+    if (abs >= 1_000_000) {
+      const m = abs / 1_000_000;
+      if (m >= 1000) return `${sign}฿${Math.round(m).toLocaleString('en-US')} ล้าน`;
+      if (m >= 100) return `${sign}฿${Math.round(m)} ล้าน`;
+      if (m >= 10) return `${sign}฿${m.toFixed(1)} ล้าน`;
+      return `${sign}฿${m.toFixed(2)} ล้าน`;
+    }
+    if (abs >= 1_000) return `${sign}฿${(abs / 1_000).toFixed(0)}K`;
+    return `${sign}฿${abs.toFixed(0)}`;
+  };
+
   const filteredProperties = properties.filter(property => {
     const matchesSearch = property.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = typeFilter === 'all' || property.type === typeFilter;
@@ -1393,7 +1411,7 @@ const PropertyManagement = () => {
 
   if (!currentTenant) {
     return (
-      <div className="min-h-screen bg-[#f8fafc]">
+      <div className="min-h-screen bg-gray-50">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <div className="lg:ml-[260px] min-h-screen">
           <Header onMenuClick={() => setSidebarOpen(true)} />
@@ -1411,7 +1429,7 @@ const PropertyManagement = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc]">
+    <div className="min-h-screen bg-gray-50">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="lg:ml-[260px] min-h-screen">
         <Header onMenuClick={() => setSidebarOpen(true)} />
@@ -1508,7 +1526,7 @@ const PropertyManagement = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="text-xl font-bold">
-                    {formatCurrency(projectStats.totalValue)}
+                    {formatTHB(projectStats.totalValue)}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     รวมราคายูนิตทุกหลังในระบบ
@@ -1723,7 +1741,7 @@ const PropertyManagement = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-xl font-bold">{formatCurrency(totalValue)}</div>
+                  <div className="text-xl font-bold">{formatTHB(totalValue)}</div>
                 </CardContent>
               </Card>
             </div>

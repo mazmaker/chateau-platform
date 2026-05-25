@@ -86,6 +86,7 @@ interface Lead {
   time_on_site?: number | null;
   brochure_downloads?: number | null;
   site_visit_attended?: boolean | null;
+  interaction_count?: number | null;
   sold_property_recently?: boolean | null;
   workplace?: string | null;
   company_name?: string | null;
@@ -100,6 +101,7 @@ interface Lead {
   urgency_score?: number | null;
   fit_score?: number | null;
   conversion_probability?: number | null;
+  purchase_timeline?: string | null;
   // Catch-all for misc DB columns referenced by scoring/loan calculators
   [key: string]: any;
 }
@@ -209,7 +211,14 @@ const LeadCDP = () => {
     }
   }, [mlProbability]);
 
-  const fetchMLScore = async (leadData: Lead) => {
+  // Re-fetch ML score when user selects a different unit (uses that unit's price as a feature)
+  useEffect(() => {
+    if (!lead || !selectedInterest?.unit?.price) return;
+    fetchMLScore(lead, Number(selectedInterest.unit.price));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedInterest?.unit?.price, lead?.id]);
+
+  const fetchMLScore = async (leadData: Lead, unitPriceOverride?: number) => {
     if (!currentTenant) return;
     try {
       const res = await fetch(
@@ -233,6 +242,7 @@ const LeadCDP = () => {
               time_on_site:       leadData.time_on_site       ?? null,
               brochure_downloads: leadData.brochure_downloads ?? null,
               site_visit_attended: leadData.site_visit_attended ? 1 : 0,
+              interaction_count:  leadData.interaction_count   ?? null,
               financial_score:    leadData.financial_score    ?? null,
               engagement_score:   leadData.engagement_score   ?? null,
               urgency_score:      leadData.urgency_score      ?? null,
@@ -240,6 +250,8 @@ const LeadCDP = () => {
               age:                leadData.age                ?? null,
               decision_maker:     leadData.decision_maker     ? 1 : 0,
               financing_approved: leadData.financing_approved ? 1 : 0,
+              // unit price — use selected unit if available, else lead's stored estimated_value
+              estimated_value:    unitPriceOverride ?? leadData.estimated_value ?? null,
             },
           }),
         },
@@ -247,7 +259,13 @@ const LeadCDP = () => {
       if (res.ok) {
         const json = await res.json();
         if (typeof json.conversion_probability === 'number') {
-          setMlProbability(json.conversion_probability);
+          const prob = json.conversion_probability;
+          setMlProbability(prob);
+          // Sync back to DB so list page shows same value
+          await supabase
+            .from('leads')
+            .update({ potential_score: Math.round(prob * 100) })
+            .eq('id', leadData.id);
         }
       }
     } catch (err) {
@@ -354,7 +372,6 @@ const LeadCDP = () => {
     // Prepare lead scoring data — DB columns return null, scoring type expects undefined
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const scoringData: LeadScoringData = {
-      credit_score: lead.credit_score ?? undefined,
       monthly_income: lead.monthly_income ?? undefined,
       monthly_debt: lead.monthly_debt ?? undefined,
       employment_type: (lead.employment_type ?? undefined) as any,
@@ -369,17 +386,27 @@ const LeadCDP = () => {
       down_payment_ready: lead.down_payment_ready ?? undefined,
       savings: lead.savings ?? undefined,
 
-      // Behavioral (mock data for now - would come from tracking)
-      website_visits: 5,
-      pages_viewed: 15,
-      time_on_site: 30,
+      // Behavioral — real tracking data from DB (incremented by leadTracking.ts helpers)
+      website_visits: lead.website_visits ?? undefined,
+      pages_viewed: lead.pages_viewed ?? undefined,
+      time_on_site: lead.time_on_site ?? undefined,
+      brochure_downloads: lead.brochure_downloads ?? undefined,
+      site_visit_attended: lead.site_visit_attended ?? undefined,
+      interaction_count: lead.interaction_count ?? undefined,
 
-      urgency_level: currentInterest?.interest_level === 'high' ? 'high' :
-                     currentInterest?.interest_level === 'low' ? 'low' : 'medium',
-      interest_level: currentInterest?.interest_level || 'medium',
+      // Urgency comes from lead.priority — that's the Sales-controlled "ลูกค้าด่วน"
+      // signal already exposed in the Lead Detail UI (no second field needed).
+      urgency_level: (lead.priority as any) || undefined,
+      interest_level: currentInterest?.interest_level || undefined,
 
-      budget_max: (effectiveUnit as any)?.price || (property as any)?.base_price || 0,
-      purchase_timeline: '3_months',
+      decision_maker: lead.decision_maker ?? undefined,
+      financing_approved: lead.financing_approved ?? undefined,
+
+      // budget_max comes from the selected unit's price. properties table has no
+      // base_price column, so don't pretend a fallback exists — undefined is correct
+      // when no unit is selected and lets the scoring engine mark the factor missing.
+      budget_max: (effectiveUnit as any)?.price || undefined,
+      purchase_timeline: lead.purchase_timeline ?? undefined,
     } as any;
 
     // Calculate potential score
@@ -404,11 +431,49 @@ const LeadCDP = () => {
           monthly_debt: lead.monthly_debt || 0,
           property_value: (effectiveUnit as any).price,
           down_payment: lead.down_payment_ready || 0,
-          credit_score: lead.credit_score || 700,
+          // Loan estimator requires a credit score for its rate tier; we no longer collect
+          // it from UI, so use 700 (market-average tier) as a stand-in assumption.
+          credit_score: 700,
           age: lead.age ?? undefined,
           employment_type: (lead.employment_type ?? undefined) as any,
           years_employed: lead.years_employed ?? undefined,
         });
+
+        // Pre-approval override: when Sales has entered a real bank approval number,
+        // it beats the system estimate. We re-derive monthly payment + ratios from the
+        // manual max so every number on the card is internally consistent with the
+        // approved amount (not a frankenstein of estimate + manual).
+        const manualMax = Number((lead as any).max_loan_amount) || 0;
+        const manualNewer = (lead as any).loan_last_updated &&
+          (!(lead as any).score_last_updated ||
+            new Date((lead as any).loan_last_updated) > new Date((lead as any).score_last_updated));
+        const useManual = manualMax > 0 && manualNewer;
+
+        if (useManual) {
+          const rate = estimation.interest_rate;
+          const years = estimation.loan_term_years;
+          const r = rate / 100 / 12;
+          const n = years * 12;
+          const monthly = r === 0
+            ? manualMax / n
+            : manualMax * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1);
+          const income = Number(lead.monthly_income) || 1;
+          const debt = Number(lead.monthly_debt) || 0;
+          const propertyValue = estimation.breakdown.property_value;
+
+          estimation.max_loan_amount = manualMax;
+          estimation.recommended_loan_amount = Math.round(manualMax * 0.8);
+          estimation.monthly_payment = Math.round(monthly);
+          estimation.affordability.ltv_ratio = Number(((manualMax / propertyValue) * 100).toFixed(2));
+          estimation.affordability.dti_ratio = Number((((debt + monthly) / income) * 100).toFixed(2));
+          estimation.affordability.housing_expense_ratio = Number(((monthly / income) * 100).toFixed(2));
+          estimation.breakdown.loan_amount = manualMax;
+          estimation.breakdown.monthly_payment = Math.round(monthly);
+          estimation.breakdown.total_payment = Math.round(monthly * n);
+          estimation.breakdown.total_interest = Math.round(monthly * n - manualMax);
+          (estimation as any).source = 'manual';
+        }
+
         setLoanEstimation(estimation);
       } catch (error) {
         console.error('Error calculating loan estimation:', error);
@@ -463,7 +528,7 @@ const LeadCDP = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
@@ -532,7 +597,7 @@ const LeadCDP = () => {
                           <Calendar className="w-4 h-4 text-gray-500" />
                           <div>
                             <p className="text-xs text-gray-500">อายุ</p>
-                            <p className="font-medium text-sm">{prefs.age || '-'} ปี</p>
+                            <p className="font-medium text-sm">{lead?.age ?? prefs.age ?? '-'} ปี</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
@@ -621,49 +686,62 @@ const LeadCDP = () => {
                 <CardHeader className="bg-gray-50 border-b border-gray-100">
                   <CardTitle className="flex items-center gap-2 text-gray-900">
                     <Home className="w-5 h-5 text-chateau" />
-                    เลือกยูนิตที่สนใจ ({interests.length > 0 ? interests.length : 1})
+                    เลือกยูนิตที่สนใจ ({interests.length})
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 max-h-[400px] overflow-y-auto">
                   {interests.length > 0 ? (
-                    <div className="space-y-2">
-                      {interests.map((interest) => {
-                        const statusBadge = getInterestStatusBadge(interest.status);
-                        const levelBadge = getInterestLevelBadge(interest.interest_level);
-                        const isSelected = interest.id === selectedInterestId;
-                        return (
-                          <button
-                            key={interest.id}
-                            onClick={() => setSelectedInterestId(interest.id)}
-                            className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
-                              isSelected
-                                ? 'border-chateau bg-chateau-50/40 shadow-soft'
-                                : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                                isSelected ? 'bg-chateau text-white' : 'bg-gray-100'
-                              }`}>
-                                <Building2 className={`w-5 h-5 ${isSelected ? 'text-white' : 'text-gray-500'}`} />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm truncate">{interest.property?.name || 'โครงการ'}</p>
-                                <p className="text-xs text-gray-500">ยูนิต {interest.unit?.unit_number || '-'}</p>
-                                {interest.unit?.price && (
-                                  <p className="text-xs font-semibold text-chateau">{formatCurrency(interest.unit.price)}</p>
-                                )}
-                              </div>
-                              <div className="flex flex-col gap-1 items-end">
-                                <Badge className={`${statusBadge.color} text-xs`}>
-                                  {statusBadge.label}
-                                </Badge>
-                                <span className={`text-xs ${levelBadge.color}`}>{levelBadge.label}</span>
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
+                    <div className="space-y-4">
+                      {Object.entries(
+                        interests.reduce((acc, i) => {
+                          const key = i.property?.name || 'ไม่ระบุโครงการ';
+                          (acc[key] ||= []).push(i);
+                          return acc;
+                        }, {} as Record<string, typeof interests>)
+                      ).map(([projectName, projectInterests]) => (
+                        <div key={projectName}>
+                          {/* Project header */}
+                          <div className="flex items-center gap-2 mb-2 px-1">
+                            <Building2 className="w-3.5 h-3.5 text-gray-400" />
+                            <p className="text-xs font-bold text-gray-700 truncate">{projectName}</p>
+                            <span className="text-[10px] font-medium text-gray-400">({projectInterests.length} ยูนิต)</span>
+                          </div>
+                          {/* Units under this project */}
+                          <div className="space-y-1.5 ml-1">
+                            {projectInterests.map((interest) => {
+                              const statusBadge = getInterestStatusBadge(interest.status);
+                              const levelBadge = getInterestLevelBadge(interest.interest_level);
+                              const isSelected = interest.id === selectedInterestId;
+                              return (
+                                <button
+                                  key={interest.id}
+                                  onClick={() => setSelectedInterestId(interest.id)}
+                                  className={`w-full text-left px-3 py-2.5 rounded-lg border transition-all ${
+                                    isSelected
+                                      ? 'border-chateau bg-chateau-50/40 shadow-soft'
+                                      : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2.5">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-bold text-sm text-gray-900">ยูนิต {interest.unit?.unit_number || '-'}</p>
+                                      {interest.unit?.price && (
+                                        <p className="text-xs font-semibold text-chateau mt-0.5">{formatCurrency(interest.unit.price)}</p>
+                                      )}
+                                    </div>
+                                    <div className="flex flex-col gap-1 items-end">
+                                      <Badge className={`${statusBadge.color} text-[10px] px-1.5 py-0`}>
+                                        {statusBadge.label}
+                                      </Badge>
+                                      <span className={`text-[10px] ${levelBadge.color}`}>{levelBadge.label}</span>
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ) : (
                     // Fallback to legacy single unit display

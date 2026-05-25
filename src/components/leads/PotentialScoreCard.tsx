@@ -4,6 +4,7 @@
  * Purpose: Display AI-calculated lead potential score with detailed breakdown
  */
 
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -13,11 +14,11 @@ import {
   TrendingDown,
   Minus,
   Target,
-  Zap,
   Clock,
   CheckCircle2,
   AlertCircle,
   ArrowRight,
+  ChevronDown,
 } from 'lucide-react';
 
 interface PotentialScoreCardProps {
@@ -26,6 +27,16 @@ interface PotentialScoreCardProps {
 }
 
 export function PotentialScoreCard({ score, loading }: PotentialScoreCardProps) {
+  // Track which categories are expanded. Default = all collapsed for cleaner overview;
+  // Sales clicks a category header to drill down into individual factors.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+
   if (loading) {
     return (
       <Card>
@@ -109,72 +120,143 @@ export function PotentialScoreCard({ score, loading }: PotentialScoreCardProps) 
             </div>
           </div>
 
-          {/* Score Breakdown */}
-          <div className="space-y-3">
+          {/* Hierarchical Score Breakdown — categories with their factors nested */}
+          <div className="space-y-5">
             <div className="text-sm font-semibold text-foreground">รายละเอียดคะแนน</div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">การเงิน</span>
-                <span className="font-semibold">{score.score_breakdown.financial_score}/100</span>
-              </div>
-              <Progress value={score.score_breakdown.financial_score} className="h-2" />
-            </div>
+            {(() => {
+              // Static list of all possible factors per category so we can show
+              // "missing" entries (with "—") and prompt Sales to fill them in.
+              // Names MUST match the `factor` strings emitted by leadScoring.ts.
+              const EXPECTED: Record<'financial'|'engagement'|'urgency'|'fit', { name: string; hint: string }[]> = {
+                financial: [
+                  { name: 'อัตราส่วนรายได้ต่อราคา', hint: 'กรอกรายได้ใน Edit Lead' },
+                  { name: 'เงินดาวน์พร้อม', hint: 'กรอกเงินดาวน์ใน Edit Lead' },
+                  { name: 'ความมั่นคงในการทำงาน', hint: 'กรอกอาชีพ + อายุงานใน Edit Lead' },
+                ],
+                engagement: [
+                  { name: 'กิจกรรมบนเว็บไซต์', hint: 'ลูกค้ายังไม่เข้าใช้งาน portal' },
+                  { name: 'การดาวน์โหลดเอกสาร', hint: 'ส่งลิงก์ portal ให้ลูกค้าดาวน์โหลดโบรชัวร์' },
+                  { name: 'การเยี่ยมชมโครงการ', hint: 'กดปุ่ม "ยืนยันมาแล้ว" ที่ interest หลังนัดดู' },
+                  { name: 'จำนวนการติดต่อ', hint: 'กดปุ่มโทรในหน้านี้ — ระบบนับให้อัตโนมัติ' },
+                ],
+                urgency: [
+                  { name: 'ระดับความเร่งด่วน', hint: 'ตั้ง Priority (สูง/กลาง/ต่ำ) ในหน้า Lead Detail' },
+                  { name: 'กรอบเวลาการซื้อ', hint: 'เลือกใน Edit Lead — ลูกค้าซื้อภายในกี่เดือน' },
+                ],
+                fit: [
+                  { name: 'ระดับความสนใจ', hint: 'ตั้ง interest level ใน Lead Interest' },
+                  { name: 'ผู้มีอำนาจตัดสินใจ', hint: 'เช็คใน Edit Lead → ข้อมูลการเงิน' },
+                  { name: 'สถานะการอนุมัติสินเชื่อ', hint: 'เช็คใน Edit Lead เมื่อลูกค้าได้รับการอนุมัติ' },
+                ],
+              };
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">การมีส่วนร่วม</span>
-                <span className="font-semibold">{score.score_breakdown.engagement_score}/100</span>
-              </div>
-              <Progress value={score.score_breakdown.engagement_score} className="h-2" />
-            </div>
+              const cov = score.score_coverage;
+              const factorsBy = (cat: 'financial'|'engagement'|'urgency'|'fit') =>
+                score.key_factors.filter((f) => f.category === cat);
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">ความเร่งด่วน</span>
-                <span className="font-semibold">{score.score_breakdown.urgency_score}/100</span>
-              </div>
-              <Progress value={score.score_breakdown.urgency_score} className="h-2" />
-            </div>
+              const rows: Array<{ key: keyof typeof score.score_breakdown; label: string; covKey: 'financial'|'engagement'|'urgency'|'fit' }> = [
+                { key: 'financial_score', label: 'การเงิน', covKey: 'financial' },
+                { key: 'engagement_score', label: 'การมีส่วนร่วม', covKey: 'engagement' },
+                { key: 'urgency_score', label: 'ความเร่งด่วน', covKey: 'urgency' },
+                { key: 'fit_score', label: 'ความเหมาะสม', covKey: 'fit' },
+              ];
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">ความเหมาะสม</span>
-                <span className="font-semibold">{score.score_breakdown.fit_score}/100</span>
-              </div>
-              <Progress value={score.score_breakdown.fit_score} className="h-2" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+              return rows.map((r) => {
+                const value = score.score_breakdown[r.key];
+                const coverage = cov ? cov[r.covKey] : 1;
+                const lowData = coverage < 0.5;
+                const presentFactors = factorsBy(r.covKey);
+                const expected = EXPECTED[r.covKey];
+                const isOpen = expanded.has(r.covKey);
+                const missingCount = expected.filter((e) => !presentFactors.find((f) => f.factor === e.name)).length;
 
-      {/* Key Factors Card */}
-      <Card className="border-l-4 border-l-blue-500">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Zap className="w-5 h-5 text-blue-600" />
-            ปัจจัยสำคัญ
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {score.key_factors.slice(0, 5).map((factor, index) => (
-              <div
-                key={index}
-                className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-              >
-                <div className="mt-0.5">{getImpactIcon(factor.impact)}</div>
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <div className="font-medium text-sm">{factor.factor}</div>
-                    <div className={`text-sm font-semibold ${getScoreColor(factor.score)}`}>
-                      {factor.score}/100
-                    </div>
+                return (
+                  <div key={r.key} className="space-y-2 pb-1">
+                    {/* Category header — clickable to expand/collapse factors */}
+                    <button
+                      type="button"
+                      onClick={() => toggle(r.covKey)}
+                      className="w-full text-left group"
+                      aria-expanded={isOpen}
+                    >
+                      <div className="flex items-center justify-between text-sm">
+                        <span className={`font-medium flex items-center gap-1.5 ${lowData ? 'text-gray-400' : 'text-foreground'}`}>
+                          <ChevronDown
+                            className={`w-4 h-4 text-gray-400 group-hover:text-gray-600 transition-transform ${isOpen ? '' : '-rotate-90'}`}
+                          />
+                          {r.label}
+                          {lowData && (
+                            <span
+                              className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full font-normal"
+                              title={`มีข้อมูล ${Math.round(coverage * 100)}% — กรอกเพิ่มเพื่อความแม่นยำ`}
+                            >
+                              ข้อมูลไม่พอ
+                            </span>
+                          )}
+                          {!isOpen && missingCount > 0 && !lowData && (
+                            <span
+                              className="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full font-normal"
+                              title={`ยังขาดข้อมูล ${missingCount} รายการ — กดเพื่อดู`}
+                            >
+                              ขาด {missingCount}
+                            </span>
+                          )}
+                        </span>
+                        <span className={`font-bold ${lowData ? 'text-gray-400' : getScoreColor(value)}`}>
+                          {lowData ? '—' : `${value}/100`}
+                        </span>
+                      </div>
+                      <div className="mt-1.5">
+                        <Progress value={lowData ? 0 : value} className={`h-2 ${lowData ? 'opacity-40' : ''}`} />
+                      </div>
+                    </button>
+
+                    {/* Nested factors — only when expanded */}
+                    {isOpen && (
+                      <div className="pl-3 border-l-2 border-gray-100 space-y-1 mt-2 animate-in fade-in slide-in-from-top-1 duration-150">
+                        {expected.map((exp) => {
+                          const factor = presentFactors.find((f) => f.factor === exp.name);
+                          if (factor) {
+                            return (
+                              <div key={exp.name} className="flex items-start justify-between gap-2 py-1 text-xs">
+                                <div className="flex items-start gap-1.5 flex-1 min-w-0">
+                                  <span className="mt-0.5 flex-shrink-0">{getImpactIcon(factor.impact)}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-foreground">{factor.factor}</div>
+                                    <div className="text-[11px] text-muted-foreground truncate" title={factor.description}>
+                                      {factor.description}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className={`text-xs font-semibold flex-shrink-0 ${getScoreColor(factor.score)}`}>
+                                  {Math.round(factor.score)}
+                                </div>
+                              </div>
+                            );
+                          }
+                          // Missing factor — show with hint
+                          return (
+                            <div key={exp.name} className="flex items-start justify-between gap-2 py-1 text-xs">
+                              <div className="flex items-start gap-1.5 flex-1 min-w-0">
+                                <Minus className="w-3.5 h-3.5 text-gray-300 mt-0.5 flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-gray-400">{exp.name}</div>
+                                  <div className="text-[11px] text-amber-600/80 truncate" title={exp.hint}>
+                                    {exp.hint}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-xs text-gray-300 flex-shrink-0">—</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-xs text-muted-foreground">{factor.description}</div>
-                </div>
-              </div>
-            ))}
+                );
+              });
+            })()}
           </div>
         </CardContent>
       </Card>

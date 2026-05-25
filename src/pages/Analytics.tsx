@@ -23,7 +23,6 @@ import {
   Briefcase,
   DollarSign,
   TrendingUp,
-  Wallet,
   Eye,
 } from 'lucide-react';
 
@@ -161,11 +160,21 @@ const sourceShort = (raw: string | null) => {
   return raw;
 };
 
+// Currency format — see Index.tsx for the canonical version (ล้าน / K with
+// thousand separators + scale-based decimal precision).
 const formatTHB = (n: number) => {
-  if (n >= 1_000_000_000) return `฿${(n / 1_000_000_000).toFixed(2)}B`;
-  if (n >= 1_000_000) return `฿${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `฿${(n / 1_000).toFixed(0)}K`;
-  return `฿${n.toFixed(0)}`;
+  if (n === 0) return '฿0';
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1_000_000) {
+    const m = abs / 1_000_000;
+    if (m >= 1000) return `${sign}฿${Math.round(m).toLocaleString('en-US')} ล้าน`;
+    if (m >= 100) return `${sign}฿${Math.round(m)} ล้าน`;
+    if (m >= 10) return `${sign}฿${m.toFixed(1)} ล้าน`;
+    return `${sign}฿${m.toFixed(2)} ล้าน`;
+  }
+  if (abs >= 1_000) return `${sign}฿${(abs / 1_000).toFixed(0)}K`;
+  return `${sign}฿${abs.toFixed(0)}`;
 };
 
 const Analytics = () => {
@@ -285,7 +294,21 @@ const Analytics = () => {
   // ─── KPI: Conversion rate ──
   const totalClosed = leads.filter((l) => l.status === 'won' || l.status === 'lost').length;
   const totalWon = leads.filter((l) => l.status === 'won').length;
+  const totalLost = leads.filter((l) => l.status === 'lost').length;
   const conversionRate = totalClosed > 0 ? (totalWon / totalClosed) * 100 : 0;
+  const leadLossRate = totalClosed > 0 ? (totalLost / totalClosed) * 100 : 0;
+
+  // Lead Loss Rate zone
+  const leadLossZones = [
+    { upTo: 40, color: KK.green, label: 'ปกติ' },
+    { upTo: 70, color: KK.amber, label: 'เฝ้าระวัง' },
+    { upTo: 100, color: KK.red, label: 'วิกฤต' },
+  ];
+  const leadLossZone = leadLossZones.find((z) => leadLossRate <= z.upTo) || leadLossZones[leadLossZones.length - 1];
+  const leadLossZoneBg =
+    leadLossZone.color === KK.green ? KK.greenLight
+    : leadLossZone.color === KK.amber ? KK.amberLight
+    : KK.redLight;
 
   // ─── KPI: Pipeline Value (snapshot, no period — sum of estimated_value across open leads)
   const openStatusSet = new Set(['new', 'contacted', 'qualified', 'negotiating']);
@@ -294,14 +317,8 @@ const Analytics = () => {
     .reduce((sum, l) => sum + Number(l.estimated_value || 0), 0);
   const pipelineLeadCount = leads.filter((l) => openStatusSet.has(l.status || '')).length;
 
-  // ─── KPI: Revenue + Avg Deal Size (won leads, filtered by period via updated_at fallback to created_at)
-  const wonInPeriod = leads.filter((l) => {
-    if (l.status !== 'won') return false;
-    const closedAt = new Date((l as any).updated_at || l.created_at);
-    return closedAt >= periodStart;
-  });
-  const totalRevenue = wonInPeriod.reduce((sum, l) => sum + Number(l.estimated_value || 0), 0);
-  const avgDealSize = wonInPeriod.length > 0 ? totalRevenue / wonInPeriod.length : 0;
+  // Revenue/avg-deal calculations removed — those numbers live on Executive Dashboard
+  // now ("ยอดขายเดือนนี้"). Analytics focuses on funnel efficiency (conversion rate).
 
   // ─── Cumulative funnel reach (used to compute stage-to-stage pass %)
   // A lead has "reached" stage X if its current status is X or any later stage in the forward chain.
@@ -321,12 +338,9 @@ const Analytics = () => {
     return (reachedBeyond[currentStage] / prevReach) * 100;
   };
 
-  // Money formatter (THB short form: ฿1.2M, ฿340K)
-  const fmtMoney = (n: number) => {
-    if (n >= 1_000_000) return `฿${(n / 1_000_000).toFixed(2)}M`;
-    if (n >= 1_000) return `฿${(n / 1_000).toFixed(0)}K`;
-    return `฿${n.toFixed(0)}`;
-  };
+  // Thai-natural money formatter — alias for the file-level formatTHB so
+  // both functions render the same way.
+  const fmtMoney = formatTHB;
 
   // ─── Funnel ──
   // Cross-section counts (kept around for "lost" which is a terminal exit, not in forward chain)
@@ -514,15 +528,11 @@ const Analytics = () => {
       bg: KK.amberLight,
     },
     {
-      title: 'Conversion Rate',
-      value: `${conversionRate.toFixed(1)}%`,
-      sub: `ปิดได้ ${totalWon}/${totalClosed} ดีล`,
-      icon: Target,
-      color: KK.green,
-      bg: KK.greenLight,
-    },
-    {
-      title: 'Pipeline Value',
+      // Renamed from "Pipeline Value" — sum of estimated_value for OPEN leads
+      // (new/contacted/qualified/negotiating). Distinct from Executive Dashboard's
+      // "มูลค่าการจอง" which counts only reserved units — this number is wider
+      // because it includes everything Sales is still chasing.
+      title: 'มูลค่าลีดทั้งหมด',
       value: fmtMoney(pipelineValue),
       sub: `${pipelineLeadCount} ลีดที่ยังเปิดอยู่`,
       icon: TrendingUp,
@@ -530,20 +540,17 @@ const Analytics = () => {
       bg: KK.blueLight,
     },
     {
-      title: 'รายได้รวม',
-      value: fmtMoney(totalRevenue),
-      sub: `${wonInPeriod.length} ดีล · ${periodDays} วันล่าสุด`,
+      // Conversion rate replaces the redundant "รายได้รวม" card — revenue lives
+      // on Executive Dashboard ("ยอดขายเดือนนี้"). Sales managers care more about
+      // funnel efficiency than absolute dollars here.
+      title: 'อัตราปิดดีล',
+      value: `${conversionRate.toFixed(1)}%`,
+      sub: totalClosed > 0
+        ? `Won ${totalWon} จาก ${totalClosed} ดีลที่จบแล้ว`
+        : 'ยังไม่มีดีลที่จบในช่วงนี้',
       icon: DollarSign,
       color: KK.green,
       bg: KK.greenLight,
-    },
-    {
-      title: 'ดีลเฉลี่ย',
-      value: fmtMoney(avgDealSize),
-      sub: wonInPeriod.length > 0 ? `จาก ${wonInPeriod.length} ดีลที่ปิด` : 'ยังไม่มีดีลในช่วงนี้',
-      icon: Wallet,
-      color: KK.purple,
-      bg: KK.purpleLight,
     },
   ];
 
@@ -589,7 +596,7 @@ const Analytics = () => {
         )}
 
         {/* KPI Row */}
-        <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 ${loading ? 'opacity-30 pointer-events-none' : ''}`}>
+        <div className={`grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 ${loading ? 'opacity-30 pointer-events-none' : ''}`}>
           {kpiCards.map((k, i) => (
             <div key={i} className="bg-white border border-gray-100 rounded-2xl p-6 shadow-soft">
               <div className="flex items-start justify-between mb-5">
@@ -602,6 +609,52 @@ const Analytics = () => {
               <p className="text-[12px] font-medium text-gray-500 mt-3.5">{k.sub}</p>
             </div>
           ))}
+        </div>
+
+        {/* Lead Loss Rate — featured panel with breakdown */}
+        <div className={`bg-white border border-gray-100 rounded-2xl shadow-soft p-7 relative overflow-hidden ${loading ? 'opacity-30 pointer-events-none' : ''}`}>
+          <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: leadLossZone.color }} />
+          <div className="pl-3 grid grid-cols-1 sm:grid-cols-2 gap-7 items-center">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-4">Lead Loss Rate</p>
+              <div className="flex items-baseline gap-2 mb-3">
+                <p className="text-[32px] font-bold tabular-nums leading-none text-gray-900 tracking-tight">
+                  {totalClosed > 0 ? leadLossRate.toFixed(1) : '—'}
+                </p>
+                {totalClosed > 0 && <span className="text-lg font-medium text-gray-500">%</span>}
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ backgroundColor: totalClosed > 0 ? leadLossZoneBg : '#f3f4f6' }}>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: totalClosed > 0 ? leadLossZone.color : '#9ca3af' }} />
+                <span className="text-[11px] font-semibold" style={{ color: totalClosed > 0 ? leadLossZone.color : '#9ca3af' }}>
+                  {totalClosed > 0 ? leadLossZone.label : 'ข้อมูลไม่พอ'}
+                </span>
+              </span>
+            </div>
+            <div className="space-y-3.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">รายละเอียด</p>
+              <div>
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span className="text-gray-600">Won</span>
+                  <span className="font-bold tabular-nums text-gray-900">{totalWon}</span>
+                </div>
+                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-500" style={{ width: `${totalClosed > 0 ? (totalWon / totalClosed) * 100 : 0}%`, backgroundColor: KK.green }} />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span className="text-gray-600">Loss</span>
+                  <span className="font-bold tabular-nums text-gray-900">{totalLost}</span>
+                </div>
+                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-500" style={{ width: `${totalClosed > 0 ? (totalLost / totalClosed) * 100 : 0}%`, backgroundColor: KK.red }} />
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-500 pt-2 border-t border-gray-100">
+                รวม Won + Loss ทั้งหมด <span className="font-semibold text-gray-700 tabular-nums">{totalClosed}</span> ดีล
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* ═══ INSIGHT — ภาพรวมตัวเลข ═══ */}
@@ -676,16 +729,17 @@ const Analytics = () => {
                 {sourceData.map((s, i) => {
                   const max = Math.max(...sourceData.map((x) => x.value), 1);
                   const widthPct = (s.value / max) * 100;
-                  const tones = [KK.red, KK.blue, KK.purple, KK.green, KK.orange, KK.amber, KK.gray];
-                  const color = tones[i % tones.length];
+                  // Monochromatic — all bars in brand red, opacity fades by rank
+                  const denom = Math.max(sourceData.length - 1, 1);
+                  const opacity = Math.max(0.25, 1 - (i / denom) * 0.75);
                   return (
                     <div key={s.name}>
                       <div className="flex justify-between mb-1.5">
                         <span className="text-xs font-medium text-gray-700">{s.name}</span>
-                        <span className="text-xs font-bold tabular-nums" style={{ color }}>{s.value}</span>
+                        <span className="text-xs font-bold tabular-nums" style={{ color: KK.red }}>{s.value}</span>
                       </div>
                       <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${widthPct}%`, backgroundColor: color }} />
+                        <div className="h-full rounded-full" style={{ width: `${widthPct}%`, backgroundColor: KK.red, opacity }} />
                       </div>
                     </div>
                   );

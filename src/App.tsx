@@ -483,14 +483,16 @@ const App = () => (
             </ProtectedRouteSimple>
           }>
             <Route path="/analytics" element={
-              <ErrorBoundary
-                showRetry={true}
-                showHome={true}
-                errorMessage="ไม่สามารถโหลดหน้ารายงานวิเคราะห์ได้"
-                context={{ page: 'analytics' }}
-              >
-                <Analytics />
-              </ErrorBoundary>
+              <ProtectedRouteSimple requireRole={['owner', 'admin']}>
+                <ErrorBoundary
+                  showRetry={true}
+                  showHome={true}
+                  errorMessage="ไม่สามารถโหลดหน้ารายงานวิเคราะห์ได้"
+                  context={{ page: 'analytics' }}
+                >
+                  <Analytics />
+                </ErrorBoundary>
+              </ProtectedRouteSimple>
             } />
 
             <Route path="/api" element={

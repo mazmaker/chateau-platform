@@ -2,9 +2,10 @@ import { useEffect, useState, useMemo } from 'react';
 import { startViewTracking } from '@/lib/viewTracking';
 import SitePlanViewer from '@/components/properties/SitePlanViewer';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Building2, MapPin, Bed, Bath, Square, Loader2, ChevronRight, LayoutGrid, List as ListIcon, Heart, SlidersHorizontal, X } from 'lucide-react';
+import { Building2, MapPin, Bed, Bath, Square, Loader2, ChevronRight, LayoutGrid, List as ListIcon, Heart, SlidersHorizontal, X, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
+import { incrementLeadCounter } from '@/lib/leadTracking';
 import CustomerLayout from './CustomerLayout';
 
 type BudgetKey = 'all' | 'u3' | '3to5' | '5to10' | '10to20' | 'over20';
@@ -27,6 +28,8 @@ interface Property {
   address?: any;
   base_price?: number | null;
   developer?: string;
+  brochure_url?: string | null;
+  tenant_id?: string;
 }
 
 interface Unit {
@@ -203,15 +206,42 @@ const CustomerPropertyDetail = () => {
     <CustomerLayout title={property.name} subtitle={property.developer} showBack backTo="/customer/properties">
       {/* Hero */}
       <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
-        {property.thumbnail_url ? (
-          <div className="relative h-56 bg-gray-100">
+        <div className="relative h-56 bg-gray-100">
+          {property.thumbnail_url ? (
             <img src={property.thumbnail_url} alt={property.name} className="w-full h-full object-cover" />
-          </div>
-        ) : (
-          <div className="h-56 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
-            <Building2 className="w-16 h-16 text-gray-300" />
-          </div>
-        )}
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+              <Building2 className="w-16 h-16 text-gray-300" />
+            </div>
+          )}
+          {/* Floating brochure download — top-right corner overlay */}
+          <button
+            type="button"
+            onClick={async () => {
+              await incrementLeadCounter({ field: 'brochure_downloads', propertyId: property.id });
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                await (supabase.from('activity_logs') as any).insert({
+                  tenant_id: property.tenant_id,
+                  activity_type: 'brochure_downloaded',
+                  description: `ลูกค้าดาวน์โหลดโบรชัวร์ ${property.name}`,
+                  metadata: { property_id: property.id, source: 'customer_portal' },
+                });
+              } catch { /* non-blocking */ }
+              if (property.brochure_url) {
+                window.open(property.brochure_url, '_blank', 'noopener');
+                toast.success('กำลังเปิดโบรชัวร์...');
+              } else {
+                toast.info('โบรชัวร์จะถูกส่งไปทางอีเมลภายใน 5 นาที');
+              }
+            }}
+            title="ดาวน์โหลดโบรชัวร์โครงการ"
+            className="absolute top-3 right-3 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-chateau text-white text-sm font-semibold shadow-lg ring-2 ring-white/50 hover:bg-chateau-600 hover:scale-105 transition-all"
+          >
+            <FileDown className="w-4 h-4" />
+            ดาวน์โหลดโบรชัวร์
+          </button>
+        </div>
         <div className="p-5">
           <h1 className="text-xl font-bold text-gray-900 mb-1">{property.name}</h1>
           {property.developer && <p className="text-sm text-gray-500 mb-3">โดย {property.developer}</p>}
@@ -223,10 +253,10 @@ const CustomerPropertyDetail = () => {
           {property.description && (
             <p className="text-sm text-gray-700 leading-relaxed">{property.description}</p>
           )}
-          {property.base_price && (
+          {(property.base_price ?? 0) > 0 && (
             <div className="mt-4 pt-4 border-t border-gray-100">
               <p className="text-xs text-gray-500 mb-0.5">ราคาเริ่มต้น</p>
-              <p className="text-2xl font-bold text-chateau">{fmt(property.base_price)}</p>
+              <p className="text-2xl font-bold text-chateau">{fmt(property.base_price!)}</p>
             </div>
           )}
         </div>

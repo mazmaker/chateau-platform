@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "@/components/dashboard/Sidebar";
 import Header from "@/components/dashboard/Header";
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -61,11 +63,29 @@ const C = {
   border:     '#e5e7eb',
 };
 
+// Currency format — Thai real estate industry convention: "X ล้าน" with comma
+// separators. Matches AP Thailand investor pages and DDproperty/Hipflat listings.
+// Decimal precision scales down as the number grows so the card stays
+// readable at a glance:
+//   ≥ 1,000M    → "฿1,855 ล้าน"   (rounded, comma separator, headline scale)
+//   100-999M    → "฿682 ล้าน"     (no decimal needed at this magnitude)
+//   10-99M      → "฿62.8 ล้าน"    (1 decimal)
+//   1-9M        → "฿1.85 ล้าน"    (2 decimals — precision matters at this scale)
+//   1-999K      → "฿850K"          (Thai sales use K; "พัน" would be too long)
+//   < 1,000     → "฿500"
 const formatTHB = (n: number) => {
-  if (n >= 1_000_000_000) return `฿${(n / 1_000_000_000).toFixed(2)}B`;
-  if (n >= 1_000_000) return `฿${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `฿${(n / 1_000).toFixed(0)}K`;
-  return `฿${n.toFixed(0)}`;
+  if (n === 0) return '฿0';
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1_000_000) {
+    const m = abs / 1_000_000;
+    if (m >= 1000) return `${sign}฿${Math.round(m).toLocaleString('en-US')} ล้าน`;
+    if (m >= 100) return `${sign}฿${Math.round(m)} ล้าน`;
+    if (m >= 10) return `${sign}฿${m.toFixed(1)} ล้าน`;
+    return `${sign}฿${m.toFixed(2)} ล้าน`;
+  }
+  if (abs >= 1_000) return `${sign}฿${(abs / 1_000).toFixed(0)}K`;
+  return `${sign}฿${abs.toFixed(0)}`;
 };
 
 const tooltipStyle = {
@@ -94,11 +114,6 @@ interface PropertyRow {
   type: string | null;
 }
 
-interface LeadRow {
-  id: string;
-  status: string | null;
-}
-
 const Index = () => {
   const { currentTenant, userRole } = useSimpleAuth();
   const navigate = useNavigate();
@@ -112,7 +127,11 @@ const Index = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [units, setUnits] = useState<UnitRow[]>([]);
   const [properties, setProperties] = useState<PropertyRow[]>([]);
-  const [leads, setLeads] = useState<LeadRow[]>([]);
+  // Cancelled bookings in the last 30 days — feeds the "ยกเลิกการจอง" KPI card
+  const [cancelledBookings, setCancelledBookings] = useState<Array<{
+    id: string; status: string; total_amount: number | null;
+    refund_amount: number | null; refunded_at: string | null;
+  }>>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -128,7 +147,11 @@ const Index = () => {
         // Lazy cleanup: revert any reservations whose hold has expired before reading inventory
         try { await (supabase as any).rpc('revert_expired_unit_reservations'); } catch { /* ignore */ }
 
-        const [unitsRes, propRes, leadsRes] = await Promise.all([
+        // Bookings: only need cancelled ones from the last 30 days for the
+        // "ยกเลิกการจอง" KPI card. Keep query lean — filter at DB.
+        const cancelledSince = new Date();
+        cancelledSince.setDate(cancelledSince.getDate() - 30);
+        const [unitsRes, propRes, cancelledRes] = await Promise.all([
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from('units') as any)
             .select('id, status, price, deposit_amount, sold_at, reserved_at, updated_at, project_id')
@@ -138,14 +161,16 @@ const Index = () => {
             .select('id, name, type')
             .eq('tenant_id', tenantId),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from('leads') as any)
-            .select('id, status')
-            .eq('tenant_id', tenantId),
+          (supabase.from('bookings') as any)
+            .select('id, status, total_amount, refund_amount, refunded_at')
+            .eq('tenant_id', tenantId)
+            .eq('status', 'cancelled')
+            .gte('refunded_at', cancelledSince.toISOString()),
         ]);
 
         setUnits((unitsRes.data || []) as UnitRow[]);
         setProperties((propRes.data || []) as PropertyRow[]);
-        setLeads((leadsRes.data || []) as LeadRow[]);
+        setCancelledBookings(cancelledRes.data || []);
       } catch (e) {
         console.error('Dashboard load failed:', e);
       } finally {
@@ -163,7 +188,6 @@ const Index = () => {
   const startOfPrevYearSameMonth = new Date(now.getFullYear() - 1, now.getMonth(), 1);
   const endOfPrevYearSameMonth = new Date(now.getFullYear() - 1, now.getMonth() + 1, 1);
   const ninetyDaysAgo = new Date(); ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-  const oneEightyDaysAgo = new Date(); oneEightyDaysAgo.setDate(oneEightyDaysAgo.getDate() - 180);
   const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 12, now.getDate());
 
   const soldUnits = units.filter((u) => u.status === 'sold');
@@ -180,6 +204,8 @@ const Index = () => {
     });
 
   const salesMTD = soldInRange(startOfMonth).reduce((s, u) => s + Number(u.price || 0), 0);
+  const salesMTDCount = soldInRange(startOfMonth).length;
+  const salesYTDCount = soldInRange(startOfYear).length;
   const salesPrevMonth = soldInRange(startOfPrevMonth, startOfMonth).reduce((s, u) => s + Number(u.price || 0), 0);
   const salesYTD = soldInRange(startOfYear).reduce((s, u) => s + Number(u.price || 0), 0);
   const salesPrevYearSameMonth = soldInRange(startOfPrevYearSameMonth, endOfPrevYearSameMonth).reduce((s, u) => s + Number(u.price || 0), 0);
@@ -191,18 +217,22 @@ const Index = () => {
   const pipelineDeposit = reservedUnits.reduce((s, u) => s + Number(u.deposit_amount || 0), 0);
   const pipelineCount = reservedUnits.length;
 
+  // Cancellation metrics — last 30 days. "refunded" = money returned to customer,
+  // "forfeited" = deposit kept by the company. Split helps finance see net impact.
+  const cancelledCount = cancelledBookings.length;
+  const cancelledRefunded = cancelledBookings.reduce((s, b) => s + Number(b.refund_amount || 0), 0);
+  const cancelledForfeited = cancelledBookings.reduce(
+    (s, b) => s + Math.max(0, Number(b.total_amount || 0) - Number(b.refund_amount || 0)),
+    0,
+  );
+
   const recent90Sold = soldInRange(ninetyDaysAgo);
-  const prev90Sold = soldInRange(oneEightyDaysAgo, ninetyDaysAgo);
-  const avgPrice90 = recent90Sold.length > 0 ? recent90Sold.reduce((s, u) => s + Number(u.price || 0), 0) / recent90Sold.length : 0;
-  const avgPricePrev = prev90Sold.length > 0 ? prev90Sold.reduce((s, u) => s + Number(u.price || 0), 0) / prev90Sold.length : 0;
-  const aspChange = avgPricePrev > 0 ? ((avgPrice90 - avgPricePrev) / avgPricePrev) * 100 : null;
 
   // Inventory
   const totalUnits = units.length;
   const availableCount = availableUnits.length;
   const reservedCount = reservedUnits.length;
   const soldCount = soldUnits.length;
-  const inventoryValue = availableUnits.reduce((s, u) => s + Number(u.price || 0), 0);
 
   // Sell-through velocity (per month over last 90 days)
   const sellThroughPerMonth = recent90Sold.length / 3;
@@ -219,6 +249,62 @@ const Index = () => {
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
   const allRevenue12mo = Array.from(projectSalesMap.values()).reduce((s, v) => s + v, 0);
+
+  // มูลค่ารวมโครงการ (GDV — Gross Development Value): sum of all unit prices = total
+  // potential revenue if every unit sells. Internal variable name stays gdvTotal so
+  // existing finance-team queries / dashboards that key off that term still resolve.
+  // Industry-standard metric used by Sansiri/AP/Origin in annual reports
+  const gdvTotal = units.reduce((s, u) => s + Number(u.price || 0), 0);
+
+  // Monthly sales trend (last 12 months) — for hero sparkline + velocity card
+  const salesByMonth12mo = Array.from({ length: 12 }, (_, i) => {
+    const monthStart = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() - (10 - i), 1);
+    const sold = soldUnits.filter((u) => {
+      if (!u.sold_at) return false;
+      const t = new Date(u.sold_at);
+      return t >= monthStart && t < monthEnd;
+    });
+    return {
+      month: monthStart.toLocaleDateString('th-TH', { month: 'short' }),
+      value: sold.reduce((s, u) => s + Number(u.price || 0), 0),
+      count: sold.length,
+    };
+  });
+
+  // Monthly reservation activity (last 6 months) — for Pipeline card sparkline
+  const reservationsByMonth6mo = Array.from({ length: 6 }, (_, i) => {
+    const monthStart = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() - (4 - i), 1);
+    const count = units.filter((u) => {
+      if (!u.reserved_at) return false;
+      const t = new Date(u.reserved_at);
+      return t >= monthStart && t < monthEnd;
+    }).length;
+    return {
+      month: monthStart.toLocaleDateString('th-TH', { month: 'short' }),
+      value: count,
+      count,
+    };
+  });
+
+  // Daily sales for current month — for MTD sparkline (day-by-day)
+  const currentDay = now.getDate();
+  const dailyThisMonth = Array.from({ length: currentDay }, (_, i) => {
+    const day = i + 1;
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), day);
+    const dayEnd = new Date(now.getFullYear(), now.getMonth(), day + 1);
+    const sold = soldUnits.filter((u) => {
+      if (!u.sold_at) return false;
+      const t = new Date(u.sold_at);
+      return t >= dayStart && t < dayEnd;
+    });
+    return {
+      month: String(day),
+      value: sold.reduce((s, u) => s + Number(u.price || 0), 0),
+      count: sold.length,
+    };
+  });
 
   const TYPE_LABEL: Record<string, string> = {
     apartment: 'อพาร์ตเมนต์',
@@ -250,14 +336,6 @@ const Index = () => {
     }))
     .sort((a, b) => b.avg - a.avg);
 
-  // Funnel — keep pure-lead pipeline (units in DB don't have FK to leads)
-  const leadsTotal = leads.length;
-  const leadsContacted = leads.filter((l) => l.status === 'contacted' || l.status === 'qualified' || l.status === 'negotiating' || l.status === 'won').length;
-  const leadsQualified = leads.filter((l) => l.status === 'qualified' || l.status === 'negotiating' || l.status === 'won').length;
-  const leadsNegotiating = leads.filter((l) => l.status === 'negotiating' || l.status === 'won').length;
-  const leadsWon = leads.filter((l) => l.status === 'won').length;
-  const conversionRate = leadsTotal > 0 ? (leadsWon / leadsTotal) * 100 : 0;
-
   // Donut data — semantic real-estate convention:
   // green = พร้อมขาย (available, ซื้อได้) · amber = จองอยู่ (wait) · red = ขายแล้ว (closed)
   const donutData = [
@@ -266,34 +344,13 @@ const Index = () => {
     { name: 'ขายแล้ว', value: soldCount, color: C.red },
   ].filter((d) => d.value > 0);
 
-  // Insight strip
-  const insight = (() => {
-    if (loading || totalUnits === 0) return null;
-    if (daysOfInventory && daysOfInventory > 24) {
-      return `Days of Inventory ${daysOfInventory.toFixed(0)} เดือน — เกินมาตรฐาน 24 เดือน พิจารณาทำ promo หรือปรับราคา`;
-    }
-    if (topProjects.length > 0 && allRevenue12mo > 0) {
-      const topShare = (topProjects[0].value / allRevenue12mo) * 100;
-      if (topShare > 30) {
-        return `${topProjects[0].name} คิดเป็น ${topShare.toFixed(0)}% ของรายได้ 12 เดือน — concentration risk สูง`;
-      }
-    }
-    if (momChange !== null && momChange < -10) {
-      return `ยอดขายลดลง ${Math.abs(momChange).toFixed(0)}% เทียบเดือนก่อน — ต้องตรวจสอบ`;
-    }
-    if (momChange !== null && momChange > 20) {
-      return `ยอดขายเติบโต ${momChange.toFixed(0)}% เทียบเดือนก่อน — โมเมนตัมดี`;
-    }
-    return null;
-  })();
-
   return (
     <div className="min-h-screen bg-gray-50">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="lg:pl-[260px]">
         <Header onMenuClick={() => setSidebarOpen(true)} />
 
-        <main className="p-6 lg:p-10 space-y-7">
+        <main className="p-6 lg:p-10 space-y-8">
           {/* === Page Title === */}
           <div className="flex items-end justify-between flex-wrap gap-3">
             <div>
@@ -321,198 +378,177 @@ const Index = () => {
             </div>
           ) : (
             <>
-              {/* === Row 1: Financial Headline === */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <FinancialCard
-                  title="ยอดขายเดือนนี้"
-                  value={formatTHB(salesMTD)}
-                  icon={Wallet}
-                  color={C.red}
-                  bg={C.redLight}
-                  sub={momChange !== null ? <ChangeBadge value={momChange} label="เทียบเดือนก่อน" /> : <span className="text-xs text-gray-400">ยังไม่มียอดเดือนก่อน</span>}
-                />
-                <FinancialCard
+              {/* Row 1 — KPI strip: 4 equal cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                <CompactKpiCard
                   title="ยอดขายปีนี้"
                   value={formatTHB(salesYTD)}
                   icon={TrendingUp}
-                  color={C.redDeep}
+                  accentColor={C.redDeep}
                   bg={C.redDeepLight}
-                  sub={yoyChange !== null ? <ChangeBadge value={yoyChange} label="YoY เดือนเดียวกัน" /> : <span className="text-xs text-gray-400">ปีก่อนไม่มียอด</span>}
+                  sub={
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-xs text-gray-500">ขาย <span className="font-semibold text-gray-700 tabular-nums">{salesYTDCount}</span> ยูนิต</span>
+                      {yoyChange !== null ? <ChangeBadge value={yoyChange} label="YoY" /> : <span className="text-xs text-gray-400">ปีก่อนไม่มียอด</span>}
+                    </div>
+                  }
+                  sparkData={salesByMonth12mo}
                 />
-                <FinancialCard
+                <CompactKpiCard
+                  title="ยอดขายเดือนนี้"
+                  value={formatTHB(salesMTD)}
+                  icon={Wallet}
+                  accentColor={C.red}
+                  bg={C.redLight}
+                  sub={
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-xs text-gray-500">ขาย <span className="font-semibold text-gray-700 tabular-nums">{salesMTDCount}</span> ยูนิต</span>
+                      {momChange !== null ? <ChangeBadge value={momChange} label="เทียบเดือนก่อน" /> : <span className="text-xs text-gray-400">เดือนแรก</span>}
+                    </div>
+                  }
+                  sparkData={dailyThisMonth}
+                  sparkLabelPrefix="วันที่"
+                />
+                <CompactKpiCard
                   title="มูลค่าการจอง"
                   value={formatTHB(pipelineValue)}
                   icon={Hourglass}
-                  color={C.amber}
+                  accentColor={C.amber}
                   bg={C.amberLight}
-                  sub={<span className="text-xs text-gray-500">{pipelineCount} ดีล · มัดจำ {formatTHB(pipelineDeposit)}</span>}
+                  sub={
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-xs text-gray-500">
+                        <span className="font-semibold text-gray-700 tabular-nums">{pipelineCount}</span> ดีล · มัดจำ {formatTHB(pipelineDeposit)}
+                      </span>
+                      {cancelledCount > 0 ? (
+                        <span className="text-xs text-red-600">
+                          ยกเลิก 30 วัน: <span className="font-semibold tabular-nums">{cancelledCount}</span> ราย
+                          {cancelledRefunded > 0 && <> · คืน {formatTHB(cancelledRefunded)}</>}
+                          {cancelledForfeited > 0 && <> · ริบ {formatTHB(cancelledForfeited)}</>}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">ไม่มีการยกเลิกใน 30 วัน</span>
+                      )}
+                    </div>
+                  }
+                  sparkData={reservationsByMonth6mo}
                 />
-                {aspByType.length > 1 ? (
-                  <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200">
-                    <div className="flex items-start justify-between mb-3">
-                      <p className="text-sm font-medium text-gray-500 leading-tight pt-1.5">ราคาเฉลี่ยที่ขายได้</p>
-                      <div
-                        className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
-                        style={{
-                          background: `linear-gradient(135deg, ${C.charcoalLight}f0 0%, ${C.charcoalLight} 100%)`,
-                          boxShadow: `inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 2px ${C.charcoal}15`,
-                        }}
-                      >
-                        <Tag className="w-5 h-5" style={{ color: C.charcoal }} strokeWidth={2.2} />
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-gray-400 mb-3">90 วันล่าสุด · แยกตามประเภท</p>
-                    <div className="space-y-2">
-                      {aspByType.map((p) => (
-                        <div key={p.label} className="flex justify-between items-baseline">
-                          <span className="text-sm text-gray-500">{p.label}</span>
-                          <span className="text-base font-bold text-gray-900 tabular-nums">{formatTHB(p.avg)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <FinancialCard
-                    title="ราคาเฉลี่ยที่ขายได้"
-                    value={avgPrice90 > 0 ? formatTHB(avgPrice90) : '—'}
-                    icon={Tag}
-                    color={C.charcoal}
-                    bg={C.charcoalLight}
-                    sub={aspChange !== null ? <ChangeBadge value={aspChange} label="QoQ" /> : <span className="text-xs text-gray-400">90 วันล่าสุด</span>}
-                  />
-                )}
+                <CompactKpiCard
+                  title="มูลค่ารวมโครงการ"
+                  value={formatTHB(gdvTotal)}
+                  icon={Building2}
+                  accentColor={C.redDeep}
+                  bg={C.redDeepLight}
+                  sub={<span className="text-xs text-gray-500"><span className="font-semibold text-gray-700 tabular-nums">{totalUnits}</span> ยูนิต · <span className="font-semibold text-gray-700 tabular-nums">{properties.length}</span> โครงการ</span>}
+                />
               </div>
 
-              {/* Insight strip */}
-              {insight && (
-                <div className="px-4 py-3 rounded-xl border" style={{ borderColor: C.amberLight, backgroundColor: '#fffdf5' }}>
-                  <p className="text-sm font-medium text-gray-800">{insight}</p>
-                </div>
-              )}
-
-              {/* === Row 2: Inventory Velocity === */}
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                {/* Inventory Status */}
-                <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+              {/* Row 2 — Asymmetric: Velocity big (2/3) + Inventory donut small (1/3) */}
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                {/* Sell-through Velocity — big card (2/3 width) */}
+                <div className="xl:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
                   <div className="flex items-center gap-2 mb-5">
-                    <Package className="w-4 h-4" style={{ color: C.red }} />
-                    <h2 className="text-base font-bold text-gray-900">Inventory Status</h2>
-                    <span className="ml-auto text-sm text-gray-500">{totalUnits} ยูนิต</span>
+                    <DollarSign className="w-4 h-4" style={{ color: C.red }} />
+                    <h3 className="text-base font-bold text-gray-900">ความเร็วขายสต๊อก</h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-4 rounded-xl bg-gray-50">
+                      <p className="text-[11px] text-gray-500 mb-1">อัตราขายเฉลี่ย (90 วัน)</p>
+                      <p className="text-2xl font-bold text-gray-900 tabular-nums leading-none">
+                        {sellThroughPerMonth.toFixed(1)}
+                      </p>
+                      <p className="text-[10px] text-gray-500 mt-1">ยูนิต / เดือน</p>
+                    </div>
+                    <div className="p-4 rounded-xl bg-gray-50">
+                      <p className="text-[11px] text-gray-500 mb-1">Days of Inventory</p>
+                      <p className="text-2xl font-bold text-gray-900 tabular-nums leading-none">
+                        {daysOfInventory !== null ? daysOfInventory.toFixed(0) : '—'}
+                      </p>
+                      <p className="text-[10px] text-gray-500 mt-1">เดือน</p>
+                    </div>
                   </div>
 
+                  {/* Monthly sales bar chart */}
+                  <div className="mt-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-gray-500">ยูนิตที่ขายได้ต่อเดือน</p>
+                      <span className="text-xs font-semibold text-gray-700 tabular-nums">
+                        รวม {salesByMonth12mo.reduce((s, m) => s + m.count, 0)} ยูนิต / 12 เดือน
+                      </span>
+                    </div>
+                    <ResponsiveContainer width="100%" height={90}>
+                      <BarChart data={salesByMonth12mo} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                        <Bar dataKey="count" fill={C.red} radius={[3, 3, 0, 0]} />
+                        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: '#fafafa' }} formatter={(v) => [`${v} ยูนิต`, '']} labelFormatter={(l) => `${l}`} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <p className="text-[11px] text-gray-400 mt-3 pt-3 border-t border-gray-100">
+                    มาตรฐานอุตสาหกรรมไทย: 18-24 เดือน · {daysOfInventory === null ? 'ยังไม่มีข้อมูล' : daysOfInventory > 24 ? 'เกินมาตรฐาน — สต๊อกค้าง' : daysOfInventory > 18 ? 'อยู่ในระดับสูง — เฝ้าระวัง' : 'อยู่ในเกณฑ์ดี'}
+                  </p>
+                </div>
+
+                {/* Inventory Status — narrow card (1/3 width), vertical stack */}
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Package className="w-4 h-4" style={{ color: C.red }} />
+                    <h3 className="text-base font-bold text-gray-900">Inventory Status</h3>
+                  </div>
                   {totalUnits === 0 ? (
                     <div className="h-[220px] flex items-center justify-center text-sm text-gray-400">ยังไม่มียูนิตในระบบ</div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-center">
-                      <ResponsiveContainer width="100%" height={200}>
-                        <PieChart>
-                          <Pie
-                            data={donutData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={50}
-                            outerRadius={80}
-                            paddingAngle={3}
-                            dataKey="value"
-                          >
-                            {donutData.map((d, i) => <Cell key={i} fill={d.color} stroke="white" strokeWidth={2} />)}
-                          </Pie>
-                          <Tooltip
-                            contentStyle={tooltipStyle}
-                            formatter={(v) => [`${v} ยูนิต`, '']}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
-
-                      <div className="space-y-3">
+                    <>
+                      <div className="relative">
+                        <ResponsiveContainer width="100%" height={180}>
+                          <PieChart>
+                            <Pie data={donutData} cx="50%" cy="50%" innerRadius={52} outerRadius={76} paddingAngle={3} dataKey="value">
+                              {donutData.map((d, i) => <Cell key={i} fill={d.color} stroke="white" strokeWidth={2} />)}
+                            </Pie>
+                            <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v} ยูนิต`, '']} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                          <p className="text-2xl font-bold text-gray-900 tabular-nums leading-none">{totalUnits}</p>
+                          <p className="text-[11px] text-gray-500 mt-1">ยูนิตทั้งหมด</p>
+                        </div>
+                      </div>
+                      <div className="space-y-2.5 mt-3">
                         <StatusRow color={C.green} label="พร้อมขาย" count={availableCount} total={totalUnits} />
                         <StatusRow color={C.amber} label="จองอยู่"  count={reservedCount} total={totalUnits} />
                         <StatusRow color={C.red}   label="ขายแล้ว"  count={soldCount} total={totalUnits} />
-                        <div className="pt-3 mt-2 border-t border-gray-100 space-y-1.5">
-                          <div className="flex justify-between text-xs">
-                            <span className="text-gray-500">มูลค่าคงค้าง</span>
-                            <span className="font-semibold tabular-nums">{formatTHB(inventoryValue)}</span>
-                          </div>
-                          <div className="flex justify-between text-xs">
-                            <span className="text-gray-500">มัดจำคงค้าง</span>
-                            <span className="font-semibold tabular-nums">{formatTHB(pipelineDeposit)}</span>
-                          </div>
-                        </div>
                       </div>
-                    </div>
+                    </>
                   )}
-                </div>
-
-                {/* Sell-through Velocity */}
-                <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
-                  <div className="flex items-center gap-2 mb-5">
-                    <DollarSign className="w-4 h-4" style={{ color: C.red }} />
-                    <h2 className="text-base font-bold text-gray-900">Sell-Through Velocity</h2>
-                  </div>
-
-                  <div className="space-y-5">
-                    <div className="p-4 rounded-xl bg-gray-50">
-                      <p className="text-xs text-gray-600 mb-1">อัตราขายเฉลี่ย (90 วัน)</p>
-                      <p className="text-3xl font-bold text-gray-900">
-                        {sellThroughPerMonth.toFixed(1)}<span className="text-base font-medium text-gray-500 ml-1.5">ยูนิต / เดือน</span>
-                      </p>
-                    </div>
-
-                    <div className="p-4 rounded-xl bg-gray-50">
-                      <p className="text-xs text-gray-600 mb-1">Days of Inventory</p>
-                      <p className="text-3xl font-bold text-gray-900">
-                        {daysOfInventory !== null ? `${daysOfInventory.toFixed(0)} ` : '— '}
-                        <span className="text-base font-medium text-gray-500 ml-1.5">เดือน</span>
-                      </p>
-                      <p className="text-[11px] text-gray-500 mt-1">
-                        {daysOfInventory === null
-                          ? 'ยังไม่มีข้อมูลการขาย 90 วันล่าสุด'
-                          : daysOfInventory > 24
-                          ? 'เกินมาตรฐานอุตสาหกรรม (18-24 เดือน)'
-                          : daysOfInventory > 18
-                          ? 'อยู่ในระดับสูง — เฝ้าระวัง'
-                          : 'อยู่ในเกณฑ์ดี'}
-                      </p>
-                    </div>
-
-                    <div className="text-xs text-gray-400 pt-1">
-                      มาตรฐานอุตสาหกรรมไทย: 18-24 เดือน · เกิน 24 = สต๊อกค้าง
-                    </div>
-                  </div>
                 </div>
               </div>
 
-              {/* === Row 3: Top Projects + Conversion Funnel === */}
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                {/* Top Selling Projects */}
-                <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+              {/* Row 3 — Asymmetric: Top Projects big (2/3) + ASP breakdown small (1/3) */}
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                {/* Top Projects — big card (2/3 width) */}
+                <div className="xl:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-6 flex flex-col">
                   <div className="flex items-center gap-2 mb-1">
                     <Building2 className="w-4 h-4" style={{ color: C.red }} />
-                    <h2 className="text-base font-bold text-gray-900">โครงการที่ขายดีที่สุด</h2>
+                    <h3 className="text-base font-bold text-gray-900">โครงการที่ขายดี</h3>
                   </div>
                   <p className="text-xs text-gray-500 mb-4">ยอดขาย 12 เดือนล่าสุด · Top 5</p>
-
                   {topProjects.length === 0 ? (
                     <div className="h-[260px] flex items-center justify-center text-sm text-gray-400">
                       ยังไม่มียอดขายใน 12 เดือนล่าสุด
                     </div>
                   ) : (
                     <>
-                      <ResponsiveContainer width="100%" height={250}>
+                      <ResponsiveContainer width="100%" height={260}>
                         <BarChart data={topProjects} layout="vertical" margin={{ top: 5, right: 30, left: 5, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
                           <XAxis type="number" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatTHB(Number(v))} />
                           <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#374151' }} axisLine={false} tickLine={false} width={120} />
-                          <Tooltip
-                            contentStyle={tooltipStyle}
-                            formatter={(v) => [formatTHB(Number(v)), 'ยอดขาย']}
-                          />
+                          <Tooltip contentStyle={tooltipStyle} formatter={(v) => [formatTHB(Number(v)), 'ยอดขาย']} />
                           <Bar dataKey="value" fill={C.red} radius={[0, 6, 6, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
-
                       {allRevenue12mo > 0 && (
-                        <p className="text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
+                        <p className="text-xs text-gray-500 mt-auto pt-3 border-t border-gray-100">
                           {topProjects[0].name} คิดเป็น <span className="font-semibold text-gray-700">{((topProjects[0].value / allRevenue12mo) * 100).toFixed(0)}%</span> ของรายได้ 12 เดือน
                         </p>
                       )}
@@ -520,30 +556,39 @@ const Index = () => {
                   )}
                 </div>
 
-                {/* Conversion Funnel */}
-                <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+                {/* ASP breakdown by type — narrow card (1/3 width) */}
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6 flex flex-col">
                   <div className="flex items-center gap-2 mb-1">
-                    <TrendingUp className="w-4 h-4" style={{ color: C.redDeep }} />
-                    <h2 className="text-base font-bold text-gray-900">Conversion Funnel</h2>
+                    <Tag className="w-4 h-4" style={{ color: C.red }} />
+                    <h3 className="text-base font-bold text-gray-900">ราคาเฉลี่ยตามประเภท</h3>
                   </div>
-                  <p className="text-xs text-gray-500 mb-5">Lead → ปิดดีล</p>
-
-                  <div className="space-y-3.5">
-                    <FunnelStep label="ลูกค้าสนใจทั้งหมด" value={leadsTotal} max={Math.max(leadsTotal, 1)} color="#cbd5e1" />
-                    <FunnelStep label="ติดต่อแล้ว +" value={leadsContacted} max={Math.max(leadsTotal, 1)} color={C.gray} />
-                    <FunnelStep label="มีคุณสมบัติ +" value={leadsQualified} max={Math.max(leadsTotal, 1)} color={C.charcoal} />
-                    <FunnelStep label="กำลังเจรจา +" value={leadsNegotiating} max={Math.max(leadsTotal, 1)} color={C.amber} />
-                    <FunnelStep label="ปิดดีลแล้ว" value={leadsWon} max={Math.max(leadsTotal, 1)} color={C.green} />
-                  </div>
-
-                  <div className="mt-5 pt-5 border-t border-gray-100">
-                    <div className="rounded-xl p-3 bg-gray-50">
-                      <p className="text-xs text-gray-600">อัตราปิดดีล</p>
-                      <p className="text-2xl font-bold tabular-nums" style={{ color: C.green }}>
-                        {conversionRate.toFixed(1)}<span className="text-sm">%</span>
+                  <p className="text-xs text-gray-500 mb-4">90 วันล่าสุด</p>
+                  {aspByType.length > 1 ? (
+                    <>
+                      <div className="space-y-2.5">
+                        {aspByType.map((p) => {
+                          const max = Math.max(...aspByType.map((x) => x.avg), 1);
+                          const pct = (p.avg / max) * 100;
+                          return (
+                            <div key={p.label}>
+                              <div className="flex justify-between items-baseline text-sm mb-1">
+                                <span className="text-gray-600">{p.label}</span>
+                                <span className="font-bold text-gray-900 tabular-nums">{formatTHB(p.avg)}</span>
+                              </div>
+                              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: C.red }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[11px] text-gray-500 mt-auto pt-3 border-t border-gray-100">
+                        จาก <span className="font-semibold text-gray-700">{recent90Sold.length}</span> ดีลใน 90 วันที่ผ่านมา
                       </p>
-                    </div>
-                  </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-gray-400 text-center py-8">มีประเภทเดียว — ดูภาพรวมที่ KPI ด้านบน</p>
+                  )}
                 </div>
               </div>
             </>
@@ -555,34 +600,6 @@ const Index = () => {
 };
 
 // ─── Sub-components ─────────────────────────────────────────────
-
-interface FinancialCardProps {
-  title: string;
-  value: string;
-  icon: React.ElementType;
-  color: string;
-  bg: string;
-  sub?: React.ReactNode;
-}
-
-const FinancialCard = ({ title, value, icon: Icon, color, bg, sub }: FinancialCardProps) => (
-  <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200">
-    <div className="flex items-start justify-between mb-4">
-      <p className="text-sm font-medium text-gray-500 leading-tight pt-1.5">{title}</p>
-      <div
-        className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
-        style={{
-          background: `linear-gradient(135deg, ${bg}f0 0%, ${bg} 100%)`,
-          boxShadow: `inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 2px ${color}15`,
-        }}
-      >
-        <Icon className="w-5 h-5" style={{ color }} strokeWidth={2.2} />
-      </div>
-    </div>
-    <p className="text-[28px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{value}</p>
-    <div className="mt-3.5 min-h-[20px]">{sub}</div>
-  </div>
-);
 
 const ChangeBadge = ({ value, label }: { value: number; label: string }) => {
   const up = value >= 0;
@@ -618,19 +635,62 @@ const StatusRow = ({ color, label, count, total }: { color: string; label: strin
   );
 };
 
-const FunnelStep = ({ label, value, max, color }: { label: string; value: number; max: number; color: string }) => {
-  const pct = (value / max) * 100;
-  return (
-    <div>
-      <div className="flex items-center justify-between text-sm mb-1.5">
-        <span className="text-gray-700">{label}</span>
-        <span className="font-semibold tabular-nums text-gray-900">{value.toLocaleString()}</span>
+// Sparkline — small area chart for trend visualization inside cards
+interface SparklineData { value?: number; count?: number; month?: string }
+const Sparkline = ({ data, color, height = 60, dataKey = 'value', labelPrefix = 'เดือน' }: { data: SparklineData[]; color: string; height?: number; dataKey?: string; labelPrefix?: string }) => (
+  <ResponsiveContainer width="100%" height={height}>
+    <AreaChart data={data} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+      <Area
+        type="monotone"
+        dataKey={dataKey}
+        stroke={color}
+        strokeWidth={2}
+        fill={color}
+        fillOpacity={0.12}
+      />
+      <Tooltip
+        contentStyle={tooltipStyle}
+        labelStyle={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        labelFormatter={(_label, payload: any) => payload?.[0]?.payload?.month ? `${labelPrefix} ${payload[0].payload.month}` : ''}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        formatter={(v: any) => [typeof v === 'number' && v > 1000 ? formatTHB(v) : String(v), 'ยอดขาย']}
+        cursor={false}
+      />
+    </AreaChart>
+  </ResponsiveContainer>
+);
+
+// Compact KPI card — left accent stripe + small icon + optional sparkline footer
+interface CompactKpiCardProps {
+  title: string;
+  value: string;
+  icon: React.ElementType;
+  accentColor: string;
+  bg: string;
+  sub?: React.ReactNode;
+  sparkData?: SparklineData[];
+  sparkLabelPrefix?: string;
+}
+const CompactKpiCard = ({ title, value, icon: Icon, accentColor, bg, sub, sparkData, sparkLabelPrefix }: CompactKpiCardProps) => (
+  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 relative overflow-hidden">
+    <div className="p-5 pl-6">
+      <div className="flex items-start justify-between mb-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 pt-1">{title}</p>
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+             style={{ background: `linear-gradient(135deg, ${bg}f0 0%, ${bg} 100%)` }}>
+          <Icon className="w-4 h-4" style={{ color: accentColor }} strokeWidth={2.2} />
+        </div>
       </div>
-      <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: color }} />
-      </div>
+      <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{value}</p>
+      <div className="mt-2.5 min-h-[18px]">{sub}</div>
     </div>
-  );
-};
+    {sparkData && sparkData.length > 0 && (
+      <div className="px-1 pb-1">
+        <Sparkline data={sparkData} color={accentColor} height={32} labelPrefix={sparkLabelPrefix} />
+      </div>
+    )}
+  </div>
+);
 
 export default Index;

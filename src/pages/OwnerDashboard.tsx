@@ -489,9 +489,9 @@ const OwnerDashboard = () => {
   };
 
   const tenantStatusData = [
-    { name: 'Active',    value: stats.activeTenants, color: KK.green },
-    { name: 'Trial',     value: stats.trialTenants, color: KK.amber },
-    { name: 'Suspended', value: Math.max(0, stats.totalTenants - stats.activeTenants - stats.trialTenants), color: KK.red },
+    { name: 'ใช้งาน',    value: stats.activeTenants, color: KK.green },
+    { name: 'ทดลองใช้', value: stats.trialTenants, color: KK.amber },
+    { name: 'ระงับ',     value: Math.max(0, stats.totalTenants - stats.activeTenants - stats.trialTenants), color: KK.red },
   ].filter(d => d.value > 0);
 
   const planRevenueData = [
@@ -517,18 +517,18 @@ const OwnerDashboard = () => {
                   Platform Overview
                 </span>
                 <h1 className="text-[34px] font-bold text-gray-900 leading-tight tracking-tight">Platform Overview</h1>
-                <p className="text-[15px] text-gray-500 mt-1.5">ภาพรวมระบบ SaaS Platform · MRR / ARR / Tenants / Churn · อัปเดตล่าสุด {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
+                <p className="text-[15px] text-gray-500 mt-1.5">ภาพรวมระบบแพลตฟอร์ม · รายได้ · บริษัท · อัตราเลิกใช้ · อัปเดตล่าสุด {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
               </div>
             </div>
 
             {/* === KPI Row (5 cards) === */}
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
               {[
-                { title: 'รายได้ต่อเดือน (MRR)', value: formatCurrency(stats.monthlyRevenue), icon: DollarSign,  color: KK.red,    bg: KK.redLight,    trend: { value: stats.mrrGrowth, up: stats.mrrGrowth >= 0 } },
-                { title: 'รายได้ต่อปี (ARR)',     value: formatCurrency(stats.annualRunRate),  icon: TrendingUp,  color: KK.purple, bg: KK.purpleLight, sub: 'MRR × 12' },
-                { title: 'บริษัททั้งหมด',         value: stats.totalTenants.toLocaleString(),  icon: Building2,   color: KK.blue,   bg: KK.blueLight,   sub: `${stats.activeTenants} Active · ${stats.trialTenants} Trial` },
+                { title: 'รายได้ต่อเดือน', value: formatCurrency(stats.monthlyRevenue), icon: DollarSign,  color: KK.red,    bg: KK.redLight,    trend: { value: stats.mrrGrowth, up: stats.mrrGrowth >= 0 } },
+                { title: 'รายได้ต่อปี',     value: formatCurrency(stats.annualRunRate),  icon: TrendingUp,  color: KK.purple, bg: KK.purpleLight, sub: 'รายได้ต่อเดือน × 12' },
+                { title: 'บริษัททั้งหมด',         value: stats.totalTenants.toLocaleString(),  icon: Building2,   color: KK.blue,   bg: KK.blueLight,   sub: `${stats.activeTenants} ใช้งาน · ${stats.trialTenants} ทดลอง` },
                 { title: 'ผู้ใช้ทั้งหมด',          value: stats.totalUsers.toLocaleString(),    icon: Users,       color: KK.green,  bg: KK.greenLight,  sub: `~${stats.totalTenants > 0 ? Math.round(stats.totalUsers / stats.totalTenants) : 0} คน/บริษัท` },
-                { title: 'อัตราเลิกใช้ (Churn)',  value: `${stats.churnRate}%`,                icon: TrendingDown,color: stats.churnRate > 5 ? KK.red : KK.green, bg: stats.churnRate > 5 ? KK.redLight : KK.greenLight, sub: 'เดือนนี้' },
+                { title: 'อัตราเลิกใช้',  value: `${stats.churnRate}%`,                icon: TrendingDown,color: stats.churnRate > 5 ? KK.red : KK.green, bg: stats.churnRate > 5 ? KK.redLight : KK.greenLight, sub: 'เดือนนี้' },
               ].map((kpi, i) => (
                 <div key={i} className="bg-white border border-gray-100 rounded-2xl p-6 shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200">
                   <div className="flex items-start justify-between mb-5">
@@ -564,8 +564,8 @@ const OwnerDashboard = () => {
               <div className="xl:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h2 className="text-base font-bold text-gray-900">แนวโน้มรายได้ (MRR)</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">6 เดือนที่ผ่านมา · รวมทุก plan</p>
+                    <h2 className="text-base font-bold text-gray-900">แนวโน้มรายได้</h2>
+                    <p className="text-xs text-gray-500 mt-0.5">6 เดือนที่ผ่านมา · รวมทุกแพ็กเกจ</p>
                   </div>
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: KK.red, backgroundColor: KK.redLight }}>6 เดือน</span>
                 </div>
@@ -626,9 +626,9 @@ const OwnerDashboard = () => {
               <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                 <div className="flex items-center gap-2 mb-1">
                   <DollarSign className="w-4 h-4" style={{ color: KK.green }} />
-                  <h2 className="text-base font-bold text-gray-900">รายได้ตาม Plan</h2>
+                  <h2 className="text-base font-bold text-gray-900">รายได้ตามแพ็กเกจ</h2>
                 </div>
-                <p className="text-xs text-gray-500 mb-4">MRR per subscription tier</p>
+                <p className="text-xs text-gray-500 mb-4">รายได้ต่อเดือน แยกตามระดับการสมัครสมาชิก</p>
                 <div className="space-y-3">
                   {planRevenueData.map((item, i) => {
                     const widthPct = (item.value / maxPlanRevenue) * 100;

@@ -4,6 +4,7 @@ import { Home, Building2, User, ArrowLeft, LogOut, FileText, Bell, Heart, Calend
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { captureReferralFromUrl } from '@/lib/referralCode';
+import { incrementLeadCounter, trackWebsiteVisitOncePerSession } from '@/lib/leadTracking';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
@@ -150,6 +151,13 @@ const CustomerLayout = ({ children, title, subtitle, showBack = false, backTo, h
   useEffect(() => {
     captureReferralFromUrl();
   }, []);
+
+  // Engagement tracking — feeds ML lead scoring with real signals (not seeded test data).
+  // Fires on every page navigation; silently no-ops for anonymous visitors.
+  useEffect(() => {
+    void trackWebsiteVisitOncePerSession();
+    void incrementLeadCounter({ field: 'pages_viewed' });
+  }, [location.pathname]);
 
   useEffect(() => {
     let channel: any = null;

@@ -15,10 +15,33 @@ export async function recomputeLeadScore(leadId: string): Promise<void> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: lead, error } = await (supabase.from('leads') as any)
-      .select('credit_score, monthly_income, monthly_debt, employment_type, years_employed, age, gender, marital_status, education, household_size, down_payment_ready, savings, has_co_borrower, number_of_dependents, is_first_time_buyer, website_visits, pages_viewed, time_on_site, brochure_downloads, site_visit_attended, urgency_level, decision_maker, financing_approved, estimated_value, priority, max_loan_amount, loan_last_updated, score_last_updated')
+      .select('credit_score, monthly_income, monthly_debt, employment_type, years_employed, age, gender, marital_status, education, household_size, down_payment_ready, savings, has_co_borrower, number_of_dependents, is_first_time_buyer, website_visits, pages_viewed, time_on_site, brochure_downloads, site_visit_attended, interaction_count, urgency_level, decision_maker, financing_approved, estimated_value, priority, purchase_timeline, max_loan_amount, loan_last_updated, score_last_updated')
       .eq('id', leadId)
       .maybeSingle();
     if (error || !lead) return;
+
+    // Auto-compute estimated_value from lead_interests (Sansiri/AP pattern):
+    //   max(unit.price across all interested units) — sales optimism
+    //   fallback to current estimated_value if no unit interests yet
+    let computedValue: number | null = lead.estimated_value;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: interests } = await (supabase.from('lead_interests') as any)
+        .select('unit_id')
+        .eq('lead_id', leadId);
+      const unitIds = (interests || []).map((i: any) => i.unit_id).filter(Boolean);
+      if (unitIds.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: units } = await (supabase.from('units') as any)
+          .select('price')
+          .in('id', unitIds);
+        const prices = (units || []).map((u: any) => Number(u.price || 0)).filter((p: number) => p > 0);
+        if (prices.length > 0) {
+          computedValue = Math.max(...prices);
+          lead.estimated_value = computedValue;
+        }
+      }
+    } catch { /* ignore — fallback to existing value */ }
 
     // Detect manual override: Sales set loan_last_updated AFTER score_last_updated
     // (or score_last_updated is null) — recompute should leave max_loan_amount alone.
@@ -28,7 +51,6 @@ export async function recomputeLeadScore(leadId: string): Promise<void> {
     // Map DB nulls → undefined for the scoring library
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const scoringInput: LeadScoringData = {
-      credit_score: lead.credit_score ?? undefined,
       monthly_income: lead.monthly_income ?? undefined,
       monthly_debt: lead.monthly_debt ?? 0,
       employment_type: (lead.employment_type ?? undefined) as any,
@@ -40,17 +62,20 @@ export async function recomputeLeadScore(leadId: string): Promise<void> {
       household_size: lead.household_size ?? undefined,
       down_payment_ready: lead.down_payment_ready ?? 0,
       savings: lead.savings ?? 0,
-      website_visits: lead.website_visits ?? 0,
-      pages_viewed: lead.pages_viewed ?? 0,
-      time_on_site: lead.time_on_site ?? 0,
-      brochure_downloads: lead.brochure_downloads ?? 0,
-      site_visit_attended: lead.site_visit_attended ?? false,
-      urgency_level: (lead.urgency_level ?? 'medium') as any,
-      interest_level: (lead.priority ?? 'medium') as any,  // priority on lead = interest_level proxy
+      // Behavioral — pass through nulls as undefined so the scoring engine can mark them
+      // "ข้อมูลไม่พอ" instead of pretending a fresh lead has 0 engagement.
+      website_visits: lead.website_visits ?? undefined,
+      pages_viewed: lead.pages_viewed ?? undefined,
+      time_on_site: lead.time_on_site ?? undefined,
+      brochure_downloads: lead.brochure_downloads ?? undefined,
+      site_visit_attended: lead.site_visit_attended ?? undefined,
+      interaction_count: lead.interaction_count ?? undefined,
+      // priority is the Sales-controlled high/medium/low signal exposed in Lead Detail.
+      urgency_level: (lead.priority as any) || undefined,
       decision_maker: lead.decision_maker ?? undefined,
       financing_approved: lead.financing_approved ?? undefined,
       budget_max: lead.estimated_value ?? undefined,
-      purchase_timeline: '3_months',
+      purchase_timeline: lead.purchase_timeline ?? undefined,
     } as any;
 
     const score = calculateLeadScore(scoringInput);
@@ -61,7 +86,9 @@ export async function recomputeLeadScore(leadId: string): Promise<void> {
       const loanInput: LoanEstimationInput = {
         monthly_income: Number(lead.monthly_income),
         monthly_debt: Number(lead.monthly_debt || 0),
-        credit_score: lead.credit_score ?? 700,
+        // Loan estimator requires a credit score for its rate tier; UI no longer
+        // collects it, so use 700 (market-average tier) as a stand-in assumption.
+        credit_score: 700,
         property_value: Number(lead.estimated_value),
         down_payment: Number(lead.down_payment_ready || 0),
         age: lead.age ?? undefined,
@@ -82,6 +109,7 @@ export async function recomputeLeadScore(leadId: string): Promise<void> {
       urgency_score: score.score_breakdown.urgency_score,
       fit_score: score.score_breakdown.fit_score,
       conversion_probability: score.conversion_probability,
+      estimated_value: computedValue,
       score_last_updated: new Date().toISOString(),
     };
     if (loanResult && !loanWasManuallySet) {

@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { useSimpleAuth } from '@/contexts/AuthContextSimple'
 import { Building2, Loader2 } from 'lucide-react'
 
+type UserRole = 'owner' | 'admin' | 'sales' | 'agent' | 'customer'
+
 interface SimpleProtectedRouteProps {
   children: ReactNode
   onlyGuests?: boolean
-  requireRole?: 'owner' | 'admin' | 'sales' | 'agent' | 'customer'
+  requireRole?: UserRole | UserRole[]
 }
 
 export const ProtectedRouteSimple = ({
@@ -43,8 +45,11 @@ export const ProtectedRouteSimple = ({
     }
 
     // Check role requirements
-    if (authChecked && user && requireRole && userRole !== requireRole) {
-      navigate('/', { replace: true })
+    if (authChecked && user && requireRole) {
+      const allowed = Array.isArray(requireRole) ? requireRole : [requireRole]
+      if (!allowed.includes(userRole as UserRole)) {
+        navigate('/', { replace: true })
+      }
     }
   }, [user, onlyGuests, requireRole, userRole, navigate, authChecked, passwordResetRequired])
 
@@ -85,7 +90,8 @@ export const ProtectedRouteSimple = ({
     }
 
     // Check role requirements
-    if (requireRole && userRole !== requireRole) {
+    const allowedRoles = requireRole ? (Array.isArray(requireRole) ? requireRole : [requireRole]) : null
+    if (allowedRoles && !allowedRoles.includes(userRole as UserRole)) {
       return (
         <div className="min-h-screen bg-white flex items-center justify-center px-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-red-200 p-8 max-w-md">

@@ -2,7 +2,7 @@
 // Syncs localStorage (fast offline reads) with lead_interests (DB, Sales-visible).
 //
 // Design (Option A — industry-standard, Sansiri/AP/DDproperty style):
-// - Customer ❤️ a unit → entry exists in BOTH localStorage AND lead_interests
+// - Customer saves a unit → entry exists in BOTH localStorage AND lead_interests
 // - Sales sees every saved unit (potential lead) → low-priority by default
 // - Customer scheduling a visit → updates same row to status='viewing_scheduled', interest_level='high'
 import { supabase } from './supabase';

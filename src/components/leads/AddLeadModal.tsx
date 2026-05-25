@@ -217,7 +217,6 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
     family_members: "",
     education: "",
     // Lead Scoring - Financial
-    credit_score: "",
     down_payment_ready: "",
     savings: "",
     // Lead Scoring - Employment
@@ -608,7 +607,6 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
       monthly_debt: "",
       family_members: "",
       education: "",
-      credit_score: "",
       down_payment_ready: "",
       savings: "",
       employment_type: "",
@@ -884,7 +882,6 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
         referred_by_agent_id: referredByAgentId,
         notes: `จุดประสงค์: ${purchasePurpose}`,
         // Lead Scoring - Financial fields
-        credit_score: formData.credit_score ? parseInt(formData.credit_score) : null,
         monthly_income: formData.monthly_income ? parseFloat(formData.monthly_income) : null,
         monthly_debt: formData.monthly_debt ? parseFloat(formData.monthly_debt) : null,
         down_payment_ready: formData.down_payment_ready ? parseFloat(formData.down_payment_ready) : null,
@@ -954,7 +951,6 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const scoringData: LeadScoringData = ({
-            credit_score: leadData.credit_score ?? undefined,
             monthly_income: leadData.monthly_income ?? undefined,
             monthly_debt: leadData.monthly_debt || 0,
             employment_type: (leadData.employment_type ?? undefined) as any,
@@ -966,15 +962,14 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
             household_size: leadData.household_size ?? undefined,
             down_payment_ready: leadData.down_payment_ready || 0,
             savings: leadData.savings || 0,
-            // Mock behavioral data (would come from tracking in production)
-            website_visits: 1,
-            pages_viewed: 1,
-            time_on_site: 5,
-            urgency_level: firstInterest.interest_level === 'high' ? 'high' :
-                           firstInterest.interest_level === 'low' ? 'low' : 'medium',
-            interest_level: firstInterest.interest_level || 'medium',
+            // Behavioral fields intentionally omitted — a brand-new lead has no tracking
+            // data yet. Leaving them undefined makes the engagement category honestly show
+            // "ข้อมูลไม่พอ" until the customer browses or Sales records interactions.
+            // urgency_level comes from leads.priority (set later by Sales); fresh lead = undefined
+            urgency_level: ((leadData as any).priority as any) || undefined,
+            interest_level: firstInterest.interest_level || undefined,
             budget_max: propertyPrice,
-            purchase_timeline: '3_months',
+            // purchase_timeline is set later via EditLeadModal; do not assume a default.
           } as any);
 
           // Calculate scores
@@ -989,7 +984,9 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
             monthly_debt: leadData.monthly_debt || 0,
             property_value: propertyPrice,
             down_payment: leadData.down_payment_ready || 0,
-            credit_score: leadData.credit_score || 700,
+            // Loan estimator requires a credit score for its interest-rate tier lookup.
+            // Sales don't see this field, so use 700 (market-average tier) as the assumption.
+            credit_score: 700,
             age: leadData.age ?? undefined,
             employment_type: (leadData.employment_type ?? undefined) as any,
             years_employed: leadData.years_employed ?? undefined,
@@ -1010,6 +1007,8 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
               urgency_score: potentialScore.score_breakdown.urgency_score,
               fit_score: potentialScore.score_breakdown.fit_score,
               conversion_probability: potentialScore.conversion_probability,
+              // Auto-set deal value from interested unit price (Sansiri/AP pattern)
+              estimated_value: propertyPrice > 0 ? propertyPrice : null,
               max_loan_amount: loanEstimation?.max_loan_amount || null,
               estimated_monthly_payment: loanEstimation?.monthly_payment || null,
               estimated_interest_rate: loanEstimation?.interest_rate || null,
@@ -1630,21 +1629,6 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
                             onChange={(e) => setFormData(prev => ({ ...prev, monthly_debt: e.target.value }))}
                             placeholder="0"
                             min="0"
-                            disabled={loading}
-                            className="mt-1.5"
-                          />
-                        </div>
-
-                        <div>
-                          <Label htmlFor="credit_score" className="text-sm font-medium">คะแนนเครดิต (300-850)</Label>
-                          <Input
-                            id="credit_score"
-                            type="number"
-                            value={formData.credit_score}
-                            onChange={(e) => setFormData(prev => ({ ...prev, credit_score: e.target.value }))}
-                            placeholder="750"
-                            min="300"
-                            max="850"
                             disabled={loading}
                             className="mt-1.5"
                           />

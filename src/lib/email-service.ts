@@ -60,25 +60,25 @@ export class EmailService {
     return {
       // วันที่ส่งใบแจ้งหนี้
       invoice_created: {
-        subject: '🧾 ใบแจ้งหนี้ใหม่ - CHATEAU Platform',
+        subject: 'ใบแจ้งหนี้ใหม่ - CHATEAU Platform',
         body: `
 เรียน {{tenant_name}}
 
 เรามีความยินดีที่จะแจ้งให้ทราบว่า ใบแจ้งหนี้สำหรับบริการของท่านได้ถูกสร้างแล้ว
 
 รายละเอียดใบแจ้งหนี้:
-📄 หมายเลข: {{invoice_number}}
-💰 จำนวนเงิน: {{amount}} บาท
-📅 กำหนดชำระ: {{due_date}}
+หมายเลข: {{invoice_number}}
+จำนวนเงิน: {{amount}} บาท
+กำหนดชำระ: {{due_date}}
 
 วิธีการชำระเงิน:
-🏦 โอนเข้าบัญชี: xxx-x-xxxxx-x ธนาคารกสิกรไทย
-📱 สแกน QR Code PromptPay: (แนบในเอกสาร)
-💳 เช็คสำหรับองค์กร
+- โอนเข้าบัญชี: xxx-x-xxxxx-x ธนาคารกสิกรไทย
+- สแกน QR Code PromptPay: (แนบในเอกสาร)
+- เช็คสำหรับองค์กร
 
 เมื่อชำระเงินแล้ว กรุณาแจ้งกลับมาที่:
-📧 ${process.env.VITE_BILLING_EMAIL || 'billing@chateau-platform.com'}
-📞 ${process.env.VITE_SUPPORT_PHONE || '02-xxx-xxxx'}
+อีเมล: ${process.env.VITE_BILLING_EMAIL || 'billing@chateau-platform.com'}
+โทร: ${process.env.VITE_SUPPORT_PHONE || '02-xxx-xxxx'}
 
 ขอขอบคุณที่ใช้บริการ CHATEAU Platform
         `,
@@ -87,17 +87,17 @@ export class EmailService {
 
       // 4 วันหลังส่งใบแจ้งหนี้ (เหลือ 3 วัน)
       reminder_3_days: {
-        subject: '⏰ แจ้งเตือน: เหลือ 3 วัน ครบกำหนดชำระ',
+        subject: 'แจ้งเตือน: เหลือ 3 วัน ครบกำหนดชำระ',
         body: `
 เรียน {{tenant_name}}
 
 แจ้งเตือนการชำระเงิน - เหลือ 3 วันก่อนครบกำหนด
 
 รายละเอียด:
-📄 ใบแจ้งหนี้: {{invoice_number}}
-💰 จำนวนเงิน: {{amount}} บาท
-📅 ครบกำหนด: {{due_date}}
-⏰ เหลือเวลา: 3 วัน
+ใบแจ้งหนี้: {{invoice_number}}
+จำนวนเงิน: {{amount}} บาท
+ครบกำหนด: {{due_date}}
+เหลือเวลา: 3 วัน
 
 หากชำระเงินแล้ว กรุณาแจ้งกลับมาเพื่อยืนยัน
         `,
@@ -106,17 +106,17 @@ export class EmailService {
 
       // 14 วันหลังส่งใบแจ้งหนี้ (เหลือ 1 วัน)
       reminder_1_day: {
-        subject: '🚨 ด่วน: พรุ่งนี้ครบกำหนดชำระ',
+        subject: 'ด่วน: พรุ่งนี้ครบกำหนดชำระ',
         body: `
 เรียน {{tenant_name}}
 
 แจ้งเตือนด่วน - พรุ่งนี้ครบกำหนดชำระเงิน
 
 รายละเอียด:
-📄 ใบแจ้งหนี้: {{invoice_number}}
-💰 จำนวนเงิน: {{amount}} บาท
-📅 ครบกำหนด: {{due_date}}
-⚠️ เหลือเวลา: 1 วัน
+ใบแจ้งหนี้: {{invoice_number}}
+จำนวนเงิน: {{amount}} บาท
+ครบกำหนด: {{due_date}}
+เหลือเวลา: 1 วัน
 
 เพื่อป้องกันการหยุดบริการ กรุณาชำระภายในวันพรุ่งนี้
         `,
@@ -125,17 +125,17 @@ export class EmailService {
 
       // 16 วัน (เกินกำหนด 1 วัน)
       overdue_notice: {
-        subject: '❌ เกินกำหนดชำระ - กรุณาชำระด่วน',
+        subject: 'เกินกำหนดชำระ - กรุณาชำระด่วน',
         body: `
 เรียน {{tenant_name}}
 
 แจ้งเตือน: การชำระเงินเกินกำหนดแล้ว {{days_past_due}} วัน
 
 รายละเอียด:
-📄 ใบแจ้งหนี้: {{invoice_number}}
-💰 จำนวนเงิน: {{amount}} บาท
-📅 เกินกำหนด: {{days_past_due}} วัน
-⚠️ Grace Period: เหลือ {{grace_days_left}} วัน
+ใบแจ้งหนี้: {{invoice_number}}
+จำนวนเงิน: {{amount}} บาท
+เกินกำหนด: {{days_past_due}} วัน
+Grace Period: เหลือ {{grace_days_left}} วัน
 
 กรุณาชำระเงินโดยเร็วที่สุด เพื่อป้องกันการระงับบริการ
         `,
@@ -144,62 +144,62 @@ export class EmailService {
 
       // 20 วัน (เกินกำหนด 5 วัน)
       final_warning: {
-        subject: '🔴 คำเตือนสุดท้าย - บริการจะถูกระงับใน 2 วัน',
+        subject: 'คำเตือนสุดท้าย - บริการจะถูกระงับใน 2 วัน',
         body: `
 เรียน {{tenant_name}}
 
 คำเตือนสุดท้าย - บริการจะถูกระงับในอีก 2 วัน
 
 รายละเอียด:
-📄 ใบแจ้งหนี้: {{invoice_number}}
-💰 จำนวนเงิน: {{amount}} บาท
-📅 เกินกำหนด: {{days_past_due}} วัน
-🔴 บริการจะหยุด: {{suspension_date}}
+ใบแจ้งหนี้: {{invoice_number}}
+จำนวนเงิน: {{amount}} บาท
+เกินกำหนด: {{days_past_due}} วัน
+บริการจะหยุด: {{suspension_date}}
 
 กรุณาติดต่อเราโดยด่วนเพื่อหาทางแก้ไข:
-📧 ${process.env.VITE_BILLING_EMAIL || 'billing@chateau-platform.com'}
-📞 ${process.env.VITE_SUPPORT_PHONE || '02-xxx-xxxx'} (กด 2 สำหรับฝ่ายการเงิน)
+อีเมล: ${process.env.VITE_BILLING_EMAIL || 'billing@chateau-platform.com'}
+โทร: ${process.env.VITE_SUPPORT_PHONE || '02-xxx-xxxx'} (กด 2 สำหรับฝ่ายการเงิน)
         `,
         priority: 'urgent'
       },
 
       // 22 วัน (ระงับบริการ)
       service_suspended: {
-        subject: '🚫 บริการถูกระงับ - กรุณาติดต่อด่วน',
+        subject: 'บริการถูกระงับ - กรุณาติดต่อด่วน',
         body: `
 เรียน {{tenant_name}}
 
 บริการ CHATEAU Platform ของท่านถูกระงับแล้ว
 
 สาเหตุ: การชำระเงินเกินกำหนด {{days_past_due}} วัน
-📄 ใบแจ้งหนี้: {{invoice_number}}
-💰 ยอดค้าง: {{amount}} บาท
+ใบแจ้งหนี้: {{invoice_number}}
+ยอดค้าง: {{amount}} บาท
 
 ข้อมูลของท่านยังปลอดภัย แต่ไม่สามารถใช้งานระบบได้จนกว่าจะชำระเงิน
 
 เมื่อชำระเงินแล้ว บริการจะกลับมาใช้งานได้ทันที
 
 ติดต่อเรา:
-📧 ${process.env.VITE_BILLING_EMAIL || 'billing@chateau-platform.com'}
-📞 ${process.env.VITE_SUPPORT_PHONE || '02-xxx-xxxx'} (กด 2 สำหรับฝ่ายการเงิน)
-💬 Line: @chateau-support
+อีเมล: ${process.env.VITE_BILLING_EMAIL || 'billing@chateau-platform.com'}
+โทร: ${process.env.VITE_SUPPORT_PHONE || '02-xxx-xxxx'} (กด 2 สำหรับฝ่ายการเงิน)
+Line: @chateau-support
         `,
         priority: 'urgent'
       },
 
       // เมื่อชำระเงินแล้ว
       payment_received: {
-        subject: '✅ ยืนยันการรับชำระเงิน - ขอบคุณ',
+        subject: 'ยืนยันการรับชำระเงิน - ขอบคุณ',
         body: `
 เรียน {{tenant_name}}
 
 ขอบคุณสำหรับการชำระเงิน
 
 รายละเอียด:
-📄 ใบแจ้งหนี้: {{invoice_number}}
-💰 จำนวนเงิน: {{amount}} บาท
-📅 วันที่ชำระ: {{payment_date}}
-✅ สถานะ: ชำระเงินแล้ว
+ใบแจ้งหนี้: {{invoice_number}}
+จำนวนเงิน: {{amount}} บาท
+วันที่ชำระ: {{payment_date}}
+สถานะ: ชำระเงินแล้ว
 
 บริการของท่านพร้อมใช้งานแล้ว
 เข้าสู่ระบบที่: {{login_url}}

@@ -76,12 +76,23 @@ export interface ScoreBreakdown {
   fit_score: number; // 0-100
 }
 
+// Per-category data completeness (0-1) — tells UI when to dim score or show "ข้อมูลไม่พอ"
+export interface ScoreCoverage {
+  financial: number;
+  engagement: number;
+  urgency: number;
+  fit: number;
+}
+
+export type FactorCategory = 'financial' | 'engagement' | 'urgency' | 'fit';
+
 export interface KeyFactor {
   factor: string;
   impact: ImpactType;
   score: number;
   weight: number;
   description: string;
+  category?: FactorCategory; // present for new scores; legacy scores omit it
 }
 
 export interface PotentialScore {
@@ -92,6 +103,8 @@ export interface PotentialScore {
 
   // Detailed Breakdown
   score_breakdown: ScoreBreakdown;
+  // Coverage per category (0-1) — share of possible factors that had data
+  score_coverage?: ScoreCoverage;
 
   // Analysis
   key_factors: KeyFactor[];
@@ -160,7 +173,10 @@ export interface LoanEstimation {
   // Warnings & Recommendations
   warnings: string[];
   recommendations: string[];
-  approval_factors: KeyFactor[];
+
+  // Source of the max_loan_amount — 'estimate' = system formula, 'manual' = bank
+  // Pre-approval entered by Sales. Drives the "ธนาคารอนุมัติแล้ว" badge in the UI.
+  source?: 'estimate' | 'manual';
 
   // Metadata
   calculated_at: Date;

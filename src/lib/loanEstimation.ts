@@ -261,110 +261,6 @@ function calculateApprovalProbability(
 }
 
 // ========================================
-// Generate Approval Factors
-// ========================================
-
-function generateApprovalFactors(
-  creditScore: number,
-  dtiRatio: number,
-  ltvRatio: number,
-  yearsEmployed?: number
-): KeyFactor[] {
-  const factors: KeyFactor[] = [];
-
-  // Credit Score Factor
-  let creditImpact: 'positive' | 'negative' | 'neutral' = 'neutral';
-  let creditScore_display = creditScore;
-
-  if (creditScore >= 750) {
-    creditImpact = 'positive';
-  } else if (creditScore < 650) {
-    creditImpact = 'negative';
-  }
-
-  factors.push({
-    factor: 'คะแนนเครดิต',
-    impact: creditImpact,
-    score: Math.min(100, (creditScore / 850) * 100),
-    weight: 0.4,
-    description: `คะแนนเครดิต ${creditScore_display} ${
-      creditImpact === 'positive'
-        ? '(ดีเยี่ยม)'
-        : creditImpact === 'neutral'
-        ? '(ปานกลาง)'
-        : '(ต่ำ)'
-    }`,
-  });
-
-  // DTI Ratio Factor
-  let dtiImpact: 'positive' | 'negative' | 'neutral' = 'neutral';
-
-  if (dtiRatio <= 36) {
-    dtiImpact = 'positive';
-  } else if (dtiRatio > 43) {
-    dtiImpact = 'negative';
-  }
-
-  factors.push({
-    factor: 'อัตราส่วนหนี้ต่อรายได้',
-    impact: dtiImpact,
-    score: Math.max(0, 100 - dtiRatio * 2),
-    weight: 0.3,
-    description: `DTI ${dtiRatio.toFixed(1)}% ${
-      dtiImpact === 'positive'
-        ? '(ต่ำกว่ามาตรฐาน)'
-        : dtiImpact === 'neutral'
-        ? '(อยู่ในเกณฑ์)'
-        : '(สูงเกินไป)'
-    }`,
-  });
-
-  // LTV Ratio Factor
-  let ltvImpact: 'positive' | 'negative' | 'neutral' = 'neutral';
-
-  if (ltvRatio <= 80) {
-    ltvImpact = 'positive';
-  } else if (ltvRatio > 90) {
-    ltvImpact = 'negative';
-  }
-
-  factors.push({
-    factor: 'อัตราส่วนเงินกู้ต่อมูลค่าทรัพย์',
-    impact: ltvImpact,
-    score: Math.max(0, 100 - ltvRatio),
-    weight: 0.2,
-    description: `LTV ${ltvRatio.toFixed(1)}% ${
-      ltvImpact === 'positive'
-        ? '(ดีมาก)'
-        : ltvImpact === 'neutral'
-        ? '(ปานกลาง)'
-        : '(สูง)'
-    }`,
-  });
-
-  // Employment Stability Factor
-  if (yearsEmployed !== undefined) {
-    let empImpact: 'positive' | 'negative' | 'neutral' = 'neutral';
-
-    if (yearsEmployed >= 5) {
-      empImpact = 'positive';
-    } else if (yearsEmployed < 2) {
-      empImpact = 'negative';
-    }
-
-    factors.push({
-      factor: 'ความมั่นคงในการทำงาน',
-      impact: empImpact,
-      score: Math.min(100, (yearsEmployed / 10) * 100),
-      weight: 0.1,
-      description: `อายุงาน ${yearsEmployed.toFixed(1)} ปี`,
-    });
-  }
-
-  return factors;
-}
-
-// ========================================
 // Main Loan Estimation Function
 // ========================================
 
@@ -472,10 +368,6 @@ export function estimateLoan(input: LoanEstimationInput): LoanEstimation {
     );
   }
 
-  if (input.credit_score < 650) {
-    warnings.push('คะแนนเครดิตต่ำกว่าเกณฑ์มาตรฐาน อาจได้อัตราดอกเบี้ยสูงหรือถูกปฏิเสธ');
-  }
-
   if (actualLoanAmount < loanAmount) {
     const shortfall = loanAmount - actualLoanAmount;
     warnings.push(
@@ -502,10 +394,6 @@ export function estimateLoan(input: LoanEstimationInput): LoanEstimation {
     );
   }
 
-  if (input.credit_score < 700) {
-    recommendations.push('ควรปรับปรุงคะแนนเครดิตเพื่อรับอัตราดอกเบี้ยที่ดีขึ้น');
-  }
-
   if (!input.has_co_borrower && affordabilityStatus !== 'excellent') {
     recommendations.push('พิจารณาใช้ผู้กู้ร่วมเพื่อเพิ่มวงเงินและโอกาสอนุมัติ');
   }
@@ -513,14 +401,6 @@ export function estimateLoan(input: LoanEstimationInput): LoanEstimation {
   if (approvalProbability < 0.7) {
     recommendations.push('ควรปรึกษาที่ปรึกษาสินเชื่อเพื่อประเมินตัวเลือกที่เหมาะสม');
   }
-
-  // Generate approval factors
-  const approvalFactors = generateApprovalFactors(
-    input.credit_score,
-    dtiRatio,
-    ltvRatio,
-    input.years_employed
-  );
 
   // Build assumptions
   const assumptions: string[] = [
@@ -548,7 +428,6 @@ export function estimateLoan(input: LoanEstimationInput): LoanEstimation {
     },
     warnings,
     recommendations,
-    approval_factors: approvalFactors,
     calculated_at: new Date(),
     assumptions,
   };

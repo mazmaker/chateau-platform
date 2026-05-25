@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
   Trophy, TrendingUp, TrendingDown, Minus, Clock, Award,
-  AlertTriangle, Sparkles, Loader2,
+  AlertTriangle, Sparkles, Loader2, Target,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 

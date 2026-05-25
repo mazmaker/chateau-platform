@@ -124,8 +124,6 @@ interface Lead {
   unit_id?: string;
   status: LeadStatus;
   source: string;
-  budget_min?: number;
-  budget_max?: number;
   preferred_location?: string;
   notes: string;
   assigned_to?: string;
@@ -296,15 +294,18 @@ const LeadManagement = () => {
       const current = selectedLeadInterests.find((i) => i.id === interestId);
       const currentStatus = current?.status;
 
-      // Status transition rules — keep edits non-destructive:
-      //   - Setting a date when status is 'interested' → upgrade to 'viewing_scheduled'
+      // Status transition rules — keep state and viewing_date in sync:
+      //   - Setting a date when status is 'interested' or 'viewed' → 'viewing_scheduled'
+      //     (rescheduling after a visit means there's a NEW future visit, so we're
+      //     back in the "scheduled" state until it happens)
       //   - Clearing a date when status is 'viewing_scheduled' → revert to 'interested'
-      //   - All other statuses (viewed/negotiating/reserved/won/lost/dropped) stay as-is
+      //   - Advanced statuses (negotiating/reserved/won/lost/dropped) stay as-is —
+      //     we don't want a viewing reschedule to undo a closed deal.
       const updates: Record<string, any> = {
         viewing_date: isoValue,
         updated_at: new Date().toISOString(),
       };
-      if (isoValue && currentStatus === 'interested') {
+      if (isoValue && (currentStatus === 'interested' || currentStatus === 'viewed')) {
         updates.status = 'viewing_scheduled';
       } else if (!isoValue && currentStatus === 'viewing_scheduled') {
         updates.status = 'interested';
@@ -333,14 +334,62 @@ const LeadManagement = () => {
     }
   };
 
+  // Sales presses "ยืนยันมาแล้ว" after the appointment. Promotes interest to 'viewed'
+  // AND flips leads.site_visit_attended so ML scoring picks up the engagement signal
+  // without Sales having to tick a second box.
+  const confirmVisitAttended = async (interestId: string, leadId: string) => {
+    setSavingVisit(true);
+    try {
+      const nowIso = new Date().toISOString();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: iErr } = await (supabase.from('lead_interests') as any)
+        .update({ status: 'viewed', updated_at: nowIso })
+        .eq('id', interestId);
+      if (iErr) throw iErr;
+      // Sync lead-level state — promote 'new' → 'contacted' since a customer who
+      // physically came to view can't still be in the "untouched" bucket.
+      const currentLead = leads.find((l) => l.id === leadId);
+      const leadUpdates: Record<string, any> = { site_visit_attended: true };
+      if (currentLead?.status === 'new') leadUpdates.status = 'contacted';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: lErr } = await (supabase.from('leads') as any)
+        .update(leadUpdates)
+        .eq('id', leadId);
+      if (lErr) throw lErr;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('activity_logs') as any).insert({
+          tenant_id: currentTenant?.id,
+          user_id: userProfile?.id,
+          activity_type: 'site_visit_confirmed',
+          description: 'ยืนยันลูกค้ามาเยี่ยมชมโครงการแล้ว',
+          metadata: { lead_id: leadId, interest_id: interestId },
+        });
+      } catch { /* non-blocking */ }
+      setSelectedLeadInterests((prev) =>
+        prev.map((i) => (i.id === interestId ? { ...i, status: 'viewed' as typeof i.status } : i))
+      );
+      if (selectedLead?.id === leadId) {
+        setSelectedLead({ ...selectedLead, ...leadUpdates } as any);
+      }
+      // Sync local list so other UI pieces (status column) reflect the bump.
+      if (leadUpdates.status) {
+        setLeads((prev: any[]) => prev.map((l) => l.id === leadId ? { ...l, ...leadUpdates } : l));
+      }
+    } catch (e: any) {
+      console.error('Confirm visit failed:', e);
+      alert('บันทึกไม่สำเร็จ: ' + (e?.message || 'unknown'));
+    } finally {
+      setSavingVisit(false);
+    }
+  };
+
   // Form state
   const [leadForm, setLeadForm] = useState({
     customer_id: '',
     property_id: '',
     status: 'new' as LeadStatus,
     source: 'website',
-    budget_min: '',
-    budget_max: '',
     preferred_location: '',
     notes: '',
     next_follow_up: ''
@@ -388,8 +437,6 @@ const LeadManagement = () => {
         unit_id: item.unit_id,
         status: item.status || 'new',
         source: item.source || 'website',
-        budget_min: item.estimated_value,
-        budget_max: item.estimated_value,
         preferred_location: undefined,
         notes: item.notes || '',
         priority: item.priority,
@@ -445,8 +492,6 @@ const LeadManagement = () => {
         property_id: `prop-${(i % 3) + 1}`,
         status,
         source: sources[Math.floor(Math.random() * sources.length)],
-        budget_min: 2000000 + Math.floor(Math.random() * 3000000),
-        budget_max: 5000000 + Math.floor(Math.random() * 5000000),
         preferred_location: 'บางนา, ลาดพร้าว, วัฒนา',
         notes: `Lead หมายเลขที่ ${i}`,
         created_at: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -539,6 +584,24 @@ const LeadManagement = () => {
       if (error) throw error;
 
       if (interestsData && interestsData.length > 0) {
+        // Self-heal: an interest at 'viewing_scheduled' with no viewing_date is an
+        // invalid combination (legacy bug). Demote to 'interested' on load so the
+        // UI never displays "นัดดู" without a date.
+        const invalidIds = interestsData
+          .filter((i: any) => i.status === 'viewing_scheduled' && !i.viewing_date)
+          .map((i: any) => i.id);
+        if (invalidIds.length > 0) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase.from('lead_interests') as any)
+              .update({ status: 'interested' })
+              .in('id', invalidIds);
+            interestsData.forEach((i: any) => {
+              if (invalidIds.includes(i.id)) i.status = 'interested';
+            });
+          } catch { /* non-blocking */ }
+        }
+
         // Fetch all properties and units for the interests
         const propertyIds = [...new Set(interestsData.map(i => i.property_id))];
         const unitIds = [...new Set(interestsData.map(i => i.unit_id))];
@@ -616,7 +679,13 @@ const LeadManagement = () => {
       // overwrite later stages (negotiating/reserved/won). Every subsequent click just
       // refreshes last_contact_date — this is the "I just called again" semantics that
       // keeps Hot Leads' "ติดต่อล่าสุด" accurate.
-      const updates: Record<string, any> = { last_contact_date: nowIso };
+      // Every call click counts as 1 interaction — Sales used to have to hit a separate "+1"
+      // button on the CDP page, which got skipped in practice. Folding it in here keeps the
+      // ML engagement signal honest without the extra step.
+      const updates: Record<string, any> = {
+        last_contact_date: nowIso,
+        interaction_count: (Number(lead.interaction_count) || 0) + 1,
+      };
       if (lead.status === 'new') updates.status = 'contacted';
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -781,8 +850,6 @@ const LeadManagement = () => {
       property_id: '',
       status: 'new',
       source: 'website',
-      budget_min: '',
-      budget_max: '',
       preferred_location: '',
       notes: '',
       next_follow_up: ''
@@ -935,6 +1002,8 @@ const LeadManagement = () => {
     }).format(amount);
   };
 
+  const [sortByScore, setSortByScore] = useState(false);
+
   const filteredLeads = leads.filter(lead => {
     const customerName = getCustomerName(lead).toLowerCase();
     const propertyName = getPropertyName(lead).toLowerCase();
@@ -948,6 +1017,11 @@ const LeadManagement = () => {
     const matchesPriority = priorityFilter === 'all'
       || (lead.priority === priorityFilter && (priorityFilter !== 'high' || openSet.has(lead.status || '')));
     return matchesSearch && matchesStatus && matchesSource && matchesPriority;
+  }).sort((a, b) => {
+    if (!sortByScore) return 0;
+    const scoreA = (a as any).potential_score ?? -1;
+    const scoreB = (b as any).potential_score ?? -1;
+    return scoreB - scoreA;
   });
 
   // Calculate stats
@@ -959,7 +1033,7 @@ const LeadManagement = () => {
   const conversionRate = totalLeads > 0 ? Math.round((closedLeads / totalLeads) * 100) : 0;
 
   return (
-    <div className="min-h-screen bg-[#f8fafc]">
+    <div className="min-h-screen bg-gray-50">
       {/* Sidebar */}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
@@ -1153,7 +1227,12 @@ const LeadManagement = () => {
                   <TableHead>โครงการที่สนใจ</TableHead>
                   <TableHead>ยูนิตสนใจ</TableHead>
                   <TableHead>สถานะ</TableHead>
-                  <TableHead>Potential Score</TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none hover:text-chateau"
+                    onClick={() => setSortByScore(v => !v)}
+                  >
+                    Potential Score {sortByScore ? '▼' : '○'}
+                  </TableHead>
                   <TableHead>วงเงินกู้ (฿)</TableHead>
                   <TableHead>แหล่งที่มา</TableHead>
                   <TableHead>วันที่สร้าง</TableHead>
@@ -1533,6 +1612,19 @@ const LeadManagement = () => {
                                     </div>
                                     {(userRole === 'agent' || userRole === 'sales' || userRole === 'admin' || userRole === 'owner') && (
                                       <div className="flex items-center gap-2">
+                                        {/* Confirm visit: only when there's an appointment and customer hasn't been
+                                            marked as visited yet. One click advances status='viewed' AND ticks
+                                            leads.site_visit_attended so ML scoring sees the engagement. */}
+                                        {interest.status === 'viewing_scheduled' && interest.viewing_date && selectedLead && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); confirmVisitAttended(interest.id, selectedLead.id); }}
+                                            disabled={savingVisit}
+                                            className="text-[11px] text-cyan-700 hover:underline font-semibold disabled:opacity-50"
+                                            title="ยืนยันว่าลูกค้ามาเยี่ยมชมโครงการแล้ว"
+                                          >
+                                            ยืนยันมาแล้ว
+                                          </button>
+                                        )}
                                         {/* Primary action: Quick Reserve. Hidden when interest is reserved/won/lost/dropped
                                             OR when the unit is no longer 'available'. Atomic check on the backend is the
                                             authoritative guard; this is UX to avoid offering a doomed click. */}

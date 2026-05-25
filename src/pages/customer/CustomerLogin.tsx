@@ -175,6 +175,16 @@ const CustomerLogin = () => {
           </p>
         </div>
 
+        {/* Browse as guest — anonymous access to property listings */}
+        <button
+          type="button"
+          onClick={() => navigate('/customer/properties')}
+          className="w-full mt-5 inline-flex items-center justify-center gap-2 text-sm font-medium text-gray-600 hover:text-chateau transition-colors py-2 group"
+        >
+          <span>ดูโครงการก่อน · ยังไม่เข้าสู่ระบบ</span>
+          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+        </button>
+
       </div>
     </div>
   );

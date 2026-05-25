@@ -198,6 +198,7 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
     assigned_to: "",
     status: "new",
     next_follow_up: "",
+    purchase_timeline: "",
     lead_notes: "",
     // Customer data
     imagePreview: "",
@@ -215,6 +216,8 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
     employment_type: "",        // ประเภทงาน — ส่งผลต่อการอนุมัติสินเชื่อ
     years_employed: "",         // อายุงาน
     max_loan_amount_manual: "", // วงเงินจากธนาคาร (manual override)
+    decision_maker: false,      // ผู้มีอำนาจตัดสินใจ — feeds fit score
+    financing_approved: false,  // ได้รับอนุมัติสินเชื่อแล้ว — feeds fit score
     family_members: "",
     education: "",
     workplace: "",
@@ -322,6 +325,7 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
         assigned_to: lead.assigned_to || "",
         status: lead.status || "new",
         next_follow_up: lead.next_follow_up || "",
+        purchase_timeline: (lead as any).purchase_timeline || "",
         lead_notes: lead.notes || "",
         imagePreview: prefs.profile_image || "",
         first_name: prefs.first_name || "",
@@ -338,6 +342,8 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
         employment_type: (lead as any).employment_type || "",
         years_employed: (lead as any).years_employed?.toString() || "",
         max_loan_amount_manual: (lead as any).max_loan_amount?.toString() || "",
+        decision_maker: !!(lead as any).decision_maker,
+        financing_approved: !!(lead as any).financing_approved,
         family_members: prefs.family_members?.toString() || "",
         education: prefs.education || "",
         workplace: prefs.workplace || "",
@@ -622,12 +628,15 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
         assigned_to: formData.assigned_to || null,
         notes: formData.lead_notes,
         next_follow_up: formData.next_follow_up || null,
+        purchase_timeline: formData.purchase_timeline || null,
         // Financial data — mirrored so the scoring + loan engine can read from leads.*
         monthly_income: formData.monthly_income ? parseFloat(formData.monthly_income) : null,
         monthly_debt: formData.monthly_debt ? parseFloat(formData.monthly_debt) : null,
         down_payment_ready: formData.down_payment_ready ? parseFloat(formData.down_payment_ready) : null,
         employment_type: OCCUPATION_TO_EMPLOYMENT_TYPE[formData.occupation] || formData.employment_type || null,
         years_employed: formData.years_employed ? parseFloat(formData.years_employed) : null,
+        decision_maker: formData.decision_maker,
+        financing_approved: formData.financing_approved,
       };
       // Manual override for bank pre-approval — when Sales has the actual approval letter,
       // they enter that exact figure here and it takes priority over the computed estimate.
@@ -769,26 +778,6 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                           </div>
 
                           <div>
-                            <Label className="text-sm font-medium">ยูนิตที่สนใจ</Label>
-                            <Select
-                              value={formData.unit_id}
-                              onValueChange={(value) => setFormData(prev => ({ ...prev, unit_id: value }))}
-                              disabled={loading || !formData.property_id}
-                            >
-                              <SelectTrigger className="mt-1.5">
-                                <SelectValue placeholder={formData.property_id ? "เลือกยูนิต" : "เลือกโครงการก่อน"} />
-                              </SelectTrigger>
-                              <SelectContent className="max-h-60">
-                                {units.map((unit) => (
-                                  <SelectItem key={unit.id} value={unit.id}>
-                                    {unit.unit_number}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <div>
                             <Label className="text-sm font-medium">พนักงานขายผู้รับผิดชอบ</Label>
                             <Select
                               value={formData.assigned_to}
@@ -820,6 +809,30 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                               disabled={loading}
                               className="mt-1.5"
                             />
+                          </div>
+
+                          <div>
+                            <Label className="text-sm font-medium flex items-center gap-2">
+                              <CalendarDays className="w-4 h-4 text-blue-500" />
+                              กรอบเวลาการซื้อ
+                            </Label>
+                            <Select
+                              value={formData.purchase_timeline}
+                              onValueChange={(value) => setFormData(prev => ({ ...prev, purchase_timeline: value }))}
+                              disabled={loading}
+                            >
+                              <SelectTrigger className="mt-1.5">
+                                <SelectValue placeholder="ลูกค้าวางแผนซื้อเมื่อไร" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="immediate">ทันที</SelectItem>
+                                <SelectItem value="1_month">ภายใน 1 เดือน</SelectItem>
+                                <SelectItem value="3_months">ภายใน 3 เดือน</SelectItem>
+                                <SelectItem value="6_months">ภายใน 6 เดือน</SelectItem>
+                                <SelectItem value="1_year">ภายใน 1 ปี</SelectItem>
+                                <SelectItem value="no_timeline">ยังไม่มีกำหนด</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </div>
                         </div>
                       </div>
@@ -1068,6 +1081,38 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                               className="mt-1.5"
                             />
                             <p className="text-[11px] text-gray-500 mt-1">ถ้ามีจดหมาย Pre-approval จากธนาคาร ใส่ตัวเลขจริงจะแทนค่าที่ระบบคำนวณ</p>
+                          </div>
+                          <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <label className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                              formData.decision_maker ? 'border-chateau-200 bg-chateau-50/50' : 'border-gray-200 bg-white hover:bg-gray-50'
+                            }`}>
+                              <input
+                                type="checkbox"
+                                checked={formData.decision_maker}
+                                onChange={(e) => setFormData(prev => ({ ...prev, decision_maker: e.target.checked }))}
+                                disabled={loading}
+                                className="mt-0.5 w-4 h-4 accent-chateau"
+                              />
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-900">เป็นผู้ตัดสินใจหลัก</p>
+                                <p className="text-xs text-gray-500 mt-0.5">ลูกค้าสามารถตัดสินใจซื้อได้เอง (ไม่ใช่แทนผู้อื่น)</p>
+                              </div>
+                            </label>
+                            <label className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                              formData.financing_approved ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white hover:bg-gray-50'
+                            }`}>
+                              <input
+                                type="checkbox"
+                                checked={formData.financing_approved}
+                                onChange={(e) => setFormData(prev => ({ ...prev, financing_approved: e.target.checked }))}
+                                disabled={loading}
+                                className="mt-0.5 w-4 h-4 accent-green-600"
+                              />
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-900">ได้รับอนุมัติสินเชื่อแล้ว</p>
+                                <p className="text-xs text-gray-500 mt-0.5">มี Pre-approval Letter หรืออนุมัติจริงจากธนาคาร</p>
+                              </div>
+                            </label>
                           </div>
                           <div>
                             <Label className="text-sm font-medium">สมาชิกในครอบครัว (คน)</Label>

@@ -388,7 +388,7 @@ export class ThaiInvoicePDFGenerator {
             <div class="payment-title">วิธีการชำระเงิน</div>
             <div class="payment-methods">
               <div class="payment-method">
-                <div class="method-title">🏦 โอนเงินผ่านธนาคาร</div>
+                <div class="method-title">โอนเงินผ่านธนาคาร</div>
                 <div class="method-details">
                   ธนาคารกสิกรไทย สาขาสีลม<br>
                   เลขที่บัญชี: 123-4-56789-0<br>
@@ -396,7 +396,7 @@ export class ThaiInvoicePDFGenerator {
                 </div>
               </div>
               <div class="payment-method">
-                <div class="method-title">📱 PromptPay QR Code</div>
+                <div class="method-title">PromptPay QR Code</div>
                 <div class="method-details">
                   สแกน QR Code หรือโอนไปที่<br>
                   เลขประจำตัวผู้เสียภาษี: 0123456789012
@@ -404,7 +404,7 @@ export class ThaiInvoicePDFGenerator {
               </div>
             </div>
             <div style="margin-top: 20px; padding: 15px; background: #eff6ff; border-radius: 6px; border-left: 4px solid #3b82f6;">
-              <div style="font-weight: 600; color: #1e40af; margin-bottom: 5px;">📝 หมายเหตุสำคัญ:</div>
+              <div style="font-weight: 600; color: #1e40af; margin-bottom: 5px;">หมายเหตุสำคัญ:</div>
               <div style="font-size: 13px; color: #1e40af;">
                 • กรุณาแจ้งการชำระเงินกลับมาที่ billing@chateau-platform.com<br>
                 • แนบหลักฐานการโอนเงิน เพื่อความรวดเร็วในการตรวจสอบ<br>

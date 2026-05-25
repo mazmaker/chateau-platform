@@ -10,9 +10,12 @@ import {
   CheckCircle2,
   Clock,
   Eye,
+  Flame,
+  PhoneOff,
   Send,
   Target,
   TrendingUp,
+  Users,
   Wallet,
 } from "lucide-react";
 import {
@@ -77,6 +80,7 @@ interface LeadRow {
   priority: string | null;
   source: string | null;
   estimated_value: number | null;
+  potential_score: number | null;
   assigned_to: string | null;
   last_contact_date: string | null;
   next_follow_up: string | null;
@@ -154,7 +158,7 @@ const MyDashboard = () => {
         const [myLeadsRes, allLeadsRes, lockedRes, propsRes] = await Promise.all([
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from('leads') as any)
-            .select('id, customer_id, status, priority, source, estimated_value, assigned_to, last_contact_date, next_follow_up, created_at, updated_at, property_id, unit_id, customers(full_name, phone)')
+            .select('id, customer_id, status, priority, source, estimated_value, potential_score, assigned_to, last_contact_date, next_follow_up, created_at, updated_at, property_id, unit_id, customers(full_name, phone)')
             .eq('tenant_id', tenantId)
             .eq('assigned_to', myId),
           // For rank — only need won deals' assigned_to + value (others)
@@ -335,8 +339,13 @@ const MyDashboard = () => {
   const myOpenLeads = myLeads.filter((l) => openStatuses.has(l.status || ''));
   const myPipelineValue = myOpenLeads.reduce((s, l) => s + Number(l.estimated_value || 0), 0);
 
-  // My hot leads (priority=high, open)
-  const myHotLeads = myOpenLeads.filter((l) => l.priority === 'high');
+  // My hot leads — manual flag (priority=high) OR ML-detected (score >= 70)
+  // Two sources of "hot": Sales reads context the model can't see, but the model
+  // catches leads Sales hasn't gotten to yet (e.g., new high-credit lead in queue).
+  const ML_HOT_THRESHOLD = 70;
+  const myHotLeads = myOpenLeads.filter((l) => (
+    l.priority === 'high' || ((l.potential_score ?? 0) >= ML_HOT_THRESHOLD)
+  ));
 
   // My rank in team — based on won deal value (all-time)
   const repWonValueMap = new Map<string, number>();
@@ -402,6 +411,29 @@ const MyDashboard = () => {
     const ref = l.last_contact_date ? new Date(l.last_contact_date) : new Date(l.created_at);
     return ref < thirtyDaysAgo;
   });
+
+  // Silent leads — open + no contact in 7+ days (looser than inactive)
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000);
+  const silentLeadsList = myOpenLeads
+    .filter((l) => {
+      const ref = l.last_contact_date ? new Date(l.last_contact_date) : new Date(l.created_at);
+      return ref < sevenDaysAgo;
+    })
+    .map((l) => {
+      const ref = l.last_contact_date ? new Date(l.last_contact_date) : new Date(l.created_at);
+      const daysCount = Math.floor((now.getTime() - ref.getTime()) / 86400000);
+      return { ...l, daysCount };
+    })
+    .sort((a, b) => b.daysCount - a.daysCount);
+
+  // Hot leads — sorted by last contact (recent flagging = most actionable)
+  const hotLeadsList = myHotLeads
+    .slice()
+    .sort((a, b) => {
+      const ta = new Date(a.last_contact_date || a.created_at).getTime();
+      const tb = new Date(b.last_contact_date || b.created_at).getTime();
+      return tb - ta;
+    });
 
   // Reservations expiring in the next 7 days
   const expiringSoon = myLockedUnits.filter((u) => {
@@ -673,21 +705,21 @@ const MyDashboard = () => {
                     )}
                   </div>
 
-                  {/* Combined Alerts — เงียบหาย + lock หมด rolled into one prioritized list */}
+                  {/* Unit lock expiring soon — separated from Silent Leads which covers idle leads */}
                   <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
                     <div className="flex items-center gap-2 mb-1">
-                      <AlertTriangle className="w-4 h-4" style={{ color: C.amber }} />
-                      <h2 className="text-base font-bold text-gray-900">ต้องดูด่วน</h2>
-                      {(inactiveLeads.length + expiringSoon.length) > 0 && (
+                      <Target className="w-4 h-4" style={{ color: C.amber }} />
+                      <h2 className="text-base font-bold text-gray-900">ยูนิตจองใกล้หมดอายุ</h2>
+                      {expiringSoon.length > 0 && (
                         <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.amber, backgroundColor: C.amberLight }}>
-                          {inactiveLeads.length + expiringSoon.length}
+                          {expiringSoon.length}
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 mb-4">ลูกค้าเงียบ · ยูนิตจองใกล้หมดอายุ</p>
-                    {inactiveLeads.length === 0 && expiringSoon.length === 0 ? (
+                    <p className="text-xs text-gray-500 mb-4">ยูนิตที่จองไว้ใกล้หมดอายุภายใน 7 วัน · ต้องปิดดีลให้ทัน</p>
+                    {expiringSoon.length === 0 ? (
                       <div className="h-[180px] flex items-center justify-center text-sm text-gray-400 text-center">
-                        ไม่มีเรื่องด่วน — ทำงานเก่งมาก
+                        ไม่มียูนิตจองใกล้หมดอายุ
                       </div>
                     ) : (
                       <div className="space-y-2 max-h-[240px] overflow-y-auto">
@@ -709,27 +741,6 @@ const MyDashboard = () => {
                               </div>
                               <span className="text-xs font-semibold tabular-nums shrink-0" style={{ color: urgent ? C.red : C.amber }}>
                                 เหลือ {days ?? '—'} วัน
-                              </span>
-                            </button>
-                          );
-                        })}
-                        {inactiveLeads.slice(0, 5).map((l) => {
-                          const days = Math.floor((Date.now() - new Date(l.last_contact_date ?? l.created_at).getTime()) / 86400000);
-                          return (
-                            <button
-                              key={`silent-${l.id}`}
-                              onClick={() => navigate(`/leads/${l.id}`)}
-                              className="w-full flex items-start justify-between gap-3 p-2.5 rounded-lg hover:bg-gray-50 transition-colors text-left"
-                            >
-                              <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                                <Clock className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: days >= 60 ? C.red : C.amber }} />
-                                <div className="min-w-0">
-                                  <p className="text-sm font-medium text-gray-900 truncate">{l.customers?.full_name || '(ไม่ระบุชื่อ)'} · เงียบ</p>
-                                  <p className="text-xs text-gray-500 mt-0.5 truncate">{l.property_id ? propById.get(l.property_id) || '—' : '—'}</p>
-                                </div>
-                              </div>
-                              <span className="text-xs font-semibold tabular-nums shrink-0" style={{ color: days >= 60 ? C.red : C.amber }}>
-                                {days} วัน
                               </span>
                             </button>
                           );
@@ -823,6 +834,141 @@ const MyDashboard = () => {
                 </div>
               )}
 
+              {/* ACTION — Hot Leads + Silent Leads (Sales only) */}
+              {userRole !== 'agent' && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">ACTION — ลงมือเลย</p>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Hot Leads */}
+                    <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <Flame className="w-4 h-4" style={{ color: C.red }} />
+                          <h3 className="text-base font-bold text-gray-900">Hot Leads</h3>
+                        </div>
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.red, backgroundColor: C.redLight }}>
+                          {hotLeadsList.length} ต้องตามด่วน
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-4">ติ๊กด่วน (Sales) + AI แนะนำ (score ≥ 70)</p>
+                      {hotLeadsList.length === 0 ? (
+                        <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ไม่มีลีดร้อนตอนนี้</div>
+                      ) : (
+                        <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+                          {hotLeadsList.map((l) => {
+                            const badge = stageBadge(l.status);
+                            const isManualHot = l.priority === 'high';
+                            const isAiHot = !isManualHot && (l.potential_score ?? 0) >= ML_HOT_THRESHOLD;
+                            return (
+                              <button
+                                key={l.id}
+                                onClick={() => navigate(`/leads/${l.id}`)}
+                                className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-gray-50 border border-gray-50 text-left"
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: C.redLight }}>
+                                    <Users className="w-4 h-4" style={{ color: C.red }} />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <p className="text-sm font-semibold text-gray-900 truncate">{l.customers?.full_name || 'ไม่ระบุชื่อ'}</p>
+                                      {isManualHot && (
+                                        <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold flex-shrink-0" style={{ color: C.red, backgroundColor: C.redLight }}>
+                                          ติ๊กด่วน
+                                        </span>
+                                      )}
+                                      {isAiHot && (
+                                        <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold flex-shrink-0" style={{ color: C.indigo, backgroundColor: '#eef2ff' }}>
+                                          AI {l.potential_score}%
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-gray-500 truncate">
+                                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold mr-1" style={{ color: badge.color, backgroundColor: badge.bg }}>
+                                        {badge.label}
+                                      </span>
+                                      {l.property_id ? propById.get(l.property_id) || '—' : '—'}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="text-right flex-shrink-0 ml-2">
+                                  {l.last_contact_date ? (() => {
+                                    const days = Math.floor((Date.now() - new Date(l.last_contact_date).getTime()) / 86400000);
+                                    return (
+                                      <>
+                                        <p className="text-sm font-bold tabular-nums" style={{ color: days >= 7 ? C.red : days >= 3 ? C.amber : C.charcoal }}>
+                                          {days === 0 ? 'วันนี้' : `${days} วัน`}
+                                        </p>
+                                        <p className="text-[10px] text-gray-400">ติดต่อล่าสุด</p>
+                                      </>
+                                    );
+                                  })() : (
+                                    <>
+                                      <p className="text-sm font-bold tabular-nums" style={{ color: C.red }}>ยังไม่ติด</p>
+                                      <p className="text-[10px] text-gray-400">รีบโทร</p>
+                                    </>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Silent Leads */}
+                    <div className="bg-white border rounded-2xl shadow-soft p-6" style={{ borderColor: C.amberLight }}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4" style={{ color: C.amber }} />
+                          <h3 className="text-base font-bold text-gray-900">Silent Leads</h3>
+                        </div>
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.amber, backgroundColor: C.amberLight }}>
+                          {silentLeadsList.length} เสี่ยงหลุด
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-4">ไม่ติดต่อมากกว่า 7 วัน · เรียงเก่าสุด</p>
+                      {silentLeadsList.length === 0 ? (
+                        <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ไม่มีลีดเงียบ — ติดตามครบทุกคน</div>
+                      ) : (
+                        <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+                          {silentLeadsList.map((l) => {
+                            const sev = l.daysCount >= 30 ? C.red : l.daysCount >= 14 ? C.amber : '#d97706';
+                            const badge = stageBadge(l.status);
+                            return (
+                              <button
+                                key={l.id}
+                                onClick={() => navigate(`/leads/${l.id}`)}
+                                className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-gray-50 border border-gray-50 text-left"
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: C.amberLight }}>
+                                    <PhoneOff className="w-4 h-4" style={{ color: sev }} />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-gray-900 truncate">{l.customers?.full_name || 'ไม่ระบุชื่อ'}</p>
+                                    <p className="text-[11px] text-gray-500 truncate">
+                                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold mr-1" style={{ color: badge.color, backgroundColor: badge.bg }}>
+                                        {badge.label}
+                                      </span>
+                                      {l.property_id ? propById.get(l.property_id) || '—' : '—'}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="text-right flex-shrink-0 ml-2">
+                                  <p className="text-sm font-bold tabular-nums" style={{ color: sev }}>{l.daysCount}</p>
+                                  <p className="text-[10px] text-gray-400">วัน</p>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* SECTION 4 — Active Deals (Sales) | Referrals (Agent) */}
               {userRole === 'agent' ? (
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
@@ -885,9 +1031,9 @@ const MyDashboard = () => {
                       ยังไม่มีดีลที่ดูแล — ขอให้แอดมินมอบหมายลูกค้าให้
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
+                    <div className="overflow-auto max-h-[480px]">
                       <table className="w-full text-sm">
-                        <thead>
+                        <thead className="sticky top-0 bg-white z-10">
                           <tr className="text-xs text-gray-500 border-b border-gray-100">
                             <th className="text-left py-2 px-3 font-medium">ลูกค้า</th>
                             <th className="text-left py-2 px-3 font-medium">โครงการ</th>

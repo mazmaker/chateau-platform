@@ -238,7 +238,7 @@ export class SimpleThaiInvoicePDF {
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
             <div style="background: white; padding: 15px; border-radius: 6px; border: 1px solid #e5e7eb;">
-              <div style="font-weight: 600; margin-bottom: 10px;">🏦 โอนเงินผ่านธนาคาร</div>
+              <div style="font-weight: 600; margin-bottom: 10px;">โอนเงินผ่านธนาคาร</div>
               <div style="font-size: 13px; line-height: 1.6; color: #6b7280;">
                 ธนาคารกสิกรไทย สาขาสีลม<br>
                 เลขที่บัญชี: 123-4-56789-0<br>
@@ -247,7 +247,7 @@ export class SimpleThaiInvoicePDF {
             </div>
 
             <div style="background: white; padding: 15px; border-radius: 6px; border: 1px solid #e5e7eb;">
-              <div style="font-weight: 600; margin-bottom: 10px;">📱 PromptPay QR Code</div>
+              <div style="font-weight: 600; margin-bottom: 10px;">PromptPay QR Code</div>
               <div style="font-size: 13px; line-height: 1.6; color: #6b7280;">
                 สแกน QR Code หรือโอนไปที่<br>
                 เลขประจำตัวผู้เสียภาษี: 0123456789012
@@ -256,7 +256,7 @@ export class SimpleThaiInvoicePDF {
           </div>
 
           <div style="padding: 15px; background: #eff6ff; border-radius: 6px; border-left: 4px solid #3b82f6;">
-            <div style="font-weight: 600; color: #1e40af; margin-bottom: 5px;">📝 หมายเหตุสำคัญ:</div>
+            <div style="font-weight: 600; color: #1e40af; margin-bottom: 5px;">หมายเหตุสำคัญ:</div>
             <div style="font-size: 13px; color: #1e40af;">
               • กรุณาแจ้งการชำระเงินกลับมาที่ billing@chateau-platform.com<br>
               • แนบหลักฐานการโอนเงิน เพื่อความรวดเร็วในการตรวจสอบ<br>

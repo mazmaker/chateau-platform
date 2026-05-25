@@ -51,50 +51,17 @@ const DEFAULT_CONFIG: ScoringConfig = {
 function calculateFinancialScore(data: LeadScoringData): {
   score: number;
   factors: KeyFactor[];
+  coverage: number;
 } {
   const factors: KeyFactor[] = [];
   let totalScore = 0;
   let totalWeight = 0;
 
-  // 1. Credit Score (40% of financial score)
-  if (data.credit_score) {
-    const creditWeight = 0.4;
-    let creditScore = 0;
-    let impact: 'positive' | 'negative' | 'neutral' = 'neutral';
+  // Credit score factor removed — Thai real estate sales don't have access to NCB
+  // reports at the lead stage. The financial category now scores from income/down/
+  // employment only. totalWeight normalizes the result over present factors.
 
-    if (data.credit_score >= 750) {
-      creditScore = 100;
-      impact = 'positive';
-    } else if (data.credit_score >= 700) {
-      creditScore = 80;
-      impact = 'positive';
-    } else if (data.credit_score >= 650) {
-      creditScore = 60;
-      impact = 'neutral';
-    } else {
-      creditScore = 30;
-      impact = 'negative';
-    }
-
-    totalScore += creditScore * creditWeight;
-    totalWeight += creditWeight;
-
-    factors.push({
-      factor: 'คะแนนเครดิต',
-      impact,
-      score: creditScore,
-      weight: creditWeight,
-      description: `คะแนนเครดิต ${data.credit_score} ${
-        impact === 'positive'
-          ? 'อยู่ในเกณฑ์ดีมาก'
-          : impact === 'neutral'
-          ? 'อยู่ในเกณฑ์ปานกลาง'
-          : 'ต่ำกว่าเกณฑ์มาตรฐาน'
-      }`,
-    });
-  }
-
-  // 2. Income to Price Ratio (30% of financial score)
+  // 1. Income to Price Ratio (30% of financial score)
   if (data.monthly_income && data.budget_max) {
     const incomeWeight = 0.3;
     const annualIncome = data.monthly_income * 12;
@@ -213,7 +180,8 @@ function calculateFinancialScore(data: LeadScoringData): {
 
   return {
     score: Math.round(finalScore),
-    factors,
+    factors: factors.map((f) => ({ ...f, category: 'financial' as const })),
+    coverage: totalWeight, // weights sum to 1.0 when complete
   };
 }
 
@@ -224,6 +192,7 @@ function calculateFinancialScore(data: LeadScoringData): {
 function calculateEngagementScore(data: LeadScoringData): {
   score: number;
   factors: KeyFactor[];
+  coverage: number;
 } {
   const factors: KeyFactor[] = [];
   let totalScore = 0;
@@ -313,7 +282,8 @@ function calculateEngagementScore(data: LeadScoringData): {
 
   return {
     score: Math.round(finalScore),
-    factors,
+    factors: factors.map((f) => ({ ...f, category: 'engagement' as const })),
+    coverage: totalWeight,
   };
 }
 
@@ -324,6 +294,7 @@ function calculateEngagementScore(data: LeadScoringData): {
 function calculateUrgencyScore(data: LeadScoringData): {
   score: number;
   factors: KeyFactor[];
+  coverage: number;
 } {
   const factors: KeyFactor[] = [];
   let totalScore = 0;
@@ -398,7 +369,8 @@ function calculateUrgencyScore(data: LeadScoringData): {
 
   return {
     score: Math.round(finalScore),
-    factors,
+    factors: factors.map((f) => ({ ...f, category: 'urgency' as const })),
+    coverage: totalWeight,
   };
 }
 
@@ -409,6 +381,7 @@ function calculateUrgencyScore(data: LeadScoringData): {
 function calculateFitScore(data: LeadScoringData): {
   score: number;
   factors: KeyFactor[];
+  coverage: number;
 } {
   const factors: KeyFactor[] = [];
   let totalScore = 0;
@@ -527,7 +500,8 @@ function calculateFitScore(data: LeadScoringData): {
 
   return {
     score: Math.round(finalScore),
-    factors,
+    factors: factors.map((f) => ({ ...f, category: 'fit' as const })),
+    coverage: totalWeight,
   };
 }
 
@@ -623,6 +597,12 @@ export function calculateLeadScore(
       engagement_score: engagement.score,
       urgency_score: urgency.score,
       fit_score: fit.score,
+    },
+    score_coverage: {
+      financial: financial.coverage,
+      engagement: engagement.coverage,
+      urgency: urgency.coverage,
+      fit: fit.coverage,
     },
     key_factors: allFactors.sort((a, b) => b.score * b.weight - a.score * a.weight).slice(0, 10),
     strengths,
