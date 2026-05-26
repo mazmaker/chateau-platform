@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import {
   X, Save, User, Plus, Trash2, Building2,
   UserCircle, Briefcase, MapPin, Megaphone, Target, ShieldCheck, Users
@@ -105,17 +106,6 @@ const GENDER_OPTIONS = [
   { value: "other", label: "อื่นๆ" },
 ];
 
-const OCCUPATION_OPTIONS = [
-  { value: "", label: "โปรดเลือกอาชีพ" },
-  { value: "business_owner", label: "ธุรกิจส่วนตัว" },
-  { value: "government", label: "รับราชการ / พนักงานของรัฐ / พนักงานหน่วยงานราชการ" },
-  { value: "state_enterprise", label: "พนักงานรัฐวิสาหกิจ" },
-  { value: "private_company", label: "พนักงานบริษัทเอกชน" },
-  { value: "farmer", label: "เกษตรกร" },
-  { value: "employee", label: "รับจ้าง" },
-  { value: "other", label: "อื่นๆ" },
-];
-
 const MARITAL_STATUS_OPTIONS = [
   { value: "", label: "โปรดเลือกสถานภาพ" },
   { value: "single", label: "โสด" },
@@ -138,8 +128,8 @@ const EDUCATION_OPTIONS = [
 ];
 
 const NEWS_SOURCE_MAIN = [
-  { value: "online", label: "จากสื่อออนไลน์" },
-  { value: "offline", label: "จากสื่อออฟไลน์" },
+  { value: "online", label: "Online" },
+  { value: "offline", label: "Offline" },
   { value: "other", label: "อื่นๆ" },
 ];
 
@@ -210,7 +200,6 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
     phone: "",
     email: "",
     // Financial Info
-    occupation: "",
     marital_status: "",
     monthly_income: "",
     monthly_debt: "",
@@ -395,9 +384,15 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
       if (error) throw error;
       if (data && data.length > 0) {
         setFormData(prev => ({ ...prev, postal_code: data[0].zipcode }));
+      } else {
+        // Sub-district has no zipcode mapping in th_zipcodes table — let Sales
+        // know so they can either pick a different sub-district or fill manually
+        // (postal_code is optional but a missing one creates incomplete records).
+        toast.warning('ไม่พบรหัสไปรษณีย์สำหรับตำบลนี้ — กรุณาตรวจสอบหรือใส่เอง');
       }
     } catch (err) {
       console.error('Error fetching zipcode:', err);
+      toast.error('ดึงรหัสไปรษณีย์ไม่สำเร็จ');
     }
   };
 
@@ -601,7 +596,6 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
       age: "",
       phone: "",
       email: "",
-      occupation: "",
       marital_status: "",
       monthly_income: "",
       monthly_debt: "",
@@ -675,11 +669,8 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
         setLoading(false);
         return;
       }
-      if (!formData.image) {
-        setError("กรุณาอัปโหลดรูปภาพ");
-        setLoading(false);
-        return;
-      }
+      // Profile image is optional — not every customer has a photo, and forcing
+      // Sales to fake one before saving slows down quick lead entry.
       if (!formData.first_name) {
         setError("กรุณาระบุชื่อ");
         setLoading(false);
@@ -776,7 +767,6 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
           age: formData.age ? parseInt(formData.age) : null,
           profile_image: imageUrl,
           // Financial info
-          occupation: formData.occupation || null,
           marital_status: formData.marital_status || null,
           monthly_income: formData.monthly_income ? parseFloat(formData.monthly_income) : null,
           monthly_debt: formData.monthly_debt ? parseFloat(formData.monthly_debt) : null,
@@ -897,6 +887,11 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
         household_size: formData.family_members ? parseInt(formData.family_members) : null,
         // Work location
         workplace: formData.workplace || null,
+        // New leads always start as system-estimate, NEVER as Pre-approval (no
+        // Letter exists yet). Sales captures Pre-approval later via EditLeadModal.
+        // Set explicitly on INSERT so a stale build / cached client can't accidentally
+        // ship without it and fall through to a wrong default.
+        loan_is_manual: false,
       };
 
       const { data: newLead, error: leadError } = await supabase
@@ -1010,6 +1005,9 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
               // Auto-set deal value from interested unit price (Sansiri/AP pattern)
               estimated_value: propertyPrice > 0 ? propertyPrice : null,
               max_loan_amount: loanEstimation?.max_loan_amount || null,
+              // System estimate on lead creation — not a manual Pre-approval entry.
+              // Pre-approval is captured later via EditLeadModal which sets loan_is_manual=true.
+              loan_is_manual: false,
               estimated_monthly_payment: loanEstimation?.monthly_payment || null,
               estimated_interest_rate: loanEstimation?.interest_rate || null,
               dti_ratio: (loanEstimation as any)?.dti_ratio || null,
@@ -1402,7 +1400,7 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
                   <div className="p-4 space-y-4">
                     {/* Image Upload */}
                     <div>
-                      <Label className="text-sm font-medium">รูปภาพ <span className="text-red-500">*</span></Label>
+                      <Label className="text-sm font-medium">รูปภาพ <span className="text-[10px] font-normal text-gray-400">(ไม่บังคับ)</span></Label>
                       <div className="flex items-center gap-4 mt-1.5">
                         {formData.imagePreview ? (
                           <div className="relative">
@@ -1795,13 +1793,14 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
                       </div>
 
                       <div>
-                        <Label htmlFor="postal_code" className="text-sm font-medium">รหัสไปรษณีย์ <span className="text-red-500">*</span></Label>
+                        <Label htmlFor="postal_code" className="text-sm font-medium">รหัสไปรษณีย์ <span className="text-[10px] font-normal text-gray-400">(เติมอัตโนมัติ — แก้ไขได้)</span></Label>
                         <Input
                           id="postal_code"
+                          inputMode="numeric"
                           value={formData.postal_code}
-                          readOnly
-                          placeholder="จะแสดงอัตโนมัติ"
-                          className="mt-1.5 bg-gray-50"
+                          onChange={(e) => setFormData(prev => ({ ...prev, postal_code: e.target.value.replace(/[^\d]/g, '') }))}
+                          placeholder="เติมอัตโนมัติจากตำบล"
+                          className="mt-1.5"
                           disabled={loading}
                         />
                       </div>

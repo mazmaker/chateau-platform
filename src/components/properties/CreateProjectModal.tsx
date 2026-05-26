@@ -602,7 +602,14 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated, editingProject,
         district_id: parseInt(formData.district_id),
         sub_district_id: parseInt(formData.sub_district_id),
         developer: formData.owner_name || null,
-        attachments: attachmentUrls.length > 0 ? attachmentUrls : (isEditing ? editingProject?.images : []),
+        // Only overwrite attachments when the user actually uploaded new ones —
+        // previous logic fell back to `editingProject.images` on edit, which silently
+        // moved gallery image URLs into the document column.
+        ...(attachmentUrls.length > 0 ? { attachments: attachmentUrls } : {}),
+        // brochure_url is what CustomerPropertyDetail's "ดาวน์โหลดโบรชัวร์" button reads.
+        // Save the Sale Kit URL there too so customers can actually download it; fall
+        // back to the first uploaded attachment if no URL was provided.
+        brochure_url: formData.sale_kit_url || attachmentUrls[0] || null,
         information_links: {
           sale_kit: formData.sale_kit_url || null,
           documents: formData.documents.filter(d => d.label.trim() && d.url.trim())

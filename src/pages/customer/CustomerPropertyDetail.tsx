@@ -29,6 +29,9 @@ interface Property {
   base_price?: number | null;
   developer?: string;
   brochure_url?: string | null;
+  // Admin form saves the primary doc URL under information_links.sale_kit — read it
+  // as a fallback so legacy projects without brochure_url still expose a download.
+  information_links?: { sale_kit?: string | null; documents?: Array<{ label: string; url: string }> } | null;
   tenant_id?: string;
 }
 
@@ -214,33 +217,37 @@ const CustomerPropertyDetail = () => {
               <Building2 className="w-16 h-16 text-gray-300" />
             </div>
           )}
-          {/* Floating brochure download — top-right corner overlay */}
-          <button
-            type="button"
-            onClick={async () => {
-              await incrementLeadCounter({ field: 'brochure_downloads', propertyId: property.id });
-              try {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                await (supabase.from('activity_logs') as any).insert({
-                  tenant_id: property.tenant_id,
-                  activity_type: 'brochure_downloaded',
-                  description: `ลูกค้าดาวน์โหลดโบรชัวร์ ${property.name}`,
-                  metadata: { property_id: property.id, source: 'customer_portal' },
-                });
-              } catch { /* non-blocking */ }
-              if (property.brochure_url) {
-                window.open(property.brochure_url, '_blank', 'noopener');
-                toast.success('กำลังเปิดโบรชัวร์...');
-              } else {
-                toast.info('โบรชัวร์จะถูกส่งไปทางอีเมลภายใน 5 นาที');
-              }
-            }}
-            title="ดาวน์โหลดโบรชัวร์โครงการ"
-            className="absolute top-3 right-3 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-chateau text-white text-sm font-semibold shadow-lg ring-2 ring-white/50 hover:bg-chateau-600 hover:scale-105 transition-all"
-          >
-            <FileDown className="w-4 h-4" />
-            ดาวน์โหลดโบรชัวร์
-          </button>
+          {/* Floating brochure download — top-right corner overlay.
+              Hide entirely when no file is available — better than misleading the
+              customer with a "ส่งทางอีเมลภายใน 5 นาที" toast for an email we never send. */}
+          {(() => {
+            const brochureUrl = property.brochure_url || property.information_links?.sale_kit || null;
+            if (!brochureUrl) return null;
+            return (
+              <button
+                type="button"
+                onClick={async () => {
+                  await incrementLeadCounter({ field: 'brochure_downloads', propertyId: property.id });
+                  try {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    await (supabase.from('activity_logs') as any).insert({
+                      tenant_id: property.tenant_id,
+                      activity_type: 'brochure_downloaded',
+                      description: `ลูกค้าดาวน์โหลดเอกสารโครงการ ${property.name}`,
+                      metadata: { property_id: property.id, source: 'customer_portal' },
+                    });
+                  } catch { /* non-blocking */ }
+                  window.open(brochureUrl, '_blank', 'noopener');
+                  toast.success('กำลังเปิดเอกสาร...');
+                }}
+                title="ดาวน์โหลดเอกสารโครงการ"
+                className="absolute top-3 right-3 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-chateau text-white text-sm font-semibold shadow-lg ring-2 ring-white/50 hover:bg-chateau-600 hover:scale-105 transition-all"
+              >
+                <FileDown className="w-4 h-4" />
+                ดาวน์โหลดเอกสาร
+              </button>
+            );
+          })()}
         </div>
         <div className="p-5">
           <h1 className="text-xl font-bold text-gray-900 mb-1">{property.name}</h1>

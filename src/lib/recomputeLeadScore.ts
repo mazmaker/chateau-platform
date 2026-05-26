@@ -15,7 +15,7 @@ export async function recomputeLeadScore(leadId: string): Promise<void> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: lead, error } = await (supabase.from('leads') as any)
-      .select('credit_score, monthly_income, monthly_debt, employment_type, years_employed, age, gender, marital_status, education, household_size, down_payment_ready, savings, has_co_borrower, number_of_dependents, is_first_time_buyer, website_visits, pages_viewed, time_on_site, brochure_downloads, site_visit_attended, interaction_count, urgency_level, decision_maker, financing_approved, estimated_value, priority, purchase_timeline, max_loan_amount, loan_last_updated, score_last_updated')
+      .select('status, tenant_id, customer_id, credit_score, monthly_income, monthly_debt, employment_type, years_employed, age, gender, marital_status, education, household_size, down_payment_ready, savings, has_co_borrower, number_of_dependents, is_first_time_buyer, website_visits, pages_viewed, time_on_site, brochure_downloads, site_visit_attended, interaction_count, urgency_level, decision_maker, financing_approved, estimated_value, priority, purchase_timeline, max_loan_amount, loan_is_manual, loan_last_updated, score_last_updated')
       .eq('id', leadId)
       .maybeSingle();
     if (error || !lead) return;
@@ -43,10 +43,11 @@ export async function recomputeLeadScore(leadId: string): Promise<void> {
       }
     } catch { /* ignore — fallback to existing value */ }
 
-    // Detect manual override: Sales set loan_last_updated AFTER score_last_updated
-    // (or score_last_updated is null) — recompute should leave max_loan_amount alone.
-    const loanWasManuallySet = lead.max_loan_amount != null && lead.loan_last_updated &&
-      (!lead.score_last_updated || new Date(lead.loan_last_updated) > new Date(lead.score_last_updated));
+    // Manual override detection — use the explicit flag instead of comparing
+    // timestamps. The old timestamp comparison had a race condition: recompute always
+    // fires within 1 second of save, so score_last_updated always ended up newer than
+    // loan_last_updated, falsely flagging manual entries as auto-computed.
+    const loanWasManuallySet = lead.max_loan_amount != null && lead.loan_is_manual === true;
 
     // Map DB nulls → undefined for the scoring library
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -130,8 +131,45 @@ export async function recomputeLeadScore(leadId: string): Promise<void> {
       updates.ltv_ratio = loanResult.ltv_ratio;
     }
 
+    // Auto-qualify: promote contacted leads whose financial profile passes the
+    // threshold. We only promote upward from 'contacted' (never from 'new' — Sales
+    // should call first, never downgrade later stages). Threshold is currently a
+    // platform-wide default of 60; future iterations should read this from
+    // tenants/company_settings so each developer (Sansiri/AP/Charn Issara/...) can
+    // tune it for their own market. Sales can always manually change status back
+    // via the dropdown in Lead Detail if they know something the model doesn't
+    // (e.g., NCB issue not visible to the system).
+    const QUALIFY_THRESHOLD = 60;
+    const finScore = score.score_breakdown.financial_score;
+    const wasContacted = lead.status === 'contacted';
+    const passesThreshold = finScore >= QUALIFY_THRESHOLD;
+    if (wasContacted && passesThreshold) {
+      updates.status = 'qualified';
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase.from('leads') as any).update(updates).eq('id', leadId);
+
+    // Audit trail for the auto-promotion so Sales/Admin can see *why* the status
+    // changed without manual action. Non-blocking — log failure shouldn't undo
+    // the score recompute.
+    if (wasContacted && passesThreshold) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('activity_logs') as any).insert({
+          tenant_id: lead.tenant_id,
+          activity_type: 'lead_auto_qualified',
+          description: `ระบบเลื่อนสถานะเป็น "มีคุณสมบัติ" อัตโนมัติ (คะแนนการเงิน ${finScore}/100)`,
+          metadata: {
+            lead_id: leadId,
+            previous_status: 'contacted',
+            new_status: 'qualified',
+            financial_score: finScore,
+            threshold: QUALIFY_THRESHOLD,
+          },
+        });
+      } catch { /* non-blocking */ }
+    }
   } catch (err) {
     console.warn('[recomputeLeadScore] non-fatal error:', err);
   }

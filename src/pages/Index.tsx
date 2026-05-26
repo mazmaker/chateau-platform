@@ -74,7 +74,9 @@ const C = {
 //   1-999K      → "฿850K"          (Thai sales use K; "พัน" would be too long)
 //   < 1,000     → "฿500"
 const formatTHB = (n: number) => {
-  if (n === 0) return '฿0';
+  // Guard against NaN/Infinity reaching the UI — a single missing field upstream
+  // can otherwise produce "฿NaN ล้าน" on an executive KPI card.
+  if (!Number.isFinite(n) || n === 0) return '฿0';
   const abs = Math.abs(n);
   const sign = n < 0 ? '-' : '';
   if (abs >= 1_000_000) {
@@ -127,10 +129,14 @@ const Index = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [units, setUnits] = useState<UnitRow[]>([]);
   const [properties, setProperties] = useState<PropertyRow[]>([]);
-  // Cancelled bookings in the last 30 days — feeds the "ยกเลิกการจอง" KPI card
+  // Cancelled bookings in the last 30 days — feeds the "ยกเลิกการจอง" KPI card.
+  // notes JSON carries deposit_amount (the actual money paid) — must use that, NOT
+  // total_amount (which is unit price). Reserving a 10M unit with 500K deposit and
+  // then cancelling with 300K refund means forfeited = 500K - 300K = 200K, not 9.7M.
   const [cancelledBookings, setCancelledBookings] = useState<Array<{
     id: string; status: string; total_amount: number | null;
     refund_amount: number | null; refunded_at: string | null;
+    notes: { deposit_amount?: number } | null;
   }>>([]);
   const [loading, setLoading] = useState(true);
 
@@ -162,7 +168,7 @@ const Index = () => {
             .eq('tenant_id', tenantId),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from('bookings') as any)
-            .select('id, status, total_amount, refund_amount, refunded_at')
+            .select('id, status, total_amount, refund_amount, refunded_at, notes')
             .eq('tenant_id', tenantId)
             .eq('status', 'cancelled')
             .gte('refunded_at', cancelledSince.toISOString()),
@@ -218,11 +224,17 @@ const Index = () => {
   const pipelineCount = reservedUnits.length;
 
   // Cancellation metrics — last 30 days. "refunded" = money returned to customer,
-  // "forfeited" = deposit kept by the company. Split helps finance see net impact.
+  // "forfeited" = deposit kept by the company. Use notes.deposit_amount (actual
+  // money paid) — total_amount is the unit price (e.g. 10M) which is NOT what
+  // changed hands at reservation time.
   const cancelledCount = cancelledBookings.length;
   const cancelledRefunded = cancelledBookings.reduce((s, b) => s + Number(b.refund_amount || 0), 0);
   const cancelledForfeited = cancelledBookings.reduce(
-    (s, b) => s + Math.max(0, Number(b.total_amount || 0) - Number(b.refund_amount || 0)),
+    (s, b) => {
+      const deposit = Number(b.notes?.deposit_amount || 0);
+      const refund = Number(b.refund_amount || 0);
+      return s + Math.max(0, deposit - refund);
+    },
     0,
   );
 
@@ -234,9 +246,14 @@ const Index = () => {
   const reservedCount = reservedUnits.length;
   const soldCount = soldUnits.length;
 
-  // Sell-through velocity (per month over last 90 days)
+  // Sell-through velocity (per month over last 90 days). Require at least 3 sales
+  // in the 90-day window — below that the velocity estimate is too noisy and the
+  // resulting "months of inventory" becomes absurd (1 sale → 0.33/mo → 300mo for
+  // 100 available units). Show 'null' instead so the UI can render "ขายช้าเกินไป".
   const sellThroughPerMonth = recent90Sold.length / 3;
-  const daysOfInventory = sellThroughPerMonth > 0 ? availableCount / sellThroughPerMonth : null; // in months
+  const daysOfInventory = recent90Sold.length >= 3 && sellThroughPerMonth > 0
+    ? availableCount / sellThroughPerMonth
+    : null; // in months
 
   // Top selling projects (last 12 months)
   const projectSalesMap = new Map<string, number>();
@@ -485,7 +502,7 @@ const Index = () => {
                   </div>
 
                   <p className="text-[11px] text-gray-400 mt-3 pt-3 border-t border-gray-100">
-                    มาตรฐานอุตสาหกรรมไทย: 18-24 เดือน · {daysOfInventory === null ? 'ยังไม่มีข้อมูล' : daysOfInventory > 24 ? 'เกินมาตรฐาน — สต๊อกค้าง' : daysOfInventory > 18 ? 'อยู่ในระดับสูง — เฝ้าระวัง' : 'อยู่ในเกณฑ์ดี'}
+                    มาตรฐานอุตสาหกรรมไทย: 18-24 เดือน · {daysOfInventory === null ? (recent90Sold.length === 0 ? 'ยังไม่มียอดขาย — คำนวณไม่ได้' : 'ยอดขายน้อยเกินไป — คำนวณไม่แม่นยำ') : daysOfInventory > 24 ? 'เกินมาตรฐาน — สต๊อกค้าง' : daysOfInventory > 18 ? 'อยู่ในระดับสูง — เฝ้าระวัง' : 'อยู่ในเกณฑ์ดี'}
                   </p>
                 </div>
 

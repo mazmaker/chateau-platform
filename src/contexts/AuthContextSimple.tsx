@@ -464,6 +464,19 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
     localStorage.removeItem('cached_tenant_id')
     localStorage.removeItem('cached_role')
     localStorage.removeItem('cached_role_timestamp')
+    // Clear cached tenant branding (logo + company name) — otherwise the next
+    // user logging in on a shared browser sees the previous tenant's brand for a
+    // moment, which looks like a security leak on a demo computer.
+    try {
+      const keysToRemove: string[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i)
+        if (k && (k.startsWith('company_logo_') || k.startsWith('company_name_'))) {
+          keysToRemove.push(k)
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k))
+    } catch { /* localStorage access can fail in private mode — non-fatal */ }
     navigate('/auth/login')
   }
 

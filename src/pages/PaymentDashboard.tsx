@@ -721,21 +721,22 @@ const PaymentDashboard = () => {
           // RPC doesn't exist, continue to next method
         }
 
-        // Method 2: Try profiles table
+        // Method 2: Try users table (migrated from `profiles` — billing_settings
+        // now lives on users.billing_settings as a jsonb column with default {}).
         try {
-          const { data: profileData, error: profileError } = await supabase
-            .from('profiles')
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: userRow, error: userErr } = await (supabase.from('users') as any)
             .select('billing_settings')
-            .eq('user_id', user.id)
+            .eq('id', user.id)
             .single();
 
-          if (!profileError && profileData?.billing_settings) {
-            setAdvancedConfig(profileData.billing_settings);
-            console.log('✅ Loaded settings from profiles table');
+          if (!userErr && userRow?.billing_settings && Object.keys(userRow.billing_settings).length > 0) {
+            setAdvancedConfig(userRow.billing_settings);
+            console.log('✅ Loaded settings from users table');
             return;
           }
-        } catch (profileErr) {
-          // Profiles access failed, continue to next method
+        } catch (userTableErr) {
+          // users access failed, continue to next method
         }
 
         // Method 3: Try tenants table (if billing_settings column exists)
@@ -1026,8 +1027,20 @@ const PaymentDashboard = () => {
 
   // Financial Reports Export Functions
   const handleDownloadPDFReport = async () => {
+    // DOM element must be cleaned up even if rendering throws — was outside try/finally
+    // before, which left an invisible orphan node on the page on render failure.
+    let element: HTMLDivElement | null = null;
     try {
       console.log('📄 Generating financial report PDF...');
+
+      // Was previously slice(0, 10) — silently hiding 90%+ of records while the
+      // report header still said "รายงานการเงิน" (full report). Bump to 100 with an
+      // explicit truncation note + pointer to CSV for full data.
+      const MAX_DETAIL_ROWS = 100;
+      const detailPayments = allPayments.slice(0, MAX_DETAIL_ROWS);
+      const truncationNote = allPayments.length > MAX_DETAIL_ROWS
+        ? `\n        (แสดง ${MAX_DETAIL_ROWS} รายการแรก จากทั้งหมด ${allPayments.length} รายการ — Export CSV สำหรับข้อมูลครบ)`
+        : '';
 
       // Generate PDF content
       const reportContent = `
@@ -1044,8 +1057,8 @@ const PaymentDashboard = () => {
         อัตราการชำระเงินตรงเวลา: ${((paymentOverview.paidInvoices / (paymentOverview.totalInvoices || 1)) * 100).toFixed(1)}%
         ค่าเฉลี่ยต่อใบแจ้งหนี้: ${formatCurrency(paymentOverview.totalRevenue / (paymentOverview.totalInvoices || 1))}
 
-        รายละเอียดการชำระเงิน:
-        ${allPayments.slice(0, 10).map(payment =>
+        รายละเอียดการชำระเงิน (${detailPayments.length} รายการ):${truncationNote}
+        ${detailPayments.map(payment =>
           `- ${payment.tenant?.name || 'N/A'} | ${payment.invoice_number} | ${formatCurrency(payment.amount)} | ${getPaymentStatusBadge(payment.payment_status)?.label}`
         ).join('\n        ')}
 
@@ -1054,7 +1067,7 @@ const PaymentDashboard = () => {
       `;
 
       // Create and download PDF
-      const element = document.createElement('div');
+      element = document.createElement('div');
       element.innerHTML = `<pre style="font-family: 'Sarabun', sans-serif; font-size: 12px; white-space: pre-wrap; padding: 20px;">${reportContent}</pre>`;
       element.style.position = 'absolute';
       element.style.left = '-9999px';
@@ -1067,8 +1080,14 @@ const PaymentDashboard = () => {
       const imgWidth = 210;
       const pageHeight = 295;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
 
+      // Guard: a degenerate canvas (height = 0) would make the paginate loop never
+      // terminate. Fail loudly instead.
+      if (!Number.isFinite(imgHeight) || imgHeight <= 0) {
+        throw new Error('PDF render failed — canvas is empty');
+      }
+
+      let heightLeft = imgHeight;
       let position = 0;
 
       pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
@@ -1082,7 +1101,6 @@ const PaymentDashboard = () => {
       }
 
       pdf.save(`financial-report-${new Date().toISOString().split('T')[0]}.pdf`);
-      document.body.removeChild(element);
 
       setPopupData({
         type: 'success',
@@ -1100,7 +1118,22 @@ const PaymentDashboard = () => {
         details: 'กรุณาลองใหม่อีกครั้ง'
       });
       setShowResultPopup(true);
+    } finally {
+      // Always remove the off-screen scratch element, even on render failure.
+      if (element && element.parentNode) {
+        element.parentNode.removeChild(element);
+      }
     }
+  };
+
+  // RFC 4180-compliant escape: wrap every cell in quotes and double up any embedded
+  // quote characters. The previous `"${cell}"` template silently broke whenever a
+  // cell contained a `"` (e.g. company name `บริษัท "ABC" จำกัด`) — Excel would
+  // mis-parse it and shift every subsequent column. Also defends against commas
+  // and newlines inside cells, which would otherwise split rows.
+  const escapeCsvCell = (value: unknown): string => {
+    const str = value == null ? '' : String(value);
+    return `"${str.replace(/"/g, '""')}"`;
   };
 
   const handleExportCSV = () => {
@@ -1123,21 +1156,28 @@ const PaymentDashboard = () => {
         ])
       ];
 
-      // Convert to CSV string
+      // Convert to CSV string \u2014 proper RFC 4180 escaping (handles quotes, commas,
+      // newlines inside cells). CRLF line endings match what Excel on Windows expects.
       const csvContent = csvData.map(row =>
-        row.map(cell => `"${cell}"`).join(',')
-      ).join('\n');
+        row.map(escapeCsvCell).join(',')
+      ).join('\r\n');
 
       // Add BOM for proper UTF-8 handling in Excel
       const BOM = '\uFEFF';
       const csvWithBOM = BOM + csvContent;
 
-      // Download CSV
+      // Download CSV \u2014 revoke the blob URL after the click so we don't leak one
+      // blob handle per export. setTimeout gives the browser a tick to actually
+      // start the download before we release the URL.
       const blob = new Blob([csvWithBOM], { type: 'text/csv;charset=utf-8;' });
+      const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
+      link.href = blobUrl;
       link.download = `financial-data-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
 
       setPopupData({
         type: 'success',
@@ -3654,20 +3694,20 @@ const PaymentDashboard = () => {
                         // RPC doesn't exist or failed
                       }
 
-                      // Method 2: Try profiles table
+                      // Method 2: Try users table (migrated from `profiles`)
                       if (!saved) {
                         try {
-                          const { error: profileError } = await supabase
-                            .from('profiles')
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          const { error: userErr } = await (supabase.from('users') as any)
                             .update({ billing_settings: advancedConfig })
-                            .eq('user_id', user.id);
+                            .eq('id', user.id);
 
-                          if (!profileError) {
-                            console.log('✅ Saved to profiles table');
+                          if (!userErr) {
+                            console.log('✅ Saved to users table');
                             saved = true;
                           }
-                        } catch (profileErr) {
-                          // Profiles update failed
+                        } catch (userTableErr) {
+                          // users update failed
                         }
                       }
 

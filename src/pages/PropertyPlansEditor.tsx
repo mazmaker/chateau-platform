@@ -162,6 +162,17 @@ export default function PropertyPlansEditor() {
   /* ────────── Plan CRUD ────────── */
 
   const handleSelectImage = (file: File) => {
+    // MIME whitelist — block obvious non-images at the gate. Extension can be
+    // spoofed by renaming so MIME header is the better (though still soft) signal.
+    const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
+    if (!ALLOWED_MIME.includes(file.type)) {
+      toast.error(`ไฟล์ "${file.name}" ไม่ใช่รูปภาพที่รองรับ (JPG / PNG / WEBP / GIF / SVG)`);
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error(`ไฟล์ "${file.name}" ใหญ่เกินไป (จำกัด 10MB)`);
+      return;
+    }
     setNewPlanFile(file);
     const reader = new FileReader();
     reader.onload = (e) => setNewPlanPreview(e.target?.result as string);

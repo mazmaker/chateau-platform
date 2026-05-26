@@ -133,18 +133,34 @@ const UnitEdit = () => {
   };
 
   /* ─── Upload helpers ─── */
+  // Validate MIME (not extension — trivially spoofed) + size cap. Surface failures via
+  // toast — silent return null leads to "save succeeded but image missing" confusion.
   const uploadImage = async (file: File, folder: string): Promise<string | null> => {
+    const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!ALLOWED_MIME.includes(file.type)) {
+      toast.error(`ไฟล์ "${file.name}" ไม่ใช่รูปภาพที่รองรับ (JPG / PNG / WEBP / GIF)`);
+      return null;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error(`ไฟล์ "${file.name}" ใหญ่เกินไป (จำกัด 10MB)`);
+      return null;
+    }
     try {
       const ext = file.name.split('.').pop();
       const path = `${currentTenant?.id}/${projectId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
       const { data, error } = await supabase.storage
         .from('units')
         .upload(path, file, { cacheControl: '3600', upsert: false });
-      if (error) { console.error(error); return null; }
+      if (error) {
+        console.error(error);
+        toast.error(`อัปโหลด "${file.name}" ไม่สำเร็จ: ${error.message}`);
+        return null;
+      }
       const { data: url } = supabase.storage.from('units').getPublicUrl(data.path);
       return url.publicUrl;
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      toast.error(`อัปโหลด "${file.name}" ไม่สำเร็จ: ${e?.message || 'unknown'}`);
       return null;
     }
   };
@@ -174,7 +190,23 @@ const UnitEdit = () => {
   const handleSave = async () => {
     if (!unitId || !currentTenant) return;
     if (!form.unit_number) { toast.error('กรุณากรอกเลขที่ยูนิต'); return; }
-    if (!form.price) { toast.error('กรุณากรอกราคา'); return; }
+    // Empty/non-numeric price → parseFloat=NaN → DB corruption. Validate explicitly.
+    const priceParsed = parseFloat(form.price);
+    if (!form.price || Number.isNaN(priceParsed) || priceParsed <= 0) {
+      toast.error('กรุณากรอกราคาเป็นตัวเลขมากกว่า 0');
+      return;
+    }
+    if (form.promo_price) {
+      const promoParsed = parseFloat(form.promo_price);
+      if (Number.isNaN(promoParsed) || promoParsed <= 0) {
+        toast.error('ราคาโปรโมชั่นต้องเป็นตัวเลขมากกว่า 0');
+        return;
+      }
+      if (promoParsed >= priceParsed) {
+        toast.error('ราคาโปรโมชั่นต้องน้อยกว่าราคาปกติ');
+        return;
+      }
+    }
     setSaving(true);
     try {
       let thumbnailUrl: string | null = null;

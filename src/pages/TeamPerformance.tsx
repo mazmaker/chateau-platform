@@ -157,10 +157,20 @@ export default function TeamPerformance() {
   }, [rows, roleFilter, atRiskOnly, sortKey, sortDesc]);
 
   // ─── Top-of-page KPI cards ────────────────────────────────
+  // Return the same shape in both branches so TypeScript doesn't think totalDeals /
+  // totalLeads / teamConvRate are possibly undefined when filteredSortedRows is empty
+  // — they're 0, not missing.
   const summary = useMemo(() => {
     const active = filteredSortedRows;
     if (active.length === 0) {
-      return { topPerformer: null, teamWonTotal: 0, atRisk: 0, avgConv: 0 };
+      return {
+        topPerformer: null as (typeof filteredSortedRows)[number] | null,
+        teamWonTotal: 0,
+        totalDeals: 0,
+        teamConvRate: 0,
+        totalLeads: 0,
+        atRisk: 0,
+      };
     }
     const topByValue = [...active].sort((a, b) => b.wonValue - a.wonValue)[0];
     const teamWonTotal = active.reduce((s, r) => s + r.wonValue, 0);

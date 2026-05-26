@@ -831,6 +831,25 @@ const PropertyManagement = () => {
   const handleSaveUnit = async () => {
     if (!selectedProperty || !currentTenant) return;
 
+    // Validate numeric inputs before save — empty string + parseFloat = NaN, which
+    // silently lands in the DB and corrupts price displays / sorting / filters.
+    const priceParsed = parseFloat(unitForm.price);
+    if (!unitForm.price || Number.isNaN(priceParsed) || priceParsed <= 0) {
+      toast.error('กรุณากรอกราคาเป็นตัวเลขมากกว่า 0');
+      return;
+    }
+    if (unitForm.promo_price) {
+      const promoParsed = parseFloat(unitForm.promo_price);
+      if (Number.isNaN(promoParsed) || promoParsed <= 0) {
+        toast.error('ราคาโปรโมชั่นต้องเป็นตัวเลขมากกว่า 0');
+        return;
+      }
+      if (promoParsed >= priceParsed) {
+        toast.error('ราคาโปรโมชั่นต้องน้อยกว่าราคาปกติ');
+        return;
+      }
+    }
+
     setSavingUnit(true);
     try {
       // Upload thumbnail if exists
@@ -969,6 +988,13 @@ const PropertyManagement = () => {
 
   const handleDeleteProperty = async () => {
     if (!selectedProperty) return;
+    // FK has ON DELETE CASCADE so units + lead_interests vanish silently — warn the
+    // user about the blast radius. Count units first so the prompt is concrete.
+    const unitCount = units.length;
+    const warning = unitCount > 0
+      ? `ลบโครงการ "${selectedProperty.name}"?\n\nจะลบยูนิตทั้งหมด ${unitCount} ยูนิตในโครงการนี้ด้วย — รวมถึงประวัติการจอง/Lead ที่เชื่อมโยง\n\nการกระทำนี้ย้อนกลับไม่ได้ ดำเนินการต่อ?`
+      : `ลบโครงการ "${selectedProperty.name}"?\n\nการกระทำนี้ย้อนกลับไม่ได้`;
+    if (!confirm(warning)) return;
     try {
       const { error } = await supabase.from('properties').delete().eq('id', selectedProperty.id);
       if (error) throw error;
@@ -1242,6 +1268,20 @@ const PropertyManagement = () => {
 
   // Upload image to Supabase Storage
   const uploadUnitImage = async (file: File, folder: string): Promise<string | null> => {
+    // Validate file type from the MIME header (not extension — which is trivially
+    // spoofed by renaming a file). Restrict to common image formats.
+    const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!ALLOWED_MIME.includes(file.type)) {
+      toast.error(`ไฟล์ "${file.name}" ไม่ใช่รูปภาพที่รองรับ (JPG / PNG / WEBP / GIF)`);
+      return null;
+    }
+    // Cap at 10MB — browser hangs creating previews for very large files, and
+    // Supabase storage will reject huge uploads anyway. Fail fast with a friendly toast.
+    const MAX_SIZE_BYTES = 10 * 1024 * 1024;
+    if (file.size > MAX_SIZE_BYTES) {
+      toast.error(`ไฟล์ "${file.name}" ใหญ่เกินไป (จำกัด 10MB)`);
+      return null;
+    }
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${currentTenant?.id}/${selectedProperty?.id}/${folder}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
@@ -1255,6 +1295,8 @@ const PropertyManagement = () => {
 
       if (error) {
         console.error('Upload error:', error);
+        // Tell the user — silent return null causes "save succeeded but image missing"
+        toast.error(`อัปโหลด "${file.name}" ไม่สำเร็จ: ${error.message}`);
         return null;
       }
 
@@ -1264,8 +1306,9 @@ const PropertyManagement = () => {
         .getPublicUrl(data.path);
 
       return urlData.publicUrl;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Upload error:', error);
+      toast.error(`อัปโหลด "${file.name}" ไม่สำเร็จ: ${error?.message || 'unknown'}`);
       return null;
     }
   };

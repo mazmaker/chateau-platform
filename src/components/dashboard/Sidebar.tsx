@@ -95,7 +95,7 @@ interface SidebarProps {
 const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, signOut, userRole, userProfile } = useSimpleAuth();
+  const { user, signOut, userRole, userProfile, passwordResetRequired } = useSimpleAuth();
   const { isOwner, isAdmin } = usePermissions();
   const { hasFeature } = useSubscriptionFeatures();
 
@@ -120,10 +120,18 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     if (item.isLogout) {
       await signOut();
       navigate("/auth/login");
-    } else {
-      navigate(item.href);
-      onClose();
+      return;
     }
+    // When user must reset password, only the change-password route is reachable.
+    // Without this guard, sidebar clicks navigate to /leads etc., which then bounce
+    // through ProtectedRoute — causing a brief flash of forbidden content.
+    if (passwordResetRequired && item.href !== "/auth/change-password") {
+      navigate("/auth/change-password");
+      onClose();
+      return;
+    }
+    navigate(item.href);
+    onClose();
   };
 
   const isActive = (href: string) => {
@@ -141,10 +149,16 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const getUserName = () => userProfile?.full_name || user?.email || "User";
 
   const getFilteredNavItems = (): NavItem[] => {
+    // IMPORTANT: requiredRoles in the NAV_ITEMS table are written UPPERCASE
+    // ("OWNER", "ADMIN", "SALES", ...), but AuthContextSimple stores userRole as
+    // lowercase ('owner', 'admin', ...). We normalize BOTH sides here so the
+    // comparison can't silently break if someone changes either source. Do not
+    // remove this normalization — without it, every menu item disappears.
+    const userRoleUpper = (userRole || "").toUpperCase();
     return getAllNavItems()
       .filter((item) => {
         if (item.isLogout) return true;
-        if (item.requiredRoles && !item.requiredRoles.includes(userRole?.toUpperCase() || "")) return false;
+        if (item.requiredRoles && !item.requiredRoles.map((r) => r.toUpperCase()).includes(userRoleUpper)) return false;
         if (item.requiredFeature && !hasFeature(item.requiredFeature)) {
           return isOwner;
         }
@@ -184,7 +198,6 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
         <item.icon className={cn("nav-icon flex-shrink-0", active && "text-white")} size={19} />
         <span className="text-[14.5px] font-medium flex-1 truncate">{item.label}</span>
         {item.isPremium && isLocked && <Lock size={12} style={{ color: "#9ca3af" }} />}
-        {item.isPremium && hasRequiredFeature && <Crown size={12} style={{ color: "rgba(245,158,11,0.7)" }} />}
       </button>
     );
   };

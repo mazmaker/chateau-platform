@@ -16,6 +16,8 @@ import {
   Home,
   CreditCard,
   PiggyBank,
+  Wallet,
+  Landmark,
 } from 'lucide-react';
 
 interface LoanEstimationCardProps {
@@ -36,13 +38,22 @@ export function LoanEstimationCard({ estimation, loading }: LoanEstimationCardPr
     );
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('th-TH', {
-      style: 'currency',
-      currency: 'THB',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
+  // Thai-natural currency format — matches Index.tsx/Analytics.tsx for consistency.
+  // Headline loan numbers (max/recommended/total) become "X ล้าน"; sub-million values
+  // (typical monthly payment) drop to "X K"; <1K shows raw baht.
+  const formatCurrency = (n: number) => {
+    if (n === 0) return '฿0';
+    const abs = Math.abs(n);
+    const sign = n < 0 ? '-' : '';
+    if (abs >= 1_000_000) {
+      const m = abs / 1_000_000;
+      if (m >= 1000) return `${sign}฿${Math.round(m).toLocaleString('en-US')} ล้าน`;
+      if (m >= 100) return `${sign}฿${Math.round(m)} ล้าน`;
+      if (m >= 10) return `${sign}฿${m.toFixed(1)} ล้าน`;
+      return `${sign}฿${m.toFixed(2)} ล้าน`;
+    }
+    if (abs >= 1_000) return `${sign}฿${(abs / 1_000).toFixed(0)}K`;
+    return `${sign}฿${abs.toFixed(0)}`;
   };
 
   // 3-tier risk classification — Sales-facing label that combines DTI / LTV / Housing.
@@ -131,7 +142,9 @@ export function LoanEstimationCard({ estimation, loading }: LoanEstimationCardPr
             </div>
           </div>
 
-          {/* Recommended vs Max */}
+          {/* Recommended / monthly / rate / term — always shown, but with clear
+              "(ประมาณ)" labels when Pre-approval is set, because those values are
+              system-calculated (NOT from the Letter). The Letter has the real numbers. */}
           <div className="grid grid-cols-2 gap-4">
             <div className="text-center p-3 rounded-lg bg-gray-50 border border-gray-200">
               <div className="text-xs text-muted-foreground mb-1">แนะนำ</div>
@@ -140,26 +153,40 @@ export function LoanEstimationCard({ estimation, loading }: LoanEstimationCardPr
               </div>
             </div>
             <div className="text-center p-3 rounded-lg bg-gray-50 border border-gray-200">
-              <div className="text-xs text-muted-foreground mb-1">ค่างวด/เดือน</div>
+              <div className="text-xs text-muted-foreground mb-1">
+                ค่างวด/เดือน
+                {estimation.source === 'manual' && (
+                  <span className="text-[10px] text-amber-600 ml-1">(ประมาณ)</span>
+                )}
+              </div>
               <div className="text-lg font-semibold text-chateau">
                 {formatCurrency(estimation.monthly_payment)}
               </div>
             </div>
           </div>
 
-          {/* Interest Rate & Term */}
           <div className="grid grid-cols-2 gap-4">
             <div className="flex items-center gap-2">
               <Percent className="w-4 h-4 text-muted-foreground" />
               <div>
-                <div className="text-xs text-muted-foreground">อัตราดอกเบี้ย (ประเมิน)</div>
+                <div className="text-xs text-muted-foreground">
+                  อัตราดอกเบี้ย
+                  <span className="text-amber-600 ml-1">
+                    ({estimation.source === 'manual' ? 'ประมาณ' : 'ประเมิน'})
+                  </span>
+                </div>
                 <div className="font-semibold">~{estimation.interest_rate}% ต่อปี</div>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-muted-foreground" />
               <div>
-                <div className="text-xs text-muted-foreground">ระยะเวลา</div>
+                <div className="text-xs text-muted-foreground">
+                  ระยะเวลา
+                  {estimation.source === 'manual' && (
+                    <span className="text-amber-600 ml-1">(ประมาณ)</span>
+                  )}
+                </div>
                 <div className="font-semibold">{estimation.loan_term_years} ปี</div>
               </div>
             </div>
@@ -167,8 +194,11 @@ export function LoanEstimationCard({ estimation, loading }: LoanEstimationCardPr
 
           {/* Approval probability — hybrid view: % + tier color + 1 next action.
               Cap at 85% because banks check NCB which we don't have — perfect 100%
-              over-promises and burns Sales when bank actually rejects. */}
-          {(() => {
+              over-promises and burns Sales when bank actually rejects.
+              HIDDEN when Pre-approval is set — once the bank has approved, the
+              "probability of approval" is no longer a meaningful estimate (it's
+              already 100% confirmed by the Letter). */}
+          {estimation.source !== 'manual' && (() => {
             const cappedProb = Math.min(0.85, estimation.affordability.approval_probability);
             const pct = cappedProb * 100;
             const barColor = riskTier === 'low' ? 'bg-green-500' : riskTier === 'medium' ? 'bg-orange-500' : 'bg-red-500';
@@ -201,8 +231,9 @@ export function LoanEstimationCard({ estimation, loading }: LoanEstimationCardPr
             <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
             {estimation.source === 'manual' ? (
               <p>
-                ตัวเลขนี้มาจาก <span className="font-medium">Pre-approval Letter ของธนาคาร</span> ที่ Sales ระบุไว้ —
-                {' '}ค่างวด / DTI / LTV คำนวณใหม่ตามวงเงินที่ธนาคารอนุมัติ
+                <span className="font-medium">วงเงินกู้สูงสุด</span> มาจาก Pre-approval Letter (ของจริง) —
+                {' '}<span className="font-medium">ดอกเบี้ย / ค่างวด / ระยะเวลา</span> เป็นการประมาณการ
+                {' '}ตัวเลขจริงดูในจดหมายของธนาคาร
               </p>
             ) : (
               <p>
@@ -293,7 +324,7 @@ export function LoanEstimationCard({ estimation, loading }: LoanEstimationCardPr
                 ))}
 
                 <div className="text-[11px] text-gray-500 pt-2 border-t border-gray-100">
-                  ⓘ คอลัมน์ <span className="font-medium">"ถ้ากู้แนะนำ"</span> คือสถานะการเงินจริง หากลูกค้ากู้ตามวงเงินที่ระบบแนะนำ (80% ของสูงสุด)
+                  ⓘ คอลัมน์ <span className="font-medium">"ถ้ากู้แนะนำ"</span> = ภาระการเงินถ้าลูกค้ากู้เพียง 80% ของวงเงินสูงสุด (ปลอดภัยกว่า)
                 </div>
               </div>
             );
@@ -320,43 +351,73 @@ export function LoanEstimationCard({ estimation, loading }: LoanEstimationCardPr
             const cashGap = Math.max(0, propertyValue - downPayment - loanAmount);
             const downNotSet = !downPayment || downPayment <= 0;
 
+            const totalCashNow = downPayment + cashGap;
+            const totalLoanRepay = estimation.breakdown.total_payment;
+            const termYears = estimation.loan_term_years;
             return (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-2 rounded hover:bg-muted/50 transition-colors">
-                  <span className="text-sm text-muted-foreground">มูลค่าทรัพย์สิน</span>
-                  <span className="font-semibold">{formatCurrency(propertyValue)}</span>
-                </div>
-                <div className="flex items-center justify-between p-2 rounded hover:bg-muted/50 transition-colors">
-                  <span className="text-sm text-muted-foreground">เงินดาวน์</span>
-                  {downNotSet ? (
-                    <span className="text-xs text-amber-700 italic">
-                      โปรดระบุเงินดาวน์ก่อน
-                    </span>
-                  ) : (
-                    <span className="font-semibold text-green-600">{formatCurrency(downPayment)}</span>
-                  )}
-                </div>
-                <div className="flex items-center justify-between p-2 rounded hover:bg-muted/50 transition-colors">
-                  <span className="text-sm text-muted-foreground">วงเงินกู้</span>
-                  <span className="font-semibold text-blue-600">{formatCurrency(loanAmount)}</span>
-                </div>
-                {cashGap > 0 && (
-                  <div className="flex items-center justify-between p-2 rounded hover:bg-muted/50 transition-colors">
-                    <span className="text-sm text-red-600 flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      ต้องเตรียมเงินสดเพิ่ม
-                    </span>
-                    <span className="font-semibold text-red-600">{formatCurrency(cashGap)}</span>
+              <div className="space-y-5">
+                {/* Group A: เงินสดที่ต้องเตรียม (จ่ายตอนปิดดีล) */}
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2 flex items-center gap-1.5">
+                    <Wallet className="w-3.5 h-3.5" />
+                    จ่ายตอนซื้อ (เงินสด)
+                  </p>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between px-2 py-1.5 text-sm">
+                      <span className="text-muted-foreground">ราคาบ้าน</span>
+                      <span className="font-semibold">{formatCurrency(propertyValue)}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-2 py-1.5 text-sm">
+                      <span className="text-muted-foreground">เงินดาวน์</span>
+                      {downNotSet ? (
+                        <span className="text-xs text-amber-700 italic">
+                          โปรดระบุเงินดาวน์ก่อน
+                        </span>
+                      ) : (
+                        <span className="font-semibold text-green-600">{formatCurrency(downPayment)}</span>
+                      )}
+                    </div>
+                    {cashGap > 0 && (
+                      <div className="flex items-center justify-between px-2 py-1.5 text-sm">
+                        <span className="text-red-600 flex items-center gap-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          ขาดเงินสด ต้องเตรียมเพิ่ม
+                        </span>
+                        <span className="font-semibold text-red-600">{formatCurrency(cashGap)}</span>
+                      </div>
+                    )}
+                    {!downNotSet && (
+                      <div className="flex items-center justify-between px-2 py-2 bg-amber-50 rounded">
+                        <span className="text-sm font-medium text-amber-900">รวมเงินสดที่ต้องเตรียม</span>
+                        <span className="font-bold text-amber-900">{formatCurrency(totalCashNow)}</span>
+                      </div>
+                    )}
                   </div>
-                )}
-                <div className="h-px bg-border"></div>
-                <div className="flex items-center justify-between p-2 rounded hover:bg-muted/50 transition-colors">
-                  <span className="text-sm text-muted-foreground">ดอกเบี้ยรวม</span>
-                  <span className="font-semibold text-orange-600">{formatCurrency(estimation.breakdown.total_interest)}</span>
                 </div>
-                <div className="flex items-center justify-between p-2 rounded bg-primary/5">
-                  <span className="text-sm font-semibold">ยอดชำระรวมทั้งหมด</span>
-                  <span className="font-bold text-lg">{formatCurrency(estimation.breakdown.total_payment)}</span>
+
+                {/* Group B: ผ่อนกับธนาคาร (จ่ายเดือนละ ตลอดสัญญา) */}
+                <div className="pt-4 border-t border-gray-100">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2 flex items-center gap-1.5">
+                    <Landmark className="w-3.5 h-3.5" />
+                    ผ่อนกับธนาคาร ({termYears} ปี)
+                  </p>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between px-2 py-1.5 text-sm">
+                      <span className="text-muted-foreground">เงินที่กู้</span>
+                      <span className="font-semibold text-blue-600">{formatCurrency(loanAmount)}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-2 py-1.5 text-sm">
+                      <span className="text-muted-foreground">ดอกเบี้ยรวม {termYears} ปี</span>
+                      <span className="font-semibold text-orange-600">{formatCurrency(estimation.breakdown.total_interest)}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-2 py-2 bg-blue-50 rounded">
+                      <div>
+                        <p className="text-sm font-medium text-blue-900">ผ่อนรวมตลอดสัญญา</p>
+                        <p className="text-[11px] text-blue-700/80">{formatCurrency(estimation.monthly_payment)} × {termYears * 12} เดือน</p>
+                      </div>
+                      <span className="font-bold text-blue-900">{formatCurrency(totalLoanRepay)}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             );

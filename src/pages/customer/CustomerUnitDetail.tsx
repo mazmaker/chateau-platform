@@ -703,7 +703,7 @@ const CustomerUnitDetail = () => {
                 sub: depositPaid
                   ? '✓ ชำระแล้ว'
                   : bookingStatus === 'pending'
-                    ? ` รอชำระมัดจำ${myBooking?.deposit_amount ? ` ${(myBooking.deposit_amount / 1_000).toLocaleString('th-TH')}K` : ''}`
+                    ? ` รอชำระมัดจำ${myBooking?.deposit_amount ? ` ฿${Number(myBooking.deposit_amount).toLocaleString('th-TH')}` : ''}`
                     : 'ขั้นต่อไป',
                 done: depositPaid,
               },

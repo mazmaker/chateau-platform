@@ -331,7 +331,10 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
         first_name: prefs.first_name || "",
         last_name: prefs.last_name || "",
         gender: prefs.gender || "",
-        age: prefs.age?.toString() || "",
+        // Fallback to lead.age (and customers.age column) — AddLeadModal writes age
+        // to leads.age + customers.age but NOT customers.preferences.age, so reading
+        // only from prefs would show an empty input for newly created leads.
+        age: prefs.age?.toString() || (lead as any).age?.toString() || (customer as any)?.age?.toString() || "",
         phone: customer?.phone || "",
         email: customer?.email || "",
         occupation: prefs.occupation || "",
@@ -629,6 +632,10 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
         notes: formData.lead_notes,
         next_follow_up: formData.next_follow_up || null,
         purchase_timeline: formData.purchase_timeline || null,
+        // Age must be mirrored to leads.age too — the loan estimator + scoring read
+        // from there, NOT customer.preferences. The old bug let prefs.age and lead.age
+        // drift apart (Sales updated prefs but loan calc kept using stale lead.age).
+        age: formData.age ? parseInt(formData.age, 10) : null,
         // Financial data — mirrored so the scoring + loan engine can read from leads.*
         monthly_income: formData.monthly_income ? parseFloat(formData.monthly_income) : null,
         monthly_debt: formData.monthly_debt ? parseFloat(formData.monthly_debt) : null,
@@ -636,13 +643,23 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
         employment_type: OCCUPATION_TO_EMPLOYMENT_TYPE[formData.occupation] || formData.employment_type || null,
         years_employed: formData.years_employed ? parseFloat(formData.years_employed) : null,
         decision_maker: formData.decision_maker,
-        financing_approved: formData.financing_approved,
+        // financing_approved is derived from the Pre-approval field below — Sales no longer
+        // ticks a separate checkbox (one source of truth: if they entered the bank amount,
+        // it means there's a real Letter, so financing IS approved).
       };
       // Manual override for bank pre-approval — when Sales has the actual approval letter,
       // they enter that exact figure here and it takes priority over the computed estimate.
-      if (manualLoan != null && !isNaN(manualLoan)) {
+      // Set loan_is_manual=true so recompute won't overwrite (replaces fragile timestamp logic).
+      const hasPreApproval = manualLoan != null && !isNaN(manualLoan) && manualLoan > 0;
+      if (hasPreApproval) {
         leadUpdate.max_loan_amount = manualLoan;
+        leadUpdate.loan_is_manual = true;
         leadUpdate.loan_last_updated = new Date().toISOString();
+        leadUpdate.financing_approved = true;
+      } else {
+        // Sales cleared the field — revert to system estimate mode + clear approval flag.
+        leadUpdate.loan_is_manual = false;
+        leadUpdate.financing_approved = false;
       }
 
       const { error: leadError } = await supabase
@@ -983,8 +1000,9 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                           <p className="text-xs text-green-600">อาชีพ รายได้ และภาระทางการเงิน</p>
                         </div>
                       </div>
-                      <div className="p-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="p-4 space-y-5">
+                        {/* Group 1: Demographics — อาชีพ / สถานภาพ / การศึกษา / ครอบครัว */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                           <div>
                             <Label className="text-sm font-medium">อาชีพ</Label>
                             <Select
@@ -1024,108 +1042,6 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                             </Select>
                           </div>
                           <div>
-                            <Label className="text-sm font-medium">รายได้ต่อเดือน (บาท)</Label>
-                            <Input
-                              type="number"
-                              value={formData.monthly_income}
-                              onChange={(e) => setFormData(prev => ({ ...prev, monthly_income: e.target.value }))}
-                              placeholder="0"
-                              disabled={loading}
-                              className="mt-1.5"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium">ภาระหนี้ต่อเดือน (บาท)</Label>
-                            <Input
-                              type="number"
-                              value={formData.monthly_debt}
-                              onChange={(e) => setFormData(prev => ({ ...prev, monthly_debt: e.target.value }))}
-                              placeholder="0"
-                              disabled={loading}
-                              className="mt-1.5"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium">เงินดาวน์ที่พร้อม (บาท)</Label>
-                            <Input
-                              type="number"
-                              value={formData.down_payment_ready}
-                              onChange={(e) => setFormData(prev => ({ ...prev, down_payment_ready: e.target.value }))}
-                              placeholder="เช่น 1,500,000"
-                              disabled={loading}
-                              className="mt-1.5"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium">อายุงาน (ปี)</Label>
-                            <Input
-                              type="number"
-                              value={formData.years_employed}
-                              onChange={(e) => setFormData(prev => ({ ...prev, years_employed: e.target.value }))}
-                              placeholder="เช่น 5"
-                              disabled={loading}
-                              className="mt-1.5"
-                            />
-                          </div>
-                          <div className="md:col-span-2">
-                            <Label className="text-sm font-medium flex items-center gap-1.5">
-                              วงเงินกู้ที่ธนาคารอนุมัติ (บาท)
-                              <span className="text-[10px] font-normal text-gray-400">— ระบุเมื่อมี Pre-approval Letter</span>
-                            </Label>
-                            <Input
-                              type="number"
-                              value={formData.max_loan_amount_manual}
-                              onChange={(e) => setFormData(prev => ({ ...prev, max_loan_amount_manual: e.target.value }))}
-                              placeholder="ปล่อยว่างให้ระบบคำนวณอัตโนมัติ"
-                              disabled={loading}
-                              className="mt-1.5"
-                            />
-                            <p className="text-[11px] text-gray-500 mt-1">ถ้ามีจดหมาย Pre-approval จากธนาคาร ใส่ตัวเลขจริงจะแทนค่าที่ระบบคำนวณ</p>
-                          </div>
-                          <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <label className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                              formData.decision_maker ? 'border-chateau-200 bg-chateau-50/50' : 'border-gray-200 bg-white hover:bg-gray-50'
-                            }`}>
-                              <input
-                                type="checkbox"
-                                checked={formData.decision_maker}
-                                onChange={(e) => setFormData(prev => ({ ...prev, decision_maker: e.target.checked }))}
-                                disabled={loading}
-                                className="mt-0.5 w-4 h-4 accent-chateau"
-                              />
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-gray-900">เป็นผู้ตัดสินใจหลัก</p>
-                                <p className="text-xs text-gray-500 mt-0.5">ลูกค้าสามารถตัดสินใจซื้อได้เอง (ไม่ใช่แทนผู้อื่น)</p>
-                              </div>
-                            </label>
-                            <label className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                              formData.financing_approved ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white hover:bg-gray-50'
-                            }`}>
-                              <input
-                                type="checkbox"
-                                checked={formData.financing_approved}
-                                onChange={(e) => setFormData(prev => ({ ...prev, financing_approved: e.target.checked }))}
-                                disabled={loading}
-                                className="mt-0.5 w-4 h-4 accent-green-600"
-                              />
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-gray-900">ได้รับอนุมัติสินเชื่อแล้ว</p>
-                                <p className="text-xs text-gray-500 mt-0.5">มี Pre-approval Letter หรืออนุมัติจริงจากธนาคาร</p>
-                              </div>
-                            </label>
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium">สมาชิกในครอบครัว (คน)</Label>
-                            <Input
-                              type="number"
-                              value={formData.family_members}
-                              onChange={(e) => setFormData(prev => ({ ...prev, family_members: e.target.value }))}
-                              placeholder="0"
-                              disabled={loading}
-                              className="mt-1.5"
-                            />
-                          </div>
-                          <div>
                             <Label className="text-sm font-medium">ระดับการศึกษา</Label>
                             <Select
                               value={formData.education}
@@ -1144,6 +1060,105 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                               </SelectContent>
                             </Select>
                           </div>
+                          <div>
+                            <Label className="text-sm font-medium">สมาชิกในครอบครัว (คน)</Label>
+                            <Input
+                              type="number"
+                              value={formData.family_members}
+                              onChange={(e) => setFormData(prev => ({ ...prev, family_members: e.target.value }))}
+                              placeholder="0"
+                              disabled={loading}
+                              className="mt-1.5"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Group 2: Income / Debt / Down payment / Job tenure — all numeric financial fields */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-gray-100">
+                          <div>
+                            <Label className="text-sm font-medium">รายได้ต่อเดือน (บาท)</Label>
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              value={formData.monthly_income ? Number(formData.monthly_income).toLocaleString('en-US') : ''}
+                              onChange={(e) => setFormData(prev => ({ ...prev, monthly_income: e.target.value.replace(/[^\d]/g, '') }))}
+                              placeholder="0"
+                              disabled={loading}
+                              className="mt-1.5"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">ภาระหนี้ต่อเดือน (บาท)</Label>
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              value={formData.monthly_debt ? Number(formData.monthly_debt).toLocaleString('en-US') : ''}
+                              onChange={(e) => setFormData(prev => ({ ...prev, monthly_debt: e.target.value.replace(/[^\d]/g, '') }))}
+                              placeholder="0"
+                              disabled={loading}
+                              className="mt-1.5"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">เงินดาวน์ที่พร้อม (บาท)</Label>
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              value={formData.down_payment_ready ? Number(formData.down_payment_ready).toLocaleString('en-US') : ''}
+                              onChange={(e) => setFormData(prev => ({ ...prev, down_payment_ready: e.target.value.replace(/[^\d]/g, '') }))}
+                              placeholder="เช่น 1,500,000"
+                              disabled={loading}
+                              className="mt-1.5"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">อายุงาน (ปี)</Label>
+                            <Input
+                              type="number"
+                              value={formData.years_employed}
+                              onChange={(e) => setFormData(prev => ({ ...prev, years_employed: e.target.value }))}
+                              placeholder="เช่น 5"
+                              disabled={loading}
+                              className="mt-1.5"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Group 3: Pre-approval — full-width since it's a "special" field with hint text */}
+                        <div className="pt-4 border-t border-gray-100">
+                          <Label className="text-sm font-medium flex items-center gap-1.5">
+                            วงเงินกู้ที่ธนาคารอนุมัติ (บาท)
+                            <span className="text-[10px] font-normal text-gray-400">— ระบุเมื่อมี Pre-approval Letter</span>
+                          </Label>
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            value={formData.max_loan_amount_manual ? Number(formData.max_loan_amount_manual).toLocaleString('en-US') : ''}
+                            onChange={(e) => setFormData(prev => ({ ...prev, max_loan_amount_manual: e.target.value.replace(/[^\d]/g, '') }))}
+                            placeholder="ปล่อยว่างให้ระบบคำนวณอัตโนมัติ"
+                            disabled={loading}
+                            className="mt-1.5"
+                          />
+                          <p className="text-[11px] text-gray-500 mt-1">ถ้ามีจดหมาย Pre-approval จากธนาคาร ใส่ตัวเลขจริงจะแทนค่าที่ระบบคำนวณ</p>
+                        </div>
+
+                        {/* Group 4: Decision maker — visual checkbox card, full width */}
+                        <div className="pt-4 border-t border-gray-100">
+                          <label className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                            formData.decision_maker ? 'border-chateau-200 bg-chateau-50/50' : 'border-gray-200 bg-white hover:bg-gray-50'
+                          }`}>
+                            <input
+                              type="checkbox"
+                              checked={formData.decision_maker}
+                              onChange={(e) => setFormData(prev => ({ ...prev, decision_maker: e.target.checked }))}
+                              disabled={loading}
+                              className="mt-0.5 w-4 h-4 accent-chateau"
+                            />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-900">เป็นผู้ตัดสินใจหลัก</p>
+                              <p className="text-xs text-gray-500 mt-0.5">ลูกค้าสามารถตัดสินใจซื้อได้เอง (ไม่ใช่แทนผู้อื่น)</p>
+                            </div>
+                          </label>
                         </div>
                       </div>
                     </CardContent>

@@ -11,7 +11,12 @@ interface MasterPlanSVGProps {
 }
 
 const MasterPlanSVG = ({ units, highlightedUnitId, projectName }: MasterPlanSVGProps) => {
-  if (!units || units.length === 0) {
+  // Filter out units with missing/null id — they'd cause duplicate React keys and
+  // hover/click handlers to bind to undefined IDs. Defensive guard against partial
+  // DB rows or in-flight inserts.
+  const safeUnits = (units || []).filter((u): u is SimpleUnit => !!u && !!u.id);
+
+  if (safeUnits.length === 0) {
     return (
       <div className="w-full h-48 flex items-center justify-center bg-emerald-50 rounded-lg border border-emerald-200 text-emerald-700 text-sm">
         ยังไม่มียูนิตในโครงการนี้
@@ -19,7 +24,7 @@ const MasterPlanSVG = ({ units, highlightedUnitId, projectName }: MasterPlanSVGP
     );
   }
 
-  const total = units.length;
+  const total = safeUnits.length;
   const cols = Math.max(3, Math.ceil(Math.sqrt(total * 1.6)));
   const rows = Math.ceil(total / cols);
 
@@ -63,7 +68,7 @@ const MasterPlanSVG = ({ units, highlightedUnitId, projectName }: MasterPlanSVGP
       <text x={padX} y="22" fontSize="10" fill="#047857">↗ ทางเข้าโครงการ</text>
 
       {/* Plot boxes */}
-      {units.map((unit, idx) => {
+      {safeUnits.map((unit, idx) => {
         const row = Math.floor(idx / cols);
         const col = idx % cols;
         const x = padX + col * (boxW + gap);

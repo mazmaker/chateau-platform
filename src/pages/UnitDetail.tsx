@@ -110,6 +110,18 @@ const UnitDetail = () => {
   const [cancelRefundAmount, setCancelRefundAmount] = useState<string>('');
   const [cancelRefundReason, setCancelRefundReason] = useState<string>('');
   const [cancelling, setCancelling] = useState(false);
+  // Delete-lead-interest dialog state — soft-delete via status='dropped' so the
+  // interest disappears from this unit's list without nuking lead history. Captures
+  // a reason that goes into both lead_interests.notes AND activity_logs.
+  const [showDeleteInterestDialog, setShowDeleteInterestDialog] = useState(false);
+  const [deleteInterestTarget, setDeleteInterestTarget] = useState<{
+    interestId: string;
+    leadId: string;
+    customerName: string;
+    status: string;
+  } | null>(null);
+  const [deleteInterestReason, setDeleteInterestReason] = useState<string>('');
+  const [deletingInterest, setDeletingInterest] = useState(false);
   // Inline viewing-date editor state (Sales schedules a visit from the unit page)
   const [editingVisitInterestId, setEditingVisitInterestId] = useState<string | null>(null);
   const [visitDraft, setVisitDraft] = useState<string>('');
@@ -183,7 +195,7 @@ const UnitDetail = () => {
         (supabase.from('properties') as any).select('*').eq('id', unitData.project_id).single(),
         (supabase.from('units') as any).select('id, unit_number, status').eq('project_id', unitData.project_id),
         (supabase.from('lead_interests') as any)
-          .select('id, status, interest_level, viewing_date, viewed_at, notes, leads:lead_id(id, status, assigned_to, customers:customer_id(id, full_name, email, phone))')
+          .select('id, lead_id, status, interest_level, viewing_date, viewed_at, notes, leads:lead_id(id, status, assigned_to, customers:customer_id(id, full_name, email, phone))')
           .eq('unit_id', unitId)
           .not('status', 'in', '("dropped","lost")'),
       ]);
@@ -202,12 +214,22 @@ const UnitDetail = () => {
       setProperty(propData || null);
       setSiblingUnits(sibs || []);
 
-      // Self-heal invalid state: status='viewing_scheduled' with no viewing_date is
+      // Self-heal invalid state #1: status='viewing_scheduled' with no viewing_date is
       // a contradiction (created by legacy data or by clearing a date via an old code
       // path that didn't revert status). Demote those interests back to 'interested'
       // so the UI never shows "นัดดู" without a date.
+      //
+      // Self-heal invalid state #2: interest.status='reserved'/'won' while the unit
+      // is actually 'available' — happens when a cancellation rolled back the unit
+      // but didn't sync the interest record (older code paths). The orphan interest
+      // makes the "ลบ" button incorrectly show a "ต้องยกเลิกจองก่อน" tooltip even
+      // though there's nothing to cancel. Demote to 'negotiating' so it reflects
+      // reality (lead was in active discussion but no deposit held).
       const invalidInterests = (leadsData || []).filter(
         (li: any) => li.status === 'viewing_scheduled' && !li.viewing_date,
+      );
+      const orphanReservedInterests = (leadsData || []).filter(
+        (li: any) => ['reserved', 'won'].includes(li.status) && unitData.status === 'available',
       );
       if (invalidInterests.length > 0) {
         try {
@@ -222,6 +244,19 @@ const UnitDetail = () => {
             }
           });
         } catch { /* non-blocking — UI still renders, just may show the bad state until refresh */ }
+      }
+      if (orphanReservedInterests.length > 0) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase.from('lead_interests') as any)
+            .update({ status: 'negotiating' })
+            .in('id', orphanReservedInterests.map((li: any) => li.id));
+          (leadsData || []).forEach((li: any) => {
+            if (['reserved', 'won'].includes(li.status) && unitData.status === 'available') {
+              li.status = 'negotiating';
+            }
+          });
+        } catch { /* non-blocking */ }
       }
 
       setUnitLeads(leadsData || []);
@@ -422,10 +457,13 @@ const UnitDetail = () => {
     }
   };
 
-  // Sales confirms the customer physically viewed the unit. Closes the gap
-  // between viewing_scheduled (appointment set) and negotiating (talking price).
-  // Also syncs lead.status (new → contacted at minimum, can't be still "new" if
-  // the customer has physically walked through the door) and ticks
+  // Sales confirms the customer physically viewed the unit. In Sales-led real
+  // estate tours (Chateau's model), a visit IS the start of negotiation — the
+  // customer meets Sales, walks through the unit, and discusses price/terms in
+  // the same session. So we collapse the artificial "viewed → negotiating" gap
+  // and jump straight to 'negotiating' here. The standalone "เริ่มเจรจา" button
+  // is left in place for legacy records but won't appear in fresh workflows.
+  // Also syncs lead.status (promote to 'negotiating' if behind) + ticks
   // leads.site_visit_attended so ML scoring sees the engagement.
   const markVisitConfirmed = async (interestId: string) => {
     setSavingVisit(true);
@@ -435,27 +473,36 @@ const UnitDetail = () => {
       const leadId = (interest as any)?.lead_id;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.from('lead_interests') as any)
-        .update({ status: 'viewed', viewed_at: nowIso, updated_at: nowIso })
+        .update({ status: 'negotiating', viewed_at: nowIso, updated_at: nowIso })
         .eq('id', interestId);
       if (error) throw error;
 
-      // Sync lead-level state — only promote if currently lagging behind.
+      // Sync lead-level state — promote anyone behind 'negotiating' up to it.
       if (leadId) {
         try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: leadRow } = await (supabase.from('leads') as any)
             .select('status').eq('id', leadId).maybeSingle();
           const leadUpdates: Record<string, any> = { site_visit_attended: true };
-          if (leadRow?.status === 'new') leadUpdates.status = 'contacted';
+          if (['new', 'contacted', 'qualified'].includes(leadRow?.status)) {
+            leadUpdates.status = 'negotiating';
+          }
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (supabase.from('leads') as any).update(leadUpdates).eq('id', leadId);
         } catch { /* non-blocking — interest update already succeeded */ }
       }
 
-      setUnitLeads((prev) => prev.map((li: any) =>
-        li.id === interestId ? { ...li, status: 'viewed', viewed_at: nowIso } : li
-      ));
-      toast.success('✓ ยืนยันลูกค้ามาดูแล้ว');
+      // Optimistic update — also mirror the lead-level status into the joined `leads`
+      // object so the badge on the card reflects the new state without waiting for a reload.
+      setUnitLeads((prev) => prev.map((li: any) => {
+        if (li.id !== interestId) return li;
+        const next: any = { ...li, status: 'negotiating', viewed_at: nowIso };
+        if (li.leads && ['new', 'contacted', 'qualified'].includes(li.leads.status)) {
+          next.leads = { ...li.leads, status: 'negotiating' };
+        }
+        return next;
+      }));
+      toast.success('✓ ยืนยันลูกค้ามาดู + เริ่มเจรจาแล้ว');
     } catch (e: any) {
       console.error('Mark visit confirmed failed:', e);
       toast.error('บันทึกไม่สำเร็จ: ' + (e?.message || 'unknown'));
@@ -1003,6 +1050,105 @@ const UnitDetail = () => {
     toast.success('เพิ่ม Lead สำเร็จ — เลือกได้ใน "บันทึกการจอง"');
   };
 
+  // Permission check for removing a lead from this unit's interest list.
+  // Blocks deletion only when there's a REAL active booking — i.e. interest is
+  // reserved/won AND the unit itself is in 'reserved'/'sold' status. If the
+  // interest status drifted out of sync with the unit (orphan record), allow
+  // deletion so users can clean up the bad state.
+  const canDeleteInterest = (li: any): boolean => {
+    if (!li?.leads) return false;
+    if (['reserved', 'won'].includes(li.status)) {
+      const unitIsLocked = unit?.status === 'reserved' || unit?.status === 'sold';
+      if (unitIsLocked) return false;
+    }
+    if (userRole === 'owner' || userRole === 'admin') return true;
+    if (userRole === 'sales') {
+      return canManageUnit(unit?.id || '', unit?.project_id);
+    }
+    if (userRole === 'agent') {
+      // Agents can only remove their own leads from a unit — never touch
+      // another agent's or in-house Sales' lead.
+      return li.leads?.assigned_to === myUserId;
+    }
+    return false;
+  };
+
+  const openDeleteInterestDialog = (li: any) => {
+    if (!li?.leads) return;
+    setDeleteInterestTarget({
+      interestId: li.id,
+      leadId: li.leads.id,
+      customerName: li.leads.customers?.full_name || '(ไม่ระบุชื่อ)',
+      status: li.status,
+    });
+    setDeleteInterestReason('');
+    setShowDeleteInterestDialog(true);
+  };
+
+  // Soft-delete the interest (status='dropped' — already filtered out by the
+  // main query at loadAll). Recompute the lead's score afterwards because
+  // estimated_value = max(unit price across interested units), so removing a
+  // unit can change the lead's budget tier.
+  const submitDeleteInterest = async () => {
+    if (!deleteInterestTarget) return;
+    if (!deleteInterestReason.trim()) {
+      toast.error('กรุณาระบุเหตุผล');
+      return;
+    }
+    setDeletingInterest(true);
+    const target = deleteInterestTarget;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.from('lead_interests') as any)
+        .update({
+          status: 'dropped',
+          notes: `[ลบจากยูนิต ${unit?.unit_number || ''}] ${deleteInterestReason.trim()}`,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', target.interestId)
+        .select('id');
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error('ไม่มีสิทธิ์ลบ');
+
+      // Audit log — who removed, why, from which unit. Owner/Admin can review later.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('activity_logs') as any).insert({
+          tenant_id: currentTenant?.id,
+          user_id: user?.id,
+          activity_type: 'lead_interest_removed',
+          description: `ลบ Lead "${target.customerName}" ออกจากยูนิต ${unit?.unit_number} — ${deleteInterestReason.trim()}`,
+          metadata: {
+            unit_id: unit?.id,
+            unit_number: unit?.unit_number,
+            lead_id: target.leadId,
+            interest_id: target.interestId,
+            previous_status: target.status,
+            reason: deleteInterestReason.trim(),
+          },
+        });
+      } catch { /* non-blocking — soft-delete already succeeded */ }
+
+      // Recompute lead's estimated_value + scores since their unit list shrank
+      try {
+        const { recomputeLeadScore } = await import('@/lib/recomputeLeadScore');
+        await recomputeLeadScore(target.leadId);
+      } catch { /* non-fatal */ }
+
+      // Optimistic removal from local state
+      setUnitLeads((prev) => prev.filter((li: any) => li.id !== target.interestId));
+      toast.success(`ลบ "${target.customerName}" ออกจากยูนิตแล้ว`);
+      setShowDeleteInterestDialog(false);
+      setDeleteInterestTarget(null);
+      setDeleteInterestReason('');
+    } catch (err: any) {
+      console.error('Delete lead interest failed:', err);
+      toast.error(err?.message || 'ลบไม่สำเร็จ');
+    } finally {
+      setDeletingInterest(false);
+    }
+  };
+
   /* ─── LINE share ─── */
   // Build the customer-facing URL that the recipient should see. Always points to
   // /customer/units/:id (not the staff /units/:id route) so the link works for
@@ -1389,18 +1535,42 @@ const UnitDetail = () => {
                     const visitFmt = (d: Date) => d.toLocaleString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
                     return (
                       <div key={li.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                        {/* Header — name + status + click-to-open lead */}
-                        <button
-                          onClick={() => navigate(`/leads/${lead.id}`)}
-                          className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
-                          title="เปิด Lead Detail"
-                        >
-                          <div className="flex-1 min-w-0">
+                        {/* Header — name + status + click-to-open lead + delete trash.
+                            Outer must be <div> (not <button>) so the nested Trash button is valid HTML. */}
+                        <div className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
+                          <button
+                            onClick={() => navigate(`/leads/${lead.id}`)}
+                            className="flex-1 min-w-0 text-left"
+                            title="เปิด Lead Detail"
+                          >
                             <p className="text-sm font-semibold text-gray-900 truncate">{lead.customers?.full_name || '-'}</p>
                             <p className="text-xs text-gray-500">{lead.customers?.phone || '-'}</p>
+                          </button>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <Badge className="bg-amber-100 text-amber-800">{leadStatusLabel(lead.status)}</Badge>
+                            {canDeleteInterest(li) ? (
+                              <button
+                                type="button"
+                                onClick={() => openDeleteInterestDialog(li)}
+                                className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                title={`ลบ ${lead.customers?.full_name || ''} ออกจากยูนิตนี้`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            ) : ['reserved', 'won'].includes(li.status) && (unit.status === 'reserved' || unit.status === 'sold') && (userRole === 'owner' || userRole === 'admin' || (userRole === 'sales' && canManageUnit(unit.id, unit.project_id))) ? (
+                              // Locked state: only when unit IS actually held (not an orphan record).
+                              // Tell the user *why* they can't delete instead of hiding the icon.
+                              <button
+                                type="button"
+                                disabled
+                                className="p-1.5 rounded-md text-gray-300 cursor-not-allowed"
+                                title="มีการจองอยู่ — ต้องกด &quot;ยกเลิกจอง&quot; ก่อน"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            ) : null}
                           </div>
-                          <Badge className="bg-amber-100 text-amber-800 flex-shrink-0">{leadStatusLabel(lead.status)}</Badge>
-                        </button>
+                        </div>
 
                         {/* Visit-date section — 5 states:
                             (1) editing date input
@@ -2276,6 +2446,70 @@ const UnitDetail = () => {
             </Button>
             <Button variant="destructive" onClick={submitCancelReservation} disabled={cancelling}>
               {cancelling ? 'กำลังยกเลิก...' : 'ยืนยันยกเลิกการจอง'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete-Lead-Interest Dialog — soft-deletes the lead↔unit link with required reason + audit log */}
+      <Dialog open={showDeleteInterestDialog} onOpenChange={(o) => { if (!deletingInterest) setShowDeleteInterestDialog(o); }}>
+        <DialogContent className="sm:max-w-[460px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-700">
+              <Trash2 className="w-5 h-5" />
+              ลบ Lead ออกจากยูนิตนี้
+            </DialogTitle>
+            <DialogDescription>
+              ลบความเชื่อมโยงระหว่าง <strong className="text-gray-900">{deleteInterestTarget?.customerName}</strong> กับยูนิต {unit.unit_number} — Lead ยังอยู่ในระบบ ไม่ได้ถูกลบ
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900">
+              <p className="font-semibold mb-1">เกิดอะไรขึ้นหลังลบ?</p>
+              <ul className="list-disc list-inside space-y-0.5 text-blue-800">
+                <li>Lead จะหายจากรายการ "Leads ที่สนใจยูนิตนี้"</li>
+                <li>คะแนน Lead จะคำนวณใหม่ (เพราะรายการยูนิตที่สนใจเปลี่ยน)</li>
+                <li>ระบบเก็บประวัติไว้ Admin ตรวจสอบย้อนหลังได้</li>
+              </ul>
+            </div>
+            <div>
+              <Label className="text-xs font-medium text-gray-700 mb-1.5 block">
+                เหตุผล <span className="text-red-500">*</span>
+              </Label>
+              <Textarea
+                value={deleteInterestReason}
+                onChange={(e) => setDeleteInterestReason(e.target.value)}
+                placeholder="เช่น เลือกยูนิตผิด, ลูกค้าเปลี่ยนใจ, ติดต่อไม่ได้นาน, สนใจยูนิตอื่นแทน..."
+                rows={3}
+                disabled={deletingInterest}
+                className="resize-none"
+              />
+              {!deleteInterestReason.trim() && (
+                <p className="text-[11px] text-gray-400 mt-1">
+                  ต้องระบุเหตุผลเพื่อยืนยันการลบ
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteInterestDialog(false)}
+              disabled={deletingInterest}
+            >
+              ยกเลิก
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={submitDeleteInterest}
+              disabled={deletingInterest || !deleteInterestReason.trim()}
+              className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+            >
+              {deletingInterest ? (
+                <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> กำลังลบ...</>
+              ) : (
+                <><Trash2 className="w-4 h-4 mr-1" /> ยืนยันลบ</>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

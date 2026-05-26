@@ -37,6 +37,15 @@ export async function getCompanySettings(tenantId: string): Promise<CompanySetti
 async function compressImage(file: File, maxSize: number = 400): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    // Track the blob URL so we can revoke it after loading — otherwise each compress
+    // call leaks one blob URL until the page unloads.
+    let blobUrl: string | null = null;
+    const cleanup = () => {
+      if (blobUrl) {
+        URL.revokeObjectURL(blobUrl);
+        blobUrl = null;
+      }
+    };
     img.onload = () => {
       // Calculate new dimensions (maintain aspect ratio, max maxSize)
       let width = img.width;
@@ -73,6 +82,7 @@ async function compressImage(file: File, maxSize: number = 400): Promise<Blob> {
       // Convert to blob with compression
       canvas.toBlob(
         (blob) => {
+          cleanup();
           if (blob) {
             resolve(blob);
           } else {
@@ -84,8 +94,12 @@ async function compressImage(file: File, maxSize: number = 400): Promise<Blob> {
       );
     };
 
-    img.onerror = () => reject(new Error('Failed to load image'));
-    img.src = URL.createObjectURL(file);
+    img.onerror = () => {
+      cleanup();
+      reject(new Error('Failed to load image'));
+    };
+    blobUrl = URL.createObjectURL(file);
+    img.src = blobUrl;
   });
 }
 
@@ -96,6 +110,16 @@ export async function uploadCompanyLogo(
   tenantId: string,
   file: File
 ): Promise<{ url: string; path: string } | null> {
+  // MIME whitelist — block obvious non-images at the gate. file.type can be
+  // spoofed via Content-Type header tampering, but combined with backend Supabase
+  // bucket policies + the compressImage step (which decodes the file as an image),
+  // a renamed .exe won't make it past the upload.
+  const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+  if (!ALLOWED_MIME.includes(file.type)) {
+    console.error(`Unsupported logo MIME type: ${file.type}`);
+    throw new Error(`รองรับเฉพาะรูปภาพ JPG / PNG / WEBP / GIF เท่านั้น`);
+  }
+
   // Compress image before upload
   let processedFile: File = file;
 

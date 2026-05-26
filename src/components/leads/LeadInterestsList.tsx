@@ -97,6 +97,9 @@ const LeadInterestsList = forwardRef<LeadInterestsListRef, LeadInterestsListProp
   const fetchInterests = async () => {
     setLoading(true);
     try {
+      // Exclude soft-deleted interests (status='dropped'/'lost') so the UI matches
+      // what UnitDetail and the delete-from-unit feature operate on. Otherwise
+      // Lead Detail would show interests that the user already removed.
       let { data, error } = await supabase
         .from("lead_interests")
         .select(`
@@ -105,6 +108,7 @@ const LeadInterestsList = forwardRef<LeadInterestsListRef, LeadInterestsListProp
           unit:units(id, unit_number, price, status)
         `)
         .eq("lead_id", leadId)
+        .not("status", "in", '("dropped","lost")')
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -113,6 +117,7 @@ const LeadInterestsList = forwardRef<LeadInterestsListRef, LeadInterestsListProp
           .from("lead_interests")
           .select("*")
           .eq("lead_id", leadId)
+          .not("status", "in", '("dropped","lost")')
           .order("created_at", { ascending: false });
 
         data = result.data;

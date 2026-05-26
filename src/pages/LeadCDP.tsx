@@ -443,11 +443,10 @@ const LeadCDP = () => {
         // it beats the system estimate. We re-derive monthly payment + ratios from the
         // manual max so every number on the card is internally consistent with the
         // approved amount (not a frankenstein of estimate + manual).
+        // Use the explicit loan_is_manual flag — the old timestamp comparison had a
+        // race condition where recompute always ran after save and falsely overrode.
         const manualMax = Number((lead as any).max_loan_amount) || 0;
-        const manualNewer = (lead as any).loan_last_updated &&
-          (!(lead as any).score_last_updated ||
-            new Date((lead as any).loan_last_updated) > new Date((lead as any).score_last_updated));
-        const useManual = manualMax > 0 && manualNewer;
+        const useManual = manualMax > 0 && (lead as any).loan_is_manual === true;
 
         if (useManual) {
           const rate = estimation.interest_rate;

@@ -201,9 +201,19 @@ const LeadManagement = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
-  // Priority filter — read from URL ?priority=high so MyDashboard's "ลูกค้าด่วน" card can deep-link in
-  const [searchParams] = useSearchParams();
-  const priorityFilter = searchParams.get('priority') || 'all';
+  const [propertyFilter, setPropertyFilter] = useState<string>('all');
+  // Priority filter — URL drives the initial value so MyDashboard's "ลูกค้าด่วน" card
+  // can deep-link in; the popover then lets Sales override / clear it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [priorityFilter, setPriorityFilterState] = useState<string>(searchParams.get('priority') || 'all');
+  const setPriorityFilter = (v: string) => {
+    setPriorityFilterState(v);
+    // Keep the URL in sync so the deep-link state survives a page refresh.
+    const next = new URLSearchParams(searchParams);
+    if (v === 'all') next.delete('priority');
+    else next.set('priority', v);
+    setSearchParams(next, { replace: true });
+  };
   const [activeTab, setActiveTab] = useState<'all' | 'my' | 'team'>(() =>
     ['sales', 'agent'].includes(userRole || '') ? 'my' : 'all'
   );
@@ -553,10 +563,13 @@ const LeadManagement = () => {
 
   const fetchInterestCounts = async () => {
     try {
+      // Exclude soft-deleted interests so the count badge matches what UnitDetail +
+      // LeadInterestsList actually display (both filter dropped/lost).
       const { data, error } = await supabase
         .from('lead_interests')
         .select('lead_id')
-        .eq('tenant_id', currentTenant?.id);
+        .eq('tenant_id', currentTenant?.id)
+        .not('status', 'in', '("dropped","lost")');
 
       if (error) throw error;
 
@@ -1002,6 +1015,24 @@ const LeadManagement = () => {
     }).format(amount);
   };
 
+  // Compact Thai currency format — matches Dashboard/Analytics/PropertyManagement.
+  // Use for table cells and headline numbers; keep formatCurrency for detail views
+  // where precision matters (income/debt fields, invoice line items).
+  const formatTHB = (n: number) => {
+    if (n === 0) return '฿0';
+    const abs = Math.abs(n);
+    const sign = n < 0 ? '-' : '';
+    if (abs >= 1_000_000) {
+      const m = abs / 1_000_000;
+      if (m >= 1000) return `${sign}฿${Math.round(m).toLocaleString('en-US')} ล้าน`;
+      if (m >= 100) return `${sign}฿${Math.round(m)} ล้าน`;
+      if (m >= 10) return `${sign}฿${m.toFixed(1)} ล้าน`;
+      return `${sign}฿${m.toFixed(2)} ล้าน`;
+    }
+    if (abs >= 1_000) return `${sign}฿${(abs / 1_000).toFixed(0)}K`;
+    return `${sign}฿${abs.toFixed(0)}`;
+  };
+
   const [sortByScore, setSortByScore] = useState(false);
 
   const filteredLeads = leads.filter(lead => {
@@ -1011,12 +1042,13 @@ const LeadManagement = () => {
                          propertyName.includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
     const matchesSource = sourceFilter === 'all' || lead.source === sourceFilter;
+    const matchesProperty = propertyFilter === 'all' || lead.property_id === propertyFilter;
     // URL-driven priority filter (from MyDashboard "ลูกค้าด่วน" deep-link).
     // For "high" we also hide closed/lost so the result matches the dashboard count.
     const openSet = new Set(['new','contacted','qualified','negotiating']);
     const matchesPriority = priorityFilter === 'all'
       || (lead.priority === priorityFilter && (priorityFilter !== 'high' || openSet.has(lead.status || '')));
-    return matchesSearch && matchesStatus && matchesSource && matchesPriority;
+    return matchesSearch && matchesStatus && matchesSource && matchesProperty && matchesPriority;
   }).sort((a, b) => {
     if (!sortByScore) return 0;
     const scoreA = (a as any).potential_score ?? -1;
@@ -1186,32 +1218,114 @@ const LeadManagement = () => {
                     className="pl-10"
                   />
                 </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[150px]">
-                    <Filter className="w-4 h-4 mr-2" />
-                    <SelectValue placeholder="สถานะ" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">ทุกสถานะ</SelectItem>
-                    <SelectItem value="new">ใหม่</SelectItem>
-                    <SelectItem value="contacted">ติดต่อแล้ว</SelectItem>
-                    <SelectItem value="qualified">มีคุณสมบัติ</SelectItem>
-                    <SelectItem value="negotiating">กำลังเจรจา</SelectItem>
-                    <SelectItem value="won">ปิดการขายสำเร็จ</SelectItem>
-                    <SelectItem value="lost">สูญเสีย</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="แหล่งที่มา" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">ทุกแหล่ง</SelectItem>
-                    <SelectItem value="online_facebook">Facebook</SelectItem>
-                    <SelectItem value="online_google">Google</SelectItem>
-                    <SelectItem value="offline">Walk-in / Offline</SelectItem>
-                  </SelectContent>
-                </Select>
+                {(() => {
+                  // Single consolidated filter — opens a panel with all filter sections.
+                  // Active-count badge on the button helps Sales see at a glance which
+                  // filters are currently narrowing the list.
+                  const activeCount =
+                    (statusFilter !== 'all' ? 1 : 0) +
+                    (sourceFilter !== 'all' ? 1 : 0) +
+                    (propertyFilter !== 'all' ? 1 : 0) +
+                    (priorityFilter !== 'all' ? 1 : 0);
+                  const clearAll = () => {
+                    setStatusFilter('all');
+                    setSourceFilter('all');
+                    setPropertyFilter('all');
+                    setPriorityFilter('all');
+                  };
+                  return (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="gap-2 min-w-[140px]">
+                          <Filter className="w-4 h-4" />
+                          ตัวกรอง
+                          {activeCount > 0 && (
+                            <span className="ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-semibold bg-chateau text-white tabular-nums">
+                              {activeCount}
+                            </span>
+                          )}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-[300px] p-4 space-y-4" onCloseAutoFocus={(e) => e.preventDefault()}>
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-semibold text-gray-900">ตัวกรอง</p>
+                          {activeCount > 0 && (
+                            <button
+                              type="button"
+                              onClick={clearAll}
+                              className="text-xs text-chateau hover:underline"
+                            >
+                              ล้างทั้งหมด
+                            </button>
+                          )}
+                        </div>
+
+                        <div>
+                          <Label className="text-xs font-medium text-gray-700 mb-1.5 block">สถานะ</Label>
+                          <Select value={statusFilter} onValueChange={setStatusFilter}>
+                            <SelectTrigger className="h-9 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">ทั้งหมด</SelectItem>
+                              <SelectItem value="new">ใหม่</SelectItem>
+                              <SelectItem value="contacted">ติดต่อแล้ว</SelectItem>
+                              <SelectItem value="qualified">มีคุณสมบัติ</SelectItem>
+                              <SelectItem value="negotiating">กำลังเจรจา</SelectItem>
+                              <SelectItem value="won">ปิดการขายสำเร็จ</SelectItem>
+                              <SelectItem value="lost">สูญเสีย</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div>
+                          <Label className="text-xs font-medium text-gray-700 mb-1.5 block">โครงการ</Label>
+                          <Select value={propertyFilter} onValueChange={setPropertyFilter}>
+                            <SelectTrigger className="h-9 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-[260px]">
+                              <SelectItem value="all">ทั้งหมด</SelectItem>
+                              {properties.map((p) => (
+                                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div>
+                          <Label className="text-xs font-medium text-gray-700 mb-1.5 block">ลูกค้าด่วน (Priority)</Label>
+                          <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+                            <SelectTrigger className="h-9 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">ทั้งหมด</SelectItem>
+                              <SelectItem value="high">สูง (ด่วน)</SelectItem>
+                              <SelectItem value="medium">ปานกลาง</SelectItem>
+                              <SelectItem value="low">ต่ำ</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div>
+                          <Label className="text-xs font-medium text-gray-700 mb-1.5 block">แหล่งที่มา</Label>
+                          <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                            <SelectTrigger className="h-9 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">ทั้งหมด</SelectItem>
+                              <SelectItem value="online_facebook">Facebook</SelectItem>
+                              <SelectItem value="online_google">Google</SelectItem>
+                              <SelectItem value="offline">Walk-in / Offline</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  );
+                })()}
               </div>
             </div>
           </CardContent>
@@ -1233,7 +1347,7 @@ const LeadManagement = () => {
                   >
                     Potential Score {sortByScore ? '▼' : '○'}
                   </TableHead>
-                  <TableHead>วงเงินกู้ (฿)</TableHead>
+                  <TableHead>วงเงินกู้</TableHead>
                   <TableHead>แหล่งที่มา</TableHead>
                   <TableHead>วันที่สร้าง</TableHead>
                   <TableHead className="text-right">ดำเนินการ</TableHead>
@@ -1297,15 +1411,18 @@ const LeadManagement = () => {
                         })()}
                       </TableCell>
                       <TableCell>
-                        {/* Real Max Loan Amount from database */}
+                        {/* Real Max Loan Amount from database — formatted compact for
+                            table scanning ("฿20.00 ล้าน" rather than 8-digit number).
+                            Split the unit suffix ("ล้าน" or "K") into a neutral color so
+                            the number itself stays the focal point. */}
                         {(() => {
                           const loanAmount = (lead as any).max_loan_amount;
-                          if (loanAmount == null) {
-                            return <span className="text-gray-400 text-sm">-</span>;
+                          if (!loanAmount || loanAmount <= 0) {
+                            return <span className="text-gray-400 text-sm italic">ยังไม่ระบุ</span>;
                           }
                           return (
-                            <span className="text-sm font-medium text-blue-600">
-                              {formatCurrency(loanAmount)}
+                            <span className="text-sm font-medium text-gray-900">
+                              {formatTHB(loanAmount)}
                             </span>
                           );
                         })()}
