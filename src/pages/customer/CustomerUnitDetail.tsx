@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   Building2, Bed, Bath, Square, Layers, MapPin, Heart, Loader2, Sun, ParkingCircle, Check,
   ChevronLeft, ChevronRight, Calendar, Calculator, Share2,
-  ChevronDown, View, Sparkles, FileDown,
+  ChevronDown, View, Sparkles, FileDown, Timer,
 } from 'lucide-react';
 import { incrementLeadCounter } from '@/lib/leadTracking';
 import { Button } from '@/components/ui/button';
@@ -1155,8 +1155,8 @@ const CustomerUnitDetail = () => {
             {/* SLA timer — passive, no clickable contact (Sales reaches out) */}
             <div className="bg-gradient-to-br from-rose-50 to-pink-50/50 border border-rose-100 rounded-xl p-4">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center flex-shrink-0 shadow-sm text-2xl">
-                  ⏱️
+                <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center flex-shrink-0 shadow-sm">
+                  <Timer className="w-5 h-5 text-rose-500" strokeWidth={2.25} />
                 </div>
                 <div className="flex-1">
                   <p className="text-[11px] text-gray-500 mb-0.5">Sales จะติดต่อกลับภายใน</p>

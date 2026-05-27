@@ -928,7 +928,7 @@ const CampaignBuilderWizard = () => {
                         <li> Audience: <span className="font-semibold">{totalReach.toLocaleString()} คน</span> ({selectedSegments.length} segments)</li>
                         {selectedProperties.length > 0 && <li> Properties: <span className="font-semibold">{selectedProperties.length} โครงการ</span></li>}
                         <li> Type: <span className="font-semibold">{CAMPAIGN_TYPES.find(t => t.value === campaignType)?.label}</span></li>
-                        <li>⏰ ส่ง: <span className="font-semibold">
+                        <li>ส่ง: <span className="font-semibold">
                           {scheduleType === "now" ? "ทันทีหลัง approve" :
                            scheduleType === "schedule" ? `${scheduleDate} ${scheduleTime}` :
                            recurringPattern}

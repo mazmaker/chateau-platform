@@ -948,8 +948,8 @@ const CampaignManagement = () => {
                       const statusConfig: Record<string, { dot: string; label: string; gradient: string; emoji: string }> = {
                         draft:     { dot: '#9ca3af', label: 'Draft',     gradient: 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)',  emoji: '' },
                         active:    { dot: KK.green,  label: 'Active',    gradient: 'linear-gradient(135deg, #ef4458 0%, #e60023 100%)',  emoji: '' },
-                        paused:    { dot: KK.amber,  label: 'Scheduled', gradient: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',  emoji: '⏰' },
-                        completed: { dot: '#9ca3af', label: 'Ended',     gradient: 'linear-gradient(135deg, #6b7280 0%, #374151 100%)',  emoji: '✓' },
+                        paused:    { dot: KK.amber,  label: 'Scheduled', gradient: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',  emoji: '' },
+                        completed: { dot: '#9ca3af', label: 'Ended',     gradient: 'linear-gradient(135deg, #6b7280 0%, #374151 100%)',  emoji: '' },
                       };
                       const sc = statusConfig[campaign.status] || statusConfig.draft;
                       const audienceCount = ((campaign.segments?.length || 0) + (campaign.activities?.length || 0)) * 1247 || 1820;
