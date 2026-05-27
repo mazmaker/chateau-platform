@@ -502,6 +502,28 @@ const UnitDetail = () => {
         }
         return next;
       }));
+
+      // Notify Lead owner that their customer was just confirmed at the unit.
+      // Non-blocking — interest update is the source of truth.
+      try {
+        const leadOwner = (interest as any)?.leads?.assigned_to;
+        const customerName = (interest as any)?.leads?.customers?.full_name || 'ลูกค้า';
+        if (leadOwner && currentTenant?.id) {
+          const { createNotification } = await import('@/lib/notifications');
+          await createNotification({
+            tenantId: currentTenant.id,
+            userId: leadOwner,
+            activityType: 'viewing_completed',
+            title: 'พาดูยูนิตเสร็จ — เริ่มเจรจา',
+            message: `${customerName} มาดูยูนิต ${unit?.unit_number || ''} แล้ว`,
+            severity: 'success',
+            relatedEntityType: 'lead',
+            relatedEntityId: leadId,
+            data: { unit_id: unit?.id, unit_number: unit?.unit_number },
+          });
+        }
+      } catch { /* non-blocking */ }
+
       toast.success('✓ ยืนยันลูกค้ามาดู + เริ่มเจรจาแล้ว');
     } catch (e: any) {
       console.error('Mark visit confirmed failed:', e);
@@ -675,6 +697,27 @@ const UnitDetail = () => {
         });
       }
 
+      // Notify Lead owner + tenant Admin/Owner — booking is a major milestone.
+      try {
+        const { createNotification, getTenantAdminUserIds } = await import('@/lib/notifications');
+        const adminIds = await getTenantAdminUserIds(currentTenant?.id || '');
+        const leadOwner = lead.assigned_to;
+        const recipients = Array.from(new Set([leadOwner, ...adminIds].filter(Boolean)));
+        for (const uid of recipients) {
+          await createNotification({
+            tenantId: currentTenant?.id || '',
+            userId: uid,
+            activityType: 'booking_created',
+            title: 'มีการจองยูนิตใหม่',
+            message: `${customerName} จองยูนิต ${unit.unit_number} (เงินจอง ${parseFloat(bookingForm.deposit_amount).toLocaleString()} ฿)`,
+            severity: 'success',
+            relatedEntityType: 'lead',
+            relatedEntityId: lead.id,
+            data: { unit_id: unit.id, unit_number: unit.unit_number, deposit_amount: parseFloat(bookingForm.deposit_amount) },
+          });
+        }
+      } catch { /* non-blocking */ }
+
       toast.success(`บันทึกการจองยูนิต ${unit.unit_number} สำหรับ ${customerName}`);
       setShowReserveDialog(false);
       await loadAll();
@@ -767,6 +810,31 @@ const UnitDetail = () => {
           }
         } catch { /* non-blocking */ }
       }
+
+      // Notify Lead owner + Admin — payment received is a finance milestone.
+      try {
+        if (unit.reserved_customer_lead_id) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: ownerRow } = await (supabase.from('leads') as any)
+            .select('assigned_to').eq('id', unit.reserved_customer_lead_id).maybeSingle();
+          const { createNotification, getTenantAdminUserIds } = await import('@/lib/notifications');
+          const adminIds = await getTenantAdminUserIds(currentTenant?.id || '');
+          const recipients = Array.from(new Set([(ownerRow as any)?.assigned_to, ...adminIds].filter(Boolean)));
+          for (const uid of recipients) {
+            await createNotification({
+              tenantId: currentTenant?.id || '',
+              userId: uid,
+              activityType: 'payment_received',
+              title: 'รับเงินจองเรียบร้อย',
+              message: `${unit.reserved_customer_name || 'ลูกค้า'} ชำระเงินจองยูนิต ${unit.unit_number}`,
+              severity: 'success',
+              relatedEntityType: 'lead',
+              relatedEntityId: unit.reserved_customer_lead_id,
+              data: { unit_id: unit.id, unit_number: unit.unit_number, amount: activeBooking?.total_amount },
+            });
+          }
+        }
+      } catch { /* non-blocking */ }
 
       toast.success(`✓ ยืนยันรับเงินมัดจำ ยูนิต ${unit.unit_number}`);
       await loadAll();
@@ -900,6 +968,32 @@ const UnitDetail = () => {
         bookingsQuery = bookingsQuery.eq('customer_id', buyingCustomerId);
       }
       await bookingsQuery;
+
+      // Notify Lead owner + Admin/Owner — won deal is the biggest event in the funnel.
+      try {
+        if (unit.reserved_customer_lead_id) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: ownerRow } = await (supabase.from('leads') as any)
+            .select('assigned_to').eq('id', unit.reserved_customer_lead_id).maybeSingle();
+          const { createNotification, getTenantAdminUserIds } = await import('@/lib/notifications');
+          const adminIds = await getTenantAdminUserIds(currentTenant?.id || '');
+          const recipients = Array.from(new Set([(ownerRow as any)?.assigned_to, ...adminIds].filter(Boolean)));
+          for (const uid of recipients) {
+            await createNotification({
+              tenantId: currentTenant?.id || '',
+              userId: uid,
+              activityType: 'lead_won',
+              title: 'ปิดดีลสำเร็จ',
+              message: `ขายยูนิต ${unit.unit_number} ให้ ${unit.reserved_customer_name || 'ลูกค้า'} สำเร็จ`,
+              severity: 'success',
+              relatedEntityType: 'lead',
+              relatedEntityId: unit.reserved_customer_lead_id,
+              data: { unit_id: unit.id, unit_number: unit.unit_number, sold_price: unit.price },
+            });
+          }
+        }
+      } catch { /* non-blocking */ }
+
       toast.success(`บันทึกการขายยูนิต ${unit.unit_number} เรียบร้อย`);
       await loadAll();
     } catch (err: any) {

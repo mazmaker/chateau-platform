@@ -715,6 +715,26 @@ const LeadManagement = () => {
         description: `ติดต่อลูกค้า ${customerName}`,
         metadata: { lead_id: lead.id, customer_id: lead.customer_id },
       });
+
+      // Notify Lead owner if it's someone else doing the contact (e.g., Admin
+      // logged a call on a Sales' lead). Skip self-notify — the contacter
+      // doesn't need a bell ping for their own action.
+      try {
+        if ((lead as any).assigned_to && (lead as any).assigned_to !== userProfile?.id && currentTenant?.id) {
+          const { createNotification } = await import('@/lib/notifications');
+          await createNotification({
+            tenantId: currentTenant.id,
+            userId: (lead as any).assigned_to,
+            activityType: 'lead_contacted',
+            title: 'มีการติดต่อ Lead ของคุณ',
+            message: `${customerName} ถูกติดต่อ`,
+            severity: 'info',
+            relatedEntityType: 'lead',
+            relatedEntityId: lead.id,
+          });
+        }
+      } catch { /* non-blocking */ }
+
       setSelectedLead({ ...lead, ...updates } as any);
       await fetchLeads();
       await fetchLeadActivities(lead.id);

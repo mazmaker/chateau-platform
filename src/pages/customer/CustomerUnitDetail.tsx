@@ -412,6 +412,60 @@ const CustomerUnitDetail = () => {
         },
       });
 
+      // Targeted in-app notification — routes the new Lead to the right user:
+      //   - If Sales was auto-assigned (via Agent referral / unit ownership) →
+      //     notify that Sales personally.
+      //   - Otherwise → broadcast to the tenant Sales pool (claim button) AND
+      //     notify Admin/Owner so they know unclaimed Leads are waiting.
+      try {
+        const customerName = (customer as any).full_name || 'ลูกค้า';
+        const { createNotification, getTenantAdminUserIds } = await import('@/lib/notifications');
+        if (salesUserId) {
+          await createNotification({
+            tenantId: unit.tenant_id,
+            userId: salesUserId,
+            activityType: 'lead_created',
+            title: 'Lead ใหม่เข้ามา',
+            message: `${customerName} สนใจยูนิต ${unit.unit_number}`,
+            severity: 'info',
+            relatedEntityType: 'lead',
+            relatedEntityId: (lead as any).id,
+            data: { unit_id: unit.id, unit_number: unit.unit_number, source: 'customer_portal' },
+          });
+        } else {
+          // Pool — broadcast to all Sales of the tenant (user_id NULL) +
+          // explicit notifications to Admin/Owner for awareness.
+          await createNotification({
+            tenantId: unit.tenant_id,
+            userId: null,
+            activityType: 'lead_unclaimed',
+            title: 'Lead ใหม่ใน pool — รอ Sales รับ',
+            message: `${customerName} สนใจยูนิต ${unit.unit_number}`,
+            severity: 'info',
+            relatedEntityType: 'lead',
+            relatedEntityId: (lead as any).id,
+            actionText: 'รับ Lead',
+            data: { unit_id: unit.id, unit_number: unit.unit_number, source: 'customer_portal' },
+          });
+          const adminIds = await getTenantAdminUserIds(unit.tenant_id);
+          for (const adminId of adminIds) {
+            await createNotification({
+              tenantId: unit.tenant_id,
+              userId: adminId,
+              activityType: 'lead_created',
+              title: 'Lead ใหม่ — รอ assign Sales',
+              message: `${customerName} สนใจยูนิต ${unit.unit_number}`,
+              severity: 'info',
+              relatedEntityType: 'lead',
+              relatedEntityId: (lead as any).id,
+              data: { unit_id: unit.id, unit_number: unit.unit_number, source: 'customer_portal' },
+            });
+          }
+        }
+      } catch (notifErr) {
+        console.warn('[notifications] lead creation notify failed:', notifErr);
+      }
+
       await loadAll();
       setShowInterestConfirm(true);
     } catch (err: any) {

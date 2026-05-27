@@ -169,6 +169,31 @@ export async function recomputeLeadScore(leadId: string): Promise<void> {
           },
         });
       } catch { /* non-blocking */ }
+
+      // Targeted notification to the Lead owner — celebrate that the customer
+      // they've been working on just cleared the affordability bar.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: leadFull } = await (supabase.from('leads') as any)
+          .select('assigned_to, customer_id, customers:customer_id(full_name)')
+          .eq('id', leadId).maybeSingle();
+        const ownerId = (leadFull as any)?.assigned_to;
+        const customerName = (leadFull as any)?.customers?.full_name || 'ลูกค้า';
+        if (ownerId && lead.tenant_id) {
+          const { createNotification } = await import('./notifications');
+          await createNotification({
+            tenantId: lead.tenant_id,
+            userId: ownerId,
+            activityType: 'lead_qualified',
+            title: 'Lead ผ่านคุณสมบัติ',
+            message: `${customerName} ผ่านการคัดกรองอัตโนมัติ (คะแนนการเงิน ${finScore}/100)`,
+            severity: 'success',
+            relatedEntityType: 'lead',
+            relatedEntityId: leadId,
+            data: { financial_score: finScore, threshold: QUALIFY_THRESHOLD },
+          });
+        }
+      } catch { /* non-blocking */ }
     }
   } catch (err) {
     console.warn('[recomputeLeadScore] non-fatal error:', err);

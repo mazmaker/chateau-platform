@@ -135,6 +135,24 @@ const HandoffLeadDialog = ({ open, onOpenChange, leadIds, customerNames, unitId,
             },
           });
         } catch { /* non-blocking */ }
+
+        // Targeted: notify the receiving Sales that a Lead was handed to them.
+        try {
+          if (selectedSalesId && currentTenant?.id) {
+            const { createNotification } = await import('@/lib/notifications');
+            await createNotification({
+              tenantId: currentTenant.id,
+              userId: selectedSalesId,
+              activityType: 'lead_assigned',
+              title: 'มอบหมาย Lead ใหม่',
+              message: `${agentName} ส่งต่อ ${customerNames?.[idx] || 'Lead'} ให้คุณ`,
+              severity: 'info',
+              relatedEntityType: 'lead',
+              relatedEntityId: leadId,
+              data: { from_user_id: userProfile?.id, source: 'handoff' },
+            });
+          }
+        } catch { /* non-blocking */ }
       }));
 
       const label = leadIds.length > 1 ? `${leadIds.length} Lead` : (customerNames?.[0] || 'Lead');
