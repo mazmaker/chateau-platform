@@ -129,6 +129,20 @@ export async function recomputeLeadScore(leadId: string): Promise<void> {
       updates.estimated_interest_rate = loanResult.interest_rate;
       updates.dti_ratio = loanResult.dti_ratio;
       updates.ltv_ratio = loanResult.ltv_ratio;
+    } else if (!loanResult && !loanWasManuallySet) {
+      // Insufficient data for auto-loan-estimate (no income, or no estimated_value)
+      // AND no manual Pre-approval set — clear any stale auto-calculated values.
+      // Without this, an old loan amount from a previous save persists in the UI
+      // even after Sales clears the income (which is misleading — Sales would see
+      // "ระบบประเมิน 5M" with no income on file, which doesn't make sense).
+      updates.max_loan_amount = null;
+      updates.estimated_monthly_payment = null;
+      updates.estimated_interest_rate = null;
+      updates.loan_term_years = null;
+      updates.dti_ratio = null;
+      updates.ltv_ratio = null;
+      updates.loan_approval_probability = null;
+      updates.loan_last_updated = null;
     }
 
     // Auto-qualify: promote contacted leads whose financial profile passes the

@@ -438,34 +438,17 @@ const LeadManagement = () => {
 
       if (error) throw error;
 
-      // Map leads data to the expected format
+      // Pass through ALL DB fields so EditLeadModal can read financial/demographic
+      // data (monthly_income, loan_is_manual, gender, etc.). The old hand-picked
+      // mapping silently dropped those fields, leaving the Edit form blank even
+      // though the data was sitting in the row.
       const mappedLeads = (data || []).map((item: any) => ({
-        id: item.id,
-        tenant_id: item.tenant_id,
-        customer_id: item.customer_id,
-        property_id: item.property_id,
-        unit_id: item.unit_id,
+        ...item,
+        // Apply UI-facing defaults / coercions on top
         status: item.status || 'new',
         source: item.source || 'website',
-        preferred_location: undefined,
         notes: item.notes || '',
-        priority: item.priority,
-        assigned_to: item.assigned_to,
-        next_follow_up: item.next_follow_up,
-        created_at: item.created_at,
-        updated_at: item.updated_at,
-        // Include scoring fields
-        potential_score: item.potential_score,
-        max_loan_amount: item.max_loan_amount,
-        financial_score: item.financial_score,
-        engagement_score: item.engagement_score,
-        urgency_score: item.urgency_score,
-        fit_score: item.fit_score,
-        conversion_probability: item.conversion_probability,
-        // Include joined data
-        customer: item.customer,
-        property: item.property,
-        unit: item.unit
+        preferred_location: undefined,
       }));
 
       setLeads(mappedLeads);

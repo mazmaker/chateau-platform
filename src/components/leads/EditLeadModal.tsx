@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useRef } from "react";
-import { X, Save, User, UserCircle, Briefcase, MapPin, Megaphone, Target, ShieldCheck, FileText, Building2, CalendarDays, UserCog } from "lucide-react";
+import { X, Save, User, UserCircle, Briefcase, MapPin, Megaphone, Target, ShieldCheck, FileText, Building2, CalendarDays, UserCog, CheckCircle, Calculator } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -215,7 +215,9 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
     down_payment_ready: "",     // เงินดาวน์พร้อม — Sales ถามตั้งแต่นัดดู
     employment_type: "",        // ประเภทงาน — ส่งผลต่อการอนุมัติสินเชื่อ
     years_employed: "",         // อายุงาน
-    max_loan_amount_manual: "", // วงเงินจากธนาคาร (manual override)
+    max_loan_amount_manual: "", // วงเงินจากธนาคาร (manual override — only when loan_is_manual=true)
+    max_loan_amount_auto: 0,    // วงเงินที่ระบบคำนวณ — แสดงเป็น placeholder เพื่อให้ Sales รู้
+    loan_is_manual_initial: false, // สถานะเดิมตอนเปิด form — ใช้ตัดสินใจ UI badge
     decision_maker: false,      // ผู้มีอำนาจตัดสินใจ — feeds fit score
     financing_approved: false,  // ได้รับอนุมัติสินเชื่อแล้ว — feeds fit score
     family_members: "",
@@ -328,9 +330,17 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
         purchase_timeline: (lead as any).purchase_timeline || "",
         lead_notes: lead.notes || "",
         imagePreview: prefs.profile_image || "",
-        first_name: prefs.first_name || "",
-        last_name: prefs.last_name || "",
-        gender: prefs.gender || "",
+        // Fallback split — 220/236 leads in the demo dataset have customer.full_name
+        // set but customers.preferences.first_name empty. Without this split, opening
+        // Edit shows blank name fields even though the Lead has a clear name in the list.
+        // Thai names typically split on the first space: "เบญจมาศ ทองคำ" → first/last.
+        first_name: prefs.first_name || (customer?.full_name ? customer.full_name.split(' ')[0] : "") || "",
+        last_name: prefs.last_name || (customer?.full_name ? customer.full_name.split(' ').slice(1).join(' ') : "") || "",
+        // Fallback to leads.* — most leads in DB have demographic data on the
+        // leads row directly, with empty customers.preferences. Without this
+        // fallback, opening Edit shows blank dropdowns even though Lead Detail
+        // shows the values correctly.
+        gender: prefs.gender || (lead as any).gender || "",
         // Fallback to lead.age (and customers.age column) — AddLeadModal writes age
         // to leads.age + customers.age but NOT customers.preferences.age, so reading
         // only from prefs would show an empty input for newly created leads.
@@ -338,18 +348,24 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
         phone: customer?.phone || "",
         email: customer?.email || "",
         occupation: prefs.occupation || "",
-        marital_status: prefs.marital_status || "",
+        marital_status: prefs.marital_status || (lead as any).marital_status || "",
         monthly_income: prefs.monthly_income?.toString() || (lead as any).monthly_income?.toString() || "",
         monthly_debt: prefs.monthly_debt?.toString() || (lead as any).monthly_debt?.toString() || "",
         down_payment_ready: (lead as any).down_payment_ready?.toString() || "",
         employment_type: (lead as any).employment_type || "",
         years_employed: (lead as any).years_employed?.toString() || "",
-        max_loan_amount_manual: (lead as any).max_loan_amount?.toString() || "",
+        // Only prefill the input with the manual value when Sales actually entered
+        // it from a Pre-approval Letter. Otherwise show empty + use auto value as
+        // the placeholder so the field clearly says "ระบบคำนวณให้" without making
+        // the user think they entered that number themselves.
+        max_loan_amount_manual: (lead as any).loan_is_manual ? ((lead as any).max_loan_amount?.toString() || "") : "",
+        max_loan_amount_auto: !(lead as any).loan_is_manual ? Number((lead as any).max_loan_amount || 0) : 0,
+        loan_is_manual_initial: !!(lead as any).loan_is_manual,
         decision_maker: !!(lead as any).decision_maker,
         financing_approved: !!(lead as any).financing_approved,
-        family_members: prefs.family_members?.toString() || "",
-        education: prefs.education || "",
-        workplace: prefs.workplace || "",
+        family_members: prefs.family_members?.toString() || (lead as any).household_size?.toString() || "",
+        education: prefs.education || (lead as any).education || "",
+        workplace: prefs.workplace || (lead as any).workplace || "",
         province_id: prefs.province_id?.toString() || "",
         district_id: prefs.district_id?.toString() || "",
         sub_district_id: prefs.sub_district_id?.toString() || "",
@@ -1124,21 +1140,47 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                           </div>
                         </div>
 
-                        {/* Group 3: Pre-approval — full-width since it's a "special" field with hint text */}
+                        {/* Group 3: Pre-approval — full-width since it's a "special" field with hint text.
+                            UX: distinguish 3 states clearly so Sales never confuses a system-estimate for a real bank approval:
+                              (a) Manual Pre-approval set (loan_is_manual=true)  → green "bank-approved" banner above input
+                              (b) System auto-calculated value (loan_is_manual=false, has value) → orange "system estimate" hint with the number shown as placeholder
+                              (c) No data yet (no income filled etc.)            → neutral placeholder */}
                         <div className="pt-4 border-t border-gray-100">
                           <Label className="text-sm font-medium flex items-center gap-1.5">
                             วงเงินกู้ที่ธนาคารอนุมัติ (บาท)
                             <span className="text-[10px] font-normal text-gray-400">— ระบุเมื่อมี Pre-approval Letter</span>
                           </Label>
-                          <Input
-                            type="text"
-                            inputMode="numeric"
-                            value={formData.max_loan_amount_manual ? Number(formData.max_loan_amount_manual).toLocaleString('en-US') : ''}
-                            onChange={(e) => setFormData(prev => ({ ...prev, max_loan_amount_manual: e.target.value.replace(/[^\d]/g, '') }))}
-                            placeholder="ปล่อยว่างให้ระบบคำนวณอัตโนมัติ"
-                            disabled={loading}
-                            className="mt-1.5"
-                          />
+
+                          {/* State indicator banner */}
+                          {formData.max_loan_amount_manual ? (
+                            <div className="mt-1.5 mb-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-green-50 border border-green-200">
+                              <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
+                              <span className="text-xs text-green-800">
+                                <span className="font-semibold">Pre-approval จากธนาคาร</span> — ตัวเลขจริงที่ธนาคารอนุมัติให้
+                              </span>
+                            </div>
+                          ) : formData.max_loan_amount_auto > 0 ? (
+                            <div className="mt-1.5 mb-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
+                              <Calculator className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                              <span className="text-xs text-amber-900">
+                                <span className="font-semibold">ระบบประเมินให้</span> ~ ฿{formData.max_loan_amount_auto.toLocaleString('en-US')} — ใส่ตัวเลขจริงด้านล่างเพื่อแทนที่
+                              </span>
+                            </div>
+                          ) : null}
+
+                          {/* Constrain input width to match the 4-col grid above (รายได้/หนี้/ดาวน์/อายุงาน) */}
+                          <div className="mt-1.5 max-w-xs">
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              value={formData.max_loan_amount_manual ? Number(formData.max_loan_amount_manual).toLocaleString('en-US') : ''}
+                              onChange={(e) => setFormData(prev => ({ ...prev, max_loan_amount_manual: e.target.value.replace(/[^\d]/g, '') }))}
+                              placeholder={formData.max_loan_amount_auto > 0
+                                ? `${formData.max_loan_amount_auto.toLocaleString('en-US')}`
+                                : 'ปล่อยว่างให้ระบบคำนวณ'}
+                              disabled={loading}
+                            />
+                          </div>
                           <p className="text-[11px] text-gray-500 mt-1">ถ้ามีจดหมาย Pre-approval จากธนาคาร ใส่ตัวเลขจริงจะแทนค่าที่ระบบคำนวณ</p>
                         </div>
 
