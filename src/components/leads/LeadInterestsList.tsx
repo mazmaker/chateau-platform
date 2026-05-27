@@ -71,6 +71,7 @@ const LeadInterestsList = forwardRef<LeadInterestsListRef, LeadInterestsListProp
   // Inline Edit state (instead of modal)
   const [editingInterestId, setEditingInterestId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [deleteReason, setDeleteReason] = useState<string>("");
   const [editLoading, setEditLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -328,31 +329,66 @@ const LeadInterestsList = forwardRef<LeadInterestsListRef, LeadInterestsListProp
   };
 
   const handleDelete = async (interestId: string) => {
+    if (!deleteReason.trim()) {
+      // UI requires a reason — same as UnitDetail's trash flow, so deletes from
+      // either entry point produce consistent audit records.
+      return;
+    }
     setDeleteLoading(true);
+    const interest = interests.find(i => i.id === interestId);
     try {
-      const { error } = await supabase
-        .from("lead_interests")
-        .delete()
+      // Soft delete via status='dropped' (NOT hard DELETE). Keeps the row in DB
+      // so audit + lead scoring history are preserved, and so that if the
+      // customer re-expresses interest on the same unit the existing row gets
+      // flipped back to 'interested' (same id, traceable journey) instead of a
+      // fresh row being inserted every time. Mirrors the trash flow in
+      // UnitDetail.tsx — both entry points behave identically now.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from('lead_interests') as any)
+        .update({
+          status: 'dropped',
+          notes: `[ลบจาก Lead Detail ${interest?.unit?.unit_number || ''}] ${deleteReason.trim()}`,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", interestId);
 
       if (error) throw error;
 
-      // Log activity for interest deletion
+      // Cancel any pending/confirmed bookings tied to this lead+unit so the
+      // customer's status timeline doesn't keep showing "ชำระมัดจำ ✓" for an
+      // interest that no longer exists. Mirrors UnitDetail.submitDeleteInterest.
+      if (interest?.unit_id) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase.from('bookings') as any)
+            .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+            .eq('tenant_id', currentTenant?.id)
+            .filter('notes->>unit_id', 'eq', interest.unit_id)
+            .filter('notes->>lead_id', 'eq', leadId)
+            .in('status', ['pending', 'confirmed']);
+        } catch { /* non-blocking */ }
+      }
+
+      // Audit log — using the SAME activity_type as the trash button on Unit
+      // Detail (lead_interest_removed) so notification + report filters can
+      // treat both as one event class.
       try {
-        const interest = interests.find(i => i.id === interestId);
         if (interest) {
           await supabase.rpc('log_activity', {
             p_tenant_id: currentTenant?.id,
             p_user_id: null,
-            p_activity_type: 'lead_interest_deleted',
-            p_description: `ลบความสนใจยูนิต: ${interest.unit?.unit_number || interest.unit_id} (${interest.property?.name || interest.property_id})`,
+            p_activity_type: 'lead_interest_removed',
+            p_description: `ลบความสนใจยูนิต ${interest.unit?.unit_number || interest.unit_id} (${interest.property?.name || ''}) — ${deleteReason.trim()}`,
             p_metadata: {
               lead_id: leadId,
               interest_id: interestId,
               property_id: interest.property_id,
               property_name: interest.property?.name,
               unit_id: interest.unit_id,
-              unit_number: interest.unit?.unit_number
+              unit_number: interest.unit?.unit_number,
+              previous_status: interest.status,
+              reason: deleteReason.trim(),
+              source: 'lead_detail',
             }
           });
         }
@@ -360,8 +396,16 @@ const LeadInterestsList = forwardRef<LeadInterestsListRef, LeadInterestsListProp
         // Ignore log_activity errors
       }
 
+      // Recompute lead score because removing an interest changes the lead's
+      // estimated_value (max unit price across active interests).
+      try {
+        const { recomputeLeadScore } = await import('@/lib/recomputeLeadScore');
+        await recomputeLeadScore(leadId);
+      } catch { /* non-fatal */ }
+
       await fetchInterests();
       setShowDeleteConfirm(null);
+      setDeleteReason("");
       onInterestsChange?.();
     } catch (error) {
       console.error("Error deleting interest:", error);
@@ -790,35 +834,42 @@ const LeadInterestsList = forwardRef<LeadInterestsListRef, LeadInterestsListProp
                             </div>
                           </div>
                         ) : showDeleteConfirm === interest.id ? (
-                          // Inline Delete Confirmation
-                          <div className="p-4 bg-red-50 border-l-4 border-red-400">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="font-medium text-red-800">
-                                  ยืนยันการลบ "{interest.unit?.unit_number}"?
-                                </p>
-                                <p className="text-sm text-red-600">
-                                  การกระทำนี้ไม่สามารถกู้คืนได้
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setShowDeleteConfirm(null)}
-                                  disabled={deleteLoading}
-                                >
-                                  ยกเลิก
-                                </Button>
-                                <Button
-                                  variant="destructive"
-                                  size="sm"
-                                  onClick={() => handleDelete(interest.id)}
-                                  disabled={deleteLoading}
-                                >
-                                  {deleteLoading ? "กำลังลบ..." : "ลบ"}
-                                </Button>
-                              </div>
+                          // Inline Delete Confirmation — soft delete with required reason
+                          // (consistent with trash button on Unit Detail).
+                          <div className="p-4 bg-red-50 border-l-4 border-red-400 space-y-3">
+                            <div>
+                              <p className="font-medium text-red-800">
+                                ลบความสนใจยูนิต "{interest.unit?.unit_number}"?
+                              </p>
+                              <p className="text-xs text-red-700 mt-0.5">
+                                Lead ยังอยู่ในระบบ — แค่ตัดความเชื่อมโยงกับยูนิตนี้ออก + เก็บประวัติไว้
+                              </p>
+                            </div>
+                            <textarea
+                              value={deleteReason}
+                              onChange={(e) => setDeleteReason(e.target.value)}
+                              placeholder="ระบุเหตุผล (เช่น เลือกยูนิตผิด, ลูกค้าเปลี่ยนใจ, ติดต่อไม่ได้นาน...)"
+                              rows={2}
+                              disabled={deleteLoading}
+                              className="w-full text-sm border border-red-200 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-red-300 resize-none"
+                            />
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => { setShowDeleteConfirm(null); setDeleteReason(""); }}
+                                disabled={deleteLoading}
+                              >
+                                ยกเลิก
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDelete(interest.id)}
+                                disabled={deleteLoading || !deleteReason.trim()}
+                              >
+                                {deleteLoading ? "กำลังลบ..." : "ยืนยันลบ"}
+                              </Button>
                             </div>
                           </div>
                         ) : (
