@@ -24,7 +24,7 @@ export type NotificationActivityType = string;
 export interface CreateNotificationInput {
   /** Tenant scope. Required — RLS enforces it. */
   tenantId: string;
-  /** Target user. Pass null/undefined for tenant-wide broadcast (lead pool style). */
+  /** Target user. Pass null/undefined for tenant-wide broadcast (system announcements). */
   userId?: string | null;
   /** Semantic event type — drives icon + label in the UI (e.g. 'lead_created'). */
   activityType: NotificationActivityType;
@@ -39,7 +39,7 @@ export interface CreateNotificationInput {
   relatedEntityId?: string;
   /** Optional explicit URL to navigate to on click (overrides entity-based link). */
   actionUrl?: string;
-  /** Button label for actionable notifications, e.g. 'รับ Lead' for unclaimed pool. */
+  /** Button label for actionable notifications (currently unused — pool/claim retired). */
   actionText?: string;
   /** Extra metadata the UI may render (e.g. financial_score, previous_status). */
   data?: Record<string, unknown>;

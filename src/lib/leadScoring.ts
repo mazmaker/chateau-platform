@@ -69,31 +69,34 @@ function calculateFinancialScore(data: LeadScoringData): {
     let incomeScore = 0;
     let impact: 'positive' | 'negative' | 'neutral' = 'neutral';
 
+    let description: string;
     if (priceToIncomeRatio <= 3) {
       incomeScore = 100;
       impact = 'positive';
+      description = `กำลังซื้อดีเยี่ยม ราคายูนิต ${priceToIncomeRatio.toFixed(1)} เท่าของรายได้ต่อปี`;
     } else if (priceToIncomeRatio <= 5) {
       incomeScore = 70;
       impact = 'neutral';
+      description = `กำลังซื้อเข้าเกณฑ์ ราคายูนิต ${priceToIncomeRatio.toFixed(1)} เท่าของรายได้ต่อปี`;
     } else if (priceToIncomeRatio <= 7) {
       incomeScore = 40;
       impact = 'neutral';
+      description = `กำลังซื้อใกล้เพดาน ราคายูนิต ${priceToIncomeRatio.toFixed(1)} เท่าของรายได้ต่อปี`;
     } else {
       incomeScore = 20;
       impact = 'negative';
+      description = `โอกาสอนุมัติต่ำ ราคายูนิตมากกว่ารายได้ ${priceToIncomeRatio.toFixed(1)} เท่าต่อปี`;
     }
 
     totalScore += incomeScore * incomeWeight;
     totalWeight += incomeWeight;
 
     factors.push({
-      factor: 'อัตราส่วนรายได้ต่อราคา',
+      factor: 'รายได้เทียบกับราคายูนิต',
       impact,
       score: incomeScore,
       weight: incomeWeight,
-      description: `ราคาทรัพย์สินเท่ากับ ${priceToIncomeRatio.toFixed(
-        1
-      )}x ของรายได้ต่อปี`,
+      description,
     });
   }
 
@@ -104,18 +107,23 @@ function calculateFinancialScore(data: LeadScoringData): {
     let downPaymentScore = 0;
     let impact: 'positive' | 'negative' | 'neutral' = 'neutral';
 
+    let dpDescription: string;
     if (downPaymentPercent >= 30) {
       downPaymentScore = 100;
       impact = 'positive';
+      dpDescription = `เงินดาวน์ดีเยี่ยม ${downPaymentPercent.toFixed(0)}% ของราคายูนิต`;
     } else if (downPaymentPercent >= 20) {
       downPaymentScore = 80;
       impact = 'positive';
+      dpDescription = `เงินดาวน์เข้าเกณฑ์ ${downPaymentPercent.toFixed(0)}% ของราคายูนิต`;
     } else if (downPaymentPercent >= 10) {
       downPaymentScore = 50;
       impact = 'neutral';
+      dpDescription = `เงินดาวน์ต่ำกว่าเกณฑ์ ${downPaymentPercent.toFixed(0)}% ของราคายูนิต (ขั้นต่ำ 20%)`;
     } else {
       downPaymentScore = 20;
       impact = 'negative';
+      dpDescription = `โอกาสอนุมัติต่ำ เงินดาวน์น้อยกว่า 10% ของราคายูนิต`;
     }
 
     totalScore += downPaymentScore * downPaymentWeight;
@@ -126,7 +134,7 @@ function calculateFinancialScore(data: LeadScoringData): {
       impact,
       score: downPaymentScore,
       weight: downPaymentWeight,
-      description: `มีเงินดาวน์ ${downPaymentPercent.toFixed(1)}% ของราคาทรัพย์สิน`,
+      description: dpDescription,
     });
   }
 
@@ -145,34 +153,36 @@ function calculateFinancialScore(data: LeadScoringData): {
     }[data.employment_type];
 
     // Adjust by years employed
+    let stabilityLabel: string;
     if (data.years_employed >= 5) {
       employmentScore = typeScore;
       impact = 'positive';
+      stabilityLabel = 'อายุงานมั่นคง';
     } else if (data.years_employed >= 2) {
       employmentScore = typeScore * 0.8;
       impact = 'neutral';
+      stabilityLabel = 'อายุงานปานกลาง';
     } else {
       employmentScore = typeScore * 0.5;
       impact = 'negative';
+      stabilityLabel = 'อายุงานน้อย';
     }
 
     totalScore += employmentScore * employmentWeight;
     totalWeight += employmentWeight;
+
+    const occupationLabel =
+      data.employment_type === 'government' ? 'ข้าราชการ'
+      : data.employment_type === 'private' ? 'พนักงานเอกชน'
+      : data.employment_type === 'business' ? 'ธุรกิจส่วนตัว'
+      : 'Freelance';
 
     factors.push({
       factor: 'ความมั่นคงในการทำงาน',
       impact,
       score: employmentScore,
       weight: employmentWeight,
-      description: `${
-        data.employment_type === 'government'
-          ? 'ข้าราชการ'
-          : data.employment_type === 'private'
-          ? 'พนักงานเอกชน'
-          : data.employment_type === 'business'
-          ? 'ธุรกิจส่วนตัว'
-          : 'Freelance'
-      } อายุงาน ${data.years_employed} ปี`,
+      description: `${stabilityLabel} ${occupationLabel} ${data.years_employed} ปี`,
     });
   }
 

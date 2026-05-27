@@ -73,7 +73,10 @@ import {
   Target,
   CreditCard,
   Send,
-  ChevronRight
+  ChevronRight,
+  Bell,
+  Heart,
+  Check
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -265,6 +268,26 @@ const LeadManagement = () => {
   };
 
   // Explicit cancel — clears viewing_date and reverts status if it was viewing_scheduled
+  // Hard-delete a dropped/lost interest row. Only exposed to Admin/Owner — Sales
+  // shouldn't be able to erase audit history. Soft-deleted ('dropped') rows pile
+  // up over time and clutter the "ยกเลิกความสนใจแล้ว" section; this gives the
+  // tenant admin a way to clean them out permanently after they're sure the
+  // history is no longer needed.
+  const permanentlyDeleteInterest = async (interestId: string, unitNumber?: string) => {
+    if (!confirm(`ลบรายการ ${unitNumber ? `ยูนิต ${unitNumber} ` : ''}อย่างถาวร?\nหลังจากลบจะไม่สามารถกู้คืนได้`)) return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from('lead_interests') as any)
+        .delete().eq('id', interestId);
+      if (error) throw error;
+      setSelectedLeadInterests((prev) => prev.filter((i) => i.id !== interestId));
+      toast.success('ลบรายการเรียบร้อย');
+    } catch (e: any) {
+      console.error('Hard-delete interest failed:', e);
+      toast.error('ลบไม่สำเร็จ: ' + (e?.message || 'unknown'));
+    }
+  };
+
   const cancelVisitDate = async (interestId: string) => {
     if (!confirm('ยกเลิกการนัดดูยูนิตนี้?')) return;
     setSavingVisit(true);
@@ -424,7 +447,8 @@ const LeadManagement = () => {
           *,
           customer:customers(id, full_name, email, phone, preferences),
           property:properties(id, name),
-          unit:units!leads_unit_id_fkey(id, unit_number, price)
+          unit:units!leads_unit_id_fkey(id, unit_number, price),
+          assigned_user:users!leads_assigned_to_fkey(id, full_name, role)
         `)
         .eq('tenant_id', currentTenant?.id)
         .order('created_at', { ascending: false });
@@ -899,17 +923,25 @@ const LeadManagement = () => {
 
   const getSourceLabel = (source: string) => {
     if (!source) return '-';
-    // Handle complex source strings like "online_google" or "online_facebook_other: xxx"
     const sourceMap: Record<string, string> = {
       'website': 'Website',
       'facebook': 'Facebook',
+      'instagram': 'Instagram',
+      'tiktok': 'TikTok',
+      'youtube': 'YouTube',
+      'twitter': 'X (Twitter)',
       'line': 'LINE',
+      'line_oa': 'LINE OA',
+      'google': 'Google',
       'referral': 'แนะนำ',
+      'agent_referral': 'Agent แนะนำ',
       'walk_in': 'Walk-in',
       'advertising': 'โฆษณา',
       'online': 'ออนไลน์',
+      'offline': 'ออฟไลน์',
       'online_google': 'Google',
       'online_facebook': 'Facebook',
+      'online_instagram': 'Instagram',
       'online_line': 'LINE OA',
       'online_tiktok': 'TikTok',
       'online_youtube': 'YouTube',
@@ -917,10 +949,19 @@ const LeadManagement = () => {
       'brochure': 'แผ่นพับ/โบรชัวร์',
       'event': 'งานอีเว้นท์',
       'friend': 'เพื่อน/ญาติแนะนำ',
+      'other': 'อื่นๆ',
     };
-    // Check for exact match first
+    // Normalize: strip "other:" / "other_" prefix and lowercase. The legacy data
+    // entry layer wrapped known platforms in "other: facebook" — we shouldn't
+    // show that to Sales. If the inner value matches a known platform → use it.
+    const normalized = source
+      .replace(/^other[:_]\s*/i, '')
+      .trim()
+      .toLowerCase();
+    if (sourceMap[normalized]) return sourceMap[normalized];
+    // Exact match on original
     if (sourceMap[source]) return sourceMap[source];
-    // Check for partial matches
+    // Partial / prefix match
     for (const [key, label] of Object.entries(sourceMap)) {
       if (source.startsWith(key)) return label;
     }
@@ -1341,8 +1382,6 @@ const LeadManagement = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>ชื่อลูกค้า</TableHead>
-                  <TableHead>โครงการที่สนใจ</TableHead>
-                  <TableHead>ยูนิตสนใจ</TableHead>
                   <TableHead>สถานะ</TableHead>
                   <TableHead
                     className="cursor-pointer select-none hover:text-chateau"
@@ -1352,6 +1391,7 @@ const LeadManagement = () => {
                   </TableHead>
                   <TableHead>วงเงินกู้</TableHead>
                   <TableHead>แหล่งที่มา</TableHead>
+                  <TableHead>ผู้รับผิดชอบ</TableHead>
                   <TableHead>วันที่สร้าง</TableHead>
                   <TableHead className="text-right">ดำเนินการ</TableHead>
                 </TableRow>
@@ -1385,16 +1425,6 @@ const LeadManagement = () => {
                       <TableCell className="font-medium">
                         {getCustomerName(lead)}
                       </TableCell>
-                      <TableCell>{getPropertyName(lead)}</TableCell>
-                      <TableCell>
-                        {interestCounts[lead.id] ? (
-                          <Badge variant="secondary" className="font-medium">
-                            {interestCounts[lead.id]} ยูนิต
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
                       <TableCell>
                         {getStatusBadge(lead.status)}
                       </TableCell>
@@ -1414,24 +1444,79 @@ const LeadManagement = () => {
                         })()}
                       </TableCell>
                       <TableCell>
-                        {/* Real Max Loan Amount from database — formatted compact for
-                            table scanning ("฿20.00 ล้าน" rather than 8-digit number).
-                            Split the unit suffix ("ล้าน" or "K") into a neutral color so
-                            the number itself stays the focal point. */}
+                        {/* Loan amount has 4 distinct presentations so Sales can take
+                            the right action at a glance:
+                              • Sales-verified  → bold dark number (no tag)
+                              • Auto-estimated  → muted number + "ประเมิน" chip
+                              • DTI too high    → "ผ่อนไม่ไหว (DTI สูง)" warning (amber)
+                              • No income data  → "ขอข้อมูลรายได้" hint (gray italic)
+                            Lumping the last two as a generic "ยังไม่ระบุ" hides a real
+                            risk signal — DTI=100% leads should be flagged, not blanked. */}
                         {(() => {
-                          const loanAmount = (lead as any).max_loan_amount;
-                          if (!loanAmount || loanAmount <= 0) {
-                            return <span className="text-gray-400 text-sm italic">ยังไม่ระบุ</span>;
+                          const loanAmount = Number((lead as any).max_loan_amount);
+                          const isManual = (lead as any).loan_is_manual === true;
+                          // Income/debt live in TWO places — leads.* and customers.preferences.* —
+                          // and they're NOT always in sync (older AddLeadModal flows wrote only to
+                          // preferences, leaving leads.monthly_income at 0). Read both, prefer
+                          // whichever is non-zero so the column doesn't lie about missing data.
+                          const prefs = (lead as any).customer?.preferences || {};
+                          const monthlyIncome = Number((lead as any).monthly_income) || Number(prefs.monthly_income) || 0;
+                          const monthlyDebt = Number((lead as any).monthly_debt) || Number(prefs.monthly_debt) || 0;
+
+                          if (loanAmount > 0) {
+                            if (isManual) {
+                              return (
+                                <span className="text-sm font-semibold text-gray-900">
+                                  {formatTHB(loanAmount)}
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="text-sm text-gray-600">{formatTHB(loanAmount)}</span>
+                                <span className="text-[10px] font-medium text-chateau">
+                                  ประเมิน
+                                </span>
+                              </span>
+                            );
                           }
-                          return (
-                            <span className="text-sm font-medium text-gray-900">
-                              {formatTHB(loanAmount)}
-                            </span>
-                          );
+                          // No stored loan amount, but income data exists → either DTI too high
+                          // OR the estimate hasn't been computed yet (legacy data drift).
+                          // Decide by DTI: >= 40% is the Thai bank cap → can't loan.
+                          if (monthlyIncome > 0) {
+                            const dti = monthlyDebt / monthlyIncome;
+                            if (dti >= 0.4) {
+                              return (
+                                <span className="text-sm font-medium text-amber-700">
+                                  ผ่อนไม่ไหว <span className="text-[10px] text-amber-600">(DTI สูง)</span>
+                                </span>
+                              );
+                            }
+                            // Has income, DTI is fine, but no stored estimate — needs recompute.
+                            return (
+                              <span className="text-sm font-medium text-blue-600 italic">
+                                รอประเมินวงเงิน
+                              </span>
+                            );
+                          }
+                          return <span className="text-gray-400 text-sm italic">ขอข้อมูลรายได้</span>;
                         })()}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{getSourceLabel(lead.source)}</Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {(() => {
+                          const assigned = (lead as any).assigned_user;
+                          if (!assigned?.full_name) {
+                            return <span className="text-amber-700 italic">ยังไม่มอบหมาย</span>;
+                          }
+                          return (
+                            <span className="text-gray-900 font-medium">
+                              {assigned.full_name}
+                            </span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {new Date(lead.created_at).toLocaleDateString('th-TH')}
@@ -1673,9 +1758,24 @@ const LeadManagement = () => {
                                   <p className="text-sm font-semibold text-gray-900 truncate">
                                     {interest.property?.name || 'โครงการ'}
                                   </p>
-                                  <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-md flex-shrink-0 ${dim ? 'bg-gray-200 text-gray-600' : 'bg-white border border-gray-200 text-gray-700'}`}>
-                                    {statusOption?.label || interest.status}
-                                  </span>
+                                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                                    <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-md ${dim ? 'bg-gray-200 text-gray-600' : 'bg-white border border-gray-200 text-gray-700'}`}>
+                                      {statusOption?.label || interest.status}
+                                    </span>
+                                    {/* Hard-delete for dropped/lost rows — Admin/Owner only.
+                                        Lets them prune dead history once they're sure it's no
+                                        longer needed. Soft-delete (status='dropped') is already
+                                        the default on the active list; this is the final step. */}
+                                    {dim && (userRole === 'admin' || userRole === 'owner') && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); permanentlyDeleteInterest(interest.id, interest.unit?.unit_number); }}
+                                        className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+                                        title="ลบรายการนี้อย่างถาวร"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                                 <div className="flex items-center gap-3 text-xs text-gray-600">
                                   <span>ยูนิต <span className="font-semibold text-gray-800">{interest.unit?.unit_number || '-'}</span></span>
@@ -1714,86 +1814,76 @@ const LeadManagement = () => {
                                     </Button>
                                   </div>
                                 ) : !dim ? (
-                                  // Two-row layout: status line on top, primary action + overflow menu below.
-                                  // Keeps "บันทึกการจอง" (primary) prominent on the right while secondary
-                                  // visit-scheduling actions live inside the ⋯ menu — reduces visual noise
-                                  // for the most common case where Agent only needs to record a reservation.
-                                  <div className="mt-1 space-y-1">
+                                  // Single row: status text on the left, all actions consolidated into
+                                  // the ⋯ overflow menu. Inline action links (บันทึกการจอง / ยืนยันมาแล้ว)
+                                  // were moved into the menu so the card stays compact — Sales reported
+                                  // the inline buttons cluttered the list view.
+                                  <div className="mt-1 flex items-center justify-between gap-2">
                                     <div className="text-[11px]">
                                       {interest.viewing_date ? (
                                         <span className="text-amber-700 font-medium">
                                           นัดดู {new Date(interest.viewing_date).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                                         </span>
                                       ) : ['viewed', 'negotiating', 'reserved', 'won'].includes(interest.status as string) ? (
-                                        <span className="text-green-700 font-medium">✓ ลูกค้าดูแล้ว</span>
+                                        <span className="text-green-700 font-medium">ลูกค้าดูแล้ว</span>
                                       ) : (
                                         <span className="text-gray-400">ยังไม่มีนัด</span>
                                       )}
+                                      {!['reserved', 'won', 'lost', 'dropped'].includes(interest.status as string)
+                                        && interest.unit?.status && interest.unit.status !== 'available' && (
+                                        <span className="ml-2 text-gray-400 italic" title={`สถานะยูนิต: ${interest.unit.status}`}>
+                                          · ยูนิตไม่ว่าง
+                                        </span>
+                                      )}
                                     </div>
                                     {(userRole === 'agent' || userRole === 'sales' || userRole === 'admin' || userRole === 'owner') && (
-                                      <div className="flex items-center gap-2">
-                                        {/* Confirm visit: only when there's an appointment and customer hasn't been
-                                            marked as visited yet. One click advances status='viewed' AND ticks
-                                            leads.site_visit_attended so ML scoring sees the engagement. */}
-                                        {interest.status === 'viewing_scheduled' && interest.viewing_date && selectedLead && (
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
                                           <button
-                                            onClick={(e) => { e.stopPropagation(); confirmVisitAttended(interest.id, selectedLead.id); }}
-                                            disabled={savingVisit}
-                                            className="text-[11px] text-cyan-700 hover:underline font-semibold disabled:opacity-50"
-                                            title="ยืนยันว่าลูกค้ามาเยี่ยมชมโครงการแล้ว"
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="p-1 rounded hover:bg-gray-200 text-gray-500"
+                                            aria-label="ตัวเลือกเพิ่มเติม"
                                           >
-                                            ยืนยันมาแล้ว
+                                            <MoreHorizontal className="w-3.5 h-3.5" />
                                           </button>
-                                        )}
-                                        {/* Primary action: Quick Reserve. Hidden when interest is reserved/won/lost/dropped
-                                            OR when the unit is no longer 'available'. Atomic check on the backend is the
-                                            authoritative guard; this is UX to avoid offering a doomed click. */}
-                                        {!['reserved', 'won', 'lost', 'dropped'].includes(interest.status as string)
-                                          && interest.unit?.status === 'available' && (
-                                          <button
-                                            onClick={(e) => { e.stopPropagation(); setReserveInterest(interest); setShowReserveDialog(true); }}
-                                            className="text-[11px] text-green-700 hover:underline font-semibold"
-                                            title="ล็อกยูนิตและรับเงินมัดจำให้ลูกค้ารายนี้"
-                                          >
-                                            บันทึกการจอง
-                                          </button>
-                                        )}
-                                        {!['reserved', 'won', 'lost', 'dropped'].includes(interest.status as string)
-                                          && interest.unit?.status && interest.unit.status !== 'available' && (
-                                          <span className="text-[11px] text-gray-400 italic" title={`สถานะยูนิต: ${interest.unit.status}`}>
-                                            ยูนิตไม่ว่าง
-                                          </span>
-                                        )}
-
-                                        {/* Overflow menu: nat-scheduling actions. Cancel is destructive so it stays
-                                            visually distinct (red) inside the menu rather than next to the primary. */}
-                                        <DropdownMenu>
-                                          <DropdownMenuTrigger asChild>
-                                            <button
-                                              onClick={(e) => e.stopPropagation()}
-                                              className="ml-auto p-1 rounded hover:bg-gray-200 text-gray-500"
-                                              aria-label="ตัวเลือกเพิ่มเติม"
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                          {/* Primary action — keep at top so it's the easiest to reach.
+                                              Hidden when interest is past 'reserved' or unit is unavailable. */}
+                                          {!['reserved', 'won', 'lost', 'dropped'].includes(interest.status as string)
+                                            && interest.unit?.status === 'available' && (
+                                            <DropdownMenuItem
+                                              onClick={(e) => { e.stopPropagation(); setReserveInterest(interest); setShowReserveDialog(true); }}
+                                              className="text-green-700 focus:text-green-800 font-semibold"
                                             >
-                                              <MoreHorizontal className="w-3.5 h-3.5" />
-                                            </button>
-                                          </DropdownMenuTrigger>
-                                          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditingVisitId(interest.id); setVisitDateDraft(toLocalInputValue(interest.viewing_date)); }}>
-                                              <Calendar className="w-3.5 h-3.5 mr-2" />
-                                              {interest.viewing_date ? 'แก้นัดดู' : 'นัดดู'}
+                                              <Check className="w-3.5 h-3.5 mr-2" /> บันทึกการจอง
                                             </DropdownMenuItem>
-                                            {interest.viewing_date && (
-                                              <DropdownMenuItem
-                                                onClick={(e) => { e.stopPropagation(); cancelVisitDate(interest.id); }}
-                                                disabled={savingVisit}
-                                                className="text-red-600 focus:text-red-700"
-                                              >
-                                                <Trash2 className="w-3.5 h-3.5 mr-2" /> ยกเลิกนัด
-                                              </DropdownMenuItem>
-                                            )}
-                                          </DropdownMenuContent>
-                                        </DropdownMenu>
-                                      </div>
+                                          )}
+                                          {/* Confirm visit — only when there's a scheduled visit not yet attended. */}
+                                          {interest.status === 'viewing_scheduled' && interest.viewing_date && selectedLead && (
+                                            <DropdownMenuItem
+                                              onClick={(e) => { e.stopPropagation(); confirmVisitAttended(interest.id, selectedLead.id); }}
+                                              disabled={savingVisit}
+                                              className="text-cyan-700 focus:text-cyan-800"
+                                            >
+                                              <CheckCircle className="w-3.5 h-3.5 mr-2" /> ยืนยันลูกค้ามาแล้ว
+                                            </DropdownMenuItem>
+                                          )}
+                                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditingVisitId(interest.id); setVisitDateDraft(toLocalInputValue(interest.viewing_date)); }}>
+                                            <Calendar className="w-3.5 h-3.5 mr-2" />
+                                            {interest.viewing_date ? 'แก้นัดดู' : 'นัดดู'}
+                                          </DropdownMenuItem>
+                                          {interest.viewing_date && (
+                                            <DropdownMenuItem
+                                              onClick={(e) => { e.stopPropagation(); cancelVisitDate(interest.id); }}
+                                              disabled={savingVisit}
+                                              className="text-red-600 focus:text-red-700"
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5 mr-2" /> ยกเลิกนัด
+                                            </DropdownMenuItem>
+                                          )}
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
                                     )}
                                   </div>
                                 ) : null}
@@ -1802,6 +1892,20 @@ const LeadManagement = () => {
                           </div>
                         );
                       };
+
+                      // Split active interests into 2 buckets matching customer intent:
+                      //   • ขอติดต่อ   = interest_level='high' (customer clicked "ฉันสนใจ")
+                      //   • บันทึกไว้ = interest_level='low'/'medium' (customer just hearted) or active engagement
+                      // This mirrors the customer-dashboard 3-section split so Sales sees the
+                      // same mental model. Color-coding alone wasn't enough — testers couldn't
+                      // distinguish "สนใจมาก/น้อย" labels at a glance.
+                      const ACTIVE_FOLLOWUP_STATUSES = ['viewing_scheduled', 'viewed', 'negotiating', 'reserved', 'deposit_paid', 'won'];
+                      const priorityInterests = activeInterests.filter(
+                        (i) => i.interest_level === 'high' || ACTIVE_FOLLOWUP_STATUSES.includes(i.status)
+                      );
+                      const bookmarkInterests = activeInterests.filter(
+                        (i) => i.interest_level !== 'high' && !ACTIVE_FOLLOWUP_STATUSES.includes(i.status)
+                      );
 
                       return (
                         <>
@@ -1818,8 +1922,41 @@ const LeadManagement = () => {
                               <div className="animate-spin rounded-full h-6 w-6 border-b-2" style={{ borderColor: '#3b82f6' }}></div>
                             </div>
                           ) : activeInterests.length > 0 ? (
-                            <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                              {activeInterests.map((interest) => renderCard(interest))}
+                            <div className="space-y-4 max-h-[400px] overflow-y-auto">
+                              {/* === ขอติดต่อ === */}
+                              {priorityInterests.length > 0 && (
+                                <div>
+                                  <div className="flex items-center justify-between mb-2 px-1">
+                                    <h4 className="text-xs font-bold text-chateau flex items-center gap-1.5">
+                                      <Bell className="w-3.5 h-3.5" />
+                                      ลูกค้าแสดงความสนใจ — โปรดติดต่อกลับ
+                                    </h4>
+                                    <span className="text-[10px] font-semibold text-chateau">{priorityInterests.length} รายการ</span>
+                                  </div>
+                                  <div className="space-y-2">
+                                    {priorityInterests.map((interest) => renderCard(interest))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* === บันทึกไว้พิจารณา — collapsed by default ===
+                                  Sales doesn't usually act on these (low-intent bookmarks); keep
+                                  them out of the main eye-line and let them expand on demand. */}
+                              {bookmarkInterests.length > 0 && (
+                                <details className="group">
+                                  <summary className="cursor-pointer list-none flex items-center justify-between mb-2 px-1 select-none">
+                                    <h4 className="text-xs font-bold text-gray-500 flex items-center gap-1.5">
+                                      <ChevronRight className="w-3 h-3 transition-transform group-open:rotate-90" />
+                                      <Heart className="w-3.5 h-3.5" />
+                                      รายการที่ลูกค้าบันทึกไว้พิจารณา
+                                    </h4>
+                                    <span className="text-[10px] font-medium text-gray-400">{bookmarkInterests.length} รายการ</span>
+                                  </summary>
+                                  <div className="space-y-2 mt-2">
+                                    {bookmarkInterests.map((interest) => renderCard(interest))}
+                                  </div>
+                                </details>
+                              )}
                             </div>
                           ) : (
                             <div className="p-3 border border-gray-100 rounded-lg bg-gray-50/40">
@@ -1839,7 +1976,7 @@ const LeadManagement = () => {
                             <details className="mt-3 group">
                               <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 select-none">
                                 <ChevronRight className="w-3 h-3 transition-transform group-open:rotate-90" />
-                                ยกเลิกความสนใจแล้ว ({droppedInterests.length})
+                                รายการที่ยกเลิกแล้ว ({droppedInterests.length})
                               </summary>
                               <div className="space-y-2 mt-2 max-h-[200px] overflow-y-auto">
                                 {droppedInterests.map((interest) => renderCard(interest, true))}

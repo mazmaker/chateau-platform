@@ -23,6 +23,14 @@ function setWishlistIds(ids: string[]) {
   window.dispatchEvent(new Event(EVENT));
 }
 
+// Silent variant — updates localStorage without dispatching the change event.
+// Used when the caller wants to coordinate the event with a downstream DB write
+// (e.g. removeFromWishlist needs the DB row marked 'dropped' BEFORE listeners
+// reload, otherwise they read stale 'interested' rows and the unit reappears).
+function setWishlistIdsSilent(ids: string[]) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
+}
+
 export function isInWishlist(unitId: string): boolean {
   return getWishlistIds().includes(unitId);
 }
@@ -64,11 +72,18 @@ async function ensureLead(unit: { id: string; tenant_id: string; project_id?: st
  * Silent — does not toast. Caller handles UI feedback.
  */
 export async function addToWishlist(unit: { id: string; tenant_id: string; project_id?: string | null }): Promise<void> {
-  // 1. localStorage (instant)
+  // localStorage first for instant UI feedback (heart fills in immediately).
   const ids = getWishlistIds();
   if (!ids.includes(unit.id)) setWishlistIds([...ids, unit.id]);
 
-  // 2. DB (so Sales sees) — best-effort, don't block UI
+  // DB sync — three cases:
+  //   1) No existing row    → insert fresh with status='interested', level='low'
+  //   2) Existing 'dropped' → resurrect to 'interested' (customer re-hearting is a
+  //                            deliberate re-engagement signal; respect it). The
+  //                            old "deliberately do NOT resurrect" rule confused
+  //                            customers — they'd click heart, the UI would show
+  //                            "นำออกจากรายการแล้ว", and they had no idea why.
+  //   3) Existing 'interested' or later → no-op (already in the wishlist).
   try {
     const leadId = await ensureLead(unit);
     if (!leadId) return;
@@ -83,19 +98,22 @@ export async function addToWishlist(unit: { id: string; tenant_id: string; proje
         property_id: unit.project_id,
         unit_id: unit.id,
         status: 'interested',
-        interest_level: 'medium',
-        notes: 'บันทึกจาก Customer Portal',
+        interest_level: 'low',
+        notes: 'บันทึกไว้ดูทีหลัง (heart) จาก Customer Portal',
       });
+    } else if ((existing as any).status === 'dropped' || (existing as any).status === 'lost') {
+      // Resurrect — keep the same row (preserves audit trail / created_at) but
+      // flip status + level back to a fresh bookmark.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase.from('lead_interests') as any)
+        .update({
+          status: 'interested',
+          interest_level: 'low',
+          notes: 'บันทึกไว้ดูทีหลัง (heart) — ลูกค้ากลับมาบันทึกอีกครั้งจาก Customer Portal',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', (existing as any).id);
     }
-    // NOTE: when `existing.status === 'dropped'` we deliberately do NOT auto-
-    // resurrect the interest. Wishlist is a casual save (heart icon) — it
-    // shouldn't override a deliberate Sales-side "ลบ Lead จากยูนิต" action,
-    // which was logged with a reason. The customer can still bring the
-    // interest back by clicking the explicit "สนใจยูนิตนี้" button, which goes
-    // through handleExpressInterest and updates notes properly. Without this
-    // guard, Sales would soft-delete the interest, the customer's stale heart
-    // toggle would silently flip it back to 'interested', and the timeline
-    // would reappear out of nowhere on the customer side.
   } catch (e) {
     console.error('addToWishlist DB sync error:', e);
   }
@@ -106,12 +124,18 @@ export async function addToWishlist(unit: { id: string; tenant_id: string; proje
  * lead_interest as `dropped` (preserves history; doesn't hard-delete).
  */
 export async function removeFromWishlist(unitId: string): Promise<void> {
-  // 1. localStorage
+  // 1. localStorage — silent update. We deliberately do NOT fire 'wishlist:changed'
+  // here, because the CustomerDashboard listener reloads from BOTH localStorage AND
+  // DB; firing now would race the DB write below and re-pull the still-'interested'
+  // row, causing the unit to flicker back into the bookmark list. Fire the event at
+  // the very end so listeners observe the consistent post-write state.
   const ids = getWishlistIds().filter((x) => x !== unitId);
-  setWishlistIds(ids);
+  setWishlistIdsSilent(ids);
 
-  // 2. DB — mark lead_interest dropped, but only if it was a low-engagement 'interested' state.
-  // Don't touch rows where the customer has already engaged (viewing_scheduled / negotiating / reserved / won).
+  // 2. DB — soft-delete (status='dropped'), only for passive bookmarks (low/medium).
+  // High-intent rows (customer pressed "ฉันสนใจยูนิตนี้") stay 'interested' because
+  // Sales has already been notified and is expecting follow-up; un-tapping the heart
+  // shouldn't silently cancel that.
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -129,9 +153,14 @@ export async function removeFromWishlist(unitId: string): Promise<void> {
       .update({ status: 'dropped', updated_at: new Date().toISOString() })
       .in('lead_id', leadIds)
       .eq('unit_id', unitId)
-      .in('status', ['interested']);  // only auto-drop low-engagement rows
+      .eq('status', 'interested')
+      .in('interest_level', ['low', 'medium']);
   } catch (e) {
     console.error('removeFromWishlist DB sync error:', e);
+  } finally {
+    // 3. Now that DB is in sync (or the write failed and we're at least localStorage-only
+    // clean), notify listeners. A single dispatch at the end avoids the flicker bug.
+    window.dispatchEvent(new Event(EVENT));
   }
 }
 

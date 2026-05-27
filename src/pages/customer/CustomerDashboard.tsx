@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Heart, Calendar, ArrowRight, X, Sparkles, ChevronRight, Search, Eye } from 'lucide-react';
+import { Building2, Heart, Calendar, ArrowRight, X, Sparkles, ChevronRight, Search, Eye, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -39,6 +39,7 @@ interface WishlistUnit {
   // Engagement state derived from lead_interests (badge on card)
   engagement?: {
     status: string;          // interested / viewing_scheduled / negotiating / reserved / won
+    interest_level: string;  // low/medium = passive bookmark; high = active "ฉันสนใจ"
     viewing_date: string | null;
   };
   tenant_id?: string;
@@ -64,7 +65,12 @@ const CustomerDashboard = () => {
       const localIds: string[] = JSON.parse(localStorage.getItem('customer_wishlist') || '[]');
 
       // Load all "active" lead_interests for this customer (DB source of truth)
-      const dbInterestMap = new Map<string, { status: string; viewing_date: string | null; tenant_id: string; project_id: string }>();
+      const dbInterestMap = new Map<string, { status: string; interest_level: string; viewing_date: string | null; tenant_id: string; project_id: string }>();
+      // Track ALL unit_ids the customer has interest rows on (including dropped/lost) so
+      // we can detect "Sales dropped this — customer's localStorage is stale" and clean
+      // it up. Without this, dropped units kept reappearing in "บันทึกไว้ดูทีหลัง"
+      // because allIds = localIds ∪ activeIds; the dropped row was invisible to the merge.
+      const droppedUnitIds = new Set<string>();
       // Also load active bookings so the engagement badge reflects payment progress —
       // booking.status is the only signal that deposit was actually paid (lead_interest stays at 'reserved' even after).
       const bookingByUnit = new Map<string, { status: string }>();
@@ -75,12 +81,15 @@ const CustomerDashboard = () => {
         if (leadIds.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: dbInterests } = await (supabase.from('lead_interests') as any)
-            .select('unit_id, status, viewing_date, tenant_id, property_id')
-            .in('lead_id', leadIds)
-            .not('status', 'in', '("dropped","lost")');
+            .select('unit_id, status, interest_level, viewing_date, tenant_id, property_id')
+            .in('lead_id', leadIds);
           ((dbInterests as any[]) || []).forEach((i: any) => {
+            if (i.status === 'dropped' || i.status === 'lost') {
+              droppedUnitIds.add(i.unit_id);
+              return;
+            }
             dbInterestMap.set(i.unit_id, {
-              status: i.status, viewing_date: i.viewing_date,
+              status: i.status, interest_level: i.interest_level || 'low', viewing_date: i.viewing_date,
               tenant_id: i.tenant_id, project_id: i.property_id,
             });
           });
@@ -96,7 +105,23 @@ const CustomerDashboard = () => {
         });
       }
 
-      // Union of unit ids from BOTH sources
+      // If Sales dropped any of the customer's localStorage entries, strip them out and
+      // persist the cleaned list back. This fixes the desync where Sales removes a
+      // customer's interest from the Lead Detail page but the customer keeps seeing
+      // it in "บันทึกไว้ดูทีหลัง" indefinitely.
+      if (droppedUnitIds.size > 0) {
+        const cleaned = localIds.filter((id) => !droppedUnitIds.has(id));
+        if (cleaned.length !== localIds.length) {
+          localStorage.setItem('customer_wishlist', JSON.stringify(cleaned));
+          // Mutate localIds in place so the union below uses the cleaned list.
+          localIds.length = 0;
+          localIds.push(...cleaned);
+          window.dispatchEvent(new Event('wishlist:changed'));
+        }
+      }
+
+      // Union of unit ids from BOTH sources — DB-active entries always take precedence,
+      // localStorage entries that aren't dropped are merged in.
       const allIds = Array.from(new Set([...localIds, ...dbInterestMap.keys()]));
       if (allIds.length === 0) { setWishlist([]); return; }
 
@@ -131,7 +156,7 @@ const CustomerDashboard = () => {
         return {
           ...u,
           property: propsMap.get(u.project_id) || null,
-          engagement: synthesizedStatus ? { status: synthesizedStatus, viewing_date: interest?.viewing_date ?? null } : undefined,
+          engagement: synthesizedStatus ? { status: synthesizedStatus, interest_level: interest?.interest_level ?? 'low', viewing_date: interest?.viewing_date ?? null } : undefined,
         };
       });
       // Stable order: most engaged first (won → reserved → negotiating → viewing_scheduled → interested → none)
@@ -495,31 +520,64 @@ const CustomerDashboard = () => {
             </section>
           )}
 
-          {/* === 2. STATS: 2 cards (Saved units + Upcoming visits) === */}
-          <section className="grid grid-cols-2 gap-3">
-            <StatCard
-              icon={Heart}
-              label="ยูนิตที่บันทึก"
-              value={wishlist.length}
-              iconColor="text-chateau"
-              bgColor="bg-rose-50"
-              subtitle={wishlist.length === 0 ? 'กดหัวใจบนยูนิต' : 'ที่ฉันสนใจ'}
-            />
-            <StatCard
-              icon={Calendar}
-              label="นัดดูยูนิต"
-              value={upcomingVisits.length}
-              iconColor="text-amber-700"
-              bgColor="bg-amber-50"
-              subtitle={upcomingVisits.length === 0 ? 'ยังไม่มีนัด' : 'กำลังจะถึง'}
-            />
-          </section>
+          {/* === 2. STATS: 3 cards — counters mirror the section split below so the
+              icon visually matches its bucket. Lumping all 3 into one "❤️ ทั้งหมด"
+              counter was misleading: heart suggested wishlist, but the count included
+              high-intent "รอ Sales" units that the customer never hearted. === */}
+          {(() => {
+            const ACTIVE_STATUSES = ['viewing_scheduled', 'viewed', 'negotiating', 'reserved', 'deposit_paid', 'won'];
+            const waitingCount = wishlist.filter((u) =>
+              u.engagement && u.engagement.status === 'interested' && u.engagement.interest_level === 'high'
+            ).length;
+            const savedCount = wishlist.filter((u) =>
+              !u.engagement
+              || (!ACTIVE_STATUSES.includes(u.engagement.status) && u.engagement.interest_level !== 'high')
+            ).length;
+            return (
+              <section className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <StatCard
+                  icon={Clock}
+                  label="รอ Sales ติดต่อ"
+                  value={waitingCount}
+                  iconColor="text-gray-700"
+                  bgColor="bg-gray-100"
+                  subtitle={waitingCount === 0 ? 'ยังไม่มีรายการ' : 'รอการติดต่อกลับ'}
+                />
+                <StatCard
+                  icon={Heart}
+                  label="บันทึกไว้พิจารณา"
+                  value={savedCount}
+                  iconColor="text-chateau"
+                  bgColor="bg-rose-50"
+                  subtitle={savedCount === 0 ? 'กดหัวใจบนยูนิต' : 'รายการที่บันทึกไว้'}
+                />
+                <StatCard
+                  icon={Calendar}
+                  label="นัดดูยูนิต"
+                  value={upcomingVisits.length}
+                  iconColor="text-amber-700"
+                  bgColor="bg-amber-50"
+                  subtitle={upcomingVisits.length === 0 ? 'ยังไม่มีนัด' : 'กำลังจะถึง'}
+                />
+              </section>
+            );
+          })()}
 
-          {/* Saved units — split into 2 sub-sections so customer can tell apart "active engagement" vs "just bookmarked" */}
+          {/* Saved units — split into 3 sub-sections matching customer's mental model:
+              1. "กำลังดำเนินการ"     — Sales picked up (viewing scheduled / negotiating / reserved / won)
+              2. "รอ Sales ติดต่อ"   — customer clicked "ฉันสนใจ" (interest_level='high') but no Sales action yet
+              3. "บันทึกไว้ดูทีหลัง"  — customer just tapped heart (interest_level='low'/'medium'); passive bookmark
+          */}
           {wishlist.length > 0 && (() => {
             const ACTIVE_STATUSES = ['viewing_scheduled', 'viewed', 'negotiating', 'reserved', 'deposit_paid', 'won'];
             const activeUnits = wishlist.filter((u) => u.engagement && ACTIVE_STATUSES.includes(u.engagement.status));
-            const savedUnits = wishlist.filter((u) => !u.engagement || !ACTIVE_STATUSES.includes(u.engagement.status));
+            const waitingUnits = wishlist.filter((u) =>
+              u.engagement && u.engagement.status === 'interested' && u.engagement.interest_level === 'high'
+            );
+            const savedUnits = wishlist.filter((u) =>
+              !u.engagement
+              || (!ACTIVE_STATUSES.includes(u.engagement.status) && u.engagement.interest_level !== 'high')
+            );
 
             // Per-status visual style for the active section (border + glow + section icon)
             // Subtle, professional look — thin border + neutral background.
@@ -573,6 +631,51 @@ const CustomerDashboard = () => {
                                    {new Date(u.engagement.viewing_date).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                                 </p>
                               )}
+                            </div>
+                            <ChevronRight className="w-5 h-5 text-gray-300 self-center mr-3 flex-shrink-0" />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                {/* === Waiting for Sales (middle — active intent but no Sales response yet) === */}
+                {waitingUnits.length > 0 && (
+                  <section>
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-gray-500" /> รอ Sales ติดต่อ
+                      </h2>
+                      <span className="text-xs text-gray-500 font-medium">{waitingUnits.length} รายการ</span>
+                    </div>
+                    <div className="space-y-2.5">
+                      {waitingUnits.map((u) => {
+                        const isPromo = u.promo_price && u.price && u.promo_price < u.price;
+                        return (
+                          <div
+                            key={u.id}
+                            onClick={() => navigate(`/customer/units/${u.id}`)}
+                            className="relative bg-white border border-gray-200 rounded-2xl overflow-hidden hover:shadow-sm hover:border-gray-300 transition-all cursor-pointer active:scale-[0.99] flex"
+                          >
+                            <div className="w-28 h-28 bg-gray-100 flex-shrink-0">
+                              {u.thumbnail_url ? (
+                                <img src={u.thumbnail_url} alt={u.unit_number} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <Building2 className="w-7 h-7 text-gray-300" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0 p-3">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 mb-1.5">
+                                <Clock className="w-3 h-3" /> รอ Sales ติดต่อ
+                              </span>
+                              <p className="text-sm font-semibold text-gray-900 truncate">ยูนิต {u.unit_number}</p>
+                              <p className="text-[11px] text-gray-500 truncate">{u.property?.name}</p>
+                              <p className="text-sm font-bold text-chateau mt-1">
+                                {fmt((isPromo ? u.promo_price : u.price) || undefined)}
+                              </p>
                             </div>
                             <ChevronRight className="w-5 h-5 text-gray-300 self-center mr-3 flex-shrink-0" />
                           </div>

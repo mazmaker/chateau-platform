@@ -63,8 +63,11 @@ export default function QuickReserveDialog({
   onSuccess,
 }: QuickReserveDialogProps) {
   const unitPrice = Number(interest?.unit?.price || 0);
-  // Industry-standard: holding deposit ~1% of unit price (e.g. ฿35,000 on ฿3.5M condo).
-  const suggestedDeposit = unitPrice > 0 ? Math.round(unitPrice * 0.01) : 0;
+  // Industry-standard ค่าจอง (booking fee): fixed token of ฿5,000-10,000 baht to lock
+  // the unit. This is NOT ค่ามัดจำ (the 10-15% down payment, which comes later at
+  // contract signing). The dialog previously suggested 1% of price (e.g. ฿35K on
+  // ฿3.5M), which mixed the two concepts and confused customers reading the timeline.
+  const suggestedDeposit = 10000;
 
   const [depositAmount, setDepositAmount] = useState('');
   const [expiryDays, setExpiryDays] = useState(isAgent ? 1 : 14);
@@ -186,7 +189,7 @@ export default function QuickReserveDialog({
         tenant_id: lead.tenant_id,
         user_id: userId,
         activity_type: 'unit_reserved',
-        description: `จองยูนิต ${interest.unit?.unit_number || ''} (${interest.property?.name || ''}) ให้ ${customerName} · มัดจำ ${formatTHB(amt)}`,
+        description: `รับค่าจองยูนิต ${interest.unit?.unit_number || ''} (${interest.property?.name || ''}) จาก ${customerName} · ค่าจอง ${formatTHB(amt)}`,
         metadata: {
           lead_id: lead.id,
           unit_id: interest.unit_id,
@@ -195,7 +198,7 @@ export default function QuickReserveDialog({
         },
       });
 
-      toast.success(`จองยูนิต ${interest.unit?.unit_number || ''} สำเร็จ`);
+      toast.success(`รับค่าจองยูนิต ${interest.unit?.unit_number || ''} สำเร็จ`);
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
@@ -211,10 +214,10 @@ export default function QuickReserveDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Lock className="w-4 h-4 text-chateau" />
-            จองยูนิต (Quick Reserve)
+            รับค่าจองยูนิต
           </DialogTitle>
           <DialogDescription>
-            ล็อกยูนิตให้ลูกค้า · มัดจำที่รับ จะ sync เข้า booking ของลูกค้าใน portal
+            ล็อกยูนิตให้ลูกค้าด้วย "ค่าจอง" — เงินก้อนเล็กเพื่อล็อกยูนิต 7-14 วัน ก่อนทำสัญญา/รับค่ามัดจำ
           </DialogDescription>
         </DialogHeader>
 
@@ -252,10 +255,10 @@ export default function QuickReserveDialog({
             </div>
           </div>
 
-          {/* Deposit */}
+          {/* ค่าจอง (booking fee) */}
           <div>
             <Label htmlFor="qr-deposit" className="text-sm">
-              จำนวนเงินมัดจำ (฿) <span className="text-red-500">*</span>
+              ค่าจอง (฿) <span className="text-red-500">*</span>
             </Label>
             <Input
               id="qr-deposit"
@@ -263,15 +266,13 @@ export default function QuickReserveDialog({
               min="0"
               value={depositAmount}
               onChange={(e) => setDepositAmount(e.target.value)}
-              placeholder={suggestedDeposit > 0 ? String(suggestedDeposit) : 'เช่น 35000'}
+              placeholder="เช่น 10000"
               className="mt-1"
               disabled={saving}
             />
-            {suggestedDeposit > 0 && (
-              <p className="text-[11px] text-gray-500 mt-1">
-                แนะนำ 1% ของราคา = {formatTHB(suggestedDeposit)}
-              </p>
-            )}
+            <p className="text-[11px] text-gray-500 mt-1">
+              มาตรฐานวงการ ฿5,000-10,000 (ค่ามัดจำ 10-15% จะรับตอนเซ็นสัญญา)
+            </p>
           </div>
 
           {/* Expiry */}

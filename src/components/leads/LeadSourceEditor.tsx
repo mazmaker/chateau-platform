@@ -51,10 +51,35 @@ export function LeadSourceEditor({ leadId, currentSource, onUpdated, variant = '
   const [saving, setSaving] = useState(false);
   const [localSource, setLocalSource] = useState(currentSource || '');
 
-  // Resolve current display label (handle legacy values like "online_facebook_other: xxx")
+  // Resolve current display label. Handles both legacy "online_facebook_other: xxx"
+  // suffix wrapping AND "other: facebook" / "other: instagram" prefix wrapping —
+  // both came from older data entry layers but should display as the underlying
+  // platform name (Facebook, Instagram), not the wrapper string.
   const currentLabel = (() => {
+    // Static aliases for values that aren't in the dropdown but need a clean label
+    const aliases: Record<string, string> = {
+      agent_referral: 'Agent แนะนำ',
+      instagram: 'Instagram',
+      facebook: 'Facebook',
+      tiktok: 'TikTok',
+      youtube: 'YouTube',
+      line: 'LINE',
+      google: 'Google',
+      other: 'อื่นๆ',
+      offline: 'ออฟไลน์',
+      online: 'ออนไลน์',
+    };
+    if (aliases[localSource]) return aliases[localSource];
     const exact = SOURCE_OPTIONS.find((o) => o.value === localSource);
     if (exact) return exact.label;
+    // Strip "other:" / "other_" prefix and try again
+    const normalized = localSource.replace(/^other[:_]\s*/i, '').trim().toLowerCase();
+    if (normalized !== localSource.toLowerCase()) {
+      if (aliases[normalized]) return aliases[normalized];
+      const fromNorm = SOURCE_OPTIONS.find((o) => o.value === normalized || o.value === `online_${normalized}`);
+      if (fromNorm) return fromNorm.label;
+    }
+    // Last resort: prefix match against canonical values
     for (const o of SOURCE_OPTIONS) {
       if (localSource.startsWith(o.value)) return o.label;
     }

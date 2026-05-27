@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
-import { Plus, Edit2, Trash2, Building2, Calendar, ChevronDown, ChevronUp, X, Check } from "lucide-react";
+import { Plus, Edit2, Trash2, Building2, Calendar, ChevronDown, ChevronUp, ChevronRight, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -440,18 +440,183 @@ const LeadInterestsList = forwardRef<LeadInterestsListRef, LeadInterestsListProp
     });
   };
 
-  // Group interests by property
-  const groupedInterests = interests.reduce((acc, interest) => {
-    const propertyId = interest.property_id;
-    if (!acc[propertyId]) {
-      acc[propertyId] = {
-        property: interest.property,
-        interests: [],
-      };
-    }
-    acc[propertyId].interests.push(interest);
-    return acc;
-  }, {} as Record<string, { property: any; interests: LeadInterestWithDetails[] }>);
+  // Split interests by intent so Sales / Admin sees one bucket per workflow stage,
+  // matching the customer-side mental model:
+  //   • ขอติดต่อ     — interest_level='high' OR sales has progressed it (viewing+).
+  //                    These need follow-up; live at the top.
+  //   • บันทึกไว้    — passive bookmarks (interest_level='low'/'medium'). Low-priority,
+  //                    collapsed by default in the modal so the form stays compact.
+  //   • ยกเลิก       — soft-deleted history (status='dropped'/'lost'). Audit trail.
+  const ACTIVE_STATUSES_INTEREST = new Set(['viewing_scheduled', 'viewed', 'negotiating', 'reserved', 'deposit_paid', 'won']);
+  const priorityInterests = interests.filter(
+    (i) => i.status !== 'dropped' && i.status !== 'lost'
+      && (i.interest_level === 'high' || ACTIVE_STATUSES_INTEREST.has(i.status as string))
+  );
+  const bookmarkInterests = interests.filter(
+    (i) => i.status !== 'dropped' && i.status !== 'lost'
+      && i.interest_level !== 'high' && !ACTIVE_STATUSES_INTEREST.has(i.status as string)
+  );
+  const droppedInterests = interests.filter(
+    (i) => i.status === 'dropped' || i.status === 'lost'
+  );
+
+  // Helper: group a subset of interests by property (kept so each section can render
+  // unit rows under a "Project Name" header — same hierarchy as before).
+  const groupByProperty = (rows: LeadInterestWithDetails[]) =>
+    rows.reduce((acc, interest) => {
+      const propertyId = interest.property_id;
+      if (!acc[propertyId]) {
+        acc[propertyId] = { property: interest.property, interests: [] };
+      }
+      acc[propertyId].interests.push(interest);
+      return acc;
+    }, {} as Record<string, { property: any; interests: LeadInterestWithDetails[] }>);
+
+  // System-generated notes pollute the display — these were intended as audit metadata,
+  // not user-facing copy. Suppress them from the row UI; Sales can still see the raw
+  // value when they edit a row.
+  const SYSTEM_NOTE_PATTERNS = [
+    /^บันทึกไว้ดูทีหลัง \(heart\)/i,
+    /^ลูกค้ากดสนใจ.*จาก Customer Portal/i,
+    /^ลูกค้ากดสนใจอีกครั้ง/i,
+    /^บันทึกจาก Customer Portal/i,
+    /^\[ลบจาก Lead Detail/i,
+  ];
+  const isSystemNote = (notes?: string | null) =>
+    !!notes && SYSTEM_NOTE_PATTERNS.some((re) => re.test(notes.trim()));
+
+  // Single source of truth for rendering each unit row (edit form / delete confirm /
+  // normal view). Extracted so the 3 sections — ขอติดต่อ / บันทึกไว้ / ยกเลิก —
+  // can all reuse the same row UI without duplicating ~200 lines of JSX.
+  const renderUnitRows = (rows: LeadInterestWithDetails[]) => rows.map((interest) => (
+    <div key={interest.id}>
+      {editingInterestId === interest.id ? (
+        <div className="p-4 bg-chateau-50 border-l-4 border-chateau-300 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-medium text-chateau-700 flex items-center gap-2">
+              <Edit2 className="w-4 h-4" />
+              แก้ไข: ยูนิต {interest.unit?.unit_number}
+            </h4>
+            <Button variant="ghost" size="sm" onClick={cancelEditing}>
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">สถานะ</Label>
+              <Select
+                value={editForm.status}
+                onValueChange={(value: InterestStatus) => setEditForm((prev) => ({ ...prev, status: value }))}
+                disabled={editLoading}
+              >
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {INTEREST_STATUS_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>{option.icon} {option.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">ระดับความสนใจ</Label>
+              <Select
+                value={editForm.interest_level}
+                onValueChange={(value: InterestLevel) => setEditForm((prev) => ({ ...prev, interest_level: value }))}
+                disabled={editLoading}
+              >
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {INTEREST_LEVEL_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>{option.icon} {option.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {(editForm.status === "viewing_scheduled" || editForm.status === "viewed") && (
+            <div className="space-y-1">
+              <Label className="text-xs">วันที่นัดดู / ดูแล้ว</Label>
+              <Input
+                type="datetime-local"
+                value={editForm.viewing_date}
+                onChange={(e) => setEditForm((prev) => ({ ...prev, viewing_date: e.target.value }))}
+                disabled={editLoading}
+                className="h-9"
+              />
+            </div>
+          )}
+          <div className="space-y-1">
+            <Label className="text-xs">บันทึก</Label>
+            <Textarea
+              value={editForm.notes}
+              onChange={(e) => setEditForm((prev) => ({ ...prev, notes: e.target.value }))}
+              placeholder="บันทึกเพิ่มเติม..."
+              disabled={editLoading}
+              rows={2}
+              className="resize-none"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={cancelEditing} disabled={editLoading}>ยกเลิก</Button>
+            <Button size="sm" onClick={() => handleEditSubmit(interest.id)} disabled={editLoading}>
+              {editLoading ? "กำลังบันทึก..." : (<><Check className="w-4 h-4 mr-1" />บันทึก</>)}
+            </Button>
+          </div>
+        </div>
+      ) : showDeleteConfirm === interest.id ? (
+        <div className="p-4 bg-red-50 border-l-4 border-red-400 space-y-3">
+          <div>
+            <p className="font-medium text-red-800">ลบความสนใจยูนิต "{interest.unit?.unit_number}"?</p>
+            <p className="text-xs text-red-700 mt-0.5">Lead ยังอยู่ในระบบ — แค่ตัดความเชื่อมโยงกับยูนิตนี้ออก + เก็บประวัติไว้</p>
+          </div>
+          <textarea
+            value={deleteReason}
+            onChange={(e) => setDeleteReason(e.target.value)}
+            placeholder="ระบุเหตุผล (เช่น เลือกยูนิตผิด, ลูกค้าเปลี่ยนใจ, ติดต่อไม่ได้นาน...)"
+            rows={2}
+            disabled={deleteLoading}
+            className="w-full text-sm border border-red-200 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-red-300 resize-none"
+          />
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => { setShowDeleteConfirm(null); setDeleteReason(""); }} disabled={deleteLoading}>ยกเลิก</Button>
+            <Button variant="destructive" size="sm" onClick={() => handleDelete(interest.id)} disabled={deleteLoading || !deleteReason.trim()}>
+              {deleteLoading ? "กำลังลบ..." : "ยืนยันลบ"}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
+          <div className="flex-1">
+            <div className="flex items-center gap-3">
+              <span className="font-medium">{interest.unit?.unit_number || "-"}</span>
+              {getStatusBadge(interest.status)}
+              {getInterestLevelIcon(interest.interest_level)}
+            </div>
+            <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+              {interest.unit?.price && (
+                <span className="text-blue-600 font-medium">{formatPrice(interest.unit.price)}</span>
+              )}
+              {interest.viewing_date && (
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  {formatDate(interest.viewing_date)}
+                </span>
+              )}
+            </div>
+            {interest.notes && !isSystemNote(interest.notes) && (
+              <p className="text-sm text-gray-600 mt-1 bg-gray-50 px-2 py-1 rounded">{interest.notes}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={() => startEditing(interest)}><Edit2 className="w-4 h-4" /></Button>
+            <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => setShowDeleteConfirm(interest.id)}>
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  ));
 
   return (
     <div className="space-y-4">
@@ -693,240 +858,60 @@ const LeadInterestsList = forwardRef<LeadInterestsListRef, LeadInterestsListProp
               </Button>
             </div>
           ) : (
-            <div className="space-y-4">
-              {Object.entries(groupedInterests).map(([propertyId, group]) => (
-                <div
-                  key={propertyId}
-                  className="border rounded-lg overflow-hidden"
-                >
-                  {/* Property Header */}
-                  <div className="bg-gray-50 px-4 py-2 border-b">
-                    <h4 className="font-medium text-gray-800 flex items-center gap-2">
-                      <Building2 className="w-4 h-4" />
-                      {group.property?.name || "ไม่ทราบโครงการ"}
-                    </h4>
-                  </div>
-
-                  {/* Units List */}
-                  <div className="divide-y">
-                    {group.interests.map((interest) => (
-                      <div key={interest.id}>
-                        {editingInterestId === interest.id ? (
-                          // Inline Edit Form
-                          <div className="p-4 bg-chateau-50 border-l-4 border-chateau-300 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <h4 className="font-medium text-chateau-700 flex items-center gap-2">
-                                <Edit2 className="w-4 h-4" />
-                                แก้ไข: ยูนิต {interest.unit?.unit_number}
-                              </h4>
-                              <Button variant="ghost" size="sm" onClick={cancelEditing}>
-                                <X className="w-4 h-4" />
-                              </Button>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {/* Status */}
-                              <div className="space-y-1">
-                                <Label className="text-xs">สถานะ</Label>
-                                <Select
-                                  value={editForm.status}
-                                  onValueChange={(value: InterestStatus) =>
-                                    setEditForm((prev) => ({ ...prev, status: value }))
-                                  }
-                                  disabled={editLoading}
-                                >
-                                  <SelectTrigger className="h-9">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {INTEREST_STATUS_OPTIONS.map((option) => (
-                                      <SelectItem key={option.value} value={option.value}>
-                                        {option.icon} {option.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-
-                              {/* Interest Level */}
-                              <div className="space-y-1">
-                                <Label className="text-xs">ระดับความสนใจ</Label>
-                                <Select
-                                  value={editForm.interest_level}
-                                  onValueChange={(value: InterestLevel) =>
-                                    setEditForm((prev) => ({ ...prev, interest_level: value }))
-                                  }
-                                  disabled={editLoading}
-                                >
-                                  <SelectTrigger className="h-9">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {INTEREST_LEVEL_OPTIONS.map((option) => (
-                                      <SelectItem key={option.value} value={option.value}>
-                                        {option.icon} {option.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-
-                            {/* Viewing Date */}
-                            {(editForm.status === "viewing_scheduled" ||
-                              editForm.status === "viewed") && (
-                              <div className="space-y-1">
-                                <Label className="text-xs">วันที่นัดดู / ดูแล้ว</Label>
-                                <Input
-                                  type="datetime-local"
-                                  value={editForm.viewing_date}
-                                  onChange={(e) =>
-                                    setEditForm((prev) => ({
-                                      ...prev,
-                                      viewing_date: e.target.value,
-                                    }))
-                                  }
-                                  disabled={editLoading}
-                                  className="h-9"
-                                />
-                              </div>
-                            )}
-
-                            {/* Notes */}
-                            <div className="space-y-1">
-                              <Label className="text-xs">บันทึก</Label>
-                              <Textarea
-                                value={editForm.notes}
-                                onChange={(e) =>
-                                  setEditForm((prev) => ({ ...prev, notes: e.target.value }))
-                                }
-                                placeholder="บันทึกเพิ่มเติม..."
-                                disabled={editLoading}
-                                rows={2}
-                                className="resize-none"
-                              />
-                            </div>
-
-                            {/* Actions */}
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={cancelEditing}
-                                disabled={editLoading}
-                              >
-                                ยกเลิก
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => handleEditSubmit(interest.id)}
-                                disabled={editLoading}
-                              >
-                                {editLoading ? (
-                                  "กำลังบันทึก..."
-                                ) : (
-                                  <>
-                                    <Check className="w-4 h-4 mr-1" />
-                                    บันทึก
-                                  </>
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                        ) : showDeleteConfirm === interest.id ? (
-                          // Inline Delete Confirmation — soft delete with required reason
-                          // (consistent with trash button on Unit Detail).
-                          <div className="p-4 bg-red-50 border-l-4 border-red-400 space-y-3">
-                            <div>
-                              <p className="font-medium text-red-800">
-                                ลบความสนใจยูนิต "{interest.unit?.unit_number}"?
-                              </p>
-                              <p className="text-xs text-red-700 mt-0.5">
-                                Lead ยังอยู่ในระบบ — แค่ตัดความเชื่อมโยงกับยูนิตนี้ออก + เก็บประวัติไว้
-                              </p>
-                            </div>
-                            <textarea
-                              value={deleteReason}
-                              onChange={(e) => setDeleteReason(e.target.value)}
-                              placeholder="ระบุเหตุผล (เช่น เลือกยูนิตผิด, ลูกค้าเปลี่ยนใจ, ติดต่อไม่ได้นาน...)"
-                              rows={2}
-                              disabled={deleteLoading}
-                              className="w-full text-sm border border-red-200 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-red-300 resize-none"
-                            />
-                            <div className="flex items-center justify-end gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => { setShowDeleteConfirm(null); setDeleteReason(""); }}
-                                disabled={deleteLoading}
-                              >
-                                ยกเลิก
-                              </Button>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => handleDelete(interest.id)}
-                                disabled={deleteLoading || !deleteReason.trim()}
-                              >
-                                {deleteLoading ? "กำลังลบ..." : "ยืนยันลบ"}
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          // Normal View
-                          <div className="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3">
-                                <span className="font-medium">
-                                  {interest.unit?.unit_number || "-"}
-                                </span>
-                                {getStatusBadge(interest.status)}
-                                {getInterestLevelIcon(interest.interest_level)}
-                              </div>
-                              <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                                {interest.unit?.price && (
-                                  <span className="text-blue-600 font-medium">
-                                    {formatPrice(interest.unit.price)}
-                                  </span>
-                                )}
-                                {interest.viewing_date && (
-                                  <span className="flex items-center gap-1">
-                                    <Calendar className="w-3 h-3" />
-                                    {formatDate(interest.viewing_date)}
-                                  </span>
-                                )}
-                              </div>
-                              {interest.notes && (
-                                <p className="text-sm text-gray-600 mt-1 bg-gray-50 px-2 py-1 rounded">
-                                  {interest.notes}
-                                </p>
-                              )}
-                            </div>
-
-                            <div className="flex items-center gap-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => startEditing(interest)}
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                onClick={() => setShowDeleteConfirm(interest.id)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        )}
+            <div className="space-y-5">
+              {(() => {
+                const renderGroupRows = (rows: LeadInterestWithDetails[]) => {
+                  const grouped = groupByProperty(rows);
+                  return Object.entries(grouped).map(([propertyId, group]) => (
+                    <div key={propertyId} className="border rounded-lg overflow-hidden">
+                      <div className="bg-gray-50 px-4 py-2 border-b">
+                        <h4 className="font-medium text-gray-800 flex items-center gap-2">
+                          <Building2 className="w-4 h-4" />
+                          {group.property?.name || "ไม่ทราบโครงการ"}
+                        </h4>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                      <div className="divide-y">{renderUnitRows(group.interests)}</div>
+                    </div>
+                  ));
+                };
+                return (
+                  <>
+                    {priorityInterests.length > 0 && (
+                      <section>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-bold text-chateau">ลูกค้าแสดงความสนใจ — โปรดติดต่อกลับ</h4>
+                          <span className="text-xs font-semibold text-chateau">{priorityInterests.length} รายการ</span>
+                        </div>
+                        <div className="space-y-3">{renderGroupRows(priorityInterests)}</div>
+                      </section>
+                    )}
+                    {bookmarkInterests.length > 0 && (
+                      <details className="group">
+                        <summary className="cursor-pointer list-none flex items-center justify-between mb-2 select-none">
+                          <h4 className="text-sm font-bold text-gray-600 flex items-center gap-1.5">
+                            <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" />
+                            รายการที่ลูกค้าบันทึกไว้พิจารณา
+                          </h4>
+                          <span className="text-xs font-medium text-gray-400">{bookmarkInterests.length} รายการ</span>
+                        </summary>
+                        <div className="space-y-3 mt-2">{renderGroupRows(bookmarkInterests)}</div>
+                      </details>
+                    )}
+                    {droppedInterests.length > 0 && (
+                      <details className="group">
+                        <summary className="cursor-pointer list-none flex items-center justify-between mb-2 select-none">
+                          <h4 className="text-sm font-bold text-gray-500 flex items-center gap-1.5">
+                            <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" />
+                            รายการที่ยกเลิกแล้ว
+                          </h4>
+                          <span className="text-xs font-medium text-gray-400">{droppedInterests.length} รายการ</span>
+                        </summary>
+                        <div className="space-y-3 mt-2 opacity-75">{renderGroupRows(droppedInterests)}</div>
+                      </details>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
         </div>

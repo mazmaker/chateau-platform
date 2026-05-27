@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   Building2, Bed, Bath, Square, Layers, MapPin, Heart, Loader2, Sun, ParkingCircle, Check,
   ChevronLeft, ChevronRight, Calendar, Calculator, Share2,
-  ChevronDown, View, Sparkles, FileDown, Timer,
+  ChevronDown, View, Sparkles, FileDown, Timer, Clock,
 } from 'lucide-react';
 import { incrementLeadCounter } from '@/lib/leadTracking';
 import { Button } from '@/components/ui/button';
@@ -73,7 +73,7 @@ const CustomerUnitDetail = () => {
   const [property, setProperty] = useState<Property | null>(null);
   const [myInterest, setMyInterest] = useState<{ id: string; status: string; viewing_date: string | null; created_at: string | null } | null>(null);
   const [myBooking, setMyBooking] = useState<{ id: string; status: string; total_amount: number; deposit_amount: number | null } | null>(null);
-  const [myLead, setMyLead] = useState<{ id: string; status: string | null; last_contact_date: string | null } | null>(null);
+  const [myLead, setMyLead] = useState<{ id: string; status: string | null; last_contact_date: string | null; assigned_to: string | null } | null>(null);
   const [similarUnits, setSimilarUnits] = useState<Unit[]>([]);
   const [assignedSales, setAssignedSales] = useState<Sales | null>(null);
   const [loading, setLoading] = useState(true);
@@ -160,7 +160,7 @@ const CustomerUnitDetail = () => {
               existingInterest = existing;
               setMyInterest(existing as any);
               const matchingLead = leadList.find((l: any) => l.id === (existing as any).lead_id);
-              if (matchingLead) setMyLead({ id: matchingLead.id, status: matchingLead.status, last_contact_date: matchingLead.last_contact_date });
+              if (matchingLead) setMyLead({ id: matchingLead.id, status: matchingLead.status, last_contact_date: matchingLead.last_contact_date, assigned_to: matchingLead.assigned_to ?? null });
             }
           }
 
@@ -277,22 +277,28 @@ const CustomerUnitDetail = () => {
         navigate(`/customer/login?return=${returnTo}`);
         return;
       }
+      // Pull preferences too so we can seed leads.monthly_income/debt at creation
+      // time. Without this, recomputeLeadScore sees leads.monthly_income=0 and skips
+      // the loan estimate, so Sales sees "รอประเมินวงเงิน" until someone re-edits
+      // the Lead. Copying at creation eliminates that drift state entirely.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: customer } = await (supabase.from('customers') as any)
-        .select('id, full_name').eq('auth_user_id', user.id).maybeSingle();
+        .select('id, full_name, preferences').eq('auth_user_id', user.id).maybeSingle();
       if (!customer) { toast.error('ไม่พบข้อมูลลูกค้า'); return; }
 
-      //  Find Sales — Workload-balanced routing (industry-standard for Thai real estate)
+      //  Find Sales — Admin pre-assignment + workload balance.
+      //  Pool/race-to-claim model was retired (see project_lead_routing_model memory).
       //
       // Priority order:
       //  (1) Sales explicitly assigned to THIS unit (sales_unit_assignments) — highest priority,
       //      override balancing because the unit was specifically pre-allocated to that Sales.
       //  (2) Among Sales managing the project (sales_project_assignments), pick the one with
-      //      the FEWEST active open leads. This balances workload fairly across the team.
+      //      the FEWEST active open leads (excluding won/lost). Balances workload fairly.
       //      Tie-breaker: oldest last-assignment time → round-robin behaviour for equal load.
-      //  (3) No Sales at all → assigned_to = null → goes to "pool" for Admin to assign manually.
+      //  (3) No Sales pre-assigned → assigned_to = null → Admin will assign manually
+      //      (Admin gets noti for every new Lead, so they will see it).
       let salesUserId: string | null = null;
-      let routingReason: string = 'pool';
+      let routingReason: string = 'admin_queue';
 
       // (1) Unit-level explicit assignment
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -361,7 +367,17 @@ const CustomerUnitDetail = () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let { data: lead } = await (supabase.from('leads') as any)
         .select('id, assigned_to, referred_by_agent_id').eq('customer_id', (customer as any).id).eq('tenant_id', unit.tenant_id).maybeSingle();
+      const leadAlreadyExisted = !!lead;
       if (!lead) {
+        // Seed financial fields from the customer profile so recomputeLeadScore can
+        // immediately produce a loan estimate. Without this, leads.monthly_income
+        // starts at 0 and the lead lives in "รอประเมินวงเงิน" limbo until someone
+        // manually edits it.
+        const prefs = (customer as any).preferences || {};
+        const seedIncome = Number(prefs.monthly_income) || null;
+        const seedDebt = prefs.monthly_debt != null ? Number(prefs.monthly_debt) : null;
+        const seedAge = prefs.age != null ? Number(prefs.age) : null;
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: newLead, error: leadErr } = await (supabase.from('leads') as any)
           .insert({
@@ -372,6 +388,9 @@ const CustomerUnitDetail = () => {
             status: 'new', source: referredByAgentId ? 'agent_referral' : 'customer_self', priority: 'medium',
             assigned_to: salesUserId, // Auto-assign if Sales found
             referred_by_agent_id: referredByAgentId,
+            monthly_income: seedIncome,
+            monthly_debt: seedDebt,
+            age: seedAge,
             notes: referredByAgentId
               ? 'ลูกค้ากดสนใจจาก Customer Portal (referral)'
               : 'ลูกค้ากดสนใจจาก Customer Portal',
@@ -381,6 +400,13 @@ const CustomerUnitDetail = () => {
         // Consume the session token once the attribution is locked in DB, so a
         // subsequent visit doesn't double-attribute or surprise the customer.
         if (referredByAgentId) clearStoredReferralCode();
+        // Fire-and-forget loan/score compute — if income was seeded, this fills in
+        // max_loan_amount immediately so Sales sees the figure in their bell + table.
+        if (seedIncome && seedIncome > 0) {
+          import('@/lib/recomputeLeadScore')
+            .then((m) => m.recomputeLeadScore((newLead as any).id))
+            .catch(() => { /* best-effort */ });
+        }
       } else if (!(lead as any).assigned_to && salesUserId) {
         // Existing lead without Sales — auto-assign now (does NOT touch referred_by_agent_id;
         // immutability trigger would reject it anyway).
@@ -428,55 +454,53 @@ const CustomerUnitDetail = () => {
         },
       });
 
-      // Targeted in-app notification — routes the new Lead to the right user:
-      //   - If Sales was auto-assigned (via Agent referral / unit ownership) →
-      //     notify that Sales personally.
-      //   - Otherwise → broadcast to the tenant Sales pool (claim button) AND
-      //     notify Admin/Owner so they know unclaimed Leads are waiting.
+      // In-app notification routing — Admin-controlled model (no pool broadcast):
+      //   • Admin/Owner   → notified for EVERY new "ฉันสนใจ" event (full visibility)
+      //   • Sales         → notified ONLY if Admin pre-assigned this unit/project to them
+      //                     (sales_unit_assignments / sales_project_assignments).
+      //   • Pool broadcast was removed in favour of this model — no more "first Sales to
+      //     click wins" races, which the team raised as a commission-dispute risk.
       try {
         const customerName = (customer as any).full_name || 'ลูกค้า';
         const { createNotification, getTenantAdminUserIds } = await import('@/lib/notifications');
+
+        const newLeadTitle = 'Lead ใหม่เข้ามา';
+        const existingLeadTitle = 'ลูกค้าเดิมสนใจยูนิตใหม่';
+        const activityType = leadAlreadyExisted ? 'lead_interest_added' : 'lead_created';
+        const message = `${customerName} สนใจยูนิต ${unit.unit_number}`;
+        const data = { unit_id: unit.id, unit_number: unit.unit_number, source: 'customer_portal' };
+
+        // 1) Admin/Owner — always notified, regardless of whether Sales was auto-assigned.
+        const adminTitleSuffix = salesUserId ? '' : ' — โปรด assign Sales';
+        const adminIds = await getTenantAdminUserIds(unit.tenant_id);
+        for (const adminId of adminIds) {
+          await createNotification({
+            tenantId: unit.tenant_id,
+            userId: adminId,
+            activityType,
+            title: (leadAlreadyExisted ? existingLeadTitle : newLeadTitle) + adminTitleSuffix,
+            message,
+            severity: 'info',
+            relatedEntityType: 'lead',
+            relatedEntityId: (lead as any).id,
+            data,
+          });
+        }
+
+        // 2) Pre-assigned Sales (from sales_unit_assignments / sales_project_assignments) —
+        //    notify additionally so they know "their" Lead just came in.
         if (salesUserId) {
           await createNotification({
             tenantId: unit.tenant_id,
             userId: salesUserId,
-            activityType: 'lead_created',
-            title: 'Lead ใหม่เข้ามา',
-            message: `${customerName} สนใจยูนิต ${unit.unit_number}`,
+            activityType,
+            title: leadAlreadyExisted ? 'ลูกค้าของคุณสนใจยูนิตใหม่' : newLeadTitle,
+            message,
             severity: 'info',
             relatedEntityType: 'lead',
             relatedEntityId: (lead as any).id,
-            data: { unit_id: unit.id, unit_number: unit.unit_number, source: 'customer_portal' },
+            data,
           });
-        } else {
-          // Pool — broadcast to all Sales of the tenant (user_id NULL) +
-          // explicit notifications to Admin/Owner for awareness.
-          await createNotification({
-            tenantId: unit.tenant_id,
-            userId: null,
-            activityType: 'lead_unclaimed',
-            title: 'Lead ใหม่ใน pool — รอ Sales รับ',
-            message: `${customerName} สนใจยูนิต ${unit.unit_number}`,
-            severity: 'info',
-            relatedEntityType: 'lead',
-            relatedEntityId: (lead as any).id,
-            actionText: 'รับ Lead',
-            data: { unit_id: unit.id, unit_number: unit.unit_number, source: 'customer_portal' },
-          });
-          const adminIds = await getTenantAdminUserIds(unit.tenant_id);
-          for (const adminId of adminIds) {
-            await createNotification({
-              tenantId: unit.tenant_id,
-              userId: adminId,
-              activityType: 'lead_created',
-              title: 'Lead ใหม่ — รอ assign Sales',
-              message: `${customerName} สนใจยูนิต ${unit.unit_number}`,
-              severity: 'info',
-              relatedEntityType: 'lead',
-              relatedEntityId: (lead as any).id,
-              data: { unit_id: unit.id, unit_number: unit.unit_number, source: 'customer_portal' },
-            });
-          }
         }
       } catch (notifErr) {
         console.warn('[notifications] lead creation notify failed:', notifErr);
@@ -653,151 +677,155 @@ const CustomerUnitDetail = () => {
         </div>
       </div>
 
-      {/* === Status Timeline (when interest exists — placed FIRST for context) === */}
-      {myInterest && (
-        <div className="bg-gradient-to-br from-rose-50/40 to-white border border-rose-100 rounded-2xl p-5">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-chateau" /> สถานะคำขอของคุณ
-          </h2>
-          {(() => {
-            // Step "นัดดูยูนิต" = customer has either booked a date OR already progressed past it.
-            // Lead funnel goes: viewing_scheduled → viewed → negotiating → reserved → won.
-            // Reaching any of viewed+ means the visit already happened, even if no explicit date row exists
-            // (e.g. walk-in customer that Sales moved straight to negotiating).
-            const advancedPastVisit = ['viewed', 'negotiating', 'reserved', 'won'].includes(myInterest.status);
-            const hasVisit = !!myInterest.viewing_date || advancedPastVisit;
-            // Treat unit-level reservation/sale for this customer's lead as a positive signal
-            const unitReservedForMyLead = !!(myLead?.id && unit.reserved_customer_lead_id === myLead.id);
-            const hasReserved = myInterest.status === 'reserved' || (unitReservedForMyLead && unit.status === 'reserved');
-            const hasNegotiating = myInterest.status === 'negotiating';
-            const hasWon = myInterest.status === 'won' || (unitReservedForMyLead && unit.status === 'sold');
+      {/* === Modern compact horizontal stepper (2024+ PropTech pattern).
+           Replaces the legacy vertical timeline — matches Sansiri Plus 2.0 / AP Live's
+           current pattern: a single horizontal progress strip with 5 dots at the top,
+           and detail cards (booking, viewing, payment) shown separately below. === */}
+      {myInterest && (() => {
+        const unitReservedForMyLead = !!(myLead?.id && unit.reserved_customer_lead_id === myLead.id);
+        const hasReserved = myInterest.status === 'reserved' || (unitReservedForMyLead && unit.status === 'reserved');
+        const hasWon = myInterest.status === 'won' || (unitReservedForMyLead && unit.status === 'sold');
 
-            // "Sales ติดต่อกลับ" — true only when Sales actually contacted ABOUT THIS UNIT (not just any prior unit).
-            // A single lead is shared across many lead_interests, so lead.last_contact_date alone is ambiguous.
-            // Real signals that Sales engaged with THIS interest:
-            //  1. This interest's status has advanced beyond the initial "interested"
-            //  2. lead.last_contact_date was set AFTER this interest was created
-            //  3. Sales has reserved/sold this exact unit for this lead
-            const advancedInterestStates = ['contacted', 'qualified', 'negotiating', 'reserved', 'won'];
-            const interestProgressed = advancedInterestStates.includes((myInterest?.status || '').toLowerCase());
-            const contactAfterInterest = !!(
-              myLead?.last_contact_date &&
-              myInterest?.created_at &&
-              new Date(myLead.last_contact_date) > new Date(myInterest.created_at)
-            );
-            const salesContacted = interestProgressed || contactAfterInterest || unitReservedForMyLead;
+        const advancedInterestStates = ['contacted', 'qualified', 'negotiating', 'reserved', 'won'];
+        const interestProgressed = advancedInterestStates.includes((myInterest?.status || '').toLowerCase());
+        const contactAfterInterest = !!(
+          myLead?.last_contact_date &&
+          myInterest?.created_at &&
+          new Date(myLead.last_contact_date) > new Date(myInterest.created_at)
+        );
+        const salesContacted = interestProgressed || contactAfterInterest || unitReservedForMyLead;
 
-            // Booking-driven states (the timeline's source of truth for steps 6+7):
-            // pending  → Sales locked unit, customer hasn't paid deposit yet (active step "จองยูนิต")
-            // confirmed → customer paid deposit (step "จองยูนิต" done, "ทำสัญญา / โอน" active)
-            // checked_in/out → contract signed + transfer done (step "ทำสัญญา / โอน" done)
-            const bookingStatus = myBooking?.status || null;
-            const depositPaid = bookingStatus === 'confirmed' || bookingStatus === 'checked_in' || bookingStatus === 'checked_out';
-            const titleTransferred = bookingStatus === 'checked_in' || bookingStatus === 'checked_out' || hasWon || (unitReservedForMyLead && unit.status === 'sold');
+        const bookingStatus = myBooking?.status || null;
+        const bookingExists = bookingStatus === 'pending' || bookingStatus === 'confirmed' || bookingStatus === 'checked_in' || bookingStatus === 'checked_out';
+        const hasBooking = bookingExists || hasReserved || hasWon;
+        const depositPaid = bookingStatus === 'confirmed' || bookingStatus === 'checked_in' || bookingStatus === 'checked_out';
+        const titleTransferred = bookingStatus === 'checked_in' || bookingStatus === 'checked_out' || hasWon || (unitReservedForMyLead && unit.status === 'sold');
 
-            const steps = [
-              { key: 'submit', label: 'ส่งคำขอ', sub: 'ระบบบันทึกเรียบร้อย', done: true },
-              {
-                key: 'assigned',
-                label: 'ระบบมอบหมาย Sales',
-                sub: !assignedSales ? 'รอจัดสรร Sales' : `${assignedSales.full_name || 'Sales'} ได้รับงาน`,
-                done: !!assignedSales,
-              },
-              {
-                key: 'contacted',
-                label: 'Sales ติดต่อกลับ',
-                sub: salesContacted
-                  ? (contactAfterInterest && myLead?.last_contact_date
-                      ? `ติดต่อแล้วเมื่อ ${new Date(myLead.last_contact_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}`
-                      : 'Sales ติดต่อแล้ว')
-                  : assignedSales
-                    ? `รอ ${assignedSales.full_name || 'Sales'} โทรกลับ (ภายใน 2 ชม.)`
-                    : 'รอ Sales รับงาน',
-                done: salesContacted,
-              },
-              {
-                key: 'visit',
-                label: 'นัดดูยูนิต',
-                sub: myInterest.viewing_date
-                  ? new Date(myInterest.viewing_date).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-                  : advancedPastVisit ? 'ดูเรียบร้อย' : 'ยังไม่นัด',
-                done: hasVisit,
-              },
-              {
-                key: 'negotiate',
-                label: 'เจรจา',
-                sub: hasReserved || hasWon ? 'เจรจาเรียบร้อย' : hasNegotiating ? 'กำลังเจรจา' : 'ขั้นต่อไป',
-                done: hasReserved || hasWon || hasNegotiating,
-              },
-              {
-                key: 'deposit',
-                label: 'ชำระมัดจำ',
-                sub: depositPaid
-                  ? '✓ ชำระแล้ว'
-                  : bookingStatus === 'pending'
-                    ? ` รอชำระมัดจำ${myBooking?.deposit_amount ? ` ฿${Number(myBooking.deposit_amount).toLocaleString('th-TH')}` : ''}`
-                    : 'ขั้นต่อไป',
-                done: depositPaid,
-              },
-              {
-                key: 'transfer',
-                label: 'ทำสัญญา / โอนกรรมสิทธิ์',
-                sub: titleTransferred ? 'โอนเรียบร้อย' : depositPaid ? 'รอทำสัญญา' : 'ขั้นต่อไป',
-                done: titleTransferred,
-              },
-            ];
-            const activeIdx = steps.findIndex((s) => !s.done);
-            const currentActive = activeIdx === -1 ? steps.length - 1 : activeIdx;
+        const steps = [
+          { key: 'submit', label: 'ส่งคำขอ', done: true },
+          { key: 'contacted', label: 'ติดต่อกลับ', done: salesContacted },
+          // "ค่าจอง" — booking fee paid (5K-10K) locks the unit. In our schema this
+          // maps to bookings.status='pending' (Sales has created the booking row and
+          // collected the booking fee from the customer).
+          { key: 'booked', label: 'ค่าจอง', done: hasBooking },
+          // "ค่ามัดจำ" — the 10-15% down payment + contract signing. Maps to
+          // bookings.status='confirmed'.
+          { key: 'deposit', label: 'ค่ามัดจำ', done: depositPaid },
+          // "โอนกรรมสิทธิ์" — final title transfer at Land Office, after mortgage
+          // approval. Maps to bookings.status='checked_in'/'checked_out'.
+          { key: 'transfer', label: 'โอนกรรมสิทธิ์', done: titleTransferred },
+        ];
+        const activeIdx = steps.findIndex((s) => !s.done);
+        const currentIdx = activeIdx === -1 ? steps.length - 1 : activeIdx;
 
-            return (
-              <div className="space-y-3">
-                {steps.map((s, i) => {
-                  const isCurrent = i === currentActive && !s.done;
-                  const isDone = s.done;
-                  return (
-                    <div key={s.key} className="flex items-start gap-3 relative">
-                      {i < steps.length - 1 && (
-                        <div className={`absolute left-[15px] top-8 w-0.5 h-[calc(100%+0.25rem)] ${isDone ? 'bg-chateau' : 'bg-gray-200'}`} />
+        return (
+          <div className="bg-white border border-gray-100 rounded-2xl p-5">
+            <h2 className="text-sm font-semibold text-gray-900 mb-4">สถานะการจอง</h2>
+            <div className="flex items-start">
+              {steps.map((s, i) => {
+                const isCurrent = i === currentIdx && !s.done;
+                const isDone = s.done;
+                const nextDone = i < steps.length - 1 && steps[i + 1].done;
+                return (
+                  <div key={s.key} className="flex-1 flex flex-col items-center relative">
+                    {/* Connector to next step — sits behind the dot via z-index */}
+                    {i < steps.length - 1 && (
+                      <div className={`absolute top-3.5 left-1/2 right-0 h-0.5 w-full ${nextDone || isDone ? 'bg-chateau' : 'bg-gray-200'}`} />
+                    )}
+                    {/* Dot */}
+                    <div className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      isDone ? 'bg-chateau text-white' :
+                      isCurrent ? 'bg-white border-2 border-chateau' :
+                      'bg-white border-2 border-gray-200'
+                    }`}>
+                      {isDone ? (
+                        <Check className="w-3.5 h-3.5" strokeWidth={3} />
+                      ) : isCurrent ? (
+                        <div className="w-2 h-2 rounded-full bg-chateau animate-pulse" />
+                      ) : (
+                        <div className="w-1.5 h-1.5 rounded-full bg-gray-300" />
                       )}
-                      <div className={`relative w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${
-                        isDone ? 'bg-chateau text-white' :
-                        isCurrent ? 'bg-white border-2 border-chateau text-chateau animate-pulse' :
-                        'bg-gray-100 text-gray-400'
-                      }`}>
-                        {isDone ? (
-                          <Check className="w-4 h-4" strokeWidth={3} />
-                        ) : isCurrent ? (
-                          <div className="w-2 h-2 rounded-full bg-chateau" />
-                        ) : (
-                          <div className="w-2 h-2 rounded-full bg-gray-300" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0 pb-3">
-                        <p className={`text-sm font-semibold ${isDone || isCurrent ? 'text-gray-900' : 'text-gray-400'}`}>
-                          {s.label}
-                        </p>
-                        <p className={`text-xs mt-0.5 ${isCurrent ? 'text-chateau font-medium' : isDone ? 'text-gray-600' : 'text-gray-400'}`}>
-                          {s.sub}
-                          {isCurrent && ' · กำลังดำเนินการ'}
-                        </p>
-                      </div>
                     </div>
-                  );
-                })}
-                {!assignedSales && (
-                  <div className="mt-2 p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-start gap-2">
-                    <Sparkles className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
-                    <p className="text-[11px] text-amber-900 leading-relaxed">
-                      <strong>SLA:</strong> Sales จะติดต่อกลับภายใน 2 ชั่วโมงทำการ — ใช้ปุ่มด้านล่างเพื่อคุย Sales ตอนนี้
+                    {/* Label */}
+                    <p className={`text-[10px] mt-1.5 text-center leading-tight ${
+                      isDone ? 'text-gray-700 font-medium' :
+                      isCurrent ? 'text-chateau font-semibold' :
+                      'text-gray-400'
+                    }`}>
+                      {s.label}
                     </p>
                   </div>
-                )}
-                {/* Self-cancel intentionally removed — customers who change their mind
-                    contact Sales, who handles the cancellation (with reason + audit) via
-                    the trash icon in Unit Detail. This matches Sansiri/AP practice and
-                    prevents accidental clicks / spam-toggle from corrupting the lead
-                    pipeline. The handleCancelInterest fn is kept (unused) in case we
-                    add a "ขอยกเลิก" flow (Sales review queue) later. */}
+                );
+              })}
+            </div>
+            {/* Currently-active step's tagline shown below the strip — keeps the stepper
+                tidy while still telling the customer what they're waiting on. */}
+            {(() => {
+              const currentStep = steps[currentIdx];
+              if (currentStep.done) return null;
+              const taglines: Record<string, string> = {
+                contacted: myLead?.assigned_to ? 'รอ Sales โทรกลับ' : 'รอจัดสรร Sales',
+                booked: 'รอชำระค่าจองเพื่อล็อกยูนิต',
+                deposit: bookingStatus === 'pending'
+                  ? `รอชำระค่ามัดจำ + เซ็นสัญญา${myBooking?.deposit_amount ? ` (฿${Number(myBooking.deposit_amount).toLocaleString('th-TH')})` : ''}`
+                  : 'รอชำระค่ามัดจำ + เซ็นสัญญา',
+                transfer: 'รอกู้สำเร็จ + โอนกรรมสิทธิ์',
+              };
+              const text = taglines[currentStep.key];
+              return text ? (
+                <div className="mt-4 pt-3 border-t border-gray-100">
+                  <p className="text-xs text-chateau font-medium flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5" />
+                    {text}
+                  </p>
+                </div>
+              ) : null;
+            })()}
+          </div>
+        );
+      })()}
+
+      {/* === นัดเยี่ยมชม (separate card — only when scheduled or visit happened).
+           Decoupled from the main timeline because viewing is optional in the
+           real-world workflow (Sansiri/AP customers often commit without visiting
+           first). Embedding it in a linear timeline caused false ✓ checkmarks on
+           the "จองก่อนดู" path. === */}
+      {myInterest && (myInterest.viewing_date || ['viewed', 'negotiating', 'reserved', 'won'].includes(myInterest.status)) && (
+        <div className="bg-white border border-amber-100 rounded-2xl p-5">
+          <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-amber-600" /> นัดเยี่ยมชมโครงการ
+          </h2>
+          {(() => {
+            const visited = ['viewed', 'negotiating', 'reserved', 'won'].includes(myInterest.status);
+            const scheduled = !!myInterest.viewing_date && !visited;
+            return (
+              <div className="flex items-start gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                  visited ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+                }`}>
+                  {visited ? <Check className="w-5 h-5" strokeWidth={2.5} /> : <Clock className="w-5 h-5" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  {visited ? (
+                    <>
+                      <p className="text-sm font-semibold text-gray-900">เยี่ยมชมเรียบร้อย</p>
+                      {myInterest.viewing_date && (
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          เมื่อ {new Date(myInterest.viewing_date).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      )}
+                    </>
+                  ) : scheduled ? (
+                    <>
+                      <p className="text-sm font-semibold text-gray-900">
+                        นัดวันที่ {new Date(myInterest.viewing_date!).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                      {property?.name && (
+                        <p className="text-xs text-gray-500 mt-0.5">ที่ {property.name}</p>
+                      )}
+                    </>
+                  ) : null}
+                </div>
               </div>
             );
           })()}

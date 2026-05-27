@@ -598,7 +598,13 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
           .replace(/^(?:other_)+other:\s*/i, '')
           .replace(/^other:\s*/i, '')
           .trim();
-        if (formData.news_source_main === "other") {
+        // If the user typed a known platform in the "other" text box, promote to
+        // its canonical online_* value instead of wrapping as "other: facebook".
+        const PROMOTE_TO_ONLINE = new Set(['facebook', 'instagram', 'google', 'line', 'tiktok', 'youtube']);
+        const lower = cleanOther.toLowerCase();
+        if (PROMOTE_TO_ONLINE.has(lower)) {
+          newsSource = `online_${lower}`;
+        } else if (formData.news_source_main === "other") {
           newsSource = `other: ${cleanOther}`;
         } else {
           newsSource = `${newsSource}_other: ${cleanOther}`;

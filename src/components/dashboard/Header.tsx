@@ -31,8 +31,6 @@ interface NotifItem {
   time: string;
   unread: boolean;
   link?: string;
-  /** When set, the dropdown row shows a "รับ Lead" claim button instead of plain navigation. */
-  claimable?: { leadId: string } | null;
 }
 
 const NOTIF_STYLES: Record<NotifType, { icon: typeof Bell; color: string; bg: string }> = {
@@ -47,6 +45,7 @@ const NOTIF_STYLES: Record<NotifType, { icon: typeof Bell; color: string; bg: st
 const mapActivityToNotif = (activity_type: string, description: string): { type: NotifType; title: string; link?: string } => {
   const map: Record<string, { type: NotifType; title: string; link?: string }> = {
     lead_created:      { type: 'lead',     title: 'Lead ใหม่เข้ามา',                   link: '/leads' },
+    lead_interest_added: { type: 'lead',   title: 'ลูกค้าเดิมสนใจยูนิตใหม่',            link: '/leads' },
     lead_assigned:     { type: 'lead',     title: 'มอบหมาย Lead ใหม่',                  link: '/leads' },
     lead_contacted:    { type: 'lead',     title: 'ติดต่อ Lead เรียบร้อย',              link: '/leads' },
     lead_qualified:    { type: 'lead',     title: 'Lead ผ่านคุณสมบัติ',                 link: '/leads' },
@@ -128,11 +127,10 @@ const Header = ({ onMenuClick }: HeaderProps) => {
   }, [isOwner]);
 
   // === Notifications — per-user, fetched from `notifications` table ===
-  // Targeting model:
-  //   - user_id = me   → personal notification (my Lead, my booking, etc.)
-  //   - user_id NULL   → tenant-wide broadcast (Lead pool — any Sales of the tenant
-  //                      sees it and can "รับ Lead" via the claim button)
-  // RLS enforces both visibility rules; we just SELECT and trust the policy layer.
+  // Targeting model: all new notifications are addressed to a specific user_id
+  // (personal). The legacy "user_id NULL = Lead pool broadcast" model has been
+  // retired — Lead routing now goes through Admin assignment instead.
+  // RLS enforces visibility; we just SELECT and trust the policy layer.
   const [notifications, setNotifications] = useState<NotifItem[]>([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const unreadCount = notifications.filter((n) => n.unread).length;
@@ -143,10 +141,11 @@ const Header = ({ onMenuClick }: HeaderProps) => {
 
     let cancelled = false;
     (async () => {
-      // Fetch personal + broadcast notifications for this tenant. RLS returns:
+      // Fetch personal notifications for this user in the current tenant. RLS returns:
       //   - rows where user_id = auth.uid()         (mine)
-      //   - rows where user_id IS NULL              (broadcast — pool)
-      //   - rows where caller is_owner()            (Owner sees all)
+      //   - rows where caller is_owner()            (Owner sees all, cross-tenant)
+      // (Legacy broadcast rows with user_id IS NULL still readable by Sales of the
+      //  same tenant via the historical policy, but no new ones are created.)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data } = await (supabase.from('notifications') as any)
         .select('id, type, title, message, is_read, related_entity_type, related_entity_id, action_url, action_text, data, created_at, user_id')
@@ -157,50 +156,14 @@ const Header = ({ onMenuClick }: HeaderProps) => {
       setNotifications(((data as any[]) || []).map(rowToNotifItem));
     })();
 
-    // Realtime: prepend new notification rows. Two filters needed because
-    // postgres_changes can only match a single equality at a time:
-    //   1. user_id = me           — personal
-    //   2. user_id IS NULL        — broadcast (Lead pool)
-    // We subscribe both and de-dupe by id when merging into state.
+    // Realtime: prepend new personal notifications addressed to this user.
+    // Broadcast/pool subscription was removed when the Lead pool model was retired.
     const personalChannel = supabase
       .channel(`notifications:user:${myUserId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${myUserId}` },
         (payload) => prependNotif(payload.new as any),
-      )
-      .subscribe();
-    const broadcastChannel = supabase
-      .channel(`notifications:tenant:${currentTenant.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `tenant_id=eq.${currentTenant.id}` },
-        (payload) => {
-          const row = payload.new as any;
-          // Only handle broadcast rows here (personal ones come through the other channel)
-          if (row?.user_id === null) prependNotif(row);
-        },
-      )
-      .subscribe();
-    // Also subscribe to UPDATE so claim → user_id set means "this lead is taken"
-    // and the row should disappear from other Sales' pool view.
-    const updateChannel = supabase
-      .channel(`notifications:updates:${currentTenant.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `tenant_id=eq.${currentTenant.id}` },
-        (payload) => {
-          const row = payload.new as any;
-          // If a broadcast notification was claimed (user_id assigned to someone),
-          // drop it from anyone else's list. The claimer still sees it as personal.
-          setNotifications((prev) => prev.map((n) => {
-            if (n.id !== row.id) return n;
-            if (row.user_id && row.user_id !== myUserId) {
-              return null as any; // marker for filter below
-            }
-            return { ...rowToNotifItem(row) };
-          }).filter(Boolean) as NotifItem[]);
-        },
       )
       .subscribe();
 
@@ -216,8 +179,6 @@ const Header = ({ onMenuClick }: HeaderProps) => {
     return () => {
       cancelled = true;
       supabase.removeChannel(personalChannel);
-      supabase.removeChannel(broadcastChannel);
-      supabase.removeChannel(updateChannel);
     };
   }, [currentTenant?.id, userProfile?.id, user?.id]);
 
@@ -225,7 +186,6 @@ const Header = ({ onMenuClick }: HeaderProps) => {
     const activityType: string = row.data?.activity_type || row.related_entity_type || 'info';
     const m = mapActivityToNotif(activityType, row.message || row.title);
     const leadId = row.related_entity_type === 'lead' ? row.related_entity_id : row.data?.lead_id;
-    const isLeadPool = row.user_id === null && activityType === 'lead_unclaimed';
     return {
       id: row.id,
       type: m.type,
@@ -234,7 +194,6 @@ const Header = ({ onMenuClick }: HeaderProps) => {
       time: formatTimeAgo(row.created_at),
       unread: !row.is_read,
       link: row.action_url || (leadId ? `/leads/${leadId}` : m.link),
-      claimable: isLeadPool && leadId ? { leadId } : null,
     };
   };
 
@@ -248,45 +207,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
     if (myUserId) void markAllNotificationsRead(myUserId);
   };
 
-  const claimLeadFromPool = async (n: NotifItem) => {
-    if (!n.claimable?.leadId) return;
-    const myUserId = userProfile?.id || user?.id;
-    if (!myUserId) return;
-    try {
-      // Atomic claim: only succeeds if the Lead is still unassigned. Concurrent
-      // Sales racing for the same Lead — the WHERE assigned_to IS NULL ensures
-      // only one wins, others get a no-op and see the notification disappear via
-      // the UPDATE subscription.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase.from('leads') as any)
-        .update({ assigned_to: myUserId })
-        .eq('id', n.claimable.leadId)
-        .is('assigned_to', null)
-        .select('id');
-      if (error) throw error;
-      if (!data || data.length === 0) {
-        // Someone else got it first
-        setNotifications((prev) => prev.filter((x) => x.id !== n.id));
-        return;
-      }
-      // Re-target the pool notification to me so it stays in my list (no longer broadcast).
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase.from('notifications') as any)
-        .update({ user_id: myUserId, is_read: true, read_at: new Date().toISOString() })
-        .eq('id', n.id);
-      markAsRead(n.id);
-      setNotifOpen(false);
-      navigate(`/leads/${n.claimable.leadId}`);
-    } catch (err) {
-      console.error('[notifications] claim failed:', err);
-    }
-  };
-
   const clickNotif = (n: NotifItem) => {
-    if (n.claimable) {
-      void claimLeadFromPool(n);
-      return;
-    }
     markAsRead(n.id);
     setNotifOpen(false);
     if (n.link) navigate(n.link);
@@ -594,18 +515,6 @@ const Header = ({ onMenuClick }: HeaderProps) => {
                         </p>
                         <p className="text-xs text-gray-500 mt-0.5 line-clamp-2 leading-snug">{n.description}</p>
                         <p className="text-[11px] text-gray-400 mt-1">{n.time}</p>
-                        {/* Pool notification — race-to-claim button. Atomic UPDATE ensures
-                            only one Sales wins; the others see the row vanish via realtime. */}
-                        {n.claimable && (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); void claimLeadFromPool(n); }}
-                            className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-chateau text-white text-xs font-semibold hover:bg-chateau-600 transition-colors"
-                          >
-                            <UserPlus className="w-3 h-3" />
-                            รับ Lead
-                          </button>
-                        )}
                       </div>
                     </div>
                   );

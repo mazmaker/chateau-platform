@@ -750,7 +750,14 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
           .replace(/^(?:other_)+other:\s*/i, '')
           .replace(/^other:\s*/i, '')
           .trim();
-        if (formData.news_source_main === "other") {
+        // If the user typed a known platform in the "other" text box (e.g. "facebook",
+        // "instagram", "google"), promote it to its canonical value instead of wrapping
+        // as "other: facebook". This prevents Sales from seeing odd labels later.
+        const PROMOTE_TO_ONLINE = new Set(['facebook', 'instagram', 'google', 'line', 'tiktok', 'youtube']);
+        const lower = cleanOther.toLowerCase();
+        if (PROMOTE_TO_ONLINE.has(lower)) {
+          newsSource = `online_${lower}`;
+        } else if (formData.news_source_main === "other") {
           newsSource = `other: ${cleanOther}`;
         } else {
           newsSource = `${newsSource}_other: ${cleanOther}`;
