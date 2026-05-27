@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   Building2, Bed, Bath, Square, Layers, MapPin, Heart, Loader2, Sun, ParkingCircle, Check,
   ChevronLeft, ChevronRight, Calendar, Calculator, Share2,
-  ChevronDown, View, Sparkles, XCircle, FileDown,
+  ChevronDown, View, Sparkles, FileDown,
 } from 'lucide-react';
 import { incrementLeadCounter } from '@/lib/leadTracking';
 import { Button } from '@/components/ui/button';
@@ -145,7 +145,9 @@ const CustomerUnitDetail = () => {
           const leadList = (leads || []) as any[];
           const leadIds = leadList.map((l: any) => l.id);
 
-          // Check existing interest + lead
+          // Check existing interest + lead. Hoist `existingInterest` to outer scope
+          // because the booking query below needs its lead_id for filtering.
+          let existingInterest: any = null;
           if (leadIds.length > 0) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data: existing } = await (supabase.from('lead_interests') as any)
@@ -155,28 +157,42 @@ const CustomerUnitDetail = () => {
               .not('status', 'in', '("dropped","lost")')
               .maybeSingle();
             if (existing) {
+              existingInterest = existing;
               setMyInterest(existing as any);
               const matchingLead = leadList.find((l: any) => l.id === (existing as any).lead_id);
               if (matchingLead) setMyLead({ id: matchingLead.id, status: matchingLead.status, last_contact_date: matchingLead.last_contact_date });
             }
           }
 
-          // Booking row for THIS unit + customer — drives step 6 (จองยูนิต) state
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: bookings } = await (supabase.from('bookings') as any)
-            .select('id, status, total_amount, notes')
-            .eq('customer_id', (customer as any).id)
-            .neq('status', 'cancelled')
-            .order('created_at', { ascending: false });
-          const matchingBooking = ((bookings || []) as any[]).find((b) => (b.notes?.unit_id) === id);
-          setMyBooking(matchingBooking
-            ? {
-                id: matchingBooking.id,
-                status: matchingBooking.status,
-                total_amount: Number(matchingBooking.total_amount || 0),
-                deposit_amount: matchingBooking.notes?.deposit_amount != null ? Number(matchingBooking.notes.deposit_amount) : null,
-              }
-            : null);
+          // Booking row for THIS unit + customer — drives step 6 (ชำระมัดจำ) state.
+          // CRITICAL: filter by the CURRENT active interest's lead_id, otherwise an
+          // old "confirmed" booking from a previously-dropped interest leaks into the
+          // timeline as "ชำระมัดจำ ✓ ชำระแล้ว" even when the new interest hasn't
+          // progressed past "ส่งคำขอ". The cancelled-status filter alone isn't enough:
+          // bookings stay 'confirmed' when Sales soft-deletes an interest via trash.
+          const currentInterestLeadId = existingInterest?.lead_id ?? null;
+          if (currentInterestLeadId) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: bookings } = await (supabase.from('bookings') as any)
+              .select('id, status, total_amount, notes')
+              .eq('customer_id', (customer as any).id)
+              .neq('status', 'cancelled')
+              .order('created_at', { ascending: false });
+            const matchingBooking = ((bookings || []) as any[]).find((b) =>
+              b.notes?.unit_id === id && b.notes?.lead_id === currentInterestLeadId,
+            );
+            setMyBooking(matchingBooking
+              ? {
+                  id: matchingBooking.id,
+                  status: matchingBooking.status,
+                  total_amount: Number(matchingBooking.total_amount || 0),
+                  deposit_amount: matchingBooking.notes?.deposit_amount != null ? Number(matchingBooking.notes.deposit_amount) : null,
+                }
+              : null);
+          } else {
+            // No active interest → no booking to consider for this view.
+            setMyBooking(null);
+          }
 
           // Find assigned sales
           const assignedId = leadList.find((l: any) => l.assigned_to)?.assigned_to;
@@ -475,49 +491,11 @@ const CustomerUnitDetail = () => {
     }
   };
 
-  const handleCancelInterest = async () => {
-    if (!unit || !myInterest) return;
-    if (!confirm('ยืนยันยกเลิกความสนใจในยูนิตนี้?\nคุณจะสามารถกด "ฉันสนใจ" ใหม่ได้ทุกเมื่อ')) return;
-    setSubmitting(true);
-    try {
-      // 'dropped' is the closest enum value for "customer cancelled" (lead_interests_status_check)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase.from('lead_interests') as any)
-        .update({ status: 'dropped', notes: 'ลูกค้ายกเลิกจาก Customer Portal' })
-        .eq('id', myInterest.id);
-      if (error) throw error;
-
-      // Notify Sales via activity_log
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: customer } = await (supabase.from('customers') as any)
-          .select('id, full_name').eq('auth_user_id', user?.id).maybeSingle();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.from('activity_logs') as any).insert({
-          tenant_id: unit.tenant_id,
-          user_id: assignedSales?.id || null,
-          activity_type: 'interest_cancelled',
-          description: `ลูกค้า${(customer as any)?.full_name || ''} ยกเลิกความสนใจยูนิต ${unit.unit_number}`,
-          metadata: {
-            lead_id: myLead?.id,
-            unit_id: unit.id,
-            unit_number: unit.unit_number,
-            customer_name: (customer as any)?.full_name,
-            source: 'customer_portal',
-          },
-        });
-      } catch { /* non-blocking */ }
-
-      toast.success('ยกเลิกความสนใจเรียบร้อย');
-      setMyInterest(null);
-    } catch (err: any) {
-      toast.error(err.message || 'ยกเลิกไม่สำเร็จ');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
+  // handleCancelInterest removed — Customer no longer has a self-cancel button.
+  // Cancellation is handled by Sales via the trash icon + reason dialog on the
+  // staff Unit Detail page (UnitDetail.tsx → submitDeleteInterest), which
+  // maintains audit trail, recomputes lead score, and prevents accidental /
+  // troll clicks from corrupting the pipeline.
 
   if (loading) {
     return (
@@ -814,19 +792,12 @@ const CustomerUnitDetail = () => {
                     </p>
                   </div>
                 )}
-                {/* Cancel interest — only allowed before reservation/sale */}
-                {!hasReserved && !hasWon && (
-                  <div className="mt-4 pt-4 border-t border-rose-100/60 flex justify-center">
-                    <button
-                      onClick={handleCancelInterest}
-                      disabled={submitting}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-rose-700 bg-white border border-rose-300 rounded-full hover:bg-rose-50 hover:border-rose-400 active:scale-[0.98] transition-all disabled:opacity-40"
-                    >
-                      <XCircle className="w-4 h-4" />
-                      ยกเลิกความสนใจในยูนิตนี้
-                    </button>
-                  </div>
-                )}
+                {/* Self-cancel intentionally removed — customers who change their mind
+                    contact Sales, who handles the cancellation (with reason + audit) via
+                    the trash icon in Unit Detail. This matches Sansiri/AP practice and
+                    prevents accidental clicks / spam-toggle from corrupting the lead
+                    pipeline. The handleCancelInterest fn is kept (unused) in case we
+                    add a "ขอยกเลิก" flow (Sales review queue) later. */}
               </div>
             );
           })()}

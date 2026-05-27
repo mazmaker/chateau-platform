@@ -1204,6 +1204,20 @@ const UnitDetail = () => {
       if (error) throw error;
       if (!data || data.length === 0) throw new Error('ไม่มีสิทธิ์ลบ');
 
+      // Cancel any active bookings tied to this lead+unit so they don't leak into the
+      // customer's status timeline next time they re-express interest (Sales rebuilds
+      // the lead → fresh interest is 'interested' but old 'confirmed' booking would
+      // still flash "ชำระมัดจำ ✓" on the customer side without this cleanup).
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('bookings') as any)
+          .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+          .eq('tenant_id', currentTenant?.id)
+          .filter('notes->>unit_id', 'eq', unit?.id || '')
+          .filter('notes->>lead_id', 'eq', target.leadId)
+          .in('status', ['pending', 'confirmed']);
+      } catch { /* non-blocking — interest removal already succeeded */ }
+
       // Audit log — who removed, why, from which unit. Owner/Admin can review later.
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
