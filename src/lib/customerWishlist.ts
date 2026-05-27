@@ -86,13 +86,16 @@ export async function addToWishlist(unit: { id: string; tenant_id: string; proje
         interest_level: 'medium',
         notes: 'บันทึกจาก Customer Portal',
       });
-    } else if ((existing as any).status === 'dropped') {
-      // Re-activate previously dropped interest
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase.from('lead_interests') as any)
-        .update({ status: 'interested', updated_at: new Date().toISOString() })
-        .eq('id', (existing as any).id);
     }
+    // NOTE: when `existing.status === 'dropped'` we deliberately do NOT auto-
+    // resurrect the interest. Wishlist is a casual save (heart icon) — it
+    // shouldn't override a deliberate Sales-side "ลบ Lead จากยูนิต" action,
+    // which was logged with a reason. The customer can still bring the
+    // interest back by clicking the explicit "สนใจยูนิตนี้" button, which goes
+    // through handleExpressInterest and updates notes properly. Without this
+    // guard, Sales would soft-delete the interest, the customer's stale heart
+    // toggle would silently flip it back to 'interested', and the timeline
+    // would reappear out of nowhere on the customer side.
   } catch (e) {
     console.error('addToWishlist DB sync error:', e);
   }
