@@ -309,7 +309,12 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
         newsSourceMain = "offline";
       } else if (source) {
         newsSourceMain = "other";
-        newsSourceOther = source;
+        // Strip "other:" and any accumulated "other_other:" prefixes from legacy
+        // corrupted data — guard so the form shows just the actual free text.
+        newsSourceOther = source
+          .replace(/^(?:other_)+other:\s*/i, '')
+          .replace(/^other:\s*/i, '')
+          .trim();
       }
 
       // Parse purchase purpose
@@ -573,13 +578,31 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
       const district = districts.find(d => d.id === parseInt(formData.district_id));
       const subDistrict = subDistricts.find(sd => sd.id === parseInt(formData.sub_district_id));
 
-      // Prepare news source data
+      // Prepare news source data — encoded as a string in DB.
+      //   main='online'  → "online_<channel>" (channel=facebook/line/google/etc.)
+      //                     "online_<channel>_other: <free text>" if also a custom note
+      //   main='offline' → "offline"
+      //   main='other'   → "other: <free text>"   ← NOT "other_other: ..." (legacy bug)
+      // The previous code blindly appended "_other:" even when main was already
+      // "other", producing "other_other: facebook". On next load that whole string
+      // got stuffed back into newsSourceOther, so the next save produced
+      // "other_other: other_other: facebook", and it accumulated every time Sales
+      // touched the form.
       let newsSource = formData.news_source_main;
       if (formData.news_source_main === "online" && formData.news_source_online) {
         newsSource = `online_${formData.news_source_online}`;
       }
       if (formData.news_source_other) {
-        newsSource = `${newsSource}_other: ${formData.news_source_other}`;
+        // Strip any accumulated "other_other: " / "other: " prefixes from corrupted older data
+        const cleanOther = formData.news_source_other
+          .replace(/^(?:other_)+other:\s*/i, '')
+          .replace(/^other:\s*/i, '')
+          .trim();
+        if (formData.news_source_main === "other") {
+          newsSource = `other: ${cleanOther}`;
+        } else {
+          newsSource = `${newsSource}_other: ${cleanOther}`;
+        }
       }
 
       // Prepare purchase purpose data

@@ -738,13 +738,23 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
       const district = districts.find(d => d.id === parseInt(formData.district_id));
       const subDistrict = subDistricts.find(sd => sd.id === parseInt(formData.sub_district_id));
 
-      // Prepare news source data
+      // Prepare news source data — same encoding rules as EditLeadModal:
+      // main='other' must become "other: <text>", NOT "other_other: <text>"
+      // (legacy bug that caused the prefix to accumulate on every save).
       let newsSource = formData.news_source_main;
       if (formData.news_source_main === "online" && formData.news_source_online) {
         newsSource = `online_${formData.news_source_online}`;
       }
       if (formData.news_source_other) {
-        newsSource = `${newsSource}_other: ${formData.news_source_other}`;
+        const cleanOther = formData.news_source_other
+          .replace(/^(?:other_)+other:\s*/i, '')
+          .replace(/^other:\s*/i, '')
+          .trim();
+        if (formData.news_source_main === "other") {
+          newsSource = `other: ${cleanOther}`;
+        } else {
+          newsSource = `${newsSource}_other: ${cleanOther}`;
+        }
       }
 
       // Prepare purchase purpose data
