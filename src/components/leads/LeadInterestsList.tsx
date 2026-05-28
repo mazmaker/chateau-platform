@@ -890,7 +890,7 @@ const LeadInterestsList = forwardRef<LeadInterestsListRef, LeadInterestsListProp
                         <summary className="cursor-pointer list-none flex items-center justify-between mb-2 select-none">
                           <h4 className="text-sm font-bold text-gray-600 flex items-center gap-1.5">
                             <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" />
-                            รายการที่ลูกค้าบันทึกไว้พิจารณา
+                            รายการที่ลูกค้าบันทึกไว้ดูทีหลัง
                           </h4>
                           <span className="text-xs font-medium text-gray-400">{bookmarkInterests.length} รายการ</span>
                         </summary>

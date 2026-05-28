@@ -77,7 +77,8 @@ import {
   AlertTriangle,
   LayoutGrid,
   List,
-  Check
+  Check,
+  Link2
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -166,6 +167,8 @@ const PropertyManagement = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { currentTenant, userRole, user } = useSimpleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Agent's referral code → powers the "คัดลอกลิงก์แนะนำ" button in the header.
+  const [myReferralCode, setMyReferralCode] = useState<string | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [units, setUnits] = useState<Unit[]>([]);
@@ -579,9 +582,27 @@ const PropertyManagement = () => {
       if (!cancelled && !error && data) {
         setMyAgentUnitIds(new Set(data.map((r: any) => r.unit_id)));
       }
+      // Also fetch my referral code for the "คัดลอกลิงก์แนะนำ" header button.
+      const { data: meRow } = await supabase
+        .from('users')
+        .select('referral_code')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (!cancelled) setMyReferralCode((meRow as any)?.referral_code || null);
     })();
     return () => { cancelled = true; };
   }, [userRole, user?.id]);
+
+  const handleCopyReferral = async () => {
+    if (!myReferralCode) return;
+    const link = `${window.location.origin}/customer?ref=${encodeURIComponent(myReferralCode)}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success(`คัดลอกลิงก์แนะนำเรียบร้อย (รหัส ${myReferralCode})`);
+    } catch {
+      toast.error('คัดลอกไม่สำเร็จ');
+    }
+  };
 
   const canManageUnit = (unitId: string, projectId?: string): boolean => {
     if (userRole === 'owner' || userRole === 'admin') return true;
@@ -1490,22 +1511,35 @@ const PropertyManagement = () => {
                       <div>
                         <h1 className="text-2xl font-bold text-gray-900">โครงการ</h1>
                         <p className="text-gray-600 mt-1">
-                          จัดการโครงการอสังหาและยูนิตทั้งหมดของบริษัท
+                          {userRole === 'agent'
+                            ? 'เลือกโครงการเพื่อดูยูนิตและแชร์ให้ลูกค้า'
+                            : 'จัดการโครงการอสังหาและยูนิตทั้งหมดของบริษัท'}
                         </p>
                       </div>
                     </div>
-                    <ManagePropertiesGuard fallback={null} showMessage={false}>
+                    {userRole === 'agent' ? (
                       <Button
-                        onClick={() => {
-                          setEditingProperty(null);
-                          setShowPropertyDialog(true);
-                        }}
-                        className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
+                        onClick={handleCopyReferral}
+                        variant="outline"
+                        className="flex items-center gap-2"
                       >
-                        <Plus className="w-4 h-4 mr-2" />
-                        เพิ่มโครงการใหม่
+                        <Link2 className="w-4 h-4" />
+                        คัดลอกลิงก์แนะนำ
                       </Button>
-                    </ManagePropertiesGuard>
+                    ) : (
+                      <ManagePropertiesGuard fallback={null} showMessage={false}>
+                        <Button
+                          onClick={() => {
+                            setEditingProperty(null);
+                            setShowPropertyDialog(true);
+                          }}
+                          className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          เพิ่มโครงการใหม่
+                        </Button>
+                      </ManagePropertiesGuard>
+                    )}
                   </div>
                 </CardContent>
               </Card>

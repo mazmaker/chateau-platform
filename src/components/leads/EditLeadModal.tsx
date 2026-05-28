@@ -170,7 +170,10 @@ const STATUS_OPTIONS = [
 ];
 
 const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalProps) => {
-  const { currentTenant } = useSimpleAuth();
+  const { currentTenant, userRole } = useSimpleAuth();
+  // Assigning the responsible Sales is an Admin/Owner action (lead routing is centrally
+  // managed). Sales/Agents may view who's assigned but cannot reassign.
+  const canAssignSales = userRole === 'owner' || userRole === 'admin';
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
 
@@ -844,7 +847,7 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                             <Select
                               value={formData.assigned_to}
                               onValueChange={(value) => setFormData(prev => ({ ...prev, assigned_to: value }))}
-                              disabled={loading}
+                              disabled={loading || !canAssignSales}
                             >
                               <SelectTrigger className="mt-1.5">
                                 <SelectValue placeholder="เลือกพนักงานขาย" />
@@ -857,6 +860,9 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                                 ))}
                               </SelectContent>
                             </Select>
+                            {!canAssignSales && (
+                              <p className="text-xs text-gray-400 mt-1">เฉพาะผู้ดูแลระบบกำหนดผู้รับผิดชอบได้</p>
+                            )}
                           </div>
 
                           <div>

@@ -323,10 +323,10 @@ export default function SelfPerformanceSection({ userId, tenantId, showName = fa
         </div>
       </div>
 
-      {/* KPI Cards — 5 base + optional Rank (only meaningful when team > 2).
-          Grid: 2 cols on mobile, 3 cols on desktop. Cards wrap naturally when count
-          shifts from 5 to 6 — no layout brittleness. */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+      {/* KPI Cards — 4 base + optional Rank (only shown when team > 2).
+          Column count tracks the card count so we never leave an orphan on its own row:
+          4 cards → single row of 4; 5 cards → 3+2. (2 cols on mobile throughout.) */}
+      <div className={`grid grid-cols-2 ${metrics.totalRanked > 2 ? 'lg:grid-cols-3' : 'lg:grid-cols-4'} gap-3`}>
         <KpiCard
           label="ปิดดีลเดือนนี้"
           value={`${metrics.wonCount} ดีล`}

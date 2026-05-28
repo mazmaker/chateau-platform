@@ -71,8 +71,8 @@ const CustomerUnitDetail = () => {
   const navigate = useNavigate();
   const [unit, setUnit] = useState<Unit | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
-  const [myInterest, setMyInterest] = useState<{ id: string; status: string; viewing_date: string | null; created_at: string | null } | null>(null);
-  const [myBooking, setMyBooking] = useState<{ id: string; status: string; total_amount: number; deposit_amount: number | null } | null>(null);
+  const [myInterest, setMyInterest] = useState<{ id: string; status: string; interest_level: string | null; viewing_date: string | null; created_at: string | null; updated_at: string | null } | null>(null);
+  const [myBooking, setMyBooking] = useState<{ id: string; status: string; total_amount: number; booking_fee: number | null; deposit_amount: number | null } | null>(null);
   const [myLead, setMyLead] = useState<{ id: string; status: string | null; last_contact_date: string | null; assigned_to: string | null } | null>(null);
   const [similarUnits, setSimilarUnits] = useState<Unit[]>([]);
   const [assignedSales, setAssignedSales] = useState<Sales | null>(null);
@@ -108,6 +108,8 @@ const CustomerUnitDetail = () => {
 
   // Dialogs
   const [showInterestConfirm, setShowInterestConfirm] = useState(false);
+  // Drives the anonymous-visitor hint under the CTA (soft-gate UX).
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   const loadAll = async () => {
     if (!id) return;
@@ -134,6 +136,7 @@ const CustomerUnitDetail = () => {
       setSimilarUnits((sims || []) as Unit[]);
 
       const { data: { user } } = await supabase.auth.getUser();
+      setIsLoggedIn(!!user);
       if (user) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: customer } = await (supabase.from('customers') as any)
@@ -151,7 +154,7 @@ const CustomerUnitDetail = () => {
           if (leadIds.length > 0) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data: existing } = await (supabase.from('lead_interests') as any)
-              .select('id, status, viewing_date, lead_id, created_at')
+              .select('id, status, interest_level, viewing_date, lead_id, created_at, updated_at')
               .eq('unit_id', id)
               .in('lead_id', leadIds)
               .not('status', 'in', '("dropped","lost")')
@@ -186,6 +189,7 @@ const CustomerUnitDetail = () => {
                   id: matchingBooking.id,
                   status: matchingBooking.status,
                   total_amount: Number(matchingBooking.total_amount || 0),
+                  booking_fee: matchingBooking.notes?.booking_fee != null ? Number(matchingBooking.notes.booking_fee) : null,
                   deposit_amount: matchingBooking.notes?.deposit_amount != null ? Number(matchingBooking.notes.deposit_amount) : null,
                 }
               : null);
@@ -283,8 +287,16 @@ const CustomerUnitDetail = () => {
       // the Lead. Copying at creation eliminates that drift state entirely.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: customer } = await (supabase.from('customers') as any)
-        .select('id, full_name, preferences').eq('auth_user_id', user.id).maybeSingle();
+        .select('id, full_name, preferences, tenant_id').eq('auth_user_id', user.id).maybeSingle();
       if (!customer) { toast.error('ไม่พบข้อมูลลูกค้า'); return; }
+
+      // First-touch tenant assignment. Customers sign up tenant-less via phone login
+      // (they haven't picked a company yet); they "join" a tenant the moment they
+      // engage with one of its units. First unit wins — never reassign afterwards.
+      if (!(customer as any).tenant_id) {
+        await (supabase.from('customers') as any)
+          .update({ tenant_id: unit.tenant_id }).eq('id', (customer as any).id);
+      }
 
       //  Find Sales — Admin pre-assignment + workload balance.
       //  Pool/race-to-claim model was retired (see project_lead_routing_model memory).
@@ -351,17 +363,15 @@ const CustomerUnitDetail = () => {
       let referredByAgentId: string | null = null;
       const storedRef = getStoredReferralCode();
       if (storedRef) {
+        // Resolve via SECURITY DEFINER RPC — customers can't read public.users directly
+        // (RLS), so a direct query always returned null. The function returns the agent's
+        // id only when the code matches an agent in THIS unit's tenant (no cross-tenant leak).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: agentRow } = await (supabase.from('users') as any)
-          .select('id, role, tenant_id')
-          .eq('referral_code', storedRef)
-          .eq('role', 'agent')
-          .maybeSingle();
-        // Only attribute when the agent belongs to the same tenant as the unit —
-        // prevents cross-tenant credit leakage.
-        if (agentRow && (agentRow as any).tenant_id === unit.tenant_id) {
-          referredByAgentId = (agentRow as any).id;
-        }
+        const { data: agentId } = await (supabase as any).rpc('resolve_referral_agent', {
+          p_code: storedRef,
+          p_tenant_id: unit.tenant_id,
+        });
+        if (agentId) referredByAgentId = agentId as string;
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -422,9 +432,11 @@ const CustomerUnitDetail = () => {
         .eq('unit_id', unit.id)
         .maybeSingle();
       if (previousInterest) {
+        // Bump updated_at explicitly — the customer timeline uses it as the baseline
+        // for "has Sales contacted me about THIS unit since I expressed interest?".
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: reErr } = await (supabase.from('lead_interests') as any)
-          .update({ status: 'interested', interest_level: 'high', notes: 'ลูกค้ากดสนใจอีกครั้งจาก Customer Portal' })
+          .update({ status: 'interested', interest_level: 'high', notes: 'ลูกค้ากดสนใจอีกครั้งจาก Customer Portal', updated_at: new Date().toISOString() })
           .eq('id', (previousInterest as any).id);
         if (reErr) throw reErr;
       } else {
@@ -638,12 +650,19 @@ const CustomerUnitDetail = () => {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">ยูนิต {unit.unit_number}</h1>
               {unit.unit_type && <p className="text-sm text-gray-500 mt-0.5">{unit.unit_type}</p>}
-              {/* Show interest badge if customer has expressed interest */}
-              {myInterest && (
+              {/* Interest badge — differentiate a passive heart-save from a real
+                  "ฉันสนใจ" request. A heart-save (interest_level='low') is just a
+                  bookmark; claiming "Sales รับเรื่อง" for it is misleading. */}
+              {myInterest && (myInterest.interest_level === 'high'
+                || ['contacted', 'qualified', 'negotiating', 'reserved', 'won'].includes((myInterest.status || '').toLowerCase())) ? (
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-chateau bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full mt-1.5">
-                  <Heart className="w-3 h-3 fill-current" /> บันทึกสนใจแล้ว · Sales รับเรื่อง
+                  <Heart className="w-3 h-3 fill-current" /> ส่งให้ Sales แล้ว · รอติดต่อกลับ
                 </span>
-              )}
+              ) : myInterest ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-600 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-full mt-1.5">
+                  <Heart className="w-3 h-3 fill-current text-chateau" /> บันทึกไว้ดูทีหลัง
+                </span>
+              ) : null}
             </div>
             {unit.status === 'available' ? (
               <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 px-3 py-1 rounded-full">
@@ -686,12 +705,32 @@ const CustomerUnitDetail = () => {
         const hasReserved = myInterest.status === 'reserved' || (unitReservedForMyLead && unit.status === 'reserved');
         const hasWon = myInterest.status === 'won' || (unitReservedForMyLead && unit.status === 'sold');
 
+        // The booking-status timeline is ONLY for real engagement — when the customer
+        // clicked "ฉันสนใจ" (interest_level='high'), or the deal progressed (status past
+        // 'interested'), or there's a booking. A passive heart-save (interest_level='low')
+        // is just a bookmark — showing "สถานะการจอง" with a half-done timeline for it is
+        // misleading (the customer never started the sales process). Hide it entirely.
+        const isRealEngagement =
+          myInterest.interest_level === 'high'
+          || ['contacted', 'qualified', 'negotiating', 'reserved', 'won'].includes((myInterest.status || '').toLowerCase())
+          || unitReservedForMyLead
+          || !!myBooking;
+        if (!isRealEngagement) return null;
+
         const advancedInterestStates = ['contacted', 'qualified', 'negotiating', 'reserved', 'won'];
         const interestProgressed = advancedInterestStates.includes((myInterest?.status || '').toLowerCase());
+        // Compare last_contact_date against the interest's updated_at (the moment the
+        // customer last (re)expressed interest in THIS unit), NOT created_at. Otherwise
+        // a lead-level contact about a DIFFERENT unit leaks in: e.g. customer hearted
+        // C0201 long ago, Sales later called about A2818 → last_contact_date > C0201's
+        // created_at → C0201 falsely shows "ติดต่อกลับ ✓". handleExpressInterest bumps
+        // updated_at on every fresh "ฉันสนใจ", so contact only counts if it happened
+        // AFTER the customer's latest expression on this specific unit.
+        const interestBaseline = myInterest?.updated_at || myInterest?.created_at;
         const contactAfterInterest = !!(
           myLead?.last_contact_date &&
-          myInterest?.created_at &&
-          new Date(myLead.last_contact_date) > new Date(myInterest.created_at)
+          interestBaseline &&
+          new Date(myLead.last_contact_date) > new Date(interestBaseline)
         );
         const salesContacted = interestProgressed || contactAfterInterest || unitReservedForMyLead;
 
@@ -766,9 +805,7 @@ const CustomerUnitDetail = () => {
               const taglines: Record<string, string> = {
                 contacted: myLead?.assigned_to ? 'รอ Sales โทรกลับ' : 'รอจัดสรร Sales',
                 booked: 'รอชำระค่าจองเพื่อล็อกยูนิต',
-                deposit: bookingStatus === 'pending'
-                  ? `รอชำระค่ามัดจำ + เซ็นสัญญา${myBooking?.deposit_amount ? ` (฿${Number(myBooking.deposit_amount).toLocaleString('th-TH')})` : ''}`
-                  : 'รอชำระค่ามัดจำ + เซ็นสัญญา',
+                deposit: 'รอชำระค่ามัดจำ + เซ็นสัญญา',
                 transfer: 'รอกู้สำเร็จ + โอนกรรมสิทธิ์',
               };
               const text = taglines[currentStep.key];
@@ -825,6 +862,51 @@ const CustomerUnitDetail = () => {
                       )}
                     </>
                   ) : null}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* === การชำระเงิน (only once a booking exists) — shows the two-payment
+           breakdown (ค่าจอง + ค่ามัดจำ) + remaining balance so the customer
+           understands exactly what they've paid and what's left. === */}
+      {myBooking && (
+        <div className="bg-white border border-gray-100 rounded-2xl p-5">
+          <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <Calculator className="w-4 h-4 text-chateau" /> การชำระเงิน
+          </h2>
+          {(() => {
+            const fee = myBooking.booking_fee || 0;
+            const deposit = myBooking.deposit_amount || 0;
+            const total = myBooking.total_amount || 0;
+            const remaining = Math.max(0, total - fee - deposit);
+            const row = (label: string, amount: number, paid: boolean, hint?: string) => (
+              <div className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                <div className="flex items-center gap-2">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${paid ? 'bg-chateau text-white' : 'bg-gray-100 text-gray-400'}`}>
+                    {paid ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : <Clock className="w-3 h-3" />}
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-800">{label}</p>
+                    {hint && <p className="text-[10px] text-gray-400">{hint}</p>}
+                  </div>
+                </div>
+                <span className={`text-sm font-semibold tabular-nums ${paid ? 'text-gray-900' : 'text-gray-400'}`}>
+                  {amount > 0 ? `฿${amount.toLocaleString('th-TH')}` : (paid ? '✓' : 'รอชำระ')}
+                </span>
+              </div>
+            );
+            return (
+              <div>
+                {row('ค่าจอง', fee, fee > 0, 'ล็อกยูนิต')}
+                {row('ค่ามัดจำ', deposit, deposit > 0, 'เงินดาวน์ + เซ็นสัญญา')}
+                <div className="flex items-center justify-between pt-3 mt-1">
+                  <p className="text-sm font-semibold text-gray-900">คงเหลือ (ยื่นกู้ธนาคาร)</p>
+                  <span className="text-sm font-bold text-chateau tabular-nums">
+                    ฿{remaining.toLocaleString('th-TH')}
+                  </span>
                 </div>
               </div>
             );
@@ -1133,36 +1215,38 @@ const CustomerUnitDetail = () => {
         </div>
       )}
 
-      {/* === FAQ === */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-5">
-        <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-amber-500" /> คำถามที่พบบ่อย
-        </h2>
-        <div className="space-y-1">
-          <FAQ q="ค่าส่วนกลางเดือนละเท่าไหร่?" a="ค่าส่วนกลางอยู่ที่ประมาณ 30-50 บาท/ตร.ม./เดือน ขึ้นกับขนาดยูนิต — Sales จะแจ้งราคาแน่นอนเมื่อจอง" />
-          <FAQ q="นำสัตว์เลี้ยงมาได้ไหม?" a="ขึ้นกับนโยบายโครงการ บางโครงการอนุญาตสุนัข/แมวขนาดเล็ก — ติดต่อ Sales เพื่อสอบถามเฉพาะโครงการ" />
-          <FAQ q="WiFi / Fiber Internet?" a="พร้อมรองรับ Fiber Internet ทุกผู้ให้บริการ (AIS / TRUE / 3BB) — สมัครได้ที่นิติบุคคล" />
-          <FAQ q="ระบบรักษาความปลอดภัย?" a="CCTV 24 ชม. · รปภ. ตลอด 24 ชม. · Key card / Tag entry · Smart Lock (เฉพาะบางยูนิต)" />
-          <FAQ q="ใช้บ้านเป็นออฟฟิศได้ไหม?" a="ขึ้นกับนโยบายโครงการและกฎหมาย — สามารถใช้เป็น Home Office ขนาดเล็กได้ในกรณีไม่กระทบผู้พักอาศัยอื่น" />
-        </div>
-      </div>
-
-      {/* === Sticky CTA — show only when actionable === */}
-      {!myInterest && unit.status === 'available' && (
-        <div className="sticky bottom-20 z-10 -mx-5 px-5 pt-3 bg-gradient-to-t from-white via-white">
-          <Button
-            onClick={handleExpressInterest}
-            disabled={submitting}
-            className="w-full h-12 text-sm font-semibold bg-chateau hover:bg-chateau-700 text-white shadow-md shadow-chateau/20"
-          >
-            {submitting ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> กำลังบันทึก...</>
-            ) : (
-              <><Heart className="w-4 h-4 mr-2" /> สนใจยูนิตนี้ — ให้ Sales ติดต่อกลับ</>
+      {/* === Sticky CTA — "ฉันสนใจ — ให้ Sales ติดต่อกลับ".
+           Shows when the unit is available AND the customer hasn't already made a
+           real request. A passive heart-save (interest_level='low') still gets the
+           CTA so they can escalate the bookmark into an actual Sales contact request.
+           Hidden only once they've requested (interest_level='high') / progressed. === */}
+      {(() => {
+        const alreadyRequested = !!myInterest && (
+          myInterest.interest_level === 'high'
+          || ['contacted', 'qualified', 'negotiating', 'reserved', 'won'].includes((myInterest.status || '').toLowerCase())
+        );
+        if (alreadyRequested || unit.status !== 'available') return null;
+        return (
+          <div className="sticky bottom-20 z-10 -mx-5 px-5 pt-3 bg-gradient-to-t from-white via-white">
+            <Button
+              onClick={handleExpressInterest}
+              disabled={submitting}
+              className="w-full h-12 text-sm font-semibold bg-chateau hover:bg-chateau-700 text-white shadow-md shadow-chateau/20"
+            >
+              {submitting ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> กำลังบันทึก...</>
+              ) : (
+                <><Heart className="w-4 h-4 mr-2" /> สนใจยูนิตนี้ — ให้ Sales ติดต่อกลับ</>
+              )}
+            </Button>
+            {!isLoggedIn && !submitting && (
+              <p className="text-center text-xs text-gray-500 mt-2">
+                เข้าสู่ระบบก่อน เพื่อให้ทีมงานติดต่อคุณได้
+              </p>
             )}
-          </Button>
-        </div>
-      )}
+          </div>
+        );
+      })()}
 
       {/* === Interest Confirmation Modal === */}
       <Dialog open={showInterestConfirm} onOpenChange={setShowInterestConfirm}>
@@ -1234,18 +1318,5 @@ const SpecItem = ({ icon: Icon, label, value }: { icon: any; label: string; valu
 const Tag = ({ children }: { children: React.ReactNode }) => (
   <span className="text-xs bg-gray-50 text-gray-700 border border-gray-100 px-3 py-1 rounded-full">{children}</span>
 );
-
-const FAQ = ({ q, a }: { q: string; a: string }) => {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="border-b border-gray-50 last:border-b-0">
-      <button onClick={() => setOpen(!open)} className="w-full py-3 flex items-start justify-between gap-3 text-left hover:bg-gray-50/50 rounded-lg px-2 -mx-2 transition-colors">
-        <span className="text-sm font-medium text-gray-900">{q}</span>
-        <ChevronDown className={`w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && <p className="text-xs text-gray-600 leading-relaxed pb-3 px-2">{a}</p>}
-    </div>
-  );
-};
 
 export default CustomerUnitDetail;

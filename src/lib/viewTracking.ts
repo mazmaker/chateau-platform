@@ -93,15 +93,14 @@ export function startViewTracking(args: TrackArgs): TrackerHandle {
       let refAgentId: string | null = null;
       if (refCode && REF_CODE_PATTERN.test(refCode)) {
         try {
+          // Resolve via SECURITY DEFINER RPC — anonymous visitors can't read public.users
+          // (RLS), so a direct query always returned null and ref_agent_id never got set.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: agent } = await (supabase.from('users') as any)
-            .select('id, tenant_id')
-            .eq('referral_code', refCode)
-            .eq('role', 'agent')
-            .maybeSingle();
-          if (agent && (!args.tenantId || (agent as any).tenant_id === args.tenantId)) {
-            refAgentId = (agent as any).id;
-          }
+          const { data: agentId } = await (supabase as any).rpc('resolve_referral_agent', {
+            p_code: refCode,
+            p_tenant_id: args.tenantId ?? null,
+          });
+          if (agentId) refAgentId = agentId as string;
         } catch {
           // tracking should never throw — degrade silently
         }

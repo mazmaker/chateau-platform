@@ -198,26 +198,17 @@ const MyDashboard = () => {
             .filter(Boolean) as UnitLockedRow[];
           setMyAssignedUnits(units);
 
-          // Referrals: activity_logs of type 'handoff_to_sales' where I'm the from_user
+          // Referrals = leads attributed to this Agent via their referral link
+          // (leads.referred_by_agent_id). This is the single source of truth for "who did
+          // I bring in" — covers customers who arrived via ?ref=AG-... and expressed interest.
+          // (Previously this read 'handoff_to_sales' activity, which missed link referrals.)
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: handoffActs } = await (supabase.from('activity_logs') as any)
-            .select('metadata, created_at')
+          const { data: refLeads } = await (supabase.from('leads') as any)
+            .select('id, status, estimated_value, updated_at, assigned_to, customers(full_name), sales_person:users!assigned_to(full_name)')
             .eq('tenant_id', tenantId)
-            .eq('activity_type', 'handoff_to_sales')
-            .order('created_at', { ascending: false })
-            .limit(100);
-          const myHandoffLeadIds = Array.from(new Set(
-            ((handoffActs || []) as any[])
-              .filter((a: any) => a.metadata?.from_user_id === myId && a.metadata?.lead_id)
-              .map((a: any) => a.metadata.lead_id)
-          ));
-          if (myHandoffLeadIds.length > 0) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { data: refLeads } = await (supabase.from('leads') as any)
-              .select('id, status, estimated_value, updated_at, assigned_to, customers(full_name), sales_person:users!assigned_to(full_name)')
-              .in('id', myHandoffLeadIds);
-            setMyReferrals((refLeads || []) as ReferralLead[]);
-          }
+            .eq('referred_by_agent_id', myId)
+            .order('updated_at', { ascending: false });
+          setMyReferrals((refLeads || []) as ReferralLead[]);
 
           // Funnel-layer-1 stats — anonymous visitor views attributed to this Agent
           // via property_views.ref_agent_id (set when ?ref=AG-2026-NNN matched on visit).
@@ -299,9 +290,19 @@ const MyDashboard = () => {
   // ─── Compute personal KPIs ──────────────────────────────────
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+
+  // Agent referral scorecard — derived from leads the Agent handed off to Sales
+  // (myReferrals) + link reach (viewStats). Replaces the Sales-style funnel, which
+  // measures own-closing performance — the wrong lens for a นายหน้า whose job is to refer.
+  const referralStats = useMemo(() => {
+    const total = myReferrals.length;
+    const won = myReferrals.filter((r) => r.status === 'won');
+    const active = myReferrals.filter((r) => r.status && !['won', 'lost'].includes(r.status));
+    const wonValue = won.reduce((s, r) => s + Number(r.estimated_value || 0), 0);
+    return { total, wonCount: won.length, activeCount: active.length, wonValue };
+  }, [myReferrals]);
 
   // 6-month revenue trend — wins by month (uses updated_at as proxy for won_at).
   // Drives the headline area chart that replaces the old "wall of KPI cards" feel.
@@ -404,13 +405,6 @@ const MyDashboard = () => {
       unitId: v.unit_id,
     })),
   ];
-
-  // Inactive leads — open + no contact (or never contacted) in 30+ days
-  // Falls back to created_at when last_contact_date is null so never-contacted leads are included
-  const inactiveLeads = myOpenLeads.filter((l) => {
-    const ref = l.last_contact_date ? new Date(l.last_contact_date) : new Date(l.created_at);
-    return ref < thirtyDaysAgo;
-  });
 
   // Silent leads — open + no contact in 7+ days (looser than inactive)
   const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000);
@@ -564,11 +558,63 @@ const MyDashboard = () => {
           ) : (
             <>
               {/* SECTION 1 — Performance Scorecard (full width).
-                  Single source of truth for "how am I doing" — old MyDashboard duplicated KPIs
-                  across Row 1 (3 cards) + this section's internal cards = 8 boxes of the same shape.
-                  We now keep ONLY this card and trust it as the personal snapshot. */}
+                  Sales/Admin see the Sales scorecard (own-closing funnel). Agents get a
+                  REFERRAL scorecard instead — their role is to refer customers, not close
+                  deals themselves, so a "Sales Funnel" of own leads is the wrong lens. */}
               {myId && currentTenant?.id && (
-                <SelfPerformanceSection userId={myId} tenantId={currentTenant.id} />
+                userRole === 'agent' ? (
+                  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Send className="w-4 h-4" style={{ color: C.red }} />
+                      <h2 className="text-base font-bold text-gray-900">ผลงานการแนะนำ</h2>
+                      <span className="ml-auto text-xs text-gray-500">ภาพรวมจากการแนะนำลูกค้าของคุณ</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mt-4">
+                      <div className="bg-white border border-gray-100 rounded-2xl shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 p-5 pl-6">
+                        <div className="flex items-start justify-between mb-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 pt-1">คนสนใจจากลิงก์</p>
+                          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `linear-gradient(135deg, ${C.redLight}f0 0%, ${C.redLight} 100%)` }}>
+                            <Eye className="w-4 h-4" style={{ color: C.red }} strokeWidth={2.2} />
+                          </div>
+                        </div>
+                        <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{viewStats.uniqueVisitors}</p>
+                        <p className="text-xs text-gray-400 mt-2.5">30 วันล่าสุด</p>
+                      </div>
+                      <div className="bg-white border border-gray-100 rounded-2xl shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 p-5 pl-6">
+                        <div className="flex items-start justify-between mb-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 pt-1">ส่งต่อให้ Sales</p>
+                          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `linear-gradient(135deg, ${C.redDeepLight}f0 0%, ${C.redDeepLight} 100%)` }}>
+                            <Send className="w-4 h-4" style={{ color: C.redDeep }} strokeWidth={2.2} />
+                          </div>
+                        </div>
+                        <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{referralStats.total}</p>
+                        <p className="text-xs text-gray-400 mt-2.5">รายการทั้งหมด</p>
+                      </div>
+                      <div className="bg-white border border-gray-100 rounded-2xl shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 p-5 pl-6">
+                        <div className="flex items-start justify-between mb-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 pt-1">กำลังดำเนินการ</p>
+                          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `linear-gradient(135deg, ${C.amberLight}f0 0%, ${C.amberLight} 100%)` }}>
+                            <Clock className="w-4 h-4" style={{ color: C.amber }} strokeWidth={2.2} />
+                          </div>
+                        </div>
+                        <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{referralStats.activeCount}</p>
+                        <p className="text-xs text-gray-400 mt-2.5">Sales กำลังดูแล</p>
+                      </div>
+                      <div className="bg-white border border-gray-100 rounded-2xl shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 p-5 pl-6">
+                        <div className="flex items-start justify-between mb-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 pt-1">ปิดได้จากการแนะนำ</p>
+                          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `linear-gradient(135deg, ${C.greenLight}f0 0%, ${C.greenLight} 100%)` }}>
+                            <CheckCircle2 className="w-4 h-4" style={{ color: C.green }} strokeWidth={2.2} />
+                          </div>
+                        </div>
+                        <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{referralStats.wonCount} ดีล</p>
+                        <p className="text-xs text-gray-400 mt-2.5">{formatTHB(referralStats.wonValue)}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <SelfPerformanceSection userId={myId} tenantId={currentTenant.id} />
+                )
               )}
 
               {/* SECTION 2 — Revenue trend (2/3) + Today timeline (1/3).
@@ -751,11 +797,11 @@ const MyDashboard = () => {
                 </div>
               )}
 
-              {/* SECTION 3 (Agent) — Assigned units + Inactive leads alert */}
+              {/* SECTION 3 (Agent) — Assigned units (full width).
+                  Agents refer and hand off — they don't chase leads after handoff — so the
+                  "stale referral" follow-up card was removed as out-of-role. */}
               {userRole === 'agent' && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                  {/* Assigned Units */}
-                  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
                     <div className="flex items-center gap-2 mb-1">
                       <Briefcase className="w-4 h-4" style={{ color: C.redDeep }} />
                       <h2 className="text-base font-bold text-gray-900">ยูนิตที่รับมอบหมาย</h2>
@@ -788,50 +834,6 @@ const MyDashboard = () => {
                       </div>
                     )}
                   </div>
-
-                  {/* Inactive leads — leads Agent hasn't contacted in 14+ days */}
-                  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
-                    <div className="flex items-center gap-2 mb-1">
-                      <AlertTriangle className="w-4 h-4" style={{ color: C.amber }} />
-                      <h2 className="text-base font-bold text-gray-900">ต้องดูด่วน</h2>
-                      {inactiveLeads.length > 0 && (
-                        <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: C.amber, backgroundColor: C.amberLight }}>
-                          {inactiveLeads.length}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500 mb-4">ลูกค้าที่ยังไม่ได้ติดตามนาน 30+ วัน</p>
-                    {inactiveLeads.length === 0 ? (
-                      <div className="h-[200px] flex items-center justify-center text-sm text-gray-400 text-center">
-                        ไม่มีลูกค้าที่ค้างติดตาม — ทำงานเก่งมาก
-                      </div>
-                    ) : (
-                      <div className="space-y-2 max-h-[240px] overflow-y-auto">
-                        {inactiveLeads.slice(0, 6).map((l) => {
-                          const days = Math.floor((Date.now() - new Date(l.last_contact_date ?? l.created_at).getTime()) / 86400000);
-                          return (
-                            <button
-                              key={`silent-${l.id}`}
-                              onClick={() => navigate(`/leads/${l.id}`)}
-                              className="w-full flex items-start justify-between gap-3 p-2.5 rounded-lg hover:bg-gray-50 transition-colors text-left"
-                            >
-                              <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                                <Clock className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: days >= 60 ? C.red : C.amber }} />
-                                <div className="min-w-0">
-                                  <p className="text-sm font-medium text-gray-900 truncate">{l.customers?.full_name || '(ไม่ระบุชื่อ)'}</p>
-                                  <p className="text-xs text-gray-500 mt-0.5 truncate">{l.property_id ? propById.get(l.property_id) || '—' : '—'}</p>
-                                </div>
-                              </div>
-                              <span className="text-xs font-semibold tabular-nums shrink-0" style={{ color: days >= 60 ? C.red : C.amber }}>
-                                {days} วัน
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
               )}
 
               {/* ACTION — Hot Leads + Silent Leads (Sales only) */}

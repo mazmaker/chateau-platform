@@ -545,7 +545,7 @@ const CustomerDashboard = () => {
                 />
                 <StatCard
                   icon={Heart}
-                  label="บันทึกไว้พิจารณา"
+                  label="บันทึกไว้ดูทีหลัง"
                   value={savedCount}
                   iconColor="text-chateau"
                   bgColor="bg-rose-50"

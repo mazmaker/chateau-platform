@@ -174,8 +174,13 @@ export default function QuickReserveDialog({
             unit_id: interest.unit_id,
             unit_number: interest.unit?.unit_number,
             lead_id: lead.id,
-            deposit_amount: amt,
-            deposit_pct: amt / unitPrice,
+            // Two-payment model: booking_fee (ค่าจอง 5-10K) is collected now to lock
+            // the unit; deposit_amount (ค่ามัดจำ 10-15%) is collected later at contract
+            // signing via UnitDetail's "ยืนยันรับเงิน" flow. Keep deposit_amount unset
+            // until then so the customer timeline doesn't prematurely show ค่ามัดจำ ✓.
+            booking_fee: amt,
+            booking_fee_paid_at: nowDate.toISOString(),
+            deposit_amount: null,
             remaining_amount: Math.max(0, unitPrice - amt),
             source: 'quick_reserve',
           },

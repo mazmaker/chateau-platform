@@ -136,7 +136,7 @@ const Index = () => {
   const [cancelledBookings, setCancelledBookings] = useState<Array<{
     id: string; status: string; total_amount: number | null;
     refund_amount: number | null; refunded_at: string | null;
-    notes: { deposit_amount?: number } | null;
+    notes: { deposit_amount?: number; booking_fee?: number } | null;
   }>>([]);
   const [loading, setLoading] = useState(true);
 
@@ -224,16 +224,17 @@ const Index = () => {
   const pipelineCount = reservedUnits.length;
 
   // Cancellation metrics — last 30 days. "refunded" = money returned to customer,
-  // "forfeited" = deposit kept by the company. Use notes.deposit_amount (actual
-  // money paid) — total_amount is the unit price (e.g. 10M) which is NOT what
-  // changed hands at reservation time.
+  // "forfeited" = money kept by the company. Actual money that changed hands =
+  // booking_fee (ค่าจอง, always collected) + deposit_amount (ค่ามัดจำ, only if the
+  // booking reached contract signing). total_amount is the unit price (e.g. 10M)
+  // which is NOT what was paid at cancellation time.
   const cancelledCount = cancelledBookings.length;
   const cancelledRefunded = cancelledBookings.reduce((s, b) => s + Number(b.refund_amount || 0), 0);
   const cancelledForfeited = cancelledBookings.reduce(
     (s, b) => {
-      const deposit = Number(b.notes?.deposit_amount || 0);
+      const paid = Number(b.notes?.booking_fee || 0) + Number(b.notes?.deposit_amount || 0);
       const refund = Number(b.refund_amount || 0);
-      return s + Math.max(0, deposit - refund);
+      return s + Math.max(0, paid - refund);
     },
     0,
   );

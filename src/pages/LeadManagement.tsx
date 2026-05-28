@@ -1078,6 +1078,10 @@ const LeadManagement = () => {
   };
 
   const [sortByScore, setSortByScore] = useState(false);
+  // Pagination — CRM standard is 10-25 rows/page (Salesforce/Dynamics/HubSpot).
+  // Default 10 keeps the list scannable; user can bump to 25/50.
+  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const filteredLeads = leads.filter(lead => {
     const customerName = getCustomerName(lead).toLowerCase();
@@ -1100,6 +1104,18 @@ const LeadManagement = () => {
     return scoreB - scoreA;
   });
 
+  // Pagination math — slice the filtered list to the current page.
+  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * pageSize;
+  const paginatedLeads = filteredLeads.slice(pageStart, pageStart + pageSize);
+
+  // Reset to page 1 whenever filters/search/sort change so the user isn't stranded
+  // on an out-of-range page.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, sourceFilter, propertyFilter, priorityFilter, sortByScore, pageSize]);
+
   // Calculate stats
   const totalLeads = leads.length;
   const newLeads = leads.filter(l => l.status === 'new').length;
@@ -1118,8 +1134,9 @@ const LeadManagement = () => {
         {/* Header */}
         <Header onMenuClick={() => setSidebarOpen(true)} />
 
-        {/* Lead Management Content */}
-        <main className="p-6">
+        {/* Lead Management Content — extra bottom padding so the pagination bar
+            clears the fixed floating widget at the bottom-right corner. */}
+        <main className="p-6 pb-28">
           <SalesGuard>
             <div className="space-y-6">
               {/* Page Header */}
@@ -1411,7 +1428,7 @@ const LeadManagement = () => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredLeads.map((lead) => (
+                  paginatedLeads.map((lead) => (
                     <TableRow
                       key={lead.id}
                       className="cursor-pointer hover:bg-muted/50"
@@ -1579,6 +1596,65 @@ const LeadManagement = () => {
                 )}
               </TableBody>
             </Table>
+
+            {/* Pagination bar — only when there's more than one page worth of data */}
+            {!loading && filteredLeads.length > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 pt-4 mt-2 border-t border-gray-100">
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <span>
+                    แสดง {pageStart + 1}–{Math.min(pageStart + pageSize, filteredLeads.length)} จาก {filteredLeads.length} รายการ
+                  </span>
+                  <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                    <SelectTrigger className="h-8 w-[110px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10 / หน้า</SelectItem>
+                      <SelectItem value="25">25 / หน้า</SelectItem>
+                      <SelectItem value="50">50 / หน้า</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2"
+                    disabled={safePage <= 1}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  >
+                    <ChevronRight className="w-4 h-4 rotate-180" />
+                  </Button>
+                  {(() => {
+                    // Compact page-number window: show up to 5 pages around the current one.
+                    const pages: number[] = [];
+                    const from = Math.max(1, safePage - 2);
+                    const to = Math.min(totalPages, from + 4);
+                    for (let i = Math.max(1, to - 4); i <= to; i++) pages.push(i);
+                    return pages.map((p) => (
+                      <Button
+                        key={p}
+                        variant={p === safePage ? 'default' : 'outline'}
+                        size="sm"
+                        className={`h-8 w-8 p-0 text-xs ${p === safePage ? 'bg-chateau hover:bg-chateau-700 text-white' : ''}`}
+                        onClick={() => setCurrentPage(p)}
+                      >
+                        {p}
+                      </Button>
+                    ));
+                  })()}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2"
+                    disabled={safePage >= totalPages}
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -1948,7 +2024,7 @@ const LeadManagement = () => {
                                     <h4 className="text-xs font-bold text-gray-500 flex items-center gap-1.5">
                                       <ChevronRight className="w-3 h-3 transition-transform group-open:rotate-90" />
                                       <Heart className="w-3.5 h-3.5" />
-                                      รายการที่ลูกค้าบันทึกไว้พิจารณา
+                                      รายการที่ลูกค้าบันทึกไว้ดูทีหลัง
                                     </h4>
                                     <span className="text-[10px] font-medium text-gray-400">{bookmarkInterests.length} รายการ</span>
                                   </summary>

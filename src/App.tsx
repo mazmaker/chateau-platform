@@ -4,7 +4,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import UserManagement from "./pages/UserManagement";
-import Projects from "./pages/Projects";
 import { SimpleLogin } from "./pages/SimpleLogin";
 import NotFound from "./pages/NotFound";
 import OwnerDashboard from "./pages/OwnerDashboard";
@@ -136,19 +135,6 @@ const App = () => (
             >
               <ProtectedRouteSimple>
                 <UserManagement />
-              </ProtectedRouteSimple>
-            </ErrorBoundary>
-          } />
-
-          <Route path="/projects" element={
-            <ErrorBoundary
-              showRetry={true}
-              showHome={true}
-              errorMessage="ไม่สามารถโหลดหน้าโครงการได้"
-              context={{ page: 'projects' }}
-            >
-              <ProtectedRouteSimple>
-                <Projects />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />

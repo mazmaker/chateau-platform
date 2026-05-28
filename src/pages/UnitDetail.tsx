@@ -99,7 +99,13 @@ const UnitDetail = () => {
   const [pickedSalesIds, setPickedSalesIds] = useState<Set<string>>(new Set());
   const [savingAssignments, setSavingAssignments] = useState(false);
   // Active booking for this unit (tracks deposit confirmation state)
-  const [activeBooking, setActiveBooking] = useState<{ id: string; status: string; total_amount: number } | null>(null);
+  const [activeBooking, setActiveBooking] = useState<{ id: string; status: string; total_amount: number; deposit_amount?: number | null } | null>(null);
+  // Confirm-deposit dialog state — captures the ค่ามัดจำ amount (10-15% down payment)
+  // when Sales receives it at contract signing. Separate from ค่าจอง (booking fee)
+  // collected earlier at reservation time.
+  const [showDepositDialog, setShowDepositDialog] = useState(false);
+  const [depositInput, setDepositInput] = useState<string>('');
+  const [confirmingDeposit, setConfirmingDeposit] = useState(false);
   // Revert-sale dialog state (Admin/Owner only — voids a sold unit back to reserved)
   const [showRevertSaleDialog, setShowRevertSaleDialog] = useState(false);
   const [revertReason, setRevertReason] = useState('');
@@ -265,13 +271,19 @@ const UnitDetail = () => {
       // the "ยืนยันรับเงิน" CTA only when there's a pending booking to confirm.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: activeBookings } = await (supabase.from('bookings') as any)
-        .select('id, status, total_amount')
+        .select('id, status, total_amount, notes')
         .eq('tenant_id', unitData.tenant_id)
         .filter('notes->>unit_id', 'eq', unitId)
         .not('status', 'in', '("cancelled","checked_out")')
         .order('created_at', { ascending: false })
         .limit(1);
-      setActiveBooking((activeBookings as any[])?.[0] || null);
+      const ab = (activeBookings as any[])?.[0];
+      setActiveBooking(ab ? {
+        id: ab.id,
+        status: ab.status,
+        total_amount: ab.total_amount,
+        deposit_amount: ab.notes?.deposit_amount ?? null,
+      } : null);
 
       // Fetch responsible sales (for Admin/Owner)
       if (userRole === 'owner' || userRole === 'admin') {
@@ -766,19 +778,45 @@ const UnitDetail = () => {
     }
   };
 
-  // Confirm deposit received — booking pending → confirmed
-  // (called from the Reserved-unit card when Sales has received the deposit but hasn't closed the sale yet)
-  const handleConfirmPayment = async () => {
+  // Open the ค่ามัดจำ capture dialog. Suggests 15% of the unit price as a default —
+  // Sales can override (some developers take 10%, some 20%, or a fixed installment).
+  const handleConfirmPayment = () => {
     if (!unit || !activeBooking) return;
     if (activeBooking.status !== 'pending') {
       toast.info('การจองนี้ยืนยันรับเงินแล้ว');
       return;
     }
-    if (!confirm(`ยืนยันรับเงินมัดจำสำหรับยูนิต ${unit.unit_number}? (สถานะการจองจะเปลี่ยนเป็น "ชำระแล้ว")`)) return;
+    const suggested = activeBooking.total_amount > 0 ? Math.round(activeBooking.total_amount * 0.15) : 0;
+    setDepositInput(suggested > 0 ? String(suggested) : '');
+    setShowDepositDialog(true);
+  };
+
+  // Confirm ค่ามัดจำ received — records the deposit amount + marks booking 'confirmed'.
+  // This is step 4 of the customer timeline (ค่ามัดจำ); ค่าจอง was already collected
+  // at reservation time via QuickReserveDialog.
+  const submitDepositConfirm = async () => {
+    if (!unit || !activeBooking) return;
+    const amt = parseFloat(depositInput);
+    if (!amt || amt <= 0) { toast.error('กรุณากรอกจำนวนค่ามัดจำ'); return; }
+    setConfirmingDeposit(true);
     try {
+      // Merge deposit fields into the existing notes JSON (preserve booking_fee etc.)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: cur } = await (supabase.from('bookings') as any)
+        .select('notes, total_amount').eq('id', activeBooking.id).maybeSingle();
+      const prevNotes = (cur?.notes && typeof cur.notes === 'object') ? cur.notes : {};
+      const totalAmt = Number(cur?.total_amount || activeBooking.total_amount || 0);
+      const bookingFee = Number(prevNotes.booking_fee || 0);
+      const mergedNotes = {
+        ...prevNotes,
+        deposit_amount: amt,
+        deposit_pct: totalAmt > 0 ? amt / totalAmt : null,
+        deposit_paid_at: new Date().toISOString(),
+        remaining_amount: Math.max(0, totalAmt - bookingFee - amt),
+      };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase.from('bookings') as any)
-        .update({ status: 'confirmed', updated_at: new Date().toISOString() })
+        .update({ status: 'confirmed', notes: mergedNotes, updated_at: new Date().toISOString() })
         .eq('id', activeBooking.id)
         .select('id');
       if (error) throw error;
@@ -825,21 +863,25 @@ const UnitDetail = () => {
               tenantId: currentTenant?.id || '',
               userId: uid,
               activityType: 'payment_received',
-              title: 'รับเงินจองเรียบร้อย',
-              message: `${unit.reserved_customer_name || 'ลูกค้า'} ชำระเงินจองยูนิต ${unit.unit_number}`,
+              title: 'รับเงินค่ามัดจำเรียบร้อย',
+              message: `${unit.reserved_customer_name || 'ลูกค้า'} ชำระค่ามัดจำยูนิต ${unit.unit_number} · ฿${amt.toLocaleString('th-TH')}`,
               severity: 'success',
               relatedEntityType: 'lead',
               relatedEntityId: unit.reserved_customer_lead_id,
-              data: { unit_id: unit.id, unit_number: unit.unit_number, amount: activeBooking?.total_amount },
+              data: { unit_id: unit.id, unit_number: unit.unit_number, amount: amt },
             });
           }
         }
       } catch { /* non-blocking */ }
 
-      toast.success(`✓ ยืนยันรับเงินมัดจำ ยูนิต ${unit.unit_number}`);
+      toast.success(`✓ ยืนยันรับค่ามัดจำ ยูนิต ${unit.unit_number} · ฿${amt.toLocaleString('th-TH')}`);
+      setShowDepositDialog(false);
+      setDepositInput('');
       await loadAll();
     } catch (err: any) {
       toast.error(err.message || 'ยืนยันไม่สำเร็จ');
+    } finally {
+      setConfirmingDeposit(false);
     }
   };
 
@@ -1218,6 +1260,24 @@ const UnitDetail = () => {
           .in('status', ['pending', 'confirmed']);
       } catch { /* non-blocking — interest removal already succeeded */ }
 
+      // If this unit was reserved/sold FOR THIS lead, free it too — otherwise the
+      // unit stays 'reserved' with stale reserved_customer_* fields and the "ข้อมูล
+      // ผู้จอง" card keeps showing the old customer even though their interest is gone.
+      try {
+        if (unit && (unit.status === 'reserved' || unit.status === 'sold')
+            && unit.reserved_customer_lead_id === target.leadId) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase.from('units') as any)
+            .update({
+              status: 'available', locked_by: null, locked_until: null,
+              reservation_date: null, reserved_customer_name: null, reserved_customer_phone: null,
+              reserved_customer_lead_id: null, deposit_amount: null, reservation_notes: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', unit.id);
+        }
+      } catch { /* non-blocking — interest removal already succeeded */ }
+
       // Audit log — who removed, why, from which unit. Owner/Admin can review later.
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1464,7 +1524,12 @@ const UnitDetail = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <InfoCell label="ลูกค้า" value={unit.reserved_customer_name} bold />
                   <InfoCell label="เบอร์โทร" value={unit.reserved_customer_phone || '-'} />
-                  <InfoCell label="เงินจอง" value={unit.deposit_amount ? `฿${Number(unit.deposit_amount).toLocaleString()}` : '-'} />
+                  <InfoCell label="ค่าจอง" value={unit.deposit_amount ? `฿${Number(unit.deposit_amount).toLocaleString()}` : '-'} />
+                  <InfoCell
+                    label="ค่ามัดจำ"
+                    value={activeBooking?.deposit_amount ? `฿${Number(activeBooking.deposit_amount).toLocaleString()}` : 'รอชำระ'}
+                    valueClass={activeBooking?.deposit_amount ? 'text-blue-700 font-semibold' : 'text-gray-400'}
+                  />
                   <InfoCell label="Sales รับผิดชอบ" value={unit.locked_by_name || '-'} />
                 </div>
               </CardContent>
@@ -1479,10 +1544,10 @@ const UnitDetail = () => {
                     <Calendar className="w-5 h-5" />
                     ข้อมูลผู้จอง
                     {activeBooking?.status === 'pending' && (
-                      <Badge className="bg-orange-100 text-orange-800 border-orange-200"> รอชำระมัดจำ</Badge>
+                      <Badge className="bg-orange-100 text-orange-800 border-orange-200">รอชำระค่ามัดจำ</Badge>
                     )}
                     {activeBooking?.status === 'confirmed' && (
-                      <Badge className="bg-blue-100 text-blue-800 border-blue-200">✓ ชำระมัดจำแล้ว</Badge>
+                      <Badge className="bg-blue-100 text-blue-800 border-blue-200">ชำระค่ามัดจำแล้ว</Badge>
                     )}
                     {expired && <Badge className="bg-red-100 text-red-700 border-red-200">หมดอายุแล้ว</Badge>}
                   </CardTitle>
@@ -1493,7 +1558,7 @@ const UnitDetail = () => {
                           mistake while reaching for the confirm/close-sale buttons next to it. */}
                       {activeBooking?.status === 'pending' && (
                         <Button size="sm" onClick={handleConfirmPayment} className="bg-blue-600 hover:bg-blue-700 text-white">
-                          <Check className="w-4 h-4 mr-1" /> ยืนยันรับเงิน
+                          <Check className="w-4 h-4 mr-1" /> รับค่ามัดจำ
                         </Button>
                       )}
                       {canCloseSale && (
@@ -1518,10 +1583,34 @@ const UnitDetail = () => {
                 </div>
               </CardHeader>
               <CardContent className="pt-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Two-payment breakdown so Sales sees clearly what's been collected:
+                    ค่าจอง was paid at reservation (the booking exists → it's received);
+                    ค่ามัดจำ is pending until the "รับค่ามัดจำ" button is clicked. */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <InfoCell label="ชื่อลูกค้า" value={unit.reserved_customer_name} bold />
                   <InfoCell label="เบอร์โทร" value={unit.reserved_customer_phone || '-'} />
-                  <InfoCell label="เงินจอง" value={unit.deposit_amount ? `฿${Number(unit.deposit_amount).toLocaleString()}` : '-'} valueClass="text-green-700 font-bold" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg bg-white border border-gray-100 mb-3">
+                  <div>
+                    <p className="text-[11px] text-gray-500 mb-0.5">ค่าจอง (ล็อกยูนิต)</p>
+                    <p className="text-sm font-bold text-green-700">
+                      {unit.deposit_amount ? `฿${Number(unit.deposit_amount).toLocaleString()}` : '-'}
+                      <span className="ml-1.5 text-[11px] font-normal text-green-600">✓ รับแล้ว</span>
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-500 mb-0.5">ค่ามัดจำ (เงินดาวน์ + สัญญา)</p>
+                    {activeBooking?.deposit_amount ? (
+                      <p className="text-sm font-bold text-blue-700">
+                        ฿{Number(activeBooking.deposit_amount).toLocaleString()}
+                        <span className="ml-1.5 text-[11px] font-normal text-blue-600">✓ รับแล้ว</span>
+                      </p>
+                    ) : (
+                      <p className="text-sm font-medium text-amber-600">รอชำระ</p>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <InfoCell label="วันที่จอง" value={unit.reservation_date ? new Date(unit.reservation_date).toLocaleDateString('th-TH', { dateStyle: 'medium' }) : '-'} />
                   <InfoCell
                     label="หมดอายุ"
@@ -2057,20 +2146,9 @@ const UnitDetail = () => {
           {/* Map */}
           <Card className="border border-gray-200">
             <CardHeader className="bg-gray-50 border-b border-gray-100 pb-3">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <MapPin className="w-5 h-5 text-chateau" /> ตำแหน่งโครงการ
-                </CardTitle>
-                {canManage && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => navigate(`/properties/${unit.project_id}/edit?section=location`)}
-                  >
-                    <Edit className="w-3.5 h-3.5 mr-1" /> แก้ไขข้อมูลโครงการ
-                  </Button>
-                )}
-              </div>
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-chateau" /> ตำแหน่งโครงการ
+              </CardTitle>
             </CardHeader>
             <CardContent className="pt-4">
               {property.location_lat && property.location_lng ? (
@@ -2094,9 +2172,6 @@ const UnitDetail = () => {
                 <div className="py-10 text-center bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
                   <MapPin className="w-8 h-8 text-gray-300 mx-auto mb-2" />
                   <p className="text-sm text-gray-500">ยังไม่ได้ตั้งค่าตำแหน่งโครงการ</p>
-                  {canManage && (
-                    <p className="text-xs text-gray-400 mt-1">กด "แก้ไขข้อมูลโครงการ" ด้านบนเพื่อใส่ lat/lng</p>
-                  )}
                 </div>
               )}
             </CardContent>
@@ -2435,6 +2510,71 @@ const UnitDetail = () => {
               className="bg-chateau hover:bg-chateau-600 text-white"
             >
               ถัดไป — ส่งต่อ {pickerSelected.length > 0 ? `${pickerSelected.length} Lead` : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Deposit (ค่ามัดจำ) Dialog — step 4 of the customer timeline.
+          Captures the 10-15% down payment Sales receives at contract signing. */}
+      <Dialog open={showDepositDialog} onOpenChange={(o) => { if (!confirmingDeposit) setShowDepositDialog(o); }}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-blue-700">
+              <Check className="w-5 h-5" /> ยืนยันรับค่ามัดจำ
+            </DialogTitle>
+            <DialogDescription>
+              บันทึกค่ามัดจำ (เงินดาวน์) ที่ลูกค้าชำระตอนเซ็นสัญญา — สถานะการจองจะเปลี่ยนเป็น "ชำระแล้ว"
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {activeBooking && activeBooking.total_amount > 0 && (
+              <div className="p-3 rounded-lg border border-gray-200 bg-gray-50 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">ราคายูนิต</span>
+                  <span className="font-semibold text-gray-900">฿{Number(activeBooking.total_amount).toLocaleString('th-TH')}</span>
+                </div>
+                {unit?.deposit_amount ? (
+                  <div className="flex justify-between mt-1">
+                    <span className="text-gray-500">ค่าจองที่รับแล้ว</span>
+                    <span className="font-medium text-gray-700">฿{Number(unit.deposit_amount).toLocaleString('th-TH')}</span>
+                  </div>
+                ) : null}
+              </div>
+            )}
+            <div>
+              <Label htmlFor="deposit-amt" className="text-sm">
+                ค่ามัดจำ (฿) <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="deposit-amt"
+                type="number"
+                min="0"
+                value={depositInput}
+                onChange={(e) => setDepositInput(e.target.value)}
+                placeholder="เช่น 1500000"
+                className="mt-1"
+                disabled={confirmingDeposit}
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                มาตรฐานวงการ 10-15% ของราคา
+                {activeBooking && activeBooking.total_amount > 0 && (
+                  <> · แนะนำ ฿{Math.round(activeBooking.total_amount * 0.15).toLocaleString('th-TH')}</>
+                )}
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="flex-row gap-2">
+            <Button variant="outline" onClick={() => setShowDepositDialog(false)} disabled={confirmingDeposit} className="flex-1">
+              ยกเลิก
+            </Button>
+            <Button
+              onClick={submitDepositConfirm}
+              disabled={confirmingDeposit || !depositInput}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+            >
+              {confirmingDeposit ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              ยืนยันรับค่ามัดจำ
             </Button>
           </DialogFooter>
         </DialogContent>
