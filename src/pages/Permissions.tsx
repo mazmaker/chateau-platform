@@ -12,7 +12,7 @@ const Permissions = () => {
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="lg:ml-[260px] min-h-screen">
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="p-6">
+        <main className="p-6 lg:p-8">
           <AdminGuard>
             <PermissionsContent />
           </AdminGuard>

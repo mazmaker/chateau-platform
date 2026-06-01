@@ -22,13 +22,15 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   Building2, Bed, Bath, Square, MapPin, Layers, DollarSign, Eye,
-  Calendar, Check, ArrowLeft, UserPlus, Loader2, Edit, Share2, Heart, Send, Users, MoreHorizontal, Trash2,
+  Calendar, Check, ArrowLeft, UserPlus, Loader2, Edit, Share2, Heart, Send, Users, MoreHorizontal, Trash2, Lock,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
+import { LEAD_STATUS_LABELS } from '@/lib/leadStatus';
 import Header from '@/components/dashboard/Header';
 import MasterPlanSVG from '@/components/properties/MasterPlanSVG';
 import AddLeadModal from '@/components/leads/AddLeadModal';
 import HandoffLeadDialog from '@/components/leads/HandoffLeadDialog';
+import QuickReserveDialog from '@/components/leads/QuickReserveDialog';
 import SitePlanViewer from '@/components/properties/SitePlanViewer';
 
 interface Unit {
@@ -167,6 +169,9 @@ const UnitDetail = () => {
   const [showHandoffDialog, setShowHandoffDialog] = useState(false);
   const [handoffLeadIds, setHandoffLeadIds] = useState<string[]>([]);
   const [showHandoffPicker, setShowHandoffPicker] = useState(false);
+  // Agent money-free "จองชั่วคราว" hold — reuses QuickReserveDialog in isAgent mode.
+  const [agentLockInterest, setAgentLockInterest] = useState<any | null>(null);
+  const [showAgentLock, setShowAgentLock] = useState(false);
   const [pickerSelected, setPickerSelected] = useState<string[]>([]);
 
   /* ─── tick countdown every 30s ─── */
@@ -201,7 +206,7 @@ const UnitDetail = () => {
         (supabase.from('properties') as any).select('*').eq('id', unitData.project_id).single(),
         (supabase.from('units') as any).select('id, unit_number, status').eq('project_id', unitData.project_id),
         (supabase.from('lead_interests') as any)
-          .select('id, lead_id, status, interest_level, viewing_date, viewed_at, notes, leads:lead_id(id, status, assigned_to, customers:customer_id(id, full_name, email, phone))')
+          .select('id, lead_id, status, interest_level, viewing_date, viewed_at, notes, leads:lead_id(id, status, assigned_to, referred_by_agent_id, customers:customer_id(id, full_name, email, phone))')
           .eq('unit_id', unitId)
           .not('status', 'in', '("dropped","lost")'),
       ]);
@@ -594,13 +599,27 @@ const UnitDetail = () => {
     }
   };
 
+  // Interests (with their lead+customer) on this unit owned by me and still active —
+  // these are the leads I can hold the unit for via the money-free agent lock.
+  const myActiveInterestsOnUnit = unitLeads.filter(
+    (li: any) =>
+      li.leads &&
+      li.leads.assigned_to === myUserId &&
+      !['reserved', 'won', 'lost', 'dropped'].includes(li.status),
+  );
+
+  const openAgentLock = (li: any) => {
+    setAgentLockInterest(li);
+    setShowAgentLock(true);
+  };
+
   /* ─── helpers ─── */
   const leadStatusLabel = (status?: string | null): string => {
     if (!status) return '-';
     const map: Record<string, string> = {
-      new: 'ใหม่', contacted: 'ติดต่อแล้ว', qualified: 'มีคุณสมบัติ',
-      negotiating: 'กำลังเจรจา', negotiation: 'กำลังเจรจา', proposal: 'เสนอขาย',
-      won: 'ปิดดีล', closed: 'ปิดการขาย', lost: 'สูญเสีย',
+      new: LEAD_STATUS_LABELS.new, contacted: LEAD_STATUS_LABELS.contacted, qualified: LEAD_STATUS_LABELS.qualified,
+      negotiating: LEAD_STATUS_LABELS.negotiating, negotiation: 'กำลังเจรจา', proposal: 'เสนอขาย',
+      won: LEAD_STATUS_LABELS.won, closed: 'ปิดการขาย', lost: LEAD_STATUS_LABELS.lost,
     };
     return map[status] || status;
   };
@@ -1406,7 +1425,21 @@ const UnitDetail = () => {
   const expired = expiry ? expiry.getTime() < now : false;
   const isReservedActive = unit.status === 'reserved' && !!unit.reserved_customer_name;
   const isSold = unit.status === 'sold' && !!unit.reserved_customer_name;
+  // Agent "courtesy hold" — money-free reservation: no booking row created, no deposit
+  // recorded on the unit. Distinct UX from a paid Sales reservation: the card hides
+  // payment fields (nothing was collected) and surfaces the handoff CTA.
+  const isAgentCourtesyHold = isReservedActive && !activeBooking && !unit.deposit_amount && !!unit.locked_by;
   const canManage = canManageUnit(unit.id, unit.project_id) || userRole === 'owner' || userRole === 'admin';
+  // Agents only see interested leads connected to them — ones they referred
+  // (referred_by_agent_id) or were assigned to handle (assigned_to). Everyone else's
+  // interest is shown as an aggregate count only — other customers aren't the agent's business.
+  const visibleUnitLeads = userRole === 'agent'
+    ? unitLeads.filter((li: any) => {
+        const ld = li.leads;
+        return ld && (ld.referred_by_agent_id === myUserId || ld.assigned_to === myUserId);
+      })
+    : unitLeads;
+  const hiddenUnitLeadCount = unitLeads.length - visibleUnitLeads.length;
   // Closing a sale = SPA signed + ownership transfer registered.
   // Global broker pattern (Sansiri/AP/Knight Frank): only in-house Sales/Admin/Owner can do this.
   // External Agents can reserve + confirm deposit, but must hand off to Sales for the actual sale close.
@@ -1429,7 +1462,7 @@ const UnitDetail = () => {
 
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
-              <h1 className="text-3xl font-bold gradient-primary-text">ยูนิต {unit.unit_number}</h1>
+              <h1 className="text-2xl font-bold gradient-primary-text">ยูนิต {unit.unit_number}</h1>
               <p className="text-base text-gray-600 mt-1">
                 <MapPin className="w-4 h-4 inline-block mr-1" />
                 {property.name}
@@ -1536,7 +1569,7 @@ const UnitDetail = () => {
             </Card>
           )}
 
-          {isReservedActive && (
+          {isReservedActive && !isAgentCourtesyHold && (
             <Card className="border-2 border-amber-200 bg-amber-50/30">
               <CardHeader className="bg-amber-50 border-b border-amber-200 pb-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
@@ -1633,6 +1666,75 @@ const UnitDetail = () => {
             </Card>
           )}
 
+          {/* Agent courtesy hold — money-free reservation. Simpler card than the Sales
+              booking card above: no "ค่าจอง / ค่ามัดจำ" payment fields (the agent never
+              collected money), and the primary CTA is "ส่งต่อ Sales" because the next
+              step in the journey is Sales taking the real booking fee. */}
+          {isAgentCourtesyHold && (
+            <Card className="border-2 border-amber-200 bg-amber-50/30">
+              <CardHeader className="bg-amber-50 border-b border-amber-200 pb-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <CardTitle className="text-base font-semibold text-amber-900 flex items-center gap-2 flex-wrap">
+                    <Lock className="w-5 h-5" />
+                    จองชั่วคราว
+                    {expired && <Badge className="bg-red-100 text-red-700 border-red-200">หมดอายุแล้ว</Badge>}
+                  </CardTitle>
+                  {canManage && (
+                    <div className="flex gap-2 flex-wrap">
+                      {isAgentUser && myLeadsOnUnit.length > 0 && (
+                        <Button size="sm" onClick={openHandoffFlow} className="bg-chateau hover:bg-chateau-600 text-white">
+                          <Send className="w-4 h-4 mr-1" /> ส่งต่อ Sales
+                        </Button>
+                      )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" aria-label="ตัวเลือกเพิ่มเติม">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={openCancelDialog} className="text-red-600 focus:text-red-700">
+                            <Trash2 className="w-4 h-4 mr-2" /> ยกเลิกการจอง
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                  <InfoCell label="ชื่อลูกค้า" value={unit.reserved_customer_name} bold />
+                  <InfoCell label="เบอร์โทร" value={unit.reserved_customer_phone || '-'} />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                  <InfoCell label="วันที่กัน" value={unit.reservation_date ? new Date(unit.reservation_date).toLocaleDateString('th-TH', { dateStyle: 'medium' }) : '-'} />
+                  <InfoCell
+                    label="หมดอายุ"
+                    value={
+                      expiry
+                        ? `${expiry.toLocaleDateString('th-TH', { dateStyle: 'medium' })}${!expired ? ` (อีก ${Math.ceil((expiry.getTime() - now) / 86400000)} วัน)` : ''}`
+                        : '-'
+                    }
+                    valueClass={expired ? 'text-red-700 font-medium' : ''}
+                  />
+                  <InfoCell label="ผู้กันยูนิต" value={unit.locked_by_name || '-'} />
+                </div>
+                <div className="p-3 rounded-lg bg-white border border-amber-100">
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    <strong>ยังไม่ได้เก็บค่าจอง</strong> — กดปุ่ม "ส่งต่อ Sales" เพื่อให้ทีมขายติดต่อลูกค้า รับค่าจอง และทำสัญญาต่อ
+                  </p>
+                </div>
+                {unit.reservation_notes && (
+                  <div className="mt-3 p-3 bg-white rounded-lg border border-gray-200">
+                    <p className="text-xs font-medium text-gray-500 mb-1">หมายเหตุ</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{unit.reservation_notes}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {unit.status === 'available' && canManage && (
             <Card className="border border-dashed border-gray-300">
               <CardContent className="pt-5">
@@ -1674,6 +1776,36 @@ const UnitDetail = () => {
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
+                        {/* Money-free hold: agent จองชั่วคราวให้ Lead ของตัวเอง (no fee).
+                            Only when the unit is still available and the agent has an
+                            active lead interested in it. Single lead → direct; many → pick. */}
+                        {unit.status === 'available' && myActiveInterestsOnUnit.length > 0 && (
+                          myActiveInterestsOnUnit.length === 1 ? (
+                            <Button
+                              onClick={() => openAgentLock(myActiveInterestsOnUnit[0])}
+                              variant="outline"
+                              className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                            >
+                              <Lock className="w-4 h-4 mr-1" /> จองชั่วคราว
+                            </Button>
+                          ) : (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50">
+                                  <Lock className="w-4 h-4 mr-1" /> จองชั่วคราว ({myActiveInterestsOnUnit.length})
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {myActiveInterestsOnUnit.map((li: any) => (
+                                  <DropdownMenuItem key={li.id} onClick={() => openAgentLock(li)}>
+                                    <Lock className="w-4 h-4 mr-2 text-amber-600" />
+                                    {li.leads?.customers?.full_name || 'ลูกค้า'}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )
+                        )}
                         {myLeadsOnUnit.length > 0 && (
                           <Button onClick={openHandoffFlow} className="bg-chateau hover:bg-chateau-600 text-white">
                             <Send className="w-4 h-4 mr-1" />
@@ -1719,7 +1851,7 @@ const UnitDetail = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {unitLeads.map((li: any) => {
+                  {visibleUnitLeads.map((li: any) => {
                     const lead = li.leads;
                     if (!lead) return null;
                     const isEditing = editingVisitInterestId === li.id;
@@ -1937,6 +2069,13 @@ const UnitDetail = () => {
                       </div>
                     );
                   })}
+                  {userRole === 'agent' && hiddenUnitLeadCount > 0 && (
+                    <div className="text-center text-sm text-gray-500 bg-gray-50 border border-gray-100 rounded-xl py-3">
+                      {visibleUnitLeads.length > 0
+                        ? `และมีผู้สนใจยูนิตนี้อีก ${hiddenUnitLeadCount} คน`
+                        : `มีผู้สนใจยูนิตนี้ ${hiddenUnitLeadCount} คน`}
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -2441,6 +2580,32 @@ const UnitDetail = () => {
         projectId={unit.project_id}
         onSuccess={() => { loadAll(); }}
       />
+
+      {/* Agent money-free hold (จองชั่วคราว) — reuses QuickReserveDialog in isAgent mode */}
+      {agentLockInterest && (
+        <QuickReserveDialog
+          open={showAgentLock}
+          onOpenChange={(o) => { setShowAgentLock(o); if (!o) setAgentLockInterest(null); }}
+          isAgent
+          userId={myUserId || ''}
+          lead={{
+            id: agentLockInterest.leads?.id,
+            customer_id: agentLockInterest.leads?.customers?.id,
+            tenant_id: currentTenant?.id || '',
+          }}
+          interest={{
+            id: agentLockInterest.id,
+            lead_id: agentLockInterest.lead_id,
+            property_id: unit.project_id,
+            unit_id: unit.id,
+            property: { id: unit.project_id, name: property?.name },
+            unit: { id: unit.id, unit_number: unit.unit_number, price: unit.price },
+          }}
+          customerName={agentLockInterest.leads?.customers?.full_name || ''}
+          customerPhone={agentLockInterest.leads?.customers?.phone || ''}
+          onSuccess={() => { setShowAgentLock(false); setAgentLockInterest(null); loadAll(); }}
+        />
+      )}
 
       {/* Handoff Picker — when multiple Leads of mine on this unit */}
       <Dialog open={showHandoffPicker} onOpenChange={(o) => { setShowHandoffPicker(o); if (!o) setPickerSelected([]); }}>

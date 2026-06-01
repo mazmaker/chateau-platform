@@ -364,12 +364,12 @@ const AdminCustomization = () => {
           <Header onMenuClick={() => setSidebarOpen(true)} />
 
           {/* Page Content */}
-          <main className="p-6">
+          <main className="p-6 lg:p-8">
             <div className="space-y-6">
               {/* Page Header */}
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-3xl font-bold tracking-tight">ตั้งค่าระบบ (Settings)</h1>
+                  <h1 className="text-2xl font-bold tracking-tight">ตั้งค่าระบบ (Settings)</h1>
                   <p className="text-muted-foreground">
                     ปรับแต่งโลโก้ สี และดีไซน์ของระบบให้เข้ากับแบรนด์บริษัทคุณ
                   </p>

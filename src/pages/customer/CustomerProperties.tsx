@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Building2, Search, MapPin, Square, SlidersHorizontal, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase';
+import { getReferralUnitScope } from '@/lib/referralScope';
 import CustomerLayout from './CustomerLayout';
 
 interface PropertyRow {
@@ -81,8 +82,20 @@ const CustomerProperties = () => {
             .eq('status', 'available'),
         ]);
         if (propsRes.error) throw propsRes.error;
-        setProperties((propsRes.data || []) as PropertyRow[]);
-        setUnits((unitsRes.data || []) as UnitMini[]);
+        let props = (propsRes.data || []) as PropertyRow[];
+        let unitList = (unitsRes.data || []) as UnitMini[];
+
+        // Agent referral scope: when the visitor arrived via ?ref=AG-..., show only the
+        // units that agent services (+ the projects those units belong to). No referral
+        // → scope is null → show the full catalog as before.
+        const scope = await getReferralUnitScope();
+        if (scope) {
+          unitList = unitList.filter((u) => scope.has(u.id));
+          const projIds = new Set(unitList.map((u) => u.project_id));
+          props = props.filter((p) => projIds.has(p.id));
+        }
+        setProperties(props);
+        setUnits(unitList);
       } catch (err) {
         console.error('Load properties error:', err);
       } finally {

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
+import { LEAD_STATUS_LABELS } from "@/lib/leadStatus";
 import LeadInterestsList from "./LeadInterestsList";
 
 // Types
@@ -161,12 +162,12 @@ const PURCHASE_PURPOSE_OPTIONS = [
 ];
 
 const STATUS_OPTIONS = [
-  { value: "new", label: "ใหม่", color: "bg-blue-100 text-blue-700" },
-  { value: "contacted", label: "ติดต่อแล้ว", color: "bg-cyan-100 text-cyan-700" },
-  { value: "qualified", label: "มีคุณสมบัติ", color: "bg-green-100 text-green-700" },
-  { value: "negotiating", label: "กำลังเจรจา", color: "bg-orange-100 text-orange-700" },
-  { value: "won", label: "ปิดการขายสำเร็จ", color: "bg-emerald-100 text-emerald-700" },
-  { value: "lost", label: "สูญเสีย", color: "bg-red-100 text-red-700" },
+  { value: "new", label: LEAD_STATUS_LABELS.new, color: "bg-blue-100 text-blue-700" },
+  { value: "contacted", label: LEAD_STATUS_LABELS.contacted, color: "bg-cyan-100 text-cyan-700" },
+  { value: "qualified", label: LEAD_STATUS_LABELS.qualified, color: "bg-green-100 text-green-700" },
+  { value: "negotiating", label: LEAD_STATUS_LABELS.negotiating, color: "bg-orange-100 text-orange-700" },
+  { value: "won", label: LEAD_STATUS_LABELS.won, color: "bg-emerald-100 text-emerald-700" },
+  { value: "lost", label: LEAD_STATUS_LABELS.lost, color: "bg-red-100 text-red-700" },
 ];
 
 const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalProps) => {

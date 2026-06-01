@@ -540,7 +540,7 @@ const LeadCDP = () => {
       <div className="lg:ml-[260px] min-h-screen">
         <Header onMenuClick={() => setSidebarOpen(true)} />
 
-        <main className="p-6">
+        <main className="p-6 lg:p-8">
           {/* Back Button & Title */}
           <div className="flex items-center gap-4 mb-6">
             <Button variant="outline" size="sm" onClick={() => navigate('/leads')}>

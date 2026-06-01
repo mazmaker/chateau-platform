@@ -2473,7 +2473,7 @@ const PaymentDashboard = () => {
         <div className="lg:ml-[260px] min-h-screen">
           <Header onMenuClick={() => setSidebarOpen(true)} />
 
-          <main className="p-3 sm:p-4 lg:p-6">
+          <main className="p-6 lg:p-8">
             {/* Page Header */}
             <Card className="bg-white border-gray-200 shadow-lg mb-4 lg:mb-6">
               <CardContent className="pt-4 sm:pt-6">
@@ -2483,7 +2483,7 @@ const PaymentDashboard = () => {
                       <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                     </div>
                     <div>
-                      <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">จัดการการชำระเงินและใบแจ้งหนี้</h1>
+                      <h1 className="text-2xl font-bold text-gray-900">จัดการการชำระเงินและใบแจ้งหนี้</h1>
                       <p className="text-sm sm:text-base text-gray-600 mt-1">ระบบจัดการการเงินและการชำระเงินของบริษัททั้งหมด</p>
                     </div>
                   </div>

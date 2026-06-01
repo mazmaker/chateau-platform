@@ -139,13 +139,13 @@ const MarketingAnalytics = () => {
         <div className="lg:pl-[260px]">
           <Header onMenuClick={() => setSidebarOpen(true)} />
 
-          <main className="p-6 lg:p-10 space-y-7">
+          <main className="p-6 lg:p-8 space-y-7">
             {/* === Page Title === */}
             <div>
               <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
                 Marketing
               </span>
-              <h1 className="text-[34px] font-bold text-gray-900 leading-tight tracking-tight">Marketing Analytics</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Marketing Analytics</h1>
               <p className="text-[15px] text-gray-500 mt-1.5">รายงานวิเคราะห์ผล Campaigns / Triggers · 30 วันล่าสุด</p>
             </div>
 

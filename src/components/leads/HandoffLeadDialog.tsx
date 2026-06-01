@@ -104,17 +104,24 @@ const HandoffLeadDialog = ({ open, onOpenChange, leadIds, customerNames, unitId,
       await Promise.all(leadIds.map(async (leadId, idx) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: existing } = await (supabase.from('leads') as any)
-          .select('notes, status').eq('id', leadId).single();
+          .select('notes, status, referred_by_agent_id').eq('id', leadId).single();
 
         const currentStatus = (existing as { notes?: string; status?: string } | null)?.status || 'new';
         // Advance 'new' leads to 'contacted' — Agent has already engaged with the customer
         const newStatus = currentStatus === 'new' ? 'contacted' : currentStatus;
+
+        // Stamp the sourcing agent on first handoff. The agent dashboard scorecard reads
+        // referred_by_agent_id, so without this a self-created lead disappears after handoff.
+        // The immutability trigger allows NULL -> set, so this only fills it when empty.
+        const existingRef = (existing as { referred_by_agent_id?: string | null } | null)?.referred_by_agent_id ?? null;
+        const sourcedByAgent = existingRef ?? (userProfile?.role === 'agent' ? userProfile?.id ?? null : null);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase.from('leads') as any)
           .update({
             assigned_to: selectedSalesId,
             status: newStatus,
+            referred_by_agent_id: sourcedByAgent,
             notes: ((existing as { notes?: string } | null)?.notes || '') + handoffNote,
             updated_at: new Date().toISOString(),
           })

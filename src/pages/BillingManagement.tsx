@@ -230,7 +230,7 @@ const BillingManagement = () => {
           <Header onMenuClick={() => setSidebarOpen(true)} />
 
           {/* Page Content */}
-          <main className="p-6">
+          <main className="p-6 lg:p-8">
             <div className="space-y-6">
               {/* Page Header */}
               <Card className="bg-white border-gray-200 shadow-lg">

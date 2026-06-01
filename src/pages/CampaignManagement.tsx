@@ -631,14 +631,14 @@ const CampaignManagement = () => {
         <div className="lg:pl-[260px]">
           <Header onMenuClick={() => setSidebarOpen(true)} />
 
-          <main className="p-6 lg:p-10 space-y-7">
+          <main className="p-6 lg:p-8 space-y-7">
             {/* === Page Title (KK style with inline summary) === */}
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
               <div>
                 <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
                   แคมเปญทั้งหมด
                 </span>
-                <h1 className="text-[34px] font-bold text-gray-900 leading-tight tracking-tight">Campaigns</h1>
+                <h1 className="text-2xl font-bold text-gray-900">Campaigns</h1>
                 <p className="text-[15px] text-gray-500 mt-1.5">
                   <span className="font-semibold text-gray-700">{campaigns.length} แคมเปญ</span>
                   <span className="mx-1.5 text-gray-300">·</span>

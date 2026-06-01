@@ -29,6 +29,7 @@ import {
 } from "recharts";
 import { supabase } from "@/lib/supabase";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
+import { LEAD_STATUS_LABELS } from "@/lib/leadStatus";
 import SelfPerformanceSection from "@/components/dashboard/SelfPerformanceSection";
 
 const C = {
@@ -511,12 +512,12 @@ const MyDashboard = () => {
   // Stage badge color
   const stageBadge = (status: string | null) => {
     switch (status) {
-      case 'negotiating': return { label: 'กำลังเจรจา',   color: C.amber, bg: C.amberLight };
-      case 'qualified':   return { label: 'มีคุณสมบัติ',  color: C.charcoal, bg: C.charcoalLight };
-      case 'contacted':   return { label: 'ติดต่อแล้ว',   color: C.slate, bg: C.slateLight };
-      case 'new':         return { label: 'ใหม่',         color: C.gray, bg: C.grayLight };
-      case 'won':         return { label: 'ปิดดีลแล้ว',   color: C.green, bg: C.greenLight };
-      case 'lost':        return { label: 'สูญเสีย',      color: C.red, bg: C.redLight };
+      case 'negotiating': return { label: LEAD_STATUS_LABELS.negotiating, color: C.amber, bg: C.amberLight };
+      case 'qualified':   return { label: LEAD_STATUS_LABELS.qualified,  color: C.charcoal, bg: C.charcoalLight };
+      case 'contacted':   return { label: LEAD_STATUS_LABELS.contacted,   color: C.slate, bg: C.slateLight };
+      case 'new':         return { label: LEAD_STATUS_LABELS.new,         color: C.gray, bg: C.grayLight };
+      case 'won':         return { label: LEAD_STATUS_LABELS.won,   color: C.green, bg: C.greenLight };
+      case 'lost':        return { label: LEAD_STATUS_LABELS.lost,      color: C.red, bg: C.redLight };
       case 'proposal':    return { label: 'เสนอราคา',     color: C.slate, bg: C.slateLight };
       default:            return { label: status || '—',  color: C.gray, bg: C.grayLight };
     }
@@ -527,13 +528,13 @@ const MyDashboard = () => {
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="lg:pl-[260px]">
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="p-6 lg:p-10 space-y-7">
+        <main className="p-6 lg:p-8 space-y-7">
           {/* Title */}
           <div>
             <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: C.red, backgroundColor: C.redLight }}>
               My Dashboard
             </span>
-            <h1 className="text-[34px] font-bold text-gray-900 leading-tight tracking-tight">
+            <h1 className="text-2xl font-bold text-gray-900">
               สวัสดี {userProfile?.full_name?.split(' ')[0] || 'คุณ'}
             </h1>
             <p className="text-[15px] text-gray-500 mt-1.5">

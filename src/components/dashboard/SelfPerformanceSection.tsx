@@ -1,9 +1,10 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
   Trophy, TrendingUp, TrendingDown, Minus, Clock, Award,
-  AlertTriangle, Sparkles, Loader2, Target,
+  Sparkles, Loader2, Target,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { LEAD_STATUS_LABELS } from '@/lib/leadStatus';
 
 // Self-Performance scorecard. Used in two places:
 //   1. /my-dashboard         — shows the logged-in user's own stats
@@ -47,7 +48,7 @@ const FUNNEL_STAGES = [
   { key: 'contacted', label: 'ติดต่อแล้ว' },
   { key: 'qualified', label: 'มีคุณสมบัติ' },
   { key: 'negotiating', label: 'เจรจา' },
-  { key: 'won', label: 'ปิดดีล' },
+  { key: 'won', label: LEAD_STATUS_LABELS.won },
 ] as const;
 
 // Theme colors aligned with docs/design-system.html — brand chateau red is the
@@ -294,19 +295,6 @@ export default function SelfPerformanceSection({ userId, tenantId, showName = fa
     );
   }
 
-  // Identify the worst stage drop (vs team) for the "leak detection" annotation
-  let leakStage: string | null = null;
-  let leakDelta = 0;
-  for (const s of FUNNEL_STAGES.slice(0, -1)) {
-    const my = metrics.stagePassRate[s.key];
-    const team = metrics.teamPassRate[s.key];
-    if (my == null || team == null) continue;
-    const delta = team - my; // positive = my pass-rate is below team
-    if (delta > leakDelta && delta >= 10) {
-      leakDelta = delta;
-      leakStage = s.label;
-    }
-  }
 
   const monthLabel = new Date().toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
 
@@ -384,12 +372,6 @@ export default function SelfPerformanceSection({ userId, tenantId, showName = fa
             <Sparkles className="w-3.5 h-3.5 text-chateau" />
             Sales Funnel · {metrics.activeLeadCount} leads
           </h3>
-          {leakStage && (
-            <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3" />
-              คอขวดที่ "{leakStage}" — drop เยอะกว่าทีม
-            </span>
-          )}
         </div>
         <div className="space-y-1.5">
           {FUNNEL_STAGES.map((s, i) => {
@@ -407,7 +389,7 @@ export default function SelfPerformanceSection({ userId, tenantId, showName = fa
             return (
               <div key={s.key}>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-medium text-gray-700 w-20 flex-shrink-0">{s.label}</span>
+                  <span className="text-xs font-medium text-gray-700 w-28 flex-shrink-0">{s.label}</span>
                   <div className="flex-1 h-7 rounded-md bg-gray-100 overflow-hidden relative">
                     <div
                       className="h-full transition-all"
@@ -444,7 +426,7 @@ export default function SelfPerformanceSection({ userId, tenantId, showName = fa
           })}
           {metrics.lostCount > 0 && (
             <div className="flex items-center gap-3">
-              <span className="text-xs font-medium text-gray-400 w-20 flex-shrink-0">เสียดีล</span>
+              <span className="text-xs font-medium text-gray-400 w-28 flex-shrink-0">{LEAD_STATUS_LABELS.lost}</span>
               <div className="flex-1 h-7 rounded-md bg-gray-100 overflow-hidden relative">
                 <div
                   className="h-full"

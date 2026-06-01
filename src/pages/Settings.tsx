@@ -827,7 +827,7 @@ const Settings = () => {
       <div className="lg:ml-[260px]">
         <Header onMenuClick={() => setSidebarOpen(true)} />
 
-        <main className="p-6">
+        <main className="p-6 lg:p-8">
           {/* Page Header */}
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-foreground">Profile Settings</h1>

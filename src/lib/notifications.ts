@@ -52,31 +52,34 @@ export interface CreateNotificationInput {
  */
 export async function createNotification(input: CreateNotificationInput): Promise<string | null> {
   try {
-    const row = {
-      tenant_id: input.tenantId,
-      user_id: input.userId ?? null,
-      type: input.severity ?? 'info',
-      title: input.title,
-      message: input.message,
-      related_entity_type: input.relatedEntityType ?? null,
-      related_entity_id: input.relatedEntityId ?? null,
-      action_url: input.actionUrl ?? null,
-      action_text: input.actionText ?? null,
-      data: {
+    // Route through the SECURITY DEFINER RPC instead of a direct insert. A notification is
+    // often created as a side effect of one user's action targeting ANOTHER user (e.g. a
+    // customer expresses interest → notify the owning agent). The notifications INSERT RLS
+    // rejects those cross-user rows (they were silently dropped), so the RPC performs the
+    // insert with a tenant-membership check instead.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any).rpc('app_create_notification', {
+      p_tenant_id: input.tenantId,
+      p_user_id: input.userId ?? null,
+      p_type: input.severity ?? 'info',
+      p_title: input.title,
+      p_message: input.message,
+      p_related_entity_type: input.relatedEntityType ?? null,
+      p_related_entity_id: input.relatedEntityId ?? null,
+      p_action_url: input.actionUrl ?? null,
+      p_action_text: input.actionText ?? null,
+      p_data: {
         activity_type: input.activityType,
         ...(input.data ?? {}),
       },
-    };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (supabase.from('notifications') as any)
-      .insert(row).select('id').single();
+    });
     if (error) {
-      console.warn('[notifications] insert failed:', error.message);
+      console.warn('[notifications] rpc failed:', error.message);
       return null;
     }
-    return (data as any)?.id ?? null;
+    return (data as string) ?? null;
   } catch (err) {
-    console.warn('[notifications] insert threw:', err);
+    console.warn('[notifications] rpc threw:', err);
     return null;
   }
 }

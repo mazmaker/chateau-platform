@@ -4,6 +4,7 @@ import { Home, Building2, User, ArrowLeft, LogOut, FileText, Bell, Heart, Calend
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { captureReferralFromUrl } from '@/lib/referralCode';
+import { captureLockedUnitFromUrl, getLockedUnit } from '@/lib/lockedUnitMode';
 import { incrementLeadCounter, trackWebsiteVisitOncePerSession } from '@/lib/leadTracking';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator,
@@ -149,8 +150,13 @@ const CustomerLayout = ({ children, title, subtitle, showBack = false, backTo, h
   // Runs on every customer-layout mount so deep-links into property/unit/booking pages
   // all get a chance to attribute the Agent before the customer creates their first lead.
   useEffect(() => {
+    // Lock to a specific unit when the customer arrives via a per-unit referral link.
+    // MUST run before captureReferralFromUrl() — that function strips the query string.
+    captureLockedUnitFromUrl();
     captureReferralFromUrl();
   }, []);
+
+  const lockedUnitId = getLockedUnit();
 
   // Engagement tracking — feeds ML lead scoring with real signals (not seeded test data).
   // Fires on every page navigation; silently no-ops for anonymous visitors.
@@ -221,7 +227,7 @@ const CustomerLayout = ({ children, title, subtitle, showBack = false, backTo, h
       {!hideHeader && (
         <header className="bg-white border-b border-gray-100 sticky top-0 z-20">
           <div className="max-w-2xl mx-auto px-5 py-3.5 flex items-center justify-between">
-            {showBack ? (
+            {showBack && !lockedUnitId ? (
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <button
                   onClick={() => (backTo ? navigate(backTo) : navigate(-1))}
@@ -355,15 +361,20 @@ const CustomerLayout = ({ children, title, subtitle, showBack = false, backTo, h
                     bookings to view AND we'd rather not interrupt browsing with a
                     login prompt. Once they have a reason to authenticate (e.g.
                     expressing interest), the existing inline gates handle it. */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-20">
-        <div className={`max-w-2xl mx-auto grid ${isAnon ? 'grid-cols-2' : 'grid-cols-3'}`}>
-          <NavBtn icon={Home} label="หน้าหลัก" active={isActive('/customer') && location.pathname === '/customer'} onClick={() => navigate('/customer')} />
-          <NavBtn icon={Building2} label="โครงการ" active={isActive('/customer/properties')} onClick={() => navigate('/customer/properties')} />
-          {!isAnon && (
-            <NavBtn icon={FileText} label="การจอง" active={isActive('/customer/bookings')} onClick={() => navigate('/customer/bookings')} />
-          )}
-        </div>
-      </nav>
+      {/* Per-unit referral lock — when the customer arrived via /customer/units/X?ref=...,
+          we hide the global nav so they can't wander to other projects/units the
+          referring agent doesn't service. The lock clears on login. */}
+      {!lockedUnitId && (
+        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-20">
+          <div className={`max-w-2xl mx-auto grid ${isAnon ? 'grid-cols-2' : 'grid-cols-3'}`}>
+            <NavBtn icon={Home} label="หน้าหลัก" active={isActive('/customer') && location.pathname === '/customer'} onClick={() => navigate('/customer')} />
+            <NavBtn icon={Building2} label="โครงการ" active={isActive('/customer/properties')} onClick={() => navigate('/customer/properties')} />
+            {!isAnon && (
+              <NavBtn icon={FileText} label="การจอง" active={isActive('/customer/bookings')} onClick={() => navigate('/customer/bookings')} />
+            )}
+          </div>
+        </nav>
+      )}
     </div>
   );
 };

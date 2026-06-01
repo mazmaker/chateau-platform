@@ -509,14 +509,14 @@ const OwnerDashboard = () => {
         <div className="lg:ml-[260px] min-h-screen">
           <Header onMenuClick={() => setSidebarOpen(true)} />
 
-          <main className="p-6 lg:p-10 space-y-7">
+          <main className="p-6 lg:p-8 space-y-7">
             {/* === Page Title === */}
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
               <div>
                 <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
                   Platform Overview
                 </span>
-                <h1 className="text-[34px] font-bold text-gray-900 leading-tight tracking-tight">Platform Overview</h1>
+                <h1 className="text-2xl font-bold text-gray-900">Platform Overview</h1>
                 <p className="text-[15px] text-gray-500 mt-1.5">ภาพรวมระบบแพลตฟอร์ม · รายได้ · บริษัท · อัตราเลิกใช้ · อัปเดตล่าสุด {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
               </div>
             </div>

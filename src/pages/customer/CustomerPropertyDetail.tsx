@@ -5,6 +5,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Building2, MapPin, Bed, Bath, Square, Loader2, ChevronRight, LayoutGrid, List as ListIcon, Heart, SlidersHorizontal, X, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
+import { getReferralUnitScope } from '@/lib/referralScope';
 import { incrementLeadCounter } from '@/lib/leadTracking';
 import CustomerLayout from './CustomerLayout';
 
@@ -125,7 +126,11 @@ const CustomerPropertyDetail = () => {
             .order('unit_number'),
         ]);
         if (propRes.data) setProperty(propRes.data as Property);
-        if (unitRes.data) setUnits((unitRes.data || []) as Unit[]);
+        // Agent referral scope: only show units that the referring agent services.
+        let unitList = (unitRes.data || []) as Unit[];
+        const scope = await getReferralUnitScope();
+        if (scope) unitList = unitList.filter((u) => scope.has(u.id));
+        setUnits(unitList);
       } catch (err) {
         console.error('Load property detail error:', err);
       } finally {

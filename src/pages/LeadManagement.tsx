@@ -9,6 +9,7 @@ import EditLeadModal from '@/components/leads/EditLeadModal';
 import { LeadSourceEditor } from '@/components/leads/LeadSourceEditor';
 import { LeadPriorityEditor } from '@/components/leads/LeadPriorityEditor';
 import { getPurchasePurposeLabel as sharedGetPurchasePurposeLabel } from '@/lib/purchasePurpose';
+import { LEAD_STATUS_LABELS, leadStatusLabel } from '@/lib/leadStatus';
 import PaymentModal from '@/components/leads/PaymentModal';
 import HandoffLeadDialog from '@/components/leads/HandoffLeadDialog';
 import QuickReserveDialog from '@/components/leads/QuickReserveDialog';
@@ -259,6 +260,25 @@ const LeadManagement = () => {
   // Quick Reserve — close-deal-from-lead flow (matches Sansiri/AP "on-the-spot" pattern)
   const [reserveInterest, setReserveInterest] = useState<LeadInterestWithDetails | null>(null);
   const [showReserveDialog, setShowReserveDialog] = useState(false);
+
+  // For agents only: their active assigned unit IDs. Used to flag interests on
+  // out-of-scope units (lead is theirs by referral, but Sales handles the unit
+  // because the agent isn't allotted it) — render a "Sales ดูแล" badge and hide
+  // the action menu so the agent can still track the lead without dead actions.
+  const [myAgentUnitIds, setMyAgentUnitIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (userRole !== 'agent' || !userProfile?.id) { setMyAgentUnitIds(new Set()); return; }
+    let cancelled = false;
+    (async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase.from('agent_unit_assignments') as any)
+        .select('unit_id')
+        .eq('agent_user_id', userProfile.id)
+        .is('revoked_at', null);
+      if (!cancelled) setMyAgentUnitIds(new Set(((data as any[]) || []).map((r) => r.unit_id)));
+    })();
+    return () => { cancelled = true; };
+  }, [userRole, userProfile?.id]);
 
   const toLocalInputValue = (iso?: string) => {
     if (!iso) return '';
@@ -898,15 +918,15 @@ const LeadManagement = () => {
 
   // Status visual config — used by both badge (cards/list) and inline (dropdown trigger)
   const STATUS_CONFIG: Record<string, { label: string; shortLabel?: string; icon: any; dot: string; badge: string }> = {
-    new:         { label: 'ใหม่',            icon: FileText,    dot: '#3b82f6', badge: 'bg-blue-50 text-blue-700 border border-blue-200' },
-    contacted:   { label: 'ติดต่อแล้ว',      icon: Phone,       dot: '#06b6d4', badge: 'bg-cyan-50 text-cyan-700 border border-cyan-200' },
-    qualified:   { label: 'มีคุณสมบัติ',      icon: CheckCircle, dot: '#10b981', badge: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
-    negotiating: { label: 'กำลังเจรจา',       icon: TrendingUp,  dot: '#f59e0b', badge: 'bg-amber-50 text-amber-700 border border-amber-200' },
+    new:         { label: LEAD_STATUS_LABELS.new,         icon: FileText,    dot: '#3b82f6', badge: 'bg-blue-50 text-blue-700 border border-blue-200' },
+    contacted:   { label: LEAD_STATUS_LABELS.contacted,   icon: Phone,       dot: '#06b6d4', badge: 'bg-cyan-50 text-cyan-700 border border-cyan-200' },
+    qualified:   { label: LEAD_STATUS_LABELS.qualified,   icon: CheckCircle, dot: '#10b981', badge: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+    negotiating: { label: LEAD_STATUS_LABELS.negotiating, icon: TrendingUp,  dot: '#f59e0b', badge: 'bg-amber-50 text-amber-700 border border-amber-200' },
     negotiation: { label: 'เจรจา',           icon: TrendingUp,  dot: '#f59e0b', badge: 'bg-amber-50 text-amber-700 border border-amber-200' },
     proposal:    { label: 'เสนอขาย',         icon: FileText,    dot: '#8b5cf6', badge: 'bg-purple-50 text-purple-700 border border-purple-200' },
-    won:         { label: 'ปิดการขายสำเร็จ', shortLabel: 'ปิดดีล',  icon: CheckCircle, dot: '#16a34a', badge: 'bg-green-100 text-green-800 border border-green-300' },
+    won:         { label: LEAD_STATUS_LABELS.won, icon: CheckCircle, dot: '#16a34a', badge: 'bg-green-100 text-green-800 border border-green-300' },
     closed:      { label: 'ปิดการขาย',       icon: CheckCircle, dot: '#16a34a', badge: 'bg-green-100 text-green-800 border border-green-300' },
-    lost:        { label: 'สูญเสีย',          icon: XCircle,     dot: '#ef4444', badge: 'bg-red-50 text-red-700 border border-red-200' },
+    lost:        { label: LEAD_STATUS_LABELS.lost,        icon: XCircle,     dot: '#ef4444', badge: 'bg-red-50 text-red-700 border border-red-200' },
   };
 
   // Full pill badge (used in cards/list cells)
@@ -1136,7 +1156,7 @@ const LeadManagement = () => {
 
         {/* Lead Management Content — extra bottom padding so the pagination bar
             clears the fixed floating widget at the bottom-right corner. */}
-        <main className="p-6 pb-28">
+        <main className="p-6 lg:p-8 pb-28">
           <SalesGuard>
             <div className="space-y-6">
               {/* Page Header */}
@@ -1230,7 +1250,7 @@ const LeadManagement = () => {
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{lostLeads}</p>
-                  <p className="text-xs text-muted-foreground">สูญเสีย</p>
+                  <p className="text-xs text-muted-foreground">{leadStatusLabel('lost')}</p>
                 </div>
               </div>
             </CardContent>
@@ -1329,12 +1349,12 @@ const LeadManagement = () => {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="all">ทั้งหมด</SelectItem>
-                              <SelectItem value="new">ใหม่</SelectItem>
-                              <SelectItem value="contacted">ติดต่อแล้ว</SelectItem>
-                              <SelectItem value="qualified">มีคุณสมบัติ</SelectItem>
-                              <SelectItem value="negotiating">กำลังเจรจา</SelectItem>
-                              <SelectItem value="won">ปิดการขายสำเร็จ</SelectItem>
-                              <SelectItem value="lost">สูญเสีย</SelectItem>
+                              <SelectItem value="new">{leadStatusLabel('new')}</SelectItem>
+                              <SelectItem value="contacted">{leadStatusLabel('contacted')}</SelectItem>
+                              <SelectItem value="qualified">{leadStatusLabel('qualified')}</SelectItem>
+                              <SelectItem value="negotiating">{leadStatusLabel('negotiating')}</SelectItem>
+                              <SelectItem value="won">{leadStatusLabel('won')}</SelectItem>
+                              <SelectItem value="lost">{leadStatusLabel('lost')}</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -1912,7 +1932,14 @@ const LeadManagement = () => {
                                         </span>
                                       )}
                                     </div>
-                                    {(userRole === 'agent' || userRole === 'sales' || userRole === 'admin' || userRole === 'owner') && (
+                                    {userRole === 'agent' && !myAgentUnitIds.has(interest.unit_id) ? (
+                                      // Lead is the agent's by referral, but this specific unit is outside
+                                      // their allotment — Sales handles it. Show a badge instead of action
+                                      // menu so the agent can track the lead without dead actions.
+                                      <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                        Sales ดูแลยูนิตนี้
+                                      </span>
+                                    ) : (userRole === 'agent' || userRole === 'sales' || userRole === 'admin' || userRole === 'owner') && (
                                       <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
                                           <button
@@ -1932,7 +1959,7 @@ const LeadManagement = () => {
                                               onClick={(e) => { e.stopPropagation(); setReserveInterest(interest); setShowReserveDialog(true); }}
                                               className="text-green-700 focus:text-green-800 font-semibold"
                                             >
-                                              <Check className="w-3.5 h-3.5 mr-2" /> บันทึกการจอง
+                                              <Check className="w-3.5 h-3.5 mr-2" /> {userRole === 'agent' ? 'จองชั่วคราว' : 'บันทึกการจอง'}
                                             </DropdownMenuItem>
                                           )}
                                           {/* Confirm visit — only when there's a scheduled visit not yet attended. */}
@@ -2160,8 +2187,8 @@ const LeadManagement = () => {
                     if (lastContactDays !== null && lastContactDays >= 30 && selectedLead.status !== 'lost' && selectedLead.status !== 'won') {
                       segs.push({ icon: '', label: 'ลูกค้าเงียบหายเกิน 30 วัน', reason: `เงียบ ${lastContactDays} วัน`, cat: 'critical' });
                     }
-                    if (selectedLead.status === 'lost') segs.push({ icon: '', label: 'สูญเสียลูกค้า', reason: 'สูญเสีย', cat: 'lifecycle' });
-                    if (selectedLead.status === 'won') segs.push({ icon: '', label: 'Won Customer', reason: 'ปิดดีลแล้ว', cat: 'critical' });
+                    if (selectedLead.status === 'lost') segs.push({ icon: '', label: leadStatusLabel('lost'), reason: leadStatusLabel('lost'), cat: 'lifecycle' });
+                    if (selectedLead.status === 'won') segs.push({ icon: '', label: 'Won Customer', reason: leadStatusLabel('won'), cat: 'critical' });
 
                     // Budget
                     const budget = selectedLead.estimated_value ? Number(selectedLead.estimated_value) : null;
@@ -2561,12 +2588,7 @@ const LeadManagement = () => {
                       <div>
                         <p className="text-xs text-gray-500">สถานะ</p>
                         <p className="font-medium text-gray-900">
-                          {leadToDelete?.status === 'new' ? 'ใหม่' :
-                           leadToDelete?.status === 'contacted' ? 'ติดต่อแล้ว' :
-                           leadToDelete?.status === 'qualified' ? 'มีคุณสมบัติ' :
-                           leadToDelete?.status === 'negotiating' ? 'กำลังเจรจา' :
-                           leadToDelete?.status === 'won' ? 'ปิดการขายสำเร็จ' :
-                           leadToDelete?.status === 'lost' ? 'สูญเสีย' : '-'}
+                          {leadStatusLabel(leadToDelete?.status)}
                         </p>
                       </div>
                     </div>

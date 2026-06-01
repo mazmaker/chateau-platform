@@ -405,7 +405,7 @@ export default function PropertyPlansEditor() {
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="lg:ml-[260px] min-h-screen">
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="p-6">
+        <main className="p-6 lg:p-8">
           <div className="space-y-5 max-w-6xl mx-auto">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>

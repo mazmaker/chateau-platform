@@ -68,12 +68,18 @@ interface Sales {
 
 const CustomerUnitDetail = () => {
   const { id } = useParams<{ id: string }>();
+  // When the customer arrived via a per-unit referral link, suppress catalog-style
+  // recommendations (similar units, etc.) so they stay focused on the one unit the
+  // agent shared.
+  const isLockedToThisUnit = (() => {
+    try { return sessionStorage.getItem('chateau_locked_unit_id') === id; } catch { return false; }
+  })();
   const navigate = useNavigate();
   const [unit, setUnit] = useState<Unit | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
   const [myInterest, setMyInterest] = useState<{ id: string; status: string; interest_level: string | null; viewing_date: string | null; created_at: string | null; updated_at: string | null } | null>(null);
   const [myBooking, setMyBooking] = useState<{ id: string; status: string; total_amount: number; booking_fee: number | null; deposit_amount: number | null } | null>(null);
-  const [myLead, setMyLead] = useState<{ id: string; status: string | null; last_contact_date: string | null; assigned_to: string | null } | null>(null);
+  const [myLead, setMyLead] = useState<{ id: string; status: string | null; last_contact_date: string | null; assigned_to: string | null; referred_by_agent_id: string | null } | null>(null);
   const [similarUnits, setSimilarUnits] = useState<Unit[]>([]);
   const [assignedSales, setAssignedSales] = useState<Sales | null>(null);
   const [loading, setLoading] = useState(true);
@@ -144,7 +150,7 @@ const CustomerUnitDetail = () => {
         if (customer) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: leads } = await (supabase.from('leads') as any)
-            .select('id, assigned_to, status, last_contact_date').eq('customer_id', (customer as any).id);
+            .select('id, assigned_to, status, last_contact_date, referred_by_agent_id').eq('customer_id', (customer as any).id);
           const leadList = (leads || []) as any[];
           const leadIds = leadList.map((l: any) => l.id);
 
@@ -163,7 +169,7 @@ const CustomerUnitDetail = () => {
               existingInterest = existing;
               setMyInterest(existing as any);
               const matchingLead = leadList.find((l: any) => l.id === (existing as any).lead_id);
-              if (matchingLead) setMyLead({ id: matchingLead.id, status: matchingLead.status, last_contact_date: matchingLead.last_contact_date, assigned_to: matchingLead.assigned_to ?? null });
+              if (matchingLead) setMyLead({ id: matchingLead.id, status: matchingLead.status, last_contact_date: matchingLead.last_contact_date, assigned_to: matchingLead.assigned_to ?? null, referred_by_agent_id: matchingLead.referred_by_agent_id ?? null });
             }
           }
 
@@ -374,6 +380,26 @@ const CustomerUnitDetail = () => {
         if (agentId) referredByAgentId = agentId as string;
       }
 
+      // Per-unit routing for agent-referred leads. The agent only owns the lead when
+      // they actually service this specific unit (agent_unit_assignments). If the
+      // customer is attributed to an agent but picks a unit outside that agent's
+      // allotment, the lead's primary handler must be Sales (the agent can't book or
+      // close that unit). The agent keeps referred_by attribution and gets a
+      // courtesy notification so they can still track the lead.
+      const isReferral = !!referredByAgentId;
+      let agentServesThisUnit = false;
+      if (isReferral && referredByAgentId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: serves } = await (supabase as any).rpc('agent_serves_unit', {
+          p_agent_id: referredByAgentId,
+          p_unit_id: unit.id,
+        });
+        agentServesThisUnit = !!serves;
+      }
+      const outOfScopeReferral = isReferral && !agentServesThisUnit;
+      const assigneeId = (isReferral && agentServesThisUnit) ? referredByAgentId : salesUserId;
+      if (isReferral) routingReason = agentServesThisUnit ? 'agent_referral' : 'agent_referral_out_of_scope';
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let { data: lead } = await (supabase.from('leads') as any)
         .select('id, assigned_to, referred_by_agent_id').eq('customer_id', (customer as any).id).eq('tenant_id', unit.tenant_id).maybeSingle();
@@ -396,7 +422,7 @@ const CustomerUnitDetail = () => {
             property_id: unit.project_id,
             unit_id: unit.id,
             status: 'new', source: referredByAgentId ? 'agent_referral' : 'customer_self', priority: 'medium',
-            assigned_to: salesUserId, // Auto-assign if Sales found
+            assigned_to: assigneeId, // Agent (if referred) else auto-assigned Sales
             referred_by_agent_id: referredByAgentId,
             monthly_income: seedIncome,
             monthly_debt: seedDebt,
@@ -417,11 +443,11 @@ const CustomerUnitDetail = () => {
             .then((m) => m.recomputeLeadScore((newLead as any).id))
             .catch(() => { /* best-effort */ });
         }
-      } else if (!(lead as any).assigned_to && salesUserId) {
-        // Existing lead without Sales — auto-assign now (does NOT touch referred_by_agent_id;
-        // immutability trigger would reject it anyway).
+      } else if (!(lead as any).assigned_to && assigneeId) {
+        // Existing lead without an owner — assign now (agent if referral, else Sales).
+        // Does NOT touch referred_by_agent_id (immutability trigger would reject it anyway).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.from('leads') as any).update({ assigned_to: salesUserId }).eq('id', (lead as any).id);
+        await (supabase.from('leads') as any).update({ assigned_to: assigneeId }).eq('id', (lead as any).id);
       }
 
       // Reuse a previously cancelled interest row if it exists (preserve audit trail / created_at)
@@ -448,11 +474,32 @@ const CustomerUnitDetail = () => {
         if (intErr) throw intErr;
       }
 
+      // Re-evaluate scope using the LEAD's persisted referred_by. The earlier check used
+      // the session ref, which is null for returning customers (the ref code was consumed
+      // on their first visit). Without this, a returning customer who picks an
+      // out-of-scope unit would get the wrong notification title ("Lead ของคุณ...") and
+      // the agent wouldn't get the "นอกขอบเขต" cue.
+      const effectiveAgentId: string | null = (lead as any)?.referred_by_agent_id ?? referredByAgentId ?? null;
+      let effectiveAgentServesUnit = false;
+      if (effectiveAgentId) {
+        if (effectiveAgentId === referredByAgentId) {
+          effectiveAgentServesUnit = agentServesThisUnit;
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: serves } = await (supabase as any).rpc('agent_serves_unit', {
+            p_agent_id: effectiveAgentId,
+            p_unit_id: unit.id,
+          });
+          effectiveAgentServesUnit = !!serves;
+        }
+      }
+      const effectiveOutOfScope = !!effectiveAgentId && !effectiveAgentServesUnit;
+
       // Insert activity_log so Sales bell picks it up (+ audit trail for routing decision)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase.from('activity_logs') as any).insert({
         tenant_id: unit.tenant_id,
-        user_id: salesUserId, // attribute to the assigned Sales (or null if pool)
+        user_id: assigneeId, // attribute to the owner (agent if referred, else Sales; null if pool)
         activity_type: 'interest_added',
         description: `ลูกค้า${(customer as any).full_name || ''} สนใจยูนิต ${unit.unit_number}`,
         metadata: {
@@ -462,7 +509,7 @@ const CustomerUnitDetail = () => {
           customer_name: (customer as any).full_name,
           source: 'customer_portal',
           routing_reason: routingReason,
-          assigned_to: salesUserId,
+          assigned_to: assigneeId,
         },
       });
 
@@ -482,8 +529,17 @@ const CustomerUnitDetail = () => {
         const message = `${customerName} สนใจยูนิต ${unit.unit_number}`;
         const data = { unit_id: unit.id, unit_number: unit.unit_number, source: 'customer_portal' };
 
-        // 1) Admin/Owner — always notified, regardless of whether Sales was auto-assigned.
-        const adminTitleSuffix = salesUserId ? '' : ' — โปรด assign Sales';
+        // Resolve the lead's CURRENT owner — read from the lead itself rather than the
+        // session ref. Subsequent interests by the same customer must still notify the
+        // owning agent even when the ref code was already consumed on the first visit.
+        // assigneeId is the fallback for brand-new leads (the lead JS object's assigned_to
+        // was just set via insert but isn't reflected in the in-memory `lead` variable).
+        const ownerId = (lead as any).assigned_to ?? assigneeId ?? null;
+        const leadAgentId = (lead as any).referred_by_agent_id ?? referredByAgentId ?? null;
+        const ownerIsReferringAgent = !!(ownerId && leadAgentId && ownerId === leadAgentId);
+
+        // 1) Admin/Owner — always notified, regardless of who was assigned.
+        const adminTitleSuffix = ownerId ? '' : ' — โปรด assign Sales';
         const adminIds = await getTenantAdminUserIds(unit.tenant_id);
         for (const adminId of adminIds) {
           await createNotification({
@@ -499,15 +555,45 @@ const CustomerUnitDetail = () => {
           });
         }
 
-        // 2) Pre-assigned Sales (from sales_unit_assignments / sales_project_assignments) —
-        //    notify additionally so they know "their" Lead just came in.
-        if (salesUserId) {
+        // 2) Notify the lead's CURRENT owner so they know their Lead just came in.
+        //    Title branches on whether that owner is still the referring agent (pre-handoff)
+        //    or Sales (direct customer, or the agent has already handed off to Sales).
+        if (ownerId) {
+          // Title branches:
+          //   • Referring agent + serves the unit  → normal "Lead ใหม่/ลูกค้าจากลิงก์...สนใจ"
+          //   • Referring agent + does NOT serve  → "นอกขอบเขต" so the agent immediately
+          //     sees this isn't theirs to action (Sales will handle).
+          //   • Sales / direct customer             → existing Sales-side title.
+          const agentOwnerOutOfScope = ownerIsReferringAgent && effectiveOutOfScope;
           await createNotification({
             tenantId: unit.tenant_id,
-            userId: salesUserId,
+            userId: ownerId,
             activityType,
-            title: leadAlreadyExisted ? 'ลูกค้าของคุณสนใจยูนิตใหม่' : newLeadTitle,
-            message,
+            title: agentOwnerOutOfScope
+              ? 'ลูกค้าของคุณสนใจยูนิตนอกขอบเขต'
+              : ownerIsReferringAgent
+                ? (leadAlreadyExisted ? 'ลูกค้าจากลิงก์แนะนำของคุณสนใจยูนิตใหม่' : 'Lead ใหม่จากลิงก์แนะนำของคุณ')
+                : (leadAlreadyExisted ? 'ลูกค้าของคุณสนใจยูนิตใหม่' : newLeadTitle),
+            message: agentOwnerOutOfScope
+              ? `${customerName} สนใจยูนิต ${unit.unit_number} — ทีมขายดูแลให้`
+              : message,
+            severity: 'info',
+            relatedEntityType: 'lead',
+            relatedEntityId: (lead as any).id,
+            data,
+          });
+        }
+
+        // 3) Out-of-scope referral — when the referring agent isn't the lead's owner
+        //    (e.g. handed off to Sales, or the new lead routed straight to Sales), still
+        //    notify the agent so their referral pipeline shows the activity.
+        if (effectiveOutOfScope && effectiveAgentId && effectiveAgentId !== ownerId) {
+          await createNotification({
+            tenantId: unit.tenant_id,
+            userId: effectiveAgentId,
+            activityType,
+            title: 'ลูกค้าของคุณสนใจยูนิตนอกขอบเขต',
+            message: `${customerName} สนใจยูนิต ${unit.unit_number} — ทีมขายดูแลให้`,
             severity: 'info',
             relatedEntityType: 'lead',
             relatedEntityId: (lead as any).id,
@@ -520,6 +606,12 @@ const CustomerUnitDetail = () => {
 
       await loadAll();
       setShowInterestConfirm(true);
+      // Lock served its purpose — attribution is now persisted on the lead.
+      // Releasing it lets the customer browse the rest of the portal naturally.
+      try {
+        const m = await import('@/lib/lockedUnitMode');
+        m.clearLockedUnit();
+      } catch { /* ignore */ }
     } catch (err: any) {
       toast.error(err.message || 'บันทึกไม่สำเร็จ');
     } finally {
@@ -541,6 +633,11 @@ const CustomerUnitDetail = () => {
     );
   }
   if (!unit) return null;
+
+  // Agent-referred leads are handled by the referring agent (not auto-assigned Sales),
+  // so the customer-facing "who will contact you" copy is kept neutral ("พนักงาน")
+  // instead of promising Sales — without revealing the agent (silent attribution).
+  const isAgentReferred = !!myLead?.referred_by_agent_id;
 
   // Build gallery images: thumbnail_url first, then unit.images[]
   const galleryImages: string[] = [];
@@ -656,7 +753,7 @@ const CustomerUnitDetail = () => {
               {myInterest && (myInterest.interest_level === 'high'
                 || ['contacted', 'qualified', 'negotiating', 'reserved', 'won'].includes((myInterest.status || '').toLowerCase())) ? (
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-chateau bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full mt-1.5">
-                  <Heart className="w-3 h-3 fill-current" /> ส่งให้ Sales แล้ว · รอติดต่อกลับ
+                  <Heart className="w-3 h-3 fill-current" /> ส่งคำขอแล้ว · รอติดต่อกลับ
                 </span>
               ) : myInterest ? (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-600 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-full mt-1.5">
@@ -746,10 +843,10 @@ const CustomerUnitDetail = () => {
           // "ค่าจอง" — booking fee paid (5K-10K) locks the unit. In our schema this
           // maps to bookings.status='pending' (Sales has created the booking row and
           // collected the booking fee from the customer).
-          { key: 'booked', label: 'ค่าจอง', done: hasBooking },
+          { key: 'booked', label: 'จอง', done: hasBooking },
           // "ค่ามัดจำ" — the 10-15% down payment + contract signing. Maps to
           // bookings.status='confirmed'.
-          { key: 'deposit', label: 'ค่ามัดจำ', done: depositPaid },
+          { key: 'deposit', label: 'ทำสัญญา', done: depositPaid },
           // "โอนกรรมสิทธิ์" — final title transfer at Land Office, after mortgage
           // approval. Maps to bookings.status='checked_in'/'checked_out'.
           { key: 'transfer', label: 'โอนกรรมสิทธิ์', done: titleTransferred },
@@ -759,7 +856,7 @@ const CustomerUnitDetail = () => {
 
         return (
           <div className="bg-white border border-gray-100 rounded-2xl p-5">
-            <h2 className="text-sm font-semibold text-gray-900 mb-4">สถานะการจอง</h2>
+            <h2 className="text-sm font-semibold text-gray-900 mb-4">ความคืบหน้า</h2>
             <div className="flex items-start">
               {steps.map((s, i) => {
                 const isCurrent = i === currentIdx && !s.done;
@@ -803,7 +900,7 @@ const CustomerUnitDetail = () => {
               const currentStep = steps[currentIdx];
               if (currentStep.done) return null;
               const taglines: Record<string, string> = {
-                contacted: myLead?.assigned_to ? 'รอ Sales โทรกลับ' : 'รอจัดสรร Sales',
+                contacted: myLead?.assigned_to ? (isAgentReferred ? 'รอพนักงานติดต่อกลับ' : 'รอ Sales โทรกลับ') : 'รอจัดสรรพนักงาน',
                 booked: 'รอชำระค่าจองเพื่อล็อกยูนิต',
                 deposit: 'รอชำระค่ามัดจำ + เซ็นสัญญา',
                 transfer: 'รอกู้สำเร็จ + โอนกรรมสิทธิ์',
@@ -1096,7 +1193,7 @@ const CustomerUnitDetail = () => {
 
             {/* Info — sales will confirm real numbers */}
             <p className="text-xs text-gray-500 text-center pt-1">
-               Sales จะคำนวณตัวเลขจริงให้เมื่อนัดดูยูนิต
+               พนักงานจะคำนวณตัวเลขจริงให้เมื่อนัดดูยูนิต
             </p>
           </div>
         )}
@@ -1181,7 +1278,7 @@ const CustomerUnitDetail = () => {
       )}
 
       {/* === Similar units === */}
-      {similarUnits.length > 0 && (
+      {similarUnits.length > 0 && !isLockedToThisUnit && (
         <div>
           <h2 className="text-sm font-semibold text-gray-900 mb-3">ยูนิตที่คล้ายกัน</h2>
           <div className="grid grid-cols-2 gap-3">
@@ -1236,12 +1333,12 @@ const CustomerUnitDetail = () => {
               {submitting ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> กำลังบันทึก...</>
               ) : (
-                <><Heart className="w-4 h-4 mr-2" /> สนใจยูนิตนี้ — ให้ Sales ติดต่อกลับ</>
+                <><Heart className="w-4 h-4 mr-2" /> สนใจยูนิตนี้ — ให้พนักงานติดต่อกลับ</>
               )}
             </Button>
             {!isLoggedIn && !submitting && (
               <p className="text-center text-xs text-gray-500 mt-2">
-                เข้าสู่ระบบก่อน เพื่อให้ทีมงานติดต่อคุณได้
+                เข้าสู่ระบบก่อน เพื่อให้พนักงานติดต่อคุณได้
               </p>
             )}
           </div>
@@ -1259,7 +1356,9 @@ const CustomerUnitDetail = () => {
               <span>เราได้รับเรื่องของคุณแล้ว</span>
             </DialogTitle>
             <DialogDescription className="pt-2">
-              ทีม Sales จะติดต่อกลับเพื่อให้ข้อมูลเพิ่มเติมและช่วยเหลือคุณในขั้นตอนต่อไป
+              {isAgentReferred
+                ? 'พนักงานจะติดต่อกลับเพื่อให้ข้อมูลเพิ่มเติมและช่วยเหลือคุณในขั้นตอนต่อไป'
+                : 'ทีม Sales จะติดต่อกลับเพื่อให้ข้อมูลเพิ่มเติมและช่วยเหลือคุณในขั้นตอนต่อไป'}
             </DialogDescription>
           </DialogHeader>
 
@@ -1271,7 +1370,7 @@ const CustomerUnitDetail = () => {
                   <Timer className="w-5 h-5 text-rose-500" strokeWidth={2.25} />
                 </div>
                 <div className="flex-1">
-                  <p className="text-[11px] text-gray-500 mb-0.5">Sales จะติดต่อกลับภายใน</p>
+                  <p className="text-[11px] text-gray-500 mb-0.5">{isAgentReferred ? 'พนักงานจะติดต่อกลับภายใน' : 'Sales จะติดต่อกลับภายใน'}</p>
                   <p className="text-lg font-bold text-chateau">24 ชั่วโมง</p>
                 </div>
               </div>
@@ -1280,7 +1379,7 @@ const CustomerUnitDetail = () => {
             {/* Next steps hint */}
             <div className="bg-gray-50 rounded-xl p-3">
               <p className="text-[11px] text-gray-600 leading-relaxed">
-                 <strong>ขั้นตอนต่อไป:</strong> Sales จะโทร / LINE เพื่อนัดวันเวลาดูยูนิตจริง — ระบบหา Sales ที่ว่างให้คุณอัตโนมัติ
+                 <strong>ขั้นตอนต่อไป:</strong> {isAgentReferred ? 'พนักงานจะโทร / LINE เพื่อนัดวันเวลาดูยูนิตจริง' : 'Sales จะโทร / LINE เพื่อนัดวันเวลาดูยูนิตจริง — ระบบหา Sales ที่ว่างให้คุณอัตโนมัติ'}
               </p>
             </div>
           </div>

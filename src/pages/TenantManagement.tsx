@@ -1690,7 +1690,7 @@ const TenantManagement = () => {
           <Header onMenuClick={() => setSidebarOpen(true)} />
 
           {/* Page Content */}
-          <main className="p-3 sm:p-6">
+          <main className="p-6 lg:p-8">
             {/* Page Header */}
             <Card className="bg-white border-gray-200 shadow-lg mb-6">
               <CardContent className="pt-6">
@@ -1700,7 +1700,7 @@ const TenantManagement = () => {
                       <Building2 className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <h1 className="text-xl sm:text-2xl font-bold text-gray-900">จัดการบริษัท (Tenants)</h1>
+                      <h1 className="text-2xl font-bold text-gray-900">จัดการบริษัท (Tenants)</h1>
                       <p className="text-sm sm:text-base text-gray-600 mt-1">
                         จัดการบริษัททั้งหมดในระบบ SaaS
                       </p>

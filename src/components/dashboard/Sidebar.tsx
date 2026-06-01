@@ -11,7 +11,6 @@ import {
   Briefcase,
   CreditCard,
   FileText,
-  Palette,
   TrendingUp,
   BarChart3,
   Lock,
@@ -48,11 +47,11 @@ interface NavGroup {
 
 // Top items (no group label) + Collapsible groups (KK style)
 const NAV_GROUPS: NavGroup[] = [
-  { id: "top",       label: null,              hrefs: ["/", "/owner", "/analytics", "/my-dashboard"] },
+  { id: "top",       label: null,              hrefs: ["/", "/owner", "/analytics", "/team", "/my-dashboard"] },
   { id: "platform",  label: "PLATFORM CORE",   icon: Building,  hrefs: ["/tenants", "/payments", "/properties"] },
-  { id: "crm",       label: "CRM & SALES",     icon: Users,     hrefs: ["/leads", "/team"] },
+  { id: "crm",       label: "CRM & SALES",     icon: Users,     hrefs: ["/leads"] },
   { id: "marketing", label: "MARKETING",       icon: Megaphone, hrefs: ["/campaigns", "/builder", "/triggers", "/marketing-analytics"] },
-  { id: "admin",     label: "ADMIN",           icon: Wrench,    hrefs: ["/users", "/permissions", "/customization", "/settings"] },
+  { id: "admin",     label: "ADMIN",           icon: Wrench,    hrefs: ["/users", "/permissions", "/settings"] },
 ];
 
 const getAllNavItems = (): NavItem[] => [
@@ -71,7 +70,6 @@ const getAllNavItems = (): NavItem[] => [
   { icon: BarChart3,       label: "Marketing Analytics",href: "/marketing-analytics", requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Users,           label: "จัดการผู้ใช้",          href: "/users",         requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Lock,            label: "สิทธิ์ผู้ใช้งาน",        href: "/permissions",   requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: Palette,         label: "ปรับแต่งระบบ",         href: "/customization", requiredRoles: ["OWNER"] },
   { icon: Settings,        label: "การตั้งค่า",           href: "/settings",      requiredRoles: ["OWNER", "ADMIN", "SALES", "AGENT", "CUSTOMER"] },
   { icon: LogOut,          label: "ออกจากระบบ",          href: "/logout",        isLogout: true },
 ];

@@ -293,7 +293,7 @@ const UnitEdit = () => {
           {/* Header */}
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">EDIT</p>
-            <h1 className="text-3xl font-bold text-gray-900">แก้ไขยูนิต {form.unit_number}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">แก้ไขยูนิต {form.unit_number}</h1>
             <p className="text-sm text-gray-600 mt-1">{projectName}</p>
           </div>
 

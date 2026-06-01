@@ -18,7 +18,7 @@ const UserManagement = () => {
         <Header onMenuClick={() => setSidebarOpen(true)} />
 
         {/* User Management Content */}
-        <main className="p-6">
+        <main className="p-6 lg:p-8">
           <AdminGuard>
             <UserManagementContent />
           </AdminGuard>

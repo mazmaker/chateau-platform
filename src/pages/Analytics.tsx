@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { supabase } from '@/lib/supabase';
+import { LEAD_STATUS_LABELS } from '@/lib/leadStatus';
 import { SubscriptionGuard } from '@/hooks/useSubscriptionFeatures';
 import {
   AreaChart,
@@ -107,8 +108,8 @@ const STATUS_LABEL: Record<string, string> = {
   contacted: 'ติดต่อแล้ว',
   qualified: 'คัดกรองแล้ว',
   negotiating: 'กำลังเจรจา',
-  won: 'ปิดดีลสำเร็จ',
-  lost: 'เสียดีล',
+  won: LEAD_STATUS_LABELS.won,
+  lost: LEAD_STATUS_LABELS.lost,
 };
 // Mono Chateau-red gradient — darker stages = deeper red, won = brand, lost = neutral
 const STATUS_COLOR: Record<string, string> = {
@@ -556,14 +557,14 @@ const Analytics = () => {
 
   return (
     <SubscriptionGuard feature="analytics" showUpgradePrompt={true}>
-      <div className="p-6 lg:p-10 space-y-7">
+      <div className="p-6 lg:p-8 space-y-7">
         {/* Title */}
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
             <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
               Lead Analytics
             </span>
-            <h1 className="text-[34px] font-bold text-gray-900 leading-tight tracking-tight">วิเคราะห์ลีด</h1>
+            <h1 className="text-2xl font-bold text-gray-900">วิเคราะห์ลีด</h1>
             <p className="text-[15px] text-gray-500 mt-1.5">ภาพรวมตัวเลข · คนที่ต้องตาม · ทีมขาย</p>
           </div>
           <div className="flex items-center gap-2">
@@ -669,7 +670,7 @@ const Analytics = () => {
               <div>
                 <h3 className="text-base font-bold text-gray-900">Lead Funnel</h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  กรวยปิดดีล · ลีดทั้งหมด {leads.length} คน · ตัวเลข = ลีดที่<strong>เคยผ่าน</strong> stage นี้ ('เสียดีล' = นับเฉพาะปัจจุบัน)
+                  กรวยปิดดีล · ลีดทั้งหมด {leads.length} คน · ตัวเลข = ลีดที่<strong>เคยผ่าน</strong> stage นี้ ('ปิดการขายไม่สำเร็จ' = นับเฉพาะปัจจุบัน)
                 </p>
               </div>
             </div>

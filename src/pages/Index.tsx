@@ -368,14 +368,14 @@ const Index = () => {
       <div className="lg:pl-[260px]">
         <Header onMenuClick={() => setSidebarOpen(true)} />
 
-        <main className="p-6 lg:p-10 space-y-8">
+        <main className="p-6 lg:p-8 space-y-8">
           {/* === Page Title === */}
           <div className="flex items-end justify-between flex-wrap gap-3">
             <div>
               <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: C.red, backgroundColor: C.redLight }}>
                 Executive View
               </span>
-              <h1 className="text-[34px] font-bold text-gray-900 leading-tight tracking-tight">Dashboard</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
               <p className="text-[15px] text-gray-500 mt-1.5">
                 ยอดขาย · สต๊อก · pipeline · {currentTenant?.name || ''} — อัปเดต {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
               </p>

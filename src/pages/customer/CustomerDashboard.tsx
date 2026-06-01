@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { addToWishlist, removeFromWishlist as removeFromWishlistDb } from '@/lib/customerWishlist';
 import { getOrCreateVisitorId } from '@/lib/viewTracking';
+import { getReferralUnitScope } from '@/lib/referralScope';
 import CustomerLayout from './CustomerLayout';
 
 interface CustomerProfile {
@@ -218,16 +219,30 @@ const CustomerDashboard = () => {
           // Recently viewed = property_views joined by current localStorage visitor_id.
           setIsAnon(true);
 
+          // Agent referral scope: if arrived via ?ref=AG-..., restrict the landing to the
+          // referring agent's units (+ their projects). scope=null → no referral → show all.
+          const scope = await getReferralUnitScope();
+          let scopeProjectIds: Set<string> | null = null;
+          if (scope) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: scopeUnits } = await (supabase.from('units') as any)
+              .select('project_id').in('id', Array.from(scope));
+            scopeProjectIds = new Set(((scopeUnits as any[]) || []).map((u: any) => u.project_id));
+          }
+
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const featRes = await (supabase.from('properties') as any)
             .select('id, name, thumbnail_url, base_price, is_active, is_featured')
             .eq('is_active', true)
             .order('is_featured', { ascending: false })
             .order('created_at', { ascending: false })
-            .limit(4);
-          setFeaturedProperties(((featRes.data as any[]) || []).map((p: any) => ({
-            id: p.id, name: p.name, thumbnail_url: p.thumbnail_url, base_price: p.base_price,
-          })));
+            .limit(scopeProjectIds ? 100 : 4);
+          setFeaturedProperties(((featRes.data as any[]) || [])
+            .filter((p: any) => !scopeProjectIds || scopeProjectIds.has(p.id))
+            .slice(0, 4)
+            .map((p: any) => ({
+              id: p.id, name: p.name, thumbnail_url: p.thumbnail_url, base_price: p.base_price,
+            })));
 
           // Recently-viewed: last 5 unique units from this visitor's property_views.
           // Skipped silently if no visitor_id (first ever load).
@@ -243,6 +258,7 @@ const CustomerDashboard = () => {
             const seenUnits = new Set<string>();
             const uniqueUnitIds: string[] = [];
             for (const v of (viewRows || []) as any[]) {
+              if (scope && !scope.has(v.unit_id)) continue; // referral scope: agent's units only
               if (!seenUnits.has(v.unit_id)) {
                 seenUnits.add(v.unit_id);
                 uniqueUnitIds.push(v.unit_id);

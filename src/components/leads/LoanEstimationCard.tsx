@@ -199,7 +199,12 @@ export function LoanEstimationCard({ estimation, loading }: LoanEstimationCardPr
               "probability of approval" is no longer a meaningful estimate (it's
               already 100% confirmed by the Letter). */}
           {estimation.source !== 'manual' && (() => {
-            const cappedProb = Math.min(0.85, estimation.affordability.approval_probability);
+            // Cap the displayed chance by risk tier so the number agrees with the color/badge:
+            // a "medium risk" lead can't show a reassuring 85% just because credit/employment
+            // is strong while a ratio is over the recommended band. (Display only — the raw
+            // approval_probability used for lead scoring is untouched.)
+            const tierCap = riskTier === 'low' ? 0.85 : riskTier === 'medium' ? 0.65 : 0.45;
+            const cappedProb = Math.min(tierCap, estimation.affordability.approval_probability);
             const pct = cappedProb * 100;
             const barColor = riskTier === 'low' ? 'bg-green-500' : riskTier === 'medium' ? 'bg-orange-500' : 'bg-red-500';
             return (

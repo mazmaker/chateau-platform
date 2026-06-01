@@ -88,6 +88,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { LEAD_STATUS_LABELS } from '@/lib/leadStatus';
 import { toast } from 'sonner';
 import CreateProjectModal from '@/components/properties/CreateProjectModal';
 import AddLeadModal from '@/components/leads/AddLeadModal';
@@ -225,15 +226,15 @@ const PropertyManagement = () => {
   const leadStatusLabel = (status?: string | null): string => {
     if (!status) return '-';
     const map: Record<string, string> = {
-      new: 'ใหม่',
-      contacted: 'ติดต่อแล้ว',
-      qualified: 'มีคุณสมบัติ',
-      negotiating: 'กำลังเจรจา',
+      new: LEAD_STATUS_LABELS.new,
+      contacted: LEAD_STATUS_LABELS.contacted,
+      qualified: LEAD_STATUS_LABELS.qualified,
+      negotiating: LEAD_STATUS_LABELS.negotiating,
       negotiation: 'กำลังเจรจา',
       proposal: 'เสนอขาย',
-      won: 'ปิดดีล',
+      won: LEAD_STATUS_LABELS.won,
       closed: 'ปิดการขาย',
-      lost: 'สูญเสีย',
+      lost: LEAD_STATUS_LABELS.lost,
     };
     return map[status] || status;
   };
@@ -1479,7 +1480,7 @@ const PropertyManagement = () => {
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <div className="lg:ml-[260px] min-h-screen">
           <Header onMenuClick={() => setSidebarOpen(true)} />
-          <main className="p-6">
+          <main className="p-6 lg:p-8">
             <div className="flex items-center justify-center min-h-[400px]">
               <div className="text-center text-muted-foreground">
                 <Building2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
@@ -1497,7 +1498,7 @@ const PropertyManagement = () => {
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="lg:ml-[260px] min-h-screen">
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="p-6">
+        <main className="p-6 lg:p-8">
           <ViewPropertiesGuard>
             <div className="space-y-6">
               {/* Header */}
@@ -1518,14 +1519,11 @@ const PropertyManagement = () => {
                       </div>
                     </div>
                     {userRole === 'agent' ? (
-                      <Button
-                        onClick={handleCopyReferral}
-                        variant="outline"
-                        className="flex items-center gap-2"
-                      >
-                        <Link2 className="w-4 h-4" />
-                        คัดลอกลิงก์แนะนำ
-                      </Button>
+                      // Per-unit referral links only — agents copy them from each unit's
+                      // detail page (UnitDetail's "คัดลอกลิงก์" button). A portal-wide link
+                      // here used to let the customer browse the whole catalog and pick a
+                      // unit outside the agent's allotment, creating un-serviceable leads.
+                      null
                     ) : (
                       <ManagePropertiesGuard fallback={null} showMessage={false}>
                         <Button
@@ -3196,13 +3194,18 @@ const PropertyManagement = () => {
                                 <UserPlus className="w-4 h-4 mr-1" />
                                 เพิ่ม Lead ใหม่
                               </Button>
-                              <Button
-                                onClick={openReserveDialog}
-                                className="bg-amber-500 hover:bg-amber-600 text-white"
-                              >
-                                <Calendar className="w-4 h-4 mr-1" />
-                                บันทึกการจอง
-                              </Button>
+                              {/* ค่าจอง involves money custody — agents never collect it.
+                                  Agents lock a unit money-free from the Leads page ("ล็อกยูนิต"),
+                                  then hand off to Sales who records ค่าจอง here. */}
+                              {userRole !== 'agent' && (
+                                <Button
+                                  onClick={openReserveDialog}
+                                  className="bg-amber-500 hover:bg-amber-600 text-white"
+                                >
+                                  <Calendar className="w-4 h-4 mr-1" />
+                                  บันทึกการจอง
+                                </Button>
+                              )}
                             </div>
                           </div>
                         </CardContent>

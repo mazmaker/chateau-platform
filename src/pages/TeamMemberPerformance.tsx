@@ -73,7 +73,7 @@ export default function TeamMemberPerformance() {
       <div className="lg:ml-[260px] min-h-screen">
         <Header onMenuClick={() => setSidebarOpen(true)} />
         <main className="p-6 lg:p-8">
-          <div className="max-w-5xl mx-auto space-y-5">
+          <div className="space-y-5">
             <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
               <ArrowLeft className="w-4 h-4 mr-1" /> กลับ
             </Button>
@@ -95,7 +95,7 @@ export default function TeamMemberPerformance() {
                       {(staff.full_name || staff.email).charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h1 className="text-xl font-bold text-gray-900">
+                      <h1 className="text-2xl font-bold text-gray-900">
                         {staff.full_name || staff.email}
                       </h1>
                       <p className="text-sm text-gray-500 mt-0.5">

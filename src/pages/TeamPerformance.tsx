@@ -203,7 +203,7 @@ export default function TeamPerformance() {
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="lg:pl-[260px]">
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="p-6 lg:p-10 space-y-7">
+        <main className="p-6 lg:p-8 space-y-7">
             {/* Page header */}
             <Card className="bg-white border-gray-200 shadow-lg">
               <CardContent className="pt-6">

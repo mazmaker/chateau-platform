@@ -70,7 +70,7 @@ export default function QuickReserveDialog({
   const suggestedDeposit = 10000;
 
   const [depositAmount, setDepositAmount] = useState('');
-  const [expiryDays, setExpiryDays] = useState(isAgent ? 1 : 14);
+  const [expiryDays, setExpiryDays] = useState(isAgent ? 2 : 14);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -78,7 +78,7 @@ export default function QuickReserveDialog({
   useEffect(() => {
     if (open) {
       setDepositAmount(suggestedDeposit > 0 ? String(suggestedDeposit) : '');
-      setExpiryDays(isAgent ? 1 : 14);
+      setExpiryDays(isAgent ? 2 : 14);
       setNotes('');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -90,7 +90,9 @@ export default function QuickReserveDialog({
       return;
     }
     const amt = parseFloat(depositAmount);
-    if (!amt || amt <= 0) {
+    // Agent courtesy hold takes no money, so the booking-fee field is hidden and
+    // not required. Sales/Admin must record ค่าจอง.
+    if (!isAgent && (!amt || amt <= 0)) {
       toast.error('กรุณากรอกจำนวนเงินจอง');
       return;
     }
@@ -102,27 +104,33 @@ export default function QuickReserveDialog({
         nowDate.getTime() + expiryDays * 86400000,
       ).toISOString();
 
-      // 1) Lock the unit (reserved). Two guards stack here:
-      //    • RLS enforces tenant + role + assignment (Sales/Agent see only their assigned units)
-      //    • .eq('status','available') is an atomic availability check — if another sales/agent
-      //      reserved this unit between page-render and click, the UPDATE matches 0 rows and we
-      //      throw "ยูนิตถูกจองไปแล้ว" instead of silently overwriting their reservation.
+      // 1) Lock the unit (reserved).
+      //    • Agent = money-free courtesy hold: no deposit_amount recorded.
+      //    • Sales/Admin = paid reservation: records ค่าจอง.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: unitData, error: unitErr } = await (supabase.from('units') as any)
-        .update({
-          status: 'reserved',
-          locked_by: userId,
-          locked_until: lockedUntil,
-          reservation_date: nowDate.toISOString(),
-          reserved_customer_name: customerName,
-          reserved_customer_phone: customerPhone || null,
-          reserved_customer_lead_id: lead.id,
-          deposit_amount: amt,
-          reservation_notes: notes.trim() || null,
-        })
-        .eq('id', interest.unit_id)
-        .eq('status', 'available')
-        .select('id, status');
+      const unitUpdate: Record<string, any> = {
+        status: 'reserved',
+        locked_by: userId,
+        locked_until: lockedUntil,
+        reservation_date: nowDate.toISOString(),
+        reserved_customer_name: customerName,
+        reserved_customer_phone: customerPhone || null,
+        reserved_customer_lead_id: lead.id,
+        reservation_notes: notes.trim() || null,
+      };
+      if (!isAgent) unitUpdate.deposit_amount = amt;
+
+      // Atomic availability guard:
+      //    • Agent may only hold a fresh 'available' unit.
+      //    • Sales may ALSO convert an existing agent courtesy-hold for the SAME
+      //      lead into a paid reservation (status already 'reserved' by the agent).
+      // RLS still enforces tenant + role + assignment underneath either path.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let unitQuery = (supabase.from('units') as any).update(unitUpdate).eq('id', interest.unit_id);
+      unitQuery = isAgent
+        ? unitQuery.eq('status', 'available')
+        : unitQuery.or(`status.eq.available,and(status.eq.reserved,reserved_customer_lead_id.eq.${lead.id})`);
+      const { data: unitData, error: unitErr } = await unitQuery.select('id, status');
       if (unitErr) throw unitErr;
       if (!unitData || unitData.length === 0) {
         // Two reasons we land here:
@@ -141,7 +149,7 @@ export default function QuickReserveDialog({
       }
 
       // 2) Lead status → negotiating
-      // Reservation = customer committed + paid holding deposit (NOT yet contracted).
+      // Reservation/hold = customer committed enough to lock a unit (NOT yet contracted).
       // 'won' is reserved for after contract+transfer; setting it here breaks pipeline conversion reports.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase.from('leads') as any)
@@ -154,8 +162,10 @@ export default function QuickReserveDialog({
         .update({ status: 'reserved', updated_at: nowDate.toISOString() })
         .eq('id', interest.id);
 
-      // 4) Create customer-facing booking record (customer portal visibility)
-      if (lead.customer_id && unitPrice > 0) {
+      // 4) Paid reservations only: create customer-facing booking record.
+      // Agent courtesy holds record NO money — Sales collects ค่าจอง later, which
+      // creates the booking at that point.
+      if (!isAgent && lead.customer_id && unitPrice > 0) {
         const reservationDay = nowDate.toISOString().slice(0, 10);
         const transferEstimate = new Date(
           nowDate.getTime() + 90 * 86400000,
@@ -194,16 +204,22 @@ export default function QuickReserveDialog({
         tenant_id: lead.tenant_id,
         user_id: userId,
         activity_type: 'unit_reserved',
-        description: `รับค่าจองยูนิต ${interest.unit?.unit_number || ''} (${interest.property?.name || ''}) จาก ${customerName} · ค่าจอง ${formatTHB(amt)}`,
+        description: isAgent
+          ? `จองชั่วคราวยูนิต ${interest.unit?.unit_number || ''} (${interest.property?.name || ''}) ให้ ${customerName} โดยนายหน้า · จองไว้ ${expiryDays} วัน (ยังไม่เก็บค่าจอง)`
+          : `รับค่าจองยูนิต ${interest.unit?.unit_number || ''} (${interest.property?.name || ''}) จาก ${customerName} · ค่าจอง ${formatTHB(amt)}`,
         metadata: {
           lead_id: lead.id,
           unit_id: interest.unit_id,
           interest_id: interest.id,
-          deposit_amount: amt,
+          ...(isAgent ? { hold: true } : { deposit_amount: amt }),
         },
       });
 
-      toast.success(`รับค่าจองยูนิต ${interest.unit?.unit_number || ''} สำเร็จ`);
+      toast.success(
+        isAgent
+          ? `จองชั่วคราวยูนิต ${interest.unit?.unit_number || ''} สำเร็จ`
+          : `รับค่าจองยูนิต ${interest.unit?.unit_number || ''} สำเร็จ`,
+      );
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
@@ -219,10 +235,12 @@ export default function QuickReserveDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Lock className="w-4 h-4 text-chateau" />
-            รับค่าจองยูนิต
+            {isAgent ? 'จองชั่วคราว' : 'รับค่าจองยูนิต'}
           </DialogTitle>
           <DialogDescription>
-            ล็อกยูนิตให้ลูกค้าด้วย "ค่าจอง" — เงินก้อนเล็กเพื่อล็อกยูนิต 7-14 วัน ก่อนทำสัญญา/รับค่ามัดจำ
+            {isAgent
+              ? 'จองยูนิตไว้ชั่วคราว — นายหน้าไม่เก็บเงิน ให้ Lead ไปวางค่าจองกับทีมขายเพื่อยืนยัน'
+              : 'ล็อกยูนิตให้ลูกค้าด้วย "ค่าจอง" — เงินก้อนเล็กเพื่อล็อกยูนิต 7-14 วัน ก่อนทำสัญญา/รับค่ามัดจำ'}
           </DialogDescription>
         </DialogHeader>
 
@@ -254,42 +272,44 @@ export default function QuickReserveDialog({
                   )}
                 </div>
                 <p className="text-[11px] text-gray-500 mt-1">
-                  ลูกค้า: <span className="font-medium text-gray-700">{customerName}</span>
+                  {isAgent ? 'Lead' : 'ลูกค้า'}: <span className="font-medium text-gray-700">{customerName}</span>
                 </p>
               </div>
             </div>
           </div>
 
-          {/* ค่าจอง (booking fee) */}
-          <div>
-            <Label htmlFor="qr-deposit" className="text-sm">
-              ค่าจอง (฿) <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="qr-deposit"
-              type="number"
-              min="0"
-              value={depositAmount}
-              onChange={(e) => setDepositAmount(e.target.value)}
-              placeholder="เช่น 10000"
-              className="mt-1"
-              disabled={saving}
-            />
-            <p className="text-[11px] text-gray-500 mt-1">
-              มาตรฐานวงการ ฿5,000-10,000 (ค่ามัดจำ 10-15% จะรับตอนเซ็นสัญญา)
-            </p>
-          </div>
+          {/* ค่าจอง (booking fee) — hidden for agents (money-free courtesy hold) */}
+          {!isAgent && (
+            <div>
+              <Label htmlFor="qr-deposit" className="text-sm">
+                ค่าจอง (฿) <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="qr-deposit"
+                type="number"
+                min="0"
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                placeholder="เช่น 10000"
+                className="mt-1"
+                disabled={saving}
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                มาตรฐานวงการ ฿5,000-10,000 (ค่ามัดจำ 10-15% จะรับตอนเซ็นสัญญา)
+              </p>
+            </div>
+          )}
 
           {/* Expiry */}
           <div>
             <Label htmlFor="qr-expiry" className="text-sm">
-              ล็อกยูนิต (วัน)
+              {isAgent ? 'จองไว้ (วัน)' : 'ล็อกยูนิต (วัน)'}
             </Label>
             <Input
               id="qr-expiry"
               type="number"
               min="1"
-              max={isAgent ? 1 : 30}
+              max={isAgent ? 3 : 30}
               value={expiryDays}
               onChange={(e) => setExpiryDays(Math.max(1, parseInt(e.target.value) || 1))}
               className="mt-1"
@@ -297,8 +317,8 @@ export default function QuickReserveDialog({
             />
             <p className="text-[11px] text-gray-500 mt-1">
               {isAgent
-                ? 'Agent ล็อกได้สูงสุด 1 วัน (ขออนุมัติเพิ่มที่ Sales)'
-                : 'ค่าเริ่มต้น 14 วัน — หลังหมดเวลายูนิตจะปลดล็อกอัตโนมัติ'}
+                ? 'จองชั่วคราวได้สูงสุด 3 วัน — ให้ Lead ไปวางค่าจองกับทีมขายภายในกำหนด'
+                : 'ค่าเริ่มต้น 14 วัน ก่อนทำสัญญา/รับค่ามัดจำ'}
             </p>
           </div>
 
@@ -328,7 +348,7 @@ export default function QuickReserveDialog({
             ยกเลิก
           </Button>
           <Button onClick={handleSave} disabled={saving}>
-            {saving ? 'กำลังบันทึก…' : 'ยืนยันจอง'}
+            {saving ? 'กำลังบันทึก…' : isAgent ? 'ยืนยันจองชั่วคราว' : 'ยืนยันจอง'}
           </Button>
         </DialogFooter>
       </DialogContent>

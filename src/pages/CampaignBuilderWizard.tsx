@@ -356,14 +356,14 @@ const CampaignBuilderWizard = () => {
         <div className="lg:pl-[260px]">
           <Header onMenuClick={() => setSidebarOpen(true)} />
 
-          <main className="p-6 lg:p-10 space-y-7">
+          <main className="p-6 lg:p-8 space-y-7">
             {/* === Page Title === */}
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
               <div>
                 <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
                   สร้างแคมเปญใน 4 ขั้นตอน
                 </span>
-                <h1 className="text-[34px] font-bold text-gray-900 leading-tight tracking-tight">Campaign Builder Wizard</h1>
+                <h1 className="text-2xl font-bold text-gray-900">Campaign Builder Wizard</h1>
                 <p className="text-[15px] text-gray-500 mt-1.5">Drag &amp; Drop · ไม่ต้องจ้าง Agency · Preview ทุกขั้นตอน · Approval Flow บังคับก่อนส่ง</p>
               </div>
               <div className="flex gap-2.5">
