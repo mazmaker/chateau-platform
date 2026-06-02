@@ -12,7 +12,7 @@ export type PurchasePurpose =
 export const PURCHASE_PURPOSE_OPTIONS: Array<{ value: PurchasePurpose; label: string; emoji: string }> = [
   { value: 'residence',  emoji: '', label: 'อยู่อาศัยเอง' },
   { value: 'investment', emoji: '', label: 'ลงทุน (เช่า / ขายต่อ)' },
-  { value: 'vacation',   emoji: '', label: 'บ้านที่สอง / พักผ่อน' },
+  { value: 'vacation',   emoji: '', label: 'พักผ่อน / บ้านพักตากอากาศ' },
   { value: 'family',     emoji: '', label: 'ครอบครัว (พ่อแม่ / บุตรหลาน)' },
   { value: 'other',      emoji: '', label: 'อื่นๆ / ยังไม่ตัดสินใจ' },
 ];

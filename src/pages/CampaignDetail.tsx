@@ -320,7 +320,9 @@ const CampaignDetail = () => {
                 </div>
               </div>
 
-              {/* LINE Preview 1/3 */}
+              {/* Channel previews 1/3 — LINE + WhatsApp stacked near each other */}
+              <div className="space-y-6">
+              {/* LINE Preview */}
               <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
                 <div className="flex items-center justify-between mb-1">
                   <h2 className="text-base font-bold text-gray-900">LINE Message</h2>
@@ -357,6 +359,51 @@ const CampaignDetail = () => {
                   </div>
                   <p className="text-white/50 text-[9px] text-right mt-1">อ่านแล้ว</p>
                 </div>
+              </div>
+
+              {/* WhatsApp Preview (mockup) — same campaign data, WhatsApp-template style.
+                  Note: this is illustrative only; real WhatsApp sends need an approved template. */}
+              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+                <div className="flex items-center justify-between mb-1">
+                  <h2 className="text-base font-bold text-gray-900">WhatsApp Message</h2>
+                  <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded text-white" style={{ backgroundColor: "#25D366" }}>
+                    Template
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mb-4">ตัวอย่าง mockup · ต้องเป็น template ที่ Meta อนุมัติ</p>
+                {/* WhatsApp chat wallpaper */}
+                <div className="rounded-xl p-3.5" style={{ backgroundColor: "#e5ddd5" }}>
+                  {/* received-message bubble */}
+                  <div className="bg-white rounded-xl rounded-tl-sm overflow-hidden shadow-sm">
+                    <div className="flex items-center gap-2 px-2.5 pt-2">
+                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-white font-bold text-[10px]" style={{ backgroundColor: "#25D366" }}>C</div>
+                      <p className="text-[11px] font-semibold text-gray-900 leading-tight">
+                        CHATEAU Property <span style={{ color: "#34b7f1" }}>✓</span>
+                      </p>
+                    </div>
+                    {campaign.image_url && (
+                      <div className="h-24 bg-gray-100 relative m-1.5 rounded-lg overflow-hidden">
+                        <img src={campaign.image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <div className="px-2.5 pb-1.5 pt-1">
+                      <p className="text-[11px] font-bold text-gray-900 leading-snug">{campaign.headline || campaign.campaign_name}</p>
+                      <p className="text-[11px] text-gray-700 mt-1 leading-relaxed line-clamp-3">{campaign.message_body || campaign.detail || '-'}</p>
+                      {/* mandatory opt-out footer (WhatsApp + PDPA) */}
+                      <p className="text-[9px] text-gray-400 mt-1.5 italic">CHATEAU Property · ตอบ STOP เพื่อยกเลิก</p>
+                      <p className="text-[8px] text-gray-400 text-right mt-0.5">10:30 <span style={{ color: "#34b7f1" }}>✓✓</span></p>
+                    </div>
+                    {/* WhatsApp CTA button — separated, blue, full-width */}
+                    {campaign.cta_text && (
+                      <div className="border-t border-gray-100">
+                        <button className="w-full py-1.5 text-[11px] font-semibold" style={{ color: "#027eb5" }}>
+                          {campaign.cta_text}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
               </div>
             </div>
 

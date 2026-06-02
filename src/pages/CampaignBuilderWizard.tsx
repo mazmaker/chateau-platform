@@ -32,6 +32,7 @@ import {
   UserCheck,
   MessageSquare,
   CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
 
 const KK = {
@@ -42,6 +43,20 @@ const KK = {
   orange: '#f97316', orangeLight: '#fff7ed',
   amber: '#f59e0b', amberLight: '#fffbeb',
   gray: '#6b7280', grayLight: '#f3f4f6',
+};
+
+// Thai relative-time for the "อัปเดตล่าสุด" badge.
+const relativeThai = (iso: string | null): string => {
+  if (!iso) return '';
+  const diffMs = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(diffMs)) return '';
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return 'เมื่อสักครู่';
+  if (min < 60) return `${min} นาทีที่แล้ว`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} ชม.ที่แล้ว`;
+  const day = Math.floor(hr / 24);
+  return `${day} วันที่แล้ว`;
 };
 
 const STEPS = [
@@ -63,6 +78,7 @@ interface SegmentRow {
   name: string;
   description: string | null;
   member_count: number;
+  last_computed_at: string | null;
 }
 
 interface PropertyRow {
@@ -108,23 +124,54 @@ const CampaignBuilderWizard = () => {
   const [segments, setSegments] = useState<SegmentRow[]>([]);
   const [segmentsLoading, setSegmentsLoading] = useState(true);
   const [segmentsError, setSegmentsError] = useState<string | null>(null);
+  const [recomputing, setRecomputing] = useState(false);
 
   const [properties, setProperties] = useState<PropertyRow[]>([]);
   const [approvers, setApprovers] = useState<ApproverRow[]>([]);
+
+  // Reusable so we can re-fetch fresh member_count after a recompute.
+  const loadSegments = async () => {
+    if (!currentTenant?.id) return;
+    const { data, error } = await supabase
+      .from('segments')
+      .select('id, code, name, description, member_count, last_computed_at')
+      .eq('tenant_id', currentTenant.id)
+      .eq('is_active', true)
+      .order('member_count', { ascending: false });
+    if (error) throw error;
+    setSegments(data || []);
+  };
+
+  // Live-rebuild segment membership against current leads, then re-fetch. member_count
+  // ships as a seed and drifts as leads change; this is the manual "make it accurate now".
+  const handleRecompute = async () => {
+    if (!currentTenant?.id || recomputing) return;
+    setRecomputing(true);
+    setSegmentsError(null);
+    try {
+      const { error } = await supabase.rpc('recompute_segment_members', { p_tenant_id: currentTenant.id });
+      if (error) throw error;
+      await loadSegments();
+    } catch (e: any) {
+      console.error('Recompute segments failed:', e);
+      setSegmentsError(e?.message || 'คำนวณ segment ใหม่ไม่สำเร็จ');
+    } finally {
+      setRecomputing(false);
+    }
+  };
+
+  // Newest last_computed_at across loaded segments → drives the freshness badge.
+  const segmentsFreshness = relativeThai(
+    segments.reduce<string | null>((newest, s) =>
+      s.last_computed_at && (!newest || s.last_computed_at > newest) ? s.last_computed_at : newest, null)
+  );
 
   useEffect(() => {
     if (!currentTenant?.id) { setSegmentsLoading(false); return; }
     const load = async () => {
       // Load segments
       try {
-        const { data, error } = await supabase
-          .from('segments')
-          .select('id, code, name, description, member_count')
-          .eq('tenant_id', currentTenant.id)
-          .eq('is_active', true)
-          .order('member_count', { ascending: false });
-        if (error) throw error;
-        setSegments(data || []);
+        await loadSegments();
       } catch (e: any) {
         console.error('Failed to load segments:', e);
         setSegmentsError(e?.message || 'โหลด segments ไม่สำเร็จ');
@@ -445,9 +492,28 @@ const CampaignBuilderWizard = () => {
                 {/* STEP 1: Segment (จาก DB จริง) */}
                 {activeStep === 1 && (
                   <>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Users className="w-5 h-5" style={{ color: KK.red }} />
-                      <h2 className="text-lg font-bold text-gray-900">Step 1: เลือก Segment</h2>
+                    <div className="flex items-start justify-between gap-3 mb-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <Users className="w-5 h-5" style={{ color: KK.red }} />
+                        <h2 className="text-lg font-bold text-gray-900">Step 1: เลือก Segment</h2>
+                      </div>
+                      {/* Member counts are a live cache — recompute rebuilds them against
+                          current leads so the campaign reaches the right people. */}
+                      <div className="flex items-center gap-2">
+                        {segmentsFreshness && (
+                          <span className="text-[11px] text-gray-400">อัปเดตล่าสุด: {segmentsFreshness}</span>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleRecompute}
+                          disabled={recomputing || segmentsLoading}
+                          className="h-8 text-xs"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${recomputing ? 'animate-spin' : ''}`} />
+                          {recomputing ? 'กำลังคำนวณ…' : 'คำนวณใหม่'}
+                        </Button>
+                      </div>
                     </div>
                     <p className="text-sm text-gray-500 mb-4">เลือกกลุ่มเป้าหมายจาก Segments ที่บันทึกไว้ — เลือกได้หลายกลุ่ม</p>
 
@@ -529,7 +595,7 @@ const CampaignBuilderWizard = () => {
                         <div className="flex items-center justify-between mb-3">
                           <div>
                             <Label className="text-sm font-semibold text-gray-900">โครงการที่ promote (ไม่บังคับ)</Label>
-                            <p className="text-xs text-gray-500 mt-0.5">ผูกแคมเปญกับโครงการเพื่อ track conversion</p>
+                            <p className="text-xs text-gray-500 mt-0.5">ผูกแคมเปญกับโครงการเพื่อ track conversion · {properties.length} โครงการ</p>
                           </div>
                           {selectedProperties.length > 0 && (
                             <span className="text-xs font-semibold px-2 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
@@ -537,8 +603,11 @@ const CampaignBuilderWizard = () => {
                             </span>
                           )}
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {properties.slice(0, 6).map((p) => {
+                        {/* Show every assigned project (RLS already scopes this list); scroll
+                            instead of capping so nothing is silently hidden when a tenant has
+                            many projects. */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
+                          {properties.map((p) => {
                             const isSel = selectedProperties.includes(p.id);
                             return (
                               <button

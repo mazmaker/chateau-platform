@@ -29,8 +29,7 @@ BEGIN
     (v_tenant_id, 'age_senior',    'ผู้สูงอายุ',        'อายุ 51+ ปี',                  '{"age_range": [51, 99]}',                      720,  v_user_id),
     (v_tenant_id, 'first_home',    'บ้านหลังแรก',       'ลูกค้าซื้อบ้านครั้งแรก',        '{"buyer_type": "first_home"}',                 1102, v_user_id),
     (v_tenant_id, 'investment',    'ลงทุน/เก็งกำไร',    'ซื้อเพื่อลงทุน',                '{"buyer_type": "investment"}',                 423,  v_user_id),
-    (v_tenant_id, 'family',        'ครอบครัว',          'ครอบครัว 2+ คน',              '{"household_size_min": 2}',                    1820, v_user_id),
-    (v_tenant_id, 'single',        'โสด',              'โสด อยู่คนเดียว',              '{"household_size": 1}',                        580,  v_user_id)
+    (v_tenant_id, 'family',        'ครอบครัว',          'ครอบครัว 2+ คน',              '{"household_size_min": 2}',                    1820, v_user_id)
   ON CONFLICT (tenant_id, code) DO NOTHING;
 
   -- ==========================================================================
@@ -137,7 +136,7 @@ BEGIN
      'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&h=500&fit=crop&auto=format&q=70',
      'เหลือ 12 ห้องสุดท้าย โครงการ A · จองภายใน 14 วัน',
      '2026-05-10', '2026-05-24', 'daily',
-     ARRAY['income_medium', 'first_home', 'single']::TEXT[], ARRAY['viewed', 'inactive']::TEXT[],
+     ARRAY['income_medium', 'first_home']::TEXT[], ARRAY['viewed', 'inactive']::TEXT[],
      'paused', 1840, 0, 0, 0,
      '🔥 เหลือ 12 ห้องสุดท้าย', 'โครงการ A ใกล้ปิดการขาย — เลือกชั้นและวิวที่ต้องการก่อนใคร',
      'ดูห้องที่เหลือ', 'https://chateau.app/clearance',
@@ -177,7 +176,7 @@ BEGIN
      'https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?w=800&h=500&fit=crop&auto=format&q=70',
      'ต้อนรับสมาชิกใหม่ + แนะนำโครงการที่เหมาะกับคุณ',
      '2026-04-01', '2026-12-31', 'daily',
-     ARRAY['age_young', 'first_home', 'single']::TEXT[], ARRAY['new_lead']::TEXT[],
+     ARRAY['age_young', 'first_home']::TEXT[], ARRAY['new_lead']::TEXT[],
      'active', 12480, 12480, 811, 6.5,
      '🎁 ยินดีต้อนรับ', 'รับ checklist เลือกโครงการ + นัดดูบ้านฟรี + ที่ปรึกษาส่วนตัว',
      'เริ่มต้น', 'https://chateau.app/welcome',

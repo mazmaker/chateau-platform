@@ -150,7 +150,7 @@ const NEWS_SOURCE_ONLINE = [
 const PURCHASE_PURPOSE_OPTIONS = [
   { value: "residence",  label: "อยู่อาศัยเอง" },
   { value: "investment", label: "ลงทุน (เช่า / ขายต่อ)" },
-  { value: "vacation",   label: "บ้านที่สอง / พักผ่อน" },
+  { value: "vacation",   label: "พักผ่อน / บ้านพักตากอากาศ" },
   { value: "family",     label: "ครอบครัว (พ่อแม่ / บุตรหลาน)" },
   { value: "other",      label: "อื่นๆ / ยังไม่ตัดสินใจ" },
 ];
@@ -224,6 +224,8 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
     // Purchase Purpose
     purchase_purpose: "",
     purchase_purpose_other: "",
+    // First-home buyer (drives the บ้านหลังแรก segment + Thai LTV/GHB eligibility)
+    is_first_time_buyer: null as boolean | null,
     // Consent
     consent: "",
     signature: "",
@@ -615,6 +617,7 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
       news_source_other: "",
       purchase_purpose: "",
       purchase_purpose_other: "",
+      is_first_time_buyer: null,
       consent: "",
       signature: "",
     });
@@ -902,6 +905,8 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
         marital_status: formData.marital_status || null,
         education: formData.education || null,
         household_size: formData.family_members ? parseInt(formData.family_members) : null,
+        // First-home flag — feeds the บ้านหลังแรก segment + Thai loan eligibility
+        is_first_time_buyer: formData.is_first_time_buyer,
         // Work location
         workplace: formData.workplace || null,
         // New leads always start as system-estimate, NEVER as Pre-approval (no
@@ -1966,6 +1971,25 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
                           />
                         </div>
                       )}
+
+                      {/* Ownership-status axis — split off from the purpose (use) radios above
+                          with a divider, and framed as its own labelled sub-question + helper
+                          line so it reads as a deliberate question, not a stray 6th radio. */}
+                      <div className="pt-3 mt-1 border-t border-gray-100">
+                        <label className="flex items-start gap-2.5 cursor-pointer rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 hover:bg-gray-100 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={formData.is_first_time_buyer === true}
+                            onChange={(e) => setFormData(prev => ({ ...prev, is_first_time_buyer: e.target.checked }))}
+                            className="w-4 h-4 mt-0.5 text-chateau rounded"
+                            disabled={loading}
+                          />
+                          <span>
+                            <span className="block font-medium text-gray-800 text-sm">เป็นการซื้อบ้านหลังแรก</span>
+                            <span className="block text-xs text-gray-500 mt-0.5">ผู้ซื้อบ้านหลังแรกมักได้รับสิทธิ์สินเชื่อ (LTV) และโครงการสินเชื่อที่ดีกว่า</span>
+                          </span>
+                        </label>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
