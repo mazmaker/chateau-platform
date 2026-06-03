@@ -120,10 +120,15 @@ const Index = () => {
   const { currentTenant, userRole } = useSimpleAuth();
   const navigate = useNavigate();
 
-  // Sales role should never see executive financials — redirect to their personal dashboard
+  // Route each role to its own home:
+  //   Sales/Agent → personal dashboard (never see executive financials)
+  //   Owner       → platform-wide Executive Dashboard (/owner): MRR, churn, tenants
+  //   Admin       → stays here ('/'), the tenant-level Executive Dashboard (that company's sales/GDV)
   useEffect(() => {
     if (userRole === 'sales' || userRole === 'agent') {
       navigate('/my-dashboard', { replace: true });
+    } else if (userRole === 'owner') {
+      navigate('/owner', { replace: true });
     }
   }, [userRole, navigate]);
   const [sidebarOpen, setSidebarOpen] = useState(false);

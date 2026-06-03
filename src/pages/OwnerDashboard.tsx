@@ -163,22 +163,43 @@ const OwnerDashboard = () => {
         const activeCount = tenantList.filter(t => t.status === 'active').length;
         const trialCount = tenantList.filter(t => t.status === 'trial').length;
 
-        // Calculate actual revenue from paid invoices
+        // Fetch paid invoices with tenant + dates to derive recurring revenue.
         const { data: paidInvoices } = await supabase
           .from('invoices')
-          .select('amount, paid_at')
+          .select('tenant_id, amount, paid_at, created_at')
           .eq('status', 'paid');
 
-        const currentRevenue = paidInvoices?.reduce((sum, inv) => {
-          const paidDate = new Date(inv.paid_at || inv.created_at);
-          const currentMonth = new Date();
-          currentMonth.setDate(1); // First day of current month
+        // MRR = sum of each ACTIVE tenant's CURRENT monthly rate (their most recent paid
+        // invoice). This is the recurring revenue base — unlike "paid this calendar month",
+        // it does NOT crater to ~0 at the start of every month before invoices are settled.
+        const activeTenantIds = new Set(
+          tenantList.filter(t => t.status === 'active').map(t => t.id)
+        );
+        const invTime = (inv: any) => new Date(inv.paid_at || inv.created_at).getTime();
+        const firstOfMonth = new Date();
+        firstOfMonth.setDate(1);
+        firstOfMonth.setHours(0, 0, 0, 0);
 
-          if (paidDate >= currentMonth) {
-            return sum + inv.amount;
+        const latestRate = new Map<string, number>();  // tenant_id -> current monthly rate
+        const latestTime = new Map<string, number>();
+        const prevRate = new Map<string, number>();     // rate as of the start of this month
+        const prevTime = new Map<string, number>();
+
+        (paidInvoices || []).forEach((inv: any) => {
+          if (!activeTenantIds.has(inv.tenant_id)) return;
+          const t = invTime(inv);
+          if (!latestTime.has(inv.tenant_id) || t > (latestTime.get(inv.tenant_id) as number)) {
+            latestTime.set(inv.tenant_id, t);
+            latestRate.set(inv.tenant_id, Number(inv.amount));
           }
-          return sum;
-        }, 0) || 0;
+          if (t < firstOfMonth.getTime() &&
+              (!prevTime.has(inv.tenant_id) || t > (prevTime.get(inv.tenant_id) as number))) {
+            prevTime.set(inv.tenant_id, t);
+            prevRate.set(inv.tenant_id, Number(inv.amount));
+          }
+        });
+
+        const mrr = Array.from(latestRate.values()).reduce((s, a) => s + a, 0);
 
         // Calculate churn rate from actual data (last 30 days)
         const thirtyDaysAgo = new Date();
@@ -189,28 +210,17 @@ const OwnerDashboard = () => {
         ).length;
         const realChurnRate = tenantList.length > 0 ? (churnedTenants / tenantList.length) * 100 : 0;
 
-        // Calculate MRR growth from previous month
-        const previousMonth = new Date();
-        previousMonth.setMonth(previousMonth.getMonth() - 1);
-        previousMonth.setDate(1);
-
-        const { data: previousMonthInvoices } = await supabase
-          .from('invoices')
-          .select('amount, paid_at')
-          .eq('status', 'paid')
-          .gte('paid_at', previousMonth.toISOString())
-          .lt('paid_at', new Date(previousMonth.getFullYear(), previousMonth.getMonth() + 1, 1).toISOString());
-
-        const previousRevenue = previousMonthInvoices?.reduce((sum, inv) => sum + inv.amount, 0) || 1;
-        const realMrrGrowth = previousRevenue > 0 ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 : 0;
+        // MoM growth of the recurring base: MRR now vs MRR as of the start of this month.
+        const previousMrr = Array.from(prevRate.values()).reduce((s, a) => s + a, 0);
+        const realMrrGrowth = previousMrr > 0 ? ((mrr - previousMrr) / previousMrr) * 100 : 0;
 
         setStats({
           totalTenants: tenantList.length,
           activeTenants: activeCount,
           trialTenants: trialCount,
           totalUsers: 0, // Will fetch from users table
-          monthlyRevenue: currentRevenue,
-          annualRunRate: currentRevenue * 12,
+          monthlyRevenue: mrr,
+          annualRunRate: mrr * 12,
           churnRate: Math.round(realChurnRate * 100) / 100,
           mrrGrowth: Math.round(realMrrGrowth * 100) / 100
         });
@@ -270,10 +280,17 @@ const OwnerDashboard = () => {
             return paidDate >= monthStart && paidDate <= monthEnd;
           }) || [];
 
-          const monthRevenue = monthInvoices.reduce((sum, inv) => sum + inv.amount, 0);
+          let monthRevenue = monthInvoices.reduce((sum, inv) => sum + inv.amount, 0);
 
           // Calculate unique tenants who paid in this month
-          const uniqueTenants = new Set(monthInvoices.map(inv => inv.tenant_id)).size;
+          let uniqueTenants = new Set(monthInvoices.map(inv => inv.tenant_id)).size;
+
+          // The in-progress current month (i === 0) usually has few/no settled invoices yet,
+          // so show the recurring run-rate (MRR) instead of a misleading partial/zero figure.
+          if (i === 0 && monthRevenue < mrr) {
+            monthRevenue = mrr;
+            uniqueTenants = activeTenantIds.size;
+          }
 
           revenueTrend.push({
             month: monthName,
@@ -315,16 +332,11 @@ const OwnerDashboard = () => {
           userCountMap.set(user.tenant_id, count + 1);
         });
 
-        // Get actual revenue per tenant from paid invoices
-        const { data: tenantRevenues } = await supabase
-          .from('invoices')
-          .select('tenant_id, amount')
-          .eq('status', 'paid');
-
+        // Total revenue per tenant (reuse the paid invoices already fetched above).
         const revenueMap = new Map<string, number>();
-        tenantRevenues?.forEach(invoice => {
+        (paidInvoices || []).forEach((invoice: any) => {
           const current = revenueMap.get(invoice.tenant_id) || 0;
-          revenueMap.set(invoice.tenant_id, current + invoice.amount);
+          revenueMap.set(invoice.tenant_id, current + Number(invoice.amount));
         });
 
         const tenantsWithRealData = tenantList
@@ -337,28 +349,18 @@ const OwnerDashboard = () => {
           .slice(0, 5) as TenantWithStats[];
         setTopTenants(tenantsWithRealData);
 
-        // Revenue by plan — current month only (same scope as MRR card)
-        const thisMonthStart = new Date();
-        thisMonthStart.setDate(1);
-        thisMonthStart.setHours(0, 0, 0, 0);
-        const currentMonthRevenueMap = new Map<string, number>();
-        historicalInvoices?.forEach(inv => {
-          if (new Date(inv.paid_at) >= thisMonthStart) {
-            const cur = currentMonthRevenueMap.get(inv.tenant_id) || 0;
-            currentMonthRevenueMap.set(inv.tenant_id, cur + inv.amount);
-          }
-        });
-
+        // Revenue by plan — each active tenant's current monthly rate, grouped by plan
+        // (same recurring basis as the MRR card, so the parts sum to MRR).
         const planRevenue = {
           enterprise: tenantList
             .filter(t => t.subscription_plan === 'enterprise' && t.status === 'active')
-            .reduce((sum, t) => sum + (currentMonthRevenueMap.get(t.id) || 0), 0),
+            .reduce((sum, t) => sum + (latestRate.get(t.id) || 0), 0),
           professional: tenantList
             .filter(t => t.subscription_plan === 'professional' && t.status === 'active')
-            .reduce((sum, t) => sum + (currentMonthRevenueMap.get(t.id) || 0), 0),
+            .reduce((sum, t) => sum + (latestRate.get(t.id) || 0), 0),
           starter: tenantList
             .filter(t => t.subscription_plan === 'starter' && t.status === 'active')
-            .reduce((sum, t) => sum + (currentMonthRevenueMap.get(t.id) || 0), 0)
+            .reduce((sum, t) => sum + (latestRate.get(t.id) || 0), 0)
         };
         setRevenueByPlan(planRevenue);
 
@@ -514,9 +516,9 @@ const OwnerDashboard = () => {
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
               <div>
                 <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
-                  Platform Overview
+                  Platform
                 </span>
-                <h1 className="text-2xl font-bold text-gray-900">Platform Overview</h1>
+                <h1 className="text-2xl font-bold text-gray-900">Executive Dashboard</h1>
                 <p className="text-[15px] text-gray-500 mt-1.5">ภาพรวมระบบแพลตฟอร์ม · รายได้ · บริษัท · อัตราเลิกใช้ · อัปเดตล่าสุด {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
               </div>
             </div>

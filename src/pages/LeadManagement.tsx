@@ -774,9 +774,14 @@ const LeadManagement = () => {
 
   const handleUpdateStatus = async (lead: Lead, newStatus: LeadStatus) => {
     try {
+      // A manual status change is an explicit Sales touch on the lead, so refresh
+      // last_contact_date too. Without this, a lead moved via the status dropdown
+      // (instead of the "บันทึกการติดต่อ" button) keeps last_contact_date = null and
+      // falsely resurfaces in the "ลีดเงียบ"/silent lists, which fall back to created_at.
+      const nowIso = new Date().toISOString();
       const { error } = await supabase
         .from('leads')
-        .update({ status: newStatus })
+        .update({ status: newStatus, last_contact_date: nowIso })
         .eq('id', lead.id);
 
       if (error) throw error;
@@ -802,7 +807,7 @@ const LeadManagement = () => {
       }
 
       setLeads(leads.map(l =>
-        l.id === lead.id ? { ...l, status: newStatus } : l
+        l.id === lead.id ? { ...l, status: newStatus, last_contact_date: nowIso } : l
       ));
     } catch (error) {
       console.error('Error updating lead status:', error);

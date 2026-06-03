@@ -521,9 +521,9 @@ const Analytics = () => {
       bg: KK.orangeLight,
     },
     {
-      title: 'SLA Breach',
+      title: 'ลีดเกิน SLA',
       value: slaBreach.length.toLocaleString(),
-      sub: 'ลีดใหม่ที่ยังไม่ติดต่อใน 2 ชม.',
+      sub: 'ลีดใหม่ค้างเกิน 2 ชม. ยังไม่ได้ติดต่อ',
       icon: Clock,
       color: KK.amber,
       bg: KK.amberLight,

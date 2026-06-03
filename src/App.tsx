@@ -144,7 +144,7 @@ const App = () => (
             <ErrorBoundary
               showRetry={true}
               showHome={true}
-              errorMessage="ไม่สามารถโหลดหน้า Platform Overview ได้"
+              errorMessage="ไม่สามารถโหลดหน้า Executive Dashboard ได้"
               context={{ page: 'owner-dashboard' }}
             >
               <ProtectedRouteSimple requireRole="owner">

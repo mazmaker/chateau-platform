@@ -55,8 +55,11 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 const getAllNavItems = (): NavItem[] => [
-  { icon: LayoutDashboard, label: "Executive Dashboard", href: "/",            requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: TrendingUp,      label: "Platform Overview",   href: "/owner",         requiredRoles: ["OWNER"] },
+  // Two role-scoped executive views, deliberately NOT shared:
+  //   Admin → "/"      tenant-level Executive Dashboard (that company's sales / GDV / inventory)
+  //   Owner → "/owner" platform-wide view (MRR, churn, tenants) = the Owner's own Executive Dashboard
+  { icon: LayoutDashboard, label: "Executive Dashboard", href: "/",            requiredRoles: ["ADMIN"] },
+  { icon: TrendingUp,      label: "Executive Dashboard", href: "/owner",         requiredRoles: ["OWNER"] },
   { icon: Trophy,          label: "แดชบอร์ดส่วนตัว",      href: "/my-dashboard",  requiredRoles: ["SALES", "AGENT"] },
   { icon: BarChart3,       label: "Analytics",           href: "/analytics",     requiredRoles: ["OWNER", "ADMIN"], requiredFeature: "analytics", isPremium: true },
   { icon: Building2,       label: "จัดการบริษัท",         href: "/tenants",       requiredRoles: ["OWNER"] },
