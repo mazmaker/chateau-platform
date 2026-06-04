@@ -48,7 +48,7 @@ interface NavGroup {
 // Top items (no group label) + Collapsible groups (KK style)
 const NAV_GROUPS: NavGroup[] = [
   { id: "top",       label: null,              hrefs: ["/", "/owner", "/analytics", "/team", "/my-dashboard"] },
-  { id: "platform",  label: "PLATFORM CORE",   icon: Building,  hrefs: ["/tenants", "/payments", "/properties"] },
+  { id: "platform",  label: "PLATFORM CORE",   icon: Building,  hrefs: ["/tenants", "/owner-leads", "/payments", "/properties"] },
   { id: "crm",       label: "CRM & SALES",     icon: Users,     hrefs: ["/leads"] },
   { id: "marketing", label: "MARKETING",       icon: Megaphone, hrefs: ["/campaigns", "/builder", "/triggers", "/marketing-analytics"] },
   { id: "admin",     label: "ADMIN",           icon: Wrench,    hrefs: ["/users", "/permissions", "/settings"] },
@@ -63,9 +63,10 @@ const getAllNavItems = (): NavItem[] => [
   { icon: Trophy,          label: "แดชบอร์ดส่วนตัว",      href: "/my-dashboard",  requiredRoles: ["SALES", "AGENT"] },
   { icon: BarChart3,       label: "Analytics",           href: "/analytics",     requiredRoles: ["OWNER", "ADMIN"], requiredFeature: "analytics", isPremium: true },
   { icon: Building2,       label: "จัดการบริษัท",         href: "/tenants",       requiredRoles: ["OWNER"] },
+  { icon: Briefcase,       label: "Leads",               href: "/owner-leads",   requiredRoles: ["OWNER"] },
   { icon: CreditCard,      label: "การชำระเงิน",          href: "/payments",      requiredRoles: ["OWNER"] },
   { icon: Building2,       label: "โครงการ",             href: "/properties",    requiredRoles: ["OWNER", "ADMIN", "SALES", "AGENT"] },
-  { icon: FileText,        label: "Leads",              href: "/leads",         requiredRoles: ["OWNER", "ADMIN", "SALES", "AGENT"] },
+  { icon: FileText,        label: "Leads",              href: "/leads",         requiredRoles: ["ADMIN", "SALES", "AGENT"] },
   { icon: UserCheck,       label: "ผลงานทีม",            href: "/team",          requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Megaphone,       label: "Campaigns",          href: "/campaigns",     requiredRoles: ["OWNER", "ADMIN"] },
   { icon: Wand2,           label: "Builder Wizard",     href: "/builder",       requiredRoles: ["OWNER", "ADMIN"] },
@@ -137,7 +138,9 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
 
   const isActive = (href: string) => {
     if (href === "/") return location.pathname === "/";
-    return location.pathname.startsWith(href);
+    // Exact match OR a real sub-path (href + "/..."), so e.g. "/owner-leads" does NOT
+    // light up "/owner". Detail routes like /tenants/:id still match their parent "/tenants".
+    return location.pathname === href || location.pathname.startsWith(href + "/");
   };
 
   const getUserInitials = () => {

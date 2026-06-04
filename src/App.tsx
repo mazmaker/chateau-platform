@@ -7,6 +7,7 @@ import UserManagement from "./pages/UserManagement";
 import { SimpleLogin } from "./pages/SimpleLogin";
 import NotFound from "./pages/NotFound";
 import OwnerDashboard from "./pages/OwnerDashboard";
+import OwnerLeads from "./pages/OwnerLeads";
 import TenantManagement from "./pages/TenantManagement";
 import BillingManagement from "./pages/BillingManagement";
 import PaymentDashboard from "./pages/PaymentDashboard";
@@ -149,6 +150,19 @@ const App = () => (
             >
               <ProtectedRouteSimple requireRole="owner">
                 <OwnerDashboard />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/owner-leads" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้า Leads ได้"
+              context={{ page: 'owner-leads' }}
+            >
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerLeads />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />
