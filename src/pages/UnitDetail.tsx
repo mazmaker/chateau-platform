@@ -648,9 +648,9 @@ const UnitDetail = () => {
     if (!lead) { toast.error('ไม่พบ Lead ที่เลือก'); return; }
     const customerName = lead.customer?.full_name || '';
     const customerPhone = lead.customer?.phone || '';
-    if (!bookingForm.deposit_amount || parseFloat(bookingForm.deposit_amount) <= 0) {
-      toast.error('กรุณากรอกจำนวนเงินจอง'); return;
-    }
+    // Booking fee is OPTIONAL: blank/0 = a money-free hold ("กันยูนิตเฉยๆ").
+    const feeRaw = parseFloat(bookingForm.deposit_amount);
+    const hasFee = !isNaN(feeRaw) && feeRaw > 0;
     setSavingReserve(true);
     try {
       const nowDate = new Date();
@@ -665,7 +665,7 @@ const UnitDetail = () => {
           reserved_customer_name: customerName,
           reserved_customer_phone: customerPhone || null,
           reserved_customer_lead_id: lead.id,
-          deposit_amount: parseFloat(bookingForm.deposit_amount),
+          deposit_amount: hasFee ? feeRaw : null,
           reservation_notes: bookingForm.notes.trim() || null,
         })
         .eq('id', unit.id)
@@ -701,8 +701,10 @@ const UnitDetail = () => {
 
       // Create customer-facing booking record so the customer portal sees it
       const customerId = lead.customer_id || lead.customer?.id || null;
-      if (customerId) {
-        const depositAmt = parseFloat(bookingForm.deposit_amount);
+      // Only create a customer-facing booking record when money was actually
+      // collected; a money-free hold has no booking/payment yet.
+      if (hasFee && customerId) {
+        const depositAmt = feeRaw;
         const unitPrice = Number(unit.price || 0);
         const depositPct = unitPrice > 0 ? depositAmt / unitPrice : 0;
         const reservationDay = nowDate.toISOString().slice(0, 10);
@@ -739,17 +741,21 @@ const UnitDetail = () => {
             tenantId: currentTenant?.id || '',
             userId: uid,
             activityType: 'booking_created',
-            title: 'มีการจองยูนิตใหม่',
-            message: `${customerName} จองยูนิต ${unit.unit_number} (เงินจอง ${parseFloat(bookingForm.deposit_amount).toLocaleString()} ฿)`,
+            title: hasFee ? 'มีการจองยูนิตใหม่' : 'มีการกันยูนิตใหม่',
+            message: hasFee
+              ? `${customerName} จองยูนิต ${unit.unit_number} (เงินจอง ${feeRaw.toLocaleString()} ฿)`
+              : `${customerName} กันยูนิต ${unit.unit_number} (ยังไม่เก็บเงิน)`,
             severity: 'success',
             relatedEntityType: 'lead',
             relatedEntityId: lead.id,
-            data: { unit_id: unit.id, unit_number: unit.unit_number, deposit_amount: parseFloat(bookingForm.deposit_amount) },
+            data: { unit_id: unit.id, unit_number: unit.unit_number, deposit_amount: hasFee ? feeRaw : null },
           });
         }
       } catch { /* non-blocking */ }
 
-      toast.success(`บันทึกการจองยูนิต ${unit.unit_number} สำหรับ ${customerName}`);
+      toast.success(hasFee
+        ? `บันทึกการจองยูนิต ${unit.unit_number} สำหรับ ${customerName}`
+        : `กันยูนิต ${unit.unit_number} ให้ ${customerName} แล้ว`);
       setShowReserveDialog(false);
       await loadAll();
     } catch (err: any) {
@@ -2410,7 +2416,7 @@ const UnitDetail = () => {
             </div>
 
             <div>
-              <Label htmlFor="booking_deposit" className="text-sm font-medium">จำนวนเงินจอง (บาท) <span className="text-red-500">*</span></Label>
+              <Label htmlFor="booking_deposit" className="text-sm font-medium">จำนวนเงินจอง (บาท) <span className="text-gray-400 font-normal">— ไม่บังคับ</span></Label>
               <Input
                 id="booking_deposit"
                 type="number"
@@ -2420,7 +2426,7 @@ const UnitDetail = () => {
                 placeholder="100000"
                 className="mt-1.5"
               />
-              <p className="text-xs text-gray-500 mt-1">นิยม 50,000-200,000 บาท ขึ้นกับราคายูนิต</p>
+              <p className="text-xs text-gray-500 mt-1">เว้นว่าง = กันยูนิตเฉยๆ ไม่เก็บเงิน · ถ้าเก็บ นิยม 50,000-200,000 บาท</p>
             </div>
 
             <div>
@@ -2466,7 +2472,7 @@ const UnitDetail = () => {
             <Button variant="outline" onClick={() => setShowReserveDialog(false)} disabled={savingReserve}>ยกเลิก</Button>
             <Button
               onClick={handleReserveUnit}
-              disabled={savingReserve || !bookingForm.lead_id || !bookingForm.deposit_amount}
+              disabled={savingReserve || !bookingForm.lead_id}
               className="bg-amber-500 hover:bg-amber-600 text-white"
             >
               {savingReserve ? 'กำลังบันทึก...' : 'บันทึกการจอง'}

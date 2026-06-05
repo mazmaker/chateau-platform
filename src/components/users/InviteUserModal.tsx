@@ -87,10 +87,15 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
         return;
       }
 
-      // For Owner, validate tenant selection
-      const tenantId = isOwner ? selectedTenantId : currentTenant?.id;
+      // Resolve the tenant. A platform Owner is NOT scoped to one company —
+      // give the new owner the inviter's home tenant as a base (RLS is_owner()
+      // grants cross-tenant access anyway), so no company needs to be picked.
+      // Tenant roles (admin/sales/agent) use the selected/own tenant.
+      const tenantId = role === UserRole.OWNER
+        ? currentTenant?.id
+        : (isOwner ? selectedTenantId : currentTenant?.id);
       if (!tenantId) {
-        setError("กรุณาเลือกบริษัท");
+        setError(role === UserRole.OWNER ? "ไม่พบบริษัทฐานของผู้เชิญ" : "กรุณาเลือกบริษัท");
         setLoading(false);
         return;
       }
@@ -208,8 +213,9 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
             />
           </div>
 
-          {/* Tenant - Only for Owner */}
-          {isOwner && (
+          {/* Company selector — only when provisioning a TENANT user. Hidden
+              for role=Owner (platform-level, sees all companies). */}
+          {isOwner && role !== UserRole.OWNER && (
             <div className="mb-4">
               <Label htmlFor="tenant" className="block text-sm font-medium text-gray-700 mb-2">
                 <Building2 className="w-4 h-4 inline mr-1" />
@@ -234,6 +240,16 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
             </div>
           )}
 
+          {/* For a platform Owner, no company is selected (cross-tenant). */}
+          {isOwner && role === UserRole.OWNER && (
+            <div className="mb-4 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2.5">
+              <p className="text-xs text-blue-700">
+                <Building2 className="w-3.5 h-3.5 inline mr-1" />
+                เจ้าของแพลตฟอร์มเห็นข้อมูลทุกบริษัท — ไม่ต้องเลือกบริษัท
+              </p>
+            </div>
+          )}
+
           {/* Role */}
           <div className="mb-4">
             <Label className="block text-sm font-medium text-gray-700 mb-2">
@@ -245,11 +261,14 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
                 <SelectValue placeholder="เลือกตำแหน่ง..." />
               </SelectTrigger>
               <SelectContent>
-                {/* ADMIN can add SALES and AGENT, OWNER can add all roles */}
+                {/* Owner can add Admin + (platform) Owner; Admin can add only
+                    Sales/Agent. When "Owner" is picked the company selector
+                    hides — a platform owner is cross-tenant, not scoped to one
+                    company (see the role-aware company block above). */}
                 {!isAdmin && (
                   <>
-                    <SelectItem value={UserRole.OWNER}>เจ้าของบริษัท (Owner)</SelectItem>
                     <SelectItem value={UserRole.ADMIN}>ผู้ดูแลบริษัท (Admin)</SelectItem>
+                    <SelectItem value={UserRole.OWNER}>เจ้าของแพลตฟอร์ม (Owner)</SelectItem>
                   </>
                 )}
                 <SelectItem value={UserRole.SALES}>พนักงานขาย (Sales)</SelectItem>

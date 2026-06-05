@@ -138,6 +138,9 @@ const OwnerDashboard = () => {
     professional: number;
     starter: number;
   }>({ enterprise: 0, professional: 0, starter: 0 });
+  // Plan list prices, read from the `plans` table (single source of truth) so
+  // this matches the จัดการแพ็กเกจ editor instead of a hardcoded copy.
+  const [planPrices, setPlanPrices] = useState<Record<string, { monthly: number; annual: number }>>({});
 
   useEffect(() => {
     if (!isOwner) {
@@ -150,6 +153,18 @@ const OwnerDashboard = () => {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
+      // Plan catalog prices (for the "recent tenants" list-price display).
+      const { data: plansData } = await (supabase as any)
+        .from('plans')
+        .select('id, price_monthly, price_yearly');
+      if (plansData) {
+        const priceMap: Record<string, { monthly: number; annual: number }> = {};
+        plansData.forEach((p: any) => {
+          priceMap[p.id] = { monthly: Number(p.price_monthly) || 0, annual: Number(p.price_yearly) || 0 };
+        });
+        setPlanPrices(priceMap);
+      }
+
       // Fetch all tenants
       const { data: tenants } = await supabase
         .from('tenants')
@@ -398,12 +413,9 @@ const OwnerDashboard = () => {
   };
 
   const getSubscriptionPrice = (plan: string) => {
-    const prices: Record<string, { monthly: number; annual: number }> = {
-      starter: { monthly: 2900, annual: 29000 },
-      professional: { monthly: 5900, annual: 59000 },
-      enterprise: { monthly: 15900, annual: 159000 }
-    };
-    return prices[plan] || { monthly: 0, annual: 0 };
+    // Read from the `plans` catalog (fetched into planPrices); fall back to 0
+    // until it loads or if the plan has no row.
+    return planPrices[plan] || { monthly: 0, annual: 0 };
   };
 
   const getStatusBadge = (status: string) => {

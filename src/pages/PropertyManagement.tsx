@@ -87,6 +87,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/lib/supabase';
+import { releaseExpiredReservations } from '@/lib/releaseExpiredReservations';
 import { cn } from '@/lib/utils';
 import { LEAD_STATUS_LABELS } from '@/lib/leadStatus';
 import { toast } from 'sonner';
@@ -166,7 +167,12 @@ interface Unit {
 const PropertyManagement = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { currentTenant, userRole, user } = useSimpleAuth();
+  const { currentTenant, userRole, user, userProfile } = useSimpleAuth();
+  // An Owner scoped into ANOTHER company can VIEW/EDIT its data (cross-tenant
+  // RLS) but CANNOT insert/delete projects/units there — those RLS policies
+  // bind to the owner's HOME tenant. So hide add/delete write actions unless the
+  // Owner is in their own home tenant; normal tenant roles are always in theirs.
+  const inOwnTenant = userRole !== 'owner' || (!!userProfile?.tenant_id && currentTenant?.id === userProfile.tenant_id);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // Agent's referral code → powers the "คัดลอกลิงก์แนะนำ" button in the header.
   const [myReferralCode, setMyReferralCode] = useState<string | null>(null);
@@ -276,10 +282,9 @@ const PropertyManagement = () => {
     const customerPhone = lead.customer?.phone || '';
     const linkedLeadId: string = lead.id;
 
-    if (!bookingForm.deposit_amount || parseFloat(bookingForm.deposit_amount) <= 0) {
-      toast.error('กรุณากรอกจำนวนเงินจอง');
-      return;
-    }
+    // Booking fee is OPTIONAL: blank/0 = a money-free hold ("กันยูนิตเฉยๆ").
+    const feeRaw = parseFloat(bookingForm.deposit_amount);
+    const hasFee = !isNaN(feeRaw) && feeRaw > 0;
 
     setSavingReserve(true);
     try {
@@ -293,7 +298,7 @@ const PropertyManagement = () => {
         reserved_customer_name: customerName,
         reserved_customer_phone: customerPhone || null,
         reserved_customer_lead_id: linkedLeadId,
-        deposit_amount: parseFloat(bookingForm.deposit_amount),
+        deposit_amount: hasFee ? feeRaw : null,
         reservation_notes: bookingForm.notes.trim() || null,
       };
       const { data, error } = await supabase
@@ -685,6 +690,10 @@ const PropertyManagement = () => {
 
   const fetchUnits = async (projectId: string) => {
     try {
+      // Self-heal: return any expired reservation holds to the available pool
+      // before reading, so stale "จอง" units don't linger in the inventory.
+      await releaseExpiredReservations(projectId);
+
       const { data, error } = await supabase
         .from('units')
         .select('*')
@@ -1524,7 +1533,7 @@ const PropertyManagement = () => {
                       // here used to let the customer browse the whole catalog and pick a
                       // unit outside the agent's allotment, creating un-serviceable leads.
                       null
-                    ) : (
+                    ) : inOwnTenant ? (
                       <ManagePropertiesGuard fallback={null} showMessage={false}>
                         <Button
                           onClick={() => {
@@ -1537,7 +1546,7 @@ const PropertyManagement = () => {
                           เพิ่มโครงการใหม่
                         </Button>
                       </ManagePropertiesGuard>
-                    )}
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>
@@ -1758,10 +1767,12 @@ const PropertyManagement = () => {
                         <Edit className="w-4 h-4 mr-2" />
                         แก้ไข
                       </Button>
-                      <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        ลบ
-                      </Button>
+                      {inOwnTenant && (
+                        <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          ลบ
+                        </Button>
+                      )}
                     </div>
                   </ManagePropertiesGuard>
                 </div>
@@ -1901,15 +1912,17 @@ const PropertyManagement = () => {
                   </button>
                 </div>
               </div>
-              <ManagePropertiesGuard fallback={null} showMessage={false}>
-                <Button onClick={() => {
-                  resetUnitForm();
-                  setShowUnitDialog(true);
-                }}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  เพิ่มยูนิตใหม่
-                </Button>
-              </ManagePropertiesGuard>
+              {inOwnTenant && (
+                <ManagePropertiesGuard fallback={null} showMessage={false}>
+                  <Button onClick={() => {
+                    resetUnitForm();
+                    setShowUnitDialog(true);
+                  }}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    เพิ่มยูนิตใหม่
+                  </Button>
+                </ManagePropertiesGuard>
+              )}
             </div>
 
             {/* Advanced Filter Row — expandable */}
@@ -3741,7 +3754,7 @@ const PropertyManagement = () => {
               </div>
               <div>
                 <Label htmlFor="booking_deposit" className="text-sm font-medium">
-                  จำนวนเงินจอง (บาท) <span className="text-red-500">*</span>
+                  จำนวนเงินจอง (บาท) <span className="text-gray-400 font-normal">— ไม่บังคับ</span>
                 </Label>
                 <Input
                   id="booking_deposit"
@@ -3752,7 +3765,7 @@ const PropertyManagement = () => {
                   placeholder="100000"
                   className="mt-1.5"
                 />
-                <p className="text-xs text-gray-500 mt-1">นิยม 50,000-200,000 บาท ขึ้นกับราคายูนิต</p>
+                <p className="text-xs text-gray-500 mt-1">เว้นว่าง = กันยูนิตเฉยๆ ไม่เก็บเงิน · ถ้าเก็บ นิยม 50,000-200,000 บาท ขึ้นกับราคายูนิต</p>
               </div>
               <div>
                 <Label className="text-sm font-medium mb-2 block">ระยะเวลาทำสัญญา (วัน)</Label>
@@ -3798,7 +3811,7 @@ const PropertyManagement = () => {
               </Button>
               <Button
                 onClick={handleReserveUnit}
-                disabled={savingReserve || !bookingForm.lead_id || !bookingForm.deposit_amount}
+                disabled={savingReserve || !bookingForm.lead_id}
                 className="bg-amber-500 hover:bg-amber-600 text-white"
               >
                 {savingReserve ? 'กำลังบันทึก...' : 'บันทึกการจอง'}

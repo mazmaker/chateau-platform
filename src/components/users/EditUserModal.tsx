@@ -42,7 +42,7 @@ const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess, currentUserRole
   // Get display name for role
   const getRoleDisplayName = (r: UserRole | string): string => {
     const lowerRole = typeof r === 'string' ? r.toLowerCase() : r;
-    if (lowerRole === 'owner') return 'เจ้าของบริษัท (Owner)';
+    if (lowerRole === 'owner') return 'เจ้าของแพลตฟอร์ม (Owner)';
     if (lowerRole === 'admin') return 'ผู้ดูแลบริษัท (Admin)';
     if (lowerRole === 'sales') return 'พนักงานขาย (Sales)';
     if (lowerRole === 'agent') return 'นายหน้า (Agent)';

@@ -8,6 +8,7 @@ import { SimpleLogin } from "./pages/SimpleLogin";
 import NotFound from "./pages/NotFound";
 import OwnerDashboard from "./pages/OwnerDashboard";
 import OwnerLeads from "./pages/OwnerLeads";
+import OwnerProjects from "./pages/OwnerProjects";
 import TenantManagement from "./pages/TenantManagement";
 import BillingManagement from "./pages/BillingManagement";
 import PaymentDashboard from "./pages/PaymentDashboard";
@@ -163,6 +164,36 @@ const App = () => (
             >
               <ProtectedRouteSimple requireRole="owner">
                 <OwnerLeads />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          {/* Owner จัดการโครงการ — cross-tenant, read-only (control-plane).
+              Two drill levels share one component via route params:
+              all companies → one company's projects. Unit-level drill was
+              removed on purpose (Owner doesn't inspect individual units). */}
+          <Route path="/owner-projects" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้า Project Dashboard ได้"
+              context={{ page: 'owner-projects' }}
+            >
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerProjects />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/owner-projects/:tenantId" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดโครงการของบริษัทได้"
+              context={{ page: 'owner-projects-tenant' }}
+            >
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerProjects />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />

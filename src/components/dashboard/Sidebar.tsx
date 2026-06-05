@@ -48,10 +48,21 @@ interface NavGroup {
 // Top items (no group label) + Collapsible groups (KK style)
 const NAV_GROUPS: NavGroup[] = [
   { id: "top",       label: null,              hrefs: ["/", "/owner", "/analytics", "/team", "/my-dashboard"] },
-  { id: "platform",  label: "PLATFORM CORE",   icon: Building,  hrefs: ["/tenants", "/owner-leads", "/payments", "/properties"] },
+  { id: "platform",  label: "PLATFORM CORE",   icon: Building,  hrefs: ["/tenants", "/owner-leads", "/payments", "/owner-projects", "/properties"] },
   { id: "crm",       label: "CRM & SALES",     icon: Users,     hrefs: ["/leads"] },
   { id: "marketing", label: "MARKETING",       icon: Megaphone, hrefs: ["/campaigns", "/builder", "/triggers", "/marketing-analytics"] },
   { id: "admin",     label: "ADMIN",           icon: Wrench,    hrefs: ["/users", "/permissions", "/settings"] },
+];
+
+// Owner = SaaS control-plane. Its menu is a deliberate 2-tier structure —
+// strategic OVERVIEW (top, no header) vs operational "จัดการระบบ" — distinct
+// from the tenant Admin's groups above. Tenant-ops menus (campaigns, triggers,
+// team, permissions, etc.) are intentionally NOT here: those are the Admin's
+// application-plane work, not the platform owner's.
+const OWNER_NAV_GROUPS: NavGroup[] = [
+  { id: "top",        label: null,           hrefs: ["/owner"] },
+  { id: "operations", label: "จัดการระบบ",    icon: Building, hrefs: ["/tenants", "/owner-projects", "/owner-leads", "/payments"] },
+  { id: "settings",   label: "ตั้งค่า",        icon: Wrench,  hrefs: ["/users", "/settings"] },
 ];
 
 const getAllNavItems = (): NavItem[] => [
@@ -61,19 +72,27 @@ const getAllNavItems = (): NavItem[] => [
   { icon: LayoutDashboard, label: "Executive Dashboard", href: "/",            requiredRoles: ["ADMIN"] },
   { icon: TrendingUp,      label: "Executive Dashboard", href: "/owner",         requiredRoles: ["OWNER"] },
   { icon: Trophy,          label: "แดชบอร์ดส่วนตัว",      href: "/my-dashboard",  requiredRoles: ["SALES", "AGENT"] },
-  { icon: BarChart3,       label: "Analytics",           href: "/analytics",     requiredRoles: ["OWNER", "ADMIN"], requiredFeature: "analytics", isPremium: true },
+  // tenant-scoped LEAD analytics (conversion/SLA/won-lost for one company) =
+  // Admin's application-plane work, not the platform Owner's. ADMIN-only.
+  { icon: BarChart3,       label: "Analytics",           href: "/analytics",     requiredRoles: ["ADMIN"], requiredFeature: "analytics", isPremium: true },
   { icon: Building2,       label: "จัดการบริษัท",         href: "/tenants",       requiredRoles: ["OWNER"] },
   { icon: Briefcase,       label: "Leads",               href: "/owner-leads",   requiredRoles: ["OWNER"] },
   { icon: CreditCard,      label: "การชำระเงิน",          href: "/payments",      requiredRoles: ["OWNER"] },
-  { icon: Building2,       label: "โครงการ",             href: "/properties",    requiredRoles: ["OWNER", "ADMIN", "SALES", "AGENT"] },
+  // Owner gets the cross-tenant, read-only Project Dashboard (control-plane);
+  // Admin/Sales/Agent keep the tenant-scoped editable /properties page.
+  { icon: Building2,       label: "จัดการโครงการ",       href: "/owner-projects", requiredRoles: ["OWNER"] },
+  { icon: Building2,       label: "โครงการ",             href: "/properties",    requiredRoles: ["ADMIN", "SALES", "AGENT"] },
   { icon: FileText,        label: "Leads",              href: "/leads",         requiredRoles: ["ADMIN", "SALES", "AGENT"] },
-  { icon: UserCheck,       label: "ผลงานทีม",            href: "/team",          requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: Megaphone,       label: "Campaigns",          href: "/campaigns",     requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: Wand2,           label: "Builder Wizard",     href: "/builder",       requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: Zap,             label: "Triggers",           href: "/triggers",      requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: BarChart3,       label: "Marketing Analytics",href: "/marketing-analytics", requiredRoles: ["OWNER", "ADMIN"] },
+  // Tenant-ops menus — Admin's application-plane work, NOT the platform Owner's.
+  // Deliberately ADMIN-only (cut from Owner) so the Owner menu stays a clean
+  // control-plane. Owner can still reach them by URL for support if ever needed.
+  { icon: UserCheck,       label: "ผลงานทีม",            href: "/team",          requiredRoles: ["ADMIN"] },
+  { icon: Megaphone,       label: "Campaigns",          href: "/campaigns",     requiredRoles: ["ADMIN"] },
+  { icon: Wand2,           label: "Builder Wizard",     href: "/builder",       requiredRoles: ["ADMIN"] },
+  { icon: Zap,             label: "Triggers",           href: "/triggers",      requiredRoles: ["ADMIN"] },
+  { icon: BarChart3,       label: "Marketing Analytics",href: "/marketing-analytics", requiredRoles: ["ADMIN"] },
   { icon: Users,           label: "จัดการผู้ใช้",          href: "/users",         requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: Lock,            label: "สิทธิ์ผู้ใช้งาน",        href: "/permissions",   requiredRoles: ["OWNER", "ADMIN"] },
+  { icon: Lock,            label: "สิทธิ์ผู้ใช้งาน",        href: "/permissions",   requiredRoles: ["ADMIN"] },
   { icon: Settings,        label: "การตั้งค่า",           href: "/settings",      requiredRoles: ["OWNER", "ADMIN", "SALES", "AGENT", "CUSTOMER"] },
   { icon: LogOut,          label: "ออกจากระบบ",          href: "/logout",        isLogout: true },
 ];
@@ -242,9 +261,9 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
           </div>
         </div>
 
-        {/* Navigation */}
+        {/* Navigation — Owner uses its own 2-tier control-plane grouping */}
         <nav className="flex-1 overflow-y-auto" style={{ padding: "12px 12px 8px" }}>
-          {NAV_GROUPS.map((group) => {
+          {(isOwner ? OWNER_NAV_GROUPS : NAV_GROUPS).map((group) => {
             const groupItems = mainItems.filter((item) => group.hrefs.includes(item.href));
             if (groupItems.length === 0) return null;
 
@@ -257,8 +276,10 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
               );
             }
 
-            // Collapsible group with icon + label + chevron
-            const isExpanded = expanded[group.id];
+            // Collapsible group with icon + label + chevron.
+            // Default to expanded unless the user explicitly collapsed it — so
+            // newly-added groups (e.g. the Owner's) start open, not hidden.
+            const isExpanded = expanded[group.id] !== false;
             const hasActiveChild = groupItems.some((i) => isActive(i.href));
             const GroupIcon = group.icon;
 

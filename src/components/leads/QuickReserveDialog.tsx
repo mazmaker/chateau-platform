@@ -90,12 +90,10 @@ export default function QuickReserveDialog({
       return;
     }
     const amt = parseFloat(depositAmount);
-    // Agent courtesy hold takes no money, so the booking-fee field is hidden and
-    // not required. Sales/Admin must record ค่าจอง.
-    if (!isAgent && (!amt || amt <= 0)) {
-      toast.error('กรุณากรอกจำนวนเงินจอง');
-      return;
-    }
+    // Booking fee is OPTIONAL: a positive amount = a paid reservation; blank/0 =
+    // a money-free hold ("กันยูนิตเฉยๆ"), now available to Sales/Admin too — the
+    // same as the agent courtesy hold. Agents are always money-free.
+    const collectingFee = !isAgent && amt > 0;
 
     setSaving(true);
     try {
@@ -118,7 +116,7 @@ export default function QuickReserveDialog({
         reserved_customer_lead_id: lead.id,
         reservation_notes: notes.trim() || null,
       };
-      if (!isAgent) unitUpdate.deposit_amount = amt;
+      if (collectingFee) unitUpdate.deposit_amount = amt;
 
       // Atomic availability guard:
       //    • Agent may only hold a fresh 'available' unit.
@@ -165,7 +163,7 @@ export default function QuickReserveDialog({
       // 4) Paid reservations only: create customer-facing booking record.
       // Agent courtesy holds record NO money — Sales collects ค่าจอง later, which
       // creates the booking at that point.
-      if (!isAgent && lead.customer_id && unitPrice > 0) {
+      if (collectingFee && lead.customer_id && unitPrice > 0) {
         const reservationDay = nowDate.toISOString().slice(0, 10);
         const transferEstimate = new Date(
           nowDate.getTime() + 90 * 86400000,
@@ -204,21 +202,21 @@ export default function QuickReserveDialog({
         tenant_id: lead.tenant_id,
         user_id: userId,
         activity_type: 'unit_reserved',
-        description: isAgent
-          ? `จองชั่วคราวยูนิต ${interest.unit?.unit_number || ''} (${interest.property?.name || ''}) ให้ ${customerName} โดยนายหน้า · จองไว้ ${expiryDays} วัน (ยังไม่เก็บค่าจอง)`
-          : `รับค่าจองยูนิต ${interest.unit?.unit_number || ''} (${interest.property?.name || ''}) จาก ${customerName} · ค่าจอง ${formatTHB(amt)}`,
+        description: collectingFee
+          ? `รับค่าจองยูนิต ${interest.unit?.unit_number || ''} (${interest.property?.name || ''}) จาก ${customerName} · ค่าจอง ${formatTHB(amt)}`
+          : `กันยูนิต ${interest.unit?.unit_number || ''} (${interest.property?.name || ''}) ให้ ${customerName} · จองไว้ ${expiryDays} วัน (ยังไม่เก็บค่าจอง)`,
         metadata: {
           lead_id: lead.id,
           unit_id: interest.unit_id,
           interest_id: interest.id,
-          ...(isAgent ? { hold: true } : { deposit_amount: amt }),
+          ...(collectingFee ? { deposit_amount: amt } : { hold: true }),
         },
       });
 
       toast.success(
-        isAgent
-          ? `จองชั่วคราวยูนิต ${interest.unit?.unit_number || ''} สำเร็จ`
-          : `รับค่าจองยูนิต ${interest.unit?.unit_number || ''} สำเร็จ`,
+        collectingFee
+          ? `รับค่าจองยูนิต ${interest.unit?.unit_number || ''} สำเร็จ`
+          : `กันยูนิต ${interest.unit?.unit_number || ''} สำเร็จ`,
       );
       onOpenChange(false);
       onSuccess();
@@ -235,12 +233,12 @@ export default function QuickReserveDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Lock className="w-4 h-4 text-chateau" />
-            {isAgent ? 'จองชั่วคราว' : 'รับค่าจองยูนิต'}
+            {isAgent ? 'จองชั่วคราว' : 'จองยูนิต'}
           </DialogTitle>
           <DialogDescription>
             {isAgent
               ? 'จองยูนิตไว้ชั่วคราว — นายหน้าไม่เก็บเงิน ให้ Lead ไปวางค่าจองกับทีมขายเพื่อยืนยัน'
-              : 'ล็อกยูนิตให้ลูกค้าด้วย "ค่าจอง" — เงินก้อนเล็กเพื่อล็อกยูนิต 7-14 วัน ก่อนทำสัญญา/รับค่ามัดจำ'}
+              : 'ใส่ "ค่าจอง" = ล็อกยูนิตแบบเก็บเงิน · เว้นว่าง = กันยูนิตให้ลูกค้าเฉยๆ (ไม่เก็บเงิน)'}
           </DialogDescription>
         </DialogHeader>
 
@@ -278,11 +276,12 @@ export default function QuickReserveDialog({
             </div>
           </div>
 
-          {/* ค่าจอง (booking fee) — hidden for agents (money-free courtesy hold) */}
+          {/* ค่าจอง (booking fee) — OPTIONAL for Sales/Admin: blank = money-free
+              hold. Hidden entirely for agents (always money-free). */}
           {!isAgent && (
             <div>
               <Label htmlFor="qr-deposit" className="text-sm">
-                ค่าจอง (฿) <span className="text-red-500">*</span>
+                ค่าจอง (฿) <span className="text-gray-400 font-normal">— ไม่บังคับ</span>
               </Label>
               <Input
                 id="qr-deposit"
@@ -295,7 +294,7 @@ export default function QuickReserveDialog({
                 disabled={saving}
               />
               <p className="text-[11px] text-gray-500 mt-1">
-                มาตรฐานวงการ ฿5,000-10,000 (ค่ามัดจำ 10-15% จะรับตอนเซ็นสัญญา)
+                เว้นว่าง = กันยูนิตเฉยๆ ไม่เก็บเงิน · ถ้าเก็บ มาตรฐาน ฿5,000-10,000 (ค่ามัดจำ 10-15% รับตอนเซ็นสัญญา)
               </p>
             </div>
           )}

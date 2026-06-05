@@ -30,7 +30,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { FeatureSelector } from '@/components/admin/FeatureSelector';
 import {
   Select,
   SelectContent,
@@ -67,6 +66,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { PageTabs } from '@/components/ui/PageTabs';
 import type { TabItem } from '@/components/ui/PageTabs';
+import PackageCatalog from '@/components/admin/PackageCatalog';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 
 interface Tenant {
@@ -138,7 +138,6 @@ const TenantManagement = () => {
   const { id: tenantId } = useParams();
   const { user } = useSimpleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('tenants');
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [tenantStats, setTenantStats] = useState<Record<string, TenantStats>>({});
   const [loading, setLoading] = useState(true);
@@ -286,60 +285,17 @@ const TenantManagement = () => {
   }, [tenantId]);
 
   // Package management states
-  const [packageConfig, setPackageConfig] = useState<PackageConfig[]>([
-    {
-      id: 'free',
-      name: 'Free',
-      price: '0',
-      properties: 5,
-      users: 3,
-      adminCount: 1,
-      salesCount: 2,
-      features: ['ระบบจัดการลูกค้า', 'ระบบ Leads']
-    },
-    {
-      id: 'starter',
-      name: 'Starter',
-      price: '2,900',
-      properties: 10,
-      users: 5,
-      adminCount: 1,
-      salesCount: 4,
-      features: ['ระบบจัดการลูกค้า', 'ระบบ Leads', 'ระบบแคมเปญ']
-    },
-    {
-      id: 'professional',
-      name: 'Professional',
-      price: '5,900',
-      properties: 50,
-      users: 10,
-      adminCount: 2,
-      salesCount: 8,
-      features: ['ระบบจัดการลูกค้า', 'ระบบ Leads', 'ระบบแคมเปญ', 'รายงานวิเคราะห์', 'API Access']
-    },
-    {
-      id: 'enterprise',
-      name: 'Enterprise',
-      price: '15,900',
-      properties: -1,
-      users: 20,
-      adminCount: 4,
-      salesCount: 16,
-      features: ['ระบบจัดการลูกค้า', 'ระบบ Leads', 'ระบบแคมเปญ', 'รายงานวิเคราะห์', 'API Access', 'รายงานวิเคราะห์ขั้นสูง', 'Custom Development', 'Support 24/7']
-    },
-  ]);
-  const [editingPackage, setEditingPackage] = useState<PackageConfig | null>(null);
-  const [showPackageDialog, setShowPackageDialog] = useState(false);
-  const [packageFormData, setPackageFormData] = useState<PackageConfig>({
-    id: '',
-    name: '',
-    price: '',
-    properties: 10,
-    users: 5,
-    adminCount: 1,
-    salesCount: 4,
-    features: ['ระบบจัดการลูกค้า', 'ระบบ Leads']
-  });
+  const [activeTab, setActiveTab] = useState('tenants');
+  const tabs: TabItem[] = [
+    { id: 'tenants', label: 'รายการบริษัท', icon: Building2 },
+    { id: 'packages', label: 'จัดการแพ็กเกจ', icon: Package },
+  ];
+
+  // Plan catalog now lives in the `plans` table (edited via the จัดการแพ็กเกจ
+  // tab below). We READ it here too so plan badges / prices / limits stay
+  // consistent system-wide instead of being hardcoded. Mapped to the existing
+  // PackageConfig shape so downstream consumers keep working.
+  const [packageConfig, setPackageConfig] = useState<PackageConfig[]>([]);
 
   // Form state for create/edit
   const [formData, setFormData] = useState({
@@ -361,7 +317,27 @@ const TenantManagement = () => {
   useEffect(() => {
     fetchTenants();
     fetchTenantStats();
+    fetchPlanCatalog();
   }, []);
+
+  // Read the plan catalog from the `plans` table (single source of truth) and
+  // map it to the existing PackageConfig shape so plan badges / prices / limits
+  // reflect whatever the Owner set on the จัดการแพ็กเกจ page.
+  const fetchPlanCatalog = async () => {
+    const { data } = await (supabase as any).from('plans').select('*').order('sort_order');
+    if (data) {
+      setPackageConfig(data.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        price: Number(p.price_monthly || 0).toLocaleString('en-US'),
+        properties: p.max_properties,
+        users: (p.max_admins || 0) + (p.max_sales || 0),
+        adminCount: p.max_admins,
+        salesCount: p.max_sales,
+        features: Array.isArray(p.features) ? p.features : [],
+      })));
+    }
+  };
 
   const fetchTenants = async () => {
     setLoading(true);
@@ -954,21 +930,6 @@ const TenantManagement = () => {
     });
   };
 
-  // Package management functions
-  const handleSavePackage = () => {
-    if (editingPackage) {
-      // Update existing package
-      setPackageConfig(packageConfig.map(p =>
-        p.id === editingPackage.id ? { ...packageFormData } : p
-      ));
-    } else {
-      // Add new package
-      setPackageConfig([...packageConfig, { ...packageFormData }]);
-    }
-    setShowPackageDialog(false);
-    setEditingPackage(null);
-  };
-
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { label: string; className: string }> = {
@@ -1076,332 +1037,6 @@ const TenantManagement = () => {
     return pkg ? parseInt(pkg.price.replace(/,/g, ''), 10) : 0;
   };
 
-  // Define tabs
-  const tabs: TabItem[] = [
-    { id: 'tenants', label: 'รายการบริษัท', icon: Building2 },
-    { id: 'overview', label: 'ภาพรวม', icon: BarChart3 },
-    { id: 'packages', label: 'จัดการแพ็กเกจ', icon: Package },
-  ];
-
-  // Render Stats Overview Tab
-  const renderOverviewTab = () => (
-    <div className="space-y-6">
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              บริษัททั้งหมด
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{tenants.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Active
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {tenants.filter(t => t.status === 'active').length}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Trial
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">
-              {tenants.filter(t => t.status === 'trial').length}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              MRR รวม
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              ฿{tenants.reduce((sum, t) => {
-                const pkg = packageConfig.find(p => p.id === t.subscription_plan);
-                const price = pkg ? parseInt(pkg.price.replace(/,/g, ''), 10) : 0;
-                return sum + price;
-              }, 0).toLocaleString()}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Plan Distribution */}
-      <Card>
-        <CardHeader>
-          <CardTitle>สัดส่วนแพ็กเกจ</CardTitle>
-          <CardDescription>จำนวนบริษัทแบ่งตามแพ็กเกจ subscription</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {packageConfig.filter(pkg => pkg.id !== 'free').map(pkg => {
-              const count = tenants.filter(t => t.subscription_plan === pkg.id).length;
-              const percentage = tenants.length > 0 ? (count / tenants.length) * 100 : 0;
-              const colors: Record<string, string> = {
-                starter: 'bg-blue-500',
-                professional: 'bg-purple-500',
-                enterprise: 'bg-chateau-500'
-              };
-              return (
-                <div key={pkg.id} className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium">{pkg.name} (฿{pkg.price})</span>
-                    <span className="text-muted-foreground">{count} บริษัท ({percentage.toFixed(1)}%)</span>
-                  </div>
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div className={`h-full ${colors[pkg.id]}`} style={{ width: `${percentage}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Status Distribution */}
-      <Card>
-        <CardHeader>
-          <CardTitle>สถานะบริษัท</CardTitle>
-          <CardDescription>จำนวนบริษัทแบ่งตามสถานะ</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-4">
-            {['active', 'trial', 'suspended', 'cancelled'].map(status => {
-              const count = tenants.filter(t => t.status === status).length;
-              const labels: Record<string, string> = {
-                active: 'Active',
-                trial: 'Trial',
-                suspended: 'ระงับ',
-                cancelled: 'ยกเลิก'
-              };
-              const colors: Record<string, string> = {
-                active: 'border-green-500 bg-green-50',
-                trial: 'border-orange-500 bg-orange-50',
-                suspended: 'border-red-500 bg-red-50',
-                cancelled: 'border-gray-500 bg-gray-50'
-              };
-              return (
-                <div key={status} className={`border rounded-lg p-4 ${colors[status]}`}>
-                  <div className="text-2xl font-bold">{count}</div>
-                  <div className="text-sm text-muted-foreground">{labels[status]}</div>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-
-  // Render Package Management Tab
-  const renderPackageManagementTab = () => (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>จัดการแพ็กเกจ (Packages)</CardTitle>
-              <CardDescription>
-                แก้ไข ชื่อ ราคา และคุณสมบัติของแต่ละแพ็กเกจ
-              </CardDescription>
-            </div>
-            <Button onClick={() => {
-              setPackageFormData({
-                id: `custom_${Date.now()}`,
-                name: '',
-                price: '',
-                properties: 10,
-                users: 5,
-                adminCount: 1,
-                salesCount: 4,
-                features: []
-              });
-              setEditingPackage(null);
-              setShowPackageDialog(true);
-            }}>
-              <Plus className="w-4 h-4 mr-2" />
-              เพิ่มแพ็กเกจใหม่
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {packageConfig.map((pkg) => (
-              <Card key={pkg.id} className="border-2">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-4 mb-4">
-                        <h3 className="text-xl font-bold">{pkg.name}</h3>
-                        <Badge className="text-lg px-3 py-1 bg-green-100 text-green-800">
-                          ฿{pkg.price} / เดือน
-                        </Badge>
-                        <Badge className="text-lg px-3 py-1">
-                          {pkg.properties === -1 ? 'ไม่จำกัด' : pkg.properties} โครงการ
-                        </Badge>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-4 mb-4">
-                        <div className="bg-white shadow-sm p-3 rounded-lg">
-                          <div className="text-sm text-muted-foreground">Admin</div>
-                          <div className="font-bold text-blue-700">{pkg.adminCount} คน</div>
-                        </div>
-                        <div className="bg-green-50 p-3 rounded-lg">
-                          <div className="text-sm text-muted-foreground">Sales</div>
-                          <div className="font-bold text-green-700">{pkg.salesCount} คน</div>
-                        </div>
-                        <div className="bg-gray-50 p-3 rounded-lg">
-                          <div className="text-sm text-muted-foreground">รวม</div>
-                          <div className="font-bold">{pkg.adminCount + pkg.salesCount} คน</div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-sm font-medium mb-2">คุณสมบัติ:</div>
-                        <div className="flex flex-wrap gap-2">
-                          {pkg.features.map((feature, idx) => (
-                            <Badge key={idx} variant="outline" className="text-sm">
-                              {feature}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2 ml-4">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setPackageFormData({ ...pkg });
-                          setEditingPackage(pkg);
-                          setShowPackageDialog(true);
-                        }}
-                      >
-                        <Edit className="w-4 h-4 mr-2" />
-                        แก้ไข
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-red-600 hover:text-red-700"
-                        onClick={() => {
-                          if (confirm(`ต้องการลบแพ็กเกจ "${pkg.name}" ใช่หรือไม่?`)) {
-                            setPackageConfig(packageConfig.filter(p => p.id !== pkg.id));
-                          }
-                        }}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-
-  // Render Settings Tab
-  const renderSettingsTab = () => (
-    <div className="space-y-6">
-      {/* Info Box */}
-      <Card className="bg-white shadow-sm border-gray-200">
-        <CardContent className="pt-6">
-          <p className="text-sm text-gray-700">
-            <strong>หมายเหตุ:</strong> แต่ละบริษัทมี <strong>Owner 1 คน</strong> (ไม่นับรวมในแพ็กเกจ)
-            จำนวนผู้ใช้ในแพ็กเกจคือ <strong>Admin + Sales</strong> เท่านั้น
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>ตั้งค่าระบบ SaaS</CardTitle>
-          <CardDescription>
-            ตั้งค่าแพ็กเกจ ราคา และข้อจำกัดของแต่ละแพ็กเกจ
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
-            {packageConfig.map(plan => (
-              <Card key={plan.id} className="border-2">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-xl">{plan.name}</CardTitle>
-                      <CardDescription>฿{plan.price} / เดือน</CardDescription>
-                    </div>
-                    <Badge className="text-lg px-4 py-1">
-                      {plan.properties === -1 ? 'ไม่จำกัด' : plan.properties} โครงการ
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {/* User Breakdown */}
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="text-sm font-medium mb-2">สิทธิ์การใช้งาน</div>
-                      <div className="flex gap-4">
-                        <div className="flex items-center gap-2">
-                          <Badge className="bg-gray-100 text-gray-700">
-                            Owner 1 คน
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">(ไม่นับรวม)</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge className="bg-gray-100 text-gray-700">
-                            Admin {plan.adminCount} คน
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge className="bg-green-100 text-green-800">
-                            Sales {plan.salesCount} คน
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="mt-2 text-xs text-muted-foreground">
-                        รวมทั้งหมด: {plan.adminCount + plan.salesCount} คน (Admin + Sales)
-                      </div>
-                    </div>
-
-                    {/* Features */}
-                    <div>
-                      <div className="text-sm font-medium mb-2">คุณสมบัติ</div>
-                      <ul className="space-y-2">
-                        {plan.features.map((feature, idx) => (
-                          <li key={idx} className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                            <span>{feature}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
 
   // Render Tenants List Tab
   const renderTenantsTab = () => (
@@ -1723,19 +1358,19 @@ const TenantManagement = () => {
 
             {/* Conditional Content: List View or Detail View */}
             {!tenantId ? (
-              /* Tenants List - Tabs Layout */
+              /* Two tabs: the customer list + the package catalog. The old
+                 "ภาพรวม" tab was removed (it duplicated the /owner Executive
+                 Dashboard and summed MRR from a hardcoded array, disagreeing
+                 with the invoice-based MRR there). "จัดการแพ็กเกจ" is now the
+                 real DB-backed editor (PackageCatalog → `plans` table), kept
+                 inside this page rather than as a separate top-level menu. */
               <div className="flex flex-col md:flex-row gap-6">
-                {/* Left Sidebar - Tabs */}
                 <div className="w-full md:w-56">
                   <PageTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
                 </div>
-
-                {/* Right Content */}
                 <div className="flex-1">
                   {activeTab === 'tenants' && renderTenantsTab()}
-                  {activeTab === 'overview' && renderOverviewTab()}
-                  {activeTab === 'packages' && renderPackageManagementTab()}
-                  {activeTab === 'settings' && renderSettingsTab()}
+                  {activeTab === 'packages' && <PackageCatalog />}
                 </div>
               </div>
             ) : (
@@ -2353,145 +1988,6 @@ const TenantManagement = () => {
               </DialogContent>
             </Dialog>
 
-            {/* Package Edit/Create Dialog */}
-            <Dialog open={showPackageDialog} onOpenChange={setShowPackageDialog}>
-              <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>
-                    {editingPackage ? 'แก้ไขแพ็กเกจ' : 'เพิ่มแพ็กเกจใหม่'}
-                  </DialogTitle>
-                  <DialogDescription>
-                    {editingPackage
-                      ? 'แก้ไขข้อมูลแพ็กเกจ subscription'
-                      : 'สร้างแพ็กเกจ subscription ใหม่'}
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  {/* Package ID */}
-                  <div className="space-y-2">
-                    <Label htmlFor="pkgId">รหัสแพ็กเกจ (ID) *</Label>
-                    <Input
-                      id="pkgId"
-                      value={packageFormData.id}
-                      onChange={(e) => setPackageFormData({ ...packageFormData, id: e.target.value })}
-                      placeholder="เช่น starter, professional, enterprise"
-                      disabled={!!editingPackage}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      รหัสพิเศษสำหรับอ้างอิงในระบบ (ไม่สามารถเปลี่ยนหลังจากสร้างแล้ว)
-                    </p>
-                  </div>
-
-                  {/* Package Name */}
-                  <div className="space-y-2">
-                    <Label htmlFor="pkgName">ชื่อแพ็กเกจ *</Label>
-                    <Input
-                      id="pkgName"
-                      value={packageFormData.name}
-                      onChange={(e) => setPackageFormData({ ...packageFormData, name: e.target.value })}
-                      placeholder="เช่น Starter, Professional, Enterprise"
-                    />
-                  </div>
-
-                  {/* Price */}
-                  <div className="space-y-2">
-                    <Label htmlFor="pkgPrice">ราคาต่อเดือน (บาท) *</Label>
-                    <Input
-                      id="pkgPrice"
-                      value={packageFormData.price}
-                      onChange={(e) => setPackageFormData({ ...packageFormData, price: e.target.value })}
-                      placeholder="เช่น 2,900"
-                    />
-                  </div>
-
-                  {/* Properties Limit */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="pkgProperties">จำนวนโครงการสูงสุด</Label>
-                      <Input
-                        id="pkgProperties"
-                        type="number"
-                        value={packageFormData.properties === -1 ? '' : packageFormData.properties}
-                        onChange={(e) => setPackageFormData({
-                          ...packageFormData,
-                          properties: e.target.value ? parseInt(e.target.value) : -1
-                        })}
-                        placeholder="-1 สำหรับไม่จำกัด"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        ใส่ -1 หรือปล่อยว่างสำหรับไม่จำกัด
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="pkgUsers">จำนวนผู้ใช้ทั้งหมด</Label>
-                      <Input
-                        id="pkgUsers"
-                        type="number"
-                        value={packageFormData.users}
-                        onChange={(e) => setPackageFormData({ ...packageFormData, users: parseInt(e.target.value) || 0 })}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Admin + Sales (Owner ไม่นับรวม)
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Admin/Sales Breakdown */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="pkgAdmin">จำนวน Admin</Label>
-                      <Input
-                        id="pkgAdmin"
-                        type="number"
-                        value={packageFormData.adminCount}
-                        onChange={(e) => setPackageFormData({
-                          ...packageFormData,
-                          adminCount: parseInt(e.target.value) || 0,
-                          users: (parseInt(e.target.value) || 0) + packageFormData.salesCount
-                        })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="pkgSales">จำนวน Sales</Label>
-                      <Input
-                        id="pkgSales"
-                        type="number"
-                        value={packageFormData.salesCount}
-                        onChange={(e) => setPackageFormData({
-                          ...packageFormData,
-                          salesCount: parseInt(e.target.value) || 0,
-                          users: packageFormData.adminCount + (parseInt(e.target.value) || 0)
-                        })}
-                      />
-                    </div>
-                  </div>
-                  <div className="bg-white shadow-sm p-3 rounded-lg">
-                    <p className="text-sm text-gray-700">
-                      <strong>สรุป:</strong> Admin {packageFormData.adminCount} คน + Sales {packageFormData.salesCount} คน = ทั้งหมด {packageFormData.adminCount + packageFormData.salesCount} คน (Owner 1 คน ไม่นับรวม)
-                    </p>
-                  </div>
-
-                  {/* Features */}
-                  <FeatureSelector
-                    selectedFeatures={packageFormData.features}
-                    onFeatureChange={(features) =>
-                      setPackageFormData({ ...packageFormData, features })
-                    }
-                  />
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setShowPackageDialog(false)}>
-                    ยกเลิก
-                  </Button>
-                  <Button
-                    onClick={handleSavePackage}
-                    disabled={!packageFormData.name || !packageFormData.price || !packageFormData.id}
-                  >
-                    {editingPackage ? 'บันทึกการแก้ไข' : 'สร้างแพ็กเกจ'}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
 
             {/* Company Detail Dialog */}
             <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
