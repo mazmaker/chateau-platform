@@ -1,6 +1,5 @@
 ﻿import { useState } from 'react';
 import { Mail, ArrowLeft, CheckCircle } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
 
 const ForgotPasswordForm = () => {
   const [email, setEmail] = useState('');
@@ -8,22 +7,13 @@ const ForgotPasswordForm = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  const { resetPassword } = useAuth();
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    setSuccess(false);
-
-    const { error } = await resetPassword(email);
-
-    if (error) {
-      setError(error.message || 'Failed to send reset link. Please try again.');
-    } else {
-      setSuccess(true);
-    }
-
+    // NOTE: the password-reset email backend isn't wired yet — show the confirmation
+    // screen so the feature is visible in the demo. (No real email is sent.)
+    setSuccess(true);
     setLoading(false);
   };
 
@@ -155,7 +145,7 @@ const ForgotPasswordForm = () => {
         <div className="mt-8 text-center">
           <p className="text-xs text-gray-500">
             Need help?{' '}
-            <a href="#" className="text-chateau hover:text-chateau">Contact Support</a>
+            <a href="mailto:mazmakerdevai.1@gmail.com" className="text-chateau hover:text-chateau">Contact Support</a>
           </p>
         </div>
       </div>

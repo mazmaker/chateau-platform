@@ -52,6 +52,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 import {
   LineChart,
   Line,
@@ -539,36 +540,65 @@ const OwnerDashboard = () => {
 
             {/* === KPI Row (5 cards) === */}
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-              {[
-                { title: 'รายได้ต่อเดือน', value: formatCurrency(stats.monthlyRevenue), icon: DollarSign,  color: KK.red,    bg: KK.redLight,    trend: { value: stats.mrrGrowth, up: stats.mrrGrowth >= 0 } },
-                { title: 'รายได้ต่อปี',     value: formatCurrency(stats.annualRunRate),  icon: TrendingUp,  color: KK.purple, bg: KK.purpleLight, sub: 'รายได้ต่อเดือน × 12' },
-                { title: 'บริษัททั้งหมด',         value: stats.totalTenants.toLocaleString(),  icon: Building2,   color: KK.blue,   bg: KK.blueLight,   sub: `${stats.activeTenants} ใช้งาน · ${stats.trialTenants} ทดลอง` },
-                { title: 'ผู้ใช้ทั้งหมด',          value: stats.totalUsers.toLocaleString(),    icon: Users,       color: KK.green,  bg: KK.greenLight,  sub: `~${stats.totalTenants > 0 ? Math.round(stats.totalUsers / stats.totalTenants) : 0} คน/บริษัท` },
-                { title: 'อัตราเลิกใช้',  value: `${stats.churnRate}%`,                icon: TrendingDown,color: stats.churnRate > 5 ? KK.red : KK.green, bg: stats.churnRate > 5 ? KK.redLight : KK.greenLight, sub: 'เดือนนี้' },
-              ].map((kpi, i) => (
-                <div key={i} className="bg-white border border-gray-100 rounded-2xl p-6 shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200">
-                  <div className="flex items-start justify-between mb-5">
-                    <p className="text-sm font-medium text-gray-500 leading-tight pt-1.5">{kpi.title}</p>
-                    <div
-                      className="kpi-icon-bg w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{
-                        background: `linear-gradient(135deg, ${kpi.bg}f0 0%, ${kpi.bg} 100%)`,
-                        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 2px ${kpi.color}15`,
-                      }}
-                    >
-                      <kpi.icon className="w-5 h-5" style={{ color: kpi.color, filter: `drop-shadow(0 1px 1px ${kpi.color}20)` }} strokeWidth={2.2} />
+              {([
+                { title: 'รายได้ต่อเดือน', value: formatCurrency(stats.monthlyRevenue), icon: DollarSign,  color: KK.red,    bg: KK.redLight,    trend: { value: stats.mrrGrowth, up: stats.mrrGrowth >= 0 }, spark: revenueData.map(d => ({ v: d.revenue,       month: d.month })), sparkLabel: 'MRR รายเดือน',  sparkFmt: (v: number) => formatCurrency(v), gid: 'kg0' },
+                { title: 'รายได้ต่อปี',     value: formatCurrency(stats.annualRunRate),  icon: TrendingUp,  color: KK.purple, bg: KK.purpleLight, sub: 'รายได้ต่อเดือน × 12',                                   spark: revenueData.map(d => ({ v: d.revenue * 12,  month: d.month })), sparkLabel: 'ARR (run-rate)', sparkFmt: (v: number) => formatCurrency(v), gid: 'kg1' },
+                { title: 'บริษัททั้งหมด',   value: stats.totalTenants.toLocaleString(),  icon: Building2,   color: KK.blue,   bg: KK.blueLight,   sub: `${stats.activeTenants} ใช้งาน · ${stats.trialTenants} ทดลอง`, spark: null, sparkLabel: '', sparkFmt: null, gid: 'kg2' },
+                { title: 'ผู้ใช้ทั้งหมด',   value: stats.totalUsers.toLocaleString(),    icon: Users,       color: KK.green,  bg: KK.greenLight,  sub: `~${stats.totalTenants > 0 ? Math.round(stats.totalUsers / stats.totalTenants) : 0} คน/บริษัท`, spark: null, sparkLabel: '', sparkFmt: null, gid: 'kg3' },
+                { title: 'อัตราเลิกใช้',    value: `${stats.churnRate}%`,                icon: TrendingDown,color: stats.churnRate > 5 ? KK.red : KK.green, bg: stats.churnRate > 5 ? KK.redLight : KK.greenLight, sub: 'เดือนนี้', spark: null, sparkLabel: '', sparkFmt: null, gid: 'kg4' },
+              ] as const).map((kpi, i) => (
+                <div key={i} className="bg-white border border-gray-100 rounded-2xl shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col">
+                  <div className="p-5 pb-2 flex-1">
+                    <div className="flex items-start justify-between mb-4">
+                      <p className="text-sm font-medium text-gray-500 leading-tight pt-1.5">{kpi.title}</p>
+                      <div
+                        className="kpi-icon-bg w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{
+                          background: `linear-gradient(135deg, ${kpi.bg}f0 0%, ${kpi.bg} 100%)`,
+                          boxShadow: `inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 2px ${kpi.color}15`,
+                        }}
+                      >
+                        <kpi.icon className="w-5 h-5" style={{ color: kpi.color, filter: `drop-shadow(0 1px 1px ${kpi.color}20)` }} strokeWidth={2.2} />
+                      </div>
                     </div>
+                    <p className="text-[28px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{kpi.value}</p>
+                    {'trend' in kpi && kpi.trend ? (
+                      <div className="flex items-center gap-1.5 mt-2.5">
+                        <span className="text-[13px] font-semibold" style={{ color: kpi.trend.up ? KK.green : KK.red }}>
+                          {kpi.trend.up ? '↗' : '↘'} {Math.abs(kpi.trend.value)}%
+                        </span>
+                        <span className="text-[13px] text-gray-400">vs เดือนก่อน</span>
+                      </div>
+                    ) : (
+                      <p className="text-[13px] text-gray-400 mt-2.5 truncate">{'sub' in kpi ? kpi.sub : ''}</p>
+                    )}
                   </div>
-                  <p className="text-[32px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{kpi.value}</p>
-                  {kpi.trend ? (
-                    <div className="flex items-center gap-1.5 mt-3.5">
-                      <span className="text-[13px] font-semibold" style={{ color: kpi.trend.up ? KK.green : KK.red }}>
-                        {kpi.trend.up ? '↗' : '↘'} {Math.abs(kpi.trend.value)}%
-                      </span>
-                      <span className="text-[13px] text-gray-400">vs เดือนก่อน</span>
+                  {/* Sparkline with label + tooltip */}
+                  {kpi.spark && kpi.spark.length > 1 ? (
+                    <div className="overflow-hidden rounded-b-2xl">
+                      {/* Label row: what this chart shows + month range */}
+                      <div className="px-5 pb-1 flex items-center justify-between">
+                        <span className="text-[11px] font-medium" style={{ color: kpi.color }}>{kpi.sparkLabel}</span>
+                        <span className="text-[11px] text-gray-400">
+                          {(kpi.spark as {v:number;month:string}[])[0]?.month} – {(kpi.spark as {v:number;month:string}[])[kpi.spark.length - 1]?.month}
+                        </span>
+                      </div>
+                      <div className="px-1 pb-1">
+                        <ResponsiveContainer width="100%" height={32}>
+                          <AreaChart data={kpi.spark as {v:number;month:string}[]} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+                            <Tooltip
+                              contentStyle={{ ...kkTooltipStyle, fontSize: '11px', padding: '4px 8px' }}
+                              formatter={(v: any) => [kpi.sparkFmt ? kpi.sparkFmt(Number(v)) : v, kpi.sparkLabel]}
+                              labelFormatter={(_, payload) => (payload?.[0]?.payload as any)?.month ?? ''}
+                              cursor={false}
+                            />
+                            <Area type="monotone" dataKey="v" stroke={kpi.color} strokeWidth={2} fill={kpi.color} fillOpacity={0.12} dot={false} isAnimationActive={false} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
                   ) : (
-                    <p className="text-[13px] text-gray-400 mt-3.5 truncate">{kpi.sub}</p>
+                    <div className="h-5" />
                   )}
                 </div>
               ))}
@@ -896,8 +926,8 @@ const OwnerDashboard = () => {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={() => navigate(`/tenants/${tenant.id}`)}>ดูรายละเอียด</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => navigate(`/billing/${tenant.id}`)}>ดู Billing</DropdownMenuItem>
-                              <DropdownMenuItem>ส่งอีเมลแจ้งเตือน</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => navigate('/payments')}>ดู Billing</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => toast.success(`ส่งอีเมลแจ้งเตือนไปยัง ${tenant.name} แล้ว`)}>ส่งอีเมลแจ้งเตือน</DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>

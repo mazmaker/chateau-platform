@@ -8,9 +8,9 @@ import { SimpleLogin } from "./pages/SimpleLogin";
 import NotFound from "./pages/NotFound";
 import OwnerDashboard from "./pages/OwnerDashboard";
 import OwnerLeads from "./pages/OwnerLeads";
+import OwnerSupport from "./pages/OwnerSupport";
 import OwnerProjects from "./pages/OwnerProjects";
 import TenantManagement from "./pages/TenantManagement";
-import BillingManagement from "./pages/BillingManagement";
 import PaymentDashboard from "./pages/PaymentDashboard";
 import PropertyManagement from "./pages/PropertyManagement";
 import UnitDetail from "./pages/UnitDetail";
@@ -42,6 +42,7 @@ import TeamMemberPerformance from "./pages/TeamMemberPerformance";
 import TeamPerformance from "./pages/TeamPerformance";
 import AcceptInvite from "./pages/AcceptInvite";
 import ForcePasswordChange from "./pages/ForcePasswordChange";
+import ForgotPasswordForm from "@/components/auth/ForgotPasswordForm";
 import { ProtectedRouteSimple } from "@/components/auth/ProtectedRouteSimple";
 import { TenantStatusGuard } from "@/components/auth/TenantStatusGuard";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -96,6 +97,13 @@ const App = () => (
               <ProtectedRouteSimple>
                 <ForcePasswordChange />
               </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          {/* Forgot Password — shows the feature in the demo; the reset-email backend isn't wired yet. */}
+          <Route path="/auth/forgot-password" element={
+            <ErrorBoundary showRetry={true} showHome={true} errorMessage="ไม่สามารถโหลดหน้าลืมรหัสผ่านได้" context={{ page: 'forgot-password' }}>
+              <ForgotPasswordForm />
             </ErrorBoundary>
           } />
 
@@ -168,6 +176,12 @@ const App = () => (
             </ErrorBoundary>
           } />
 
+          <Route path="/owner-support" element={
+            <ProtectedRouteSimple requireRole="owner">
+              <OwnerSupport />
+            </ProtectedRouteSimple>
+          } />
+
           {/* Owner จัดการโครงการ — cross-tenant, read-only (control-plane).
               Two drill levels share one component via route params:
               all companies → one company's projects. Unit-level drill was
@@ -220,19 +234,6 @@ const App = () => (
             >
               <ProtectedRouteSimple requireRole="owner">
                 <TenantManagement />
-              </ProtectedRouteSimple>
-            </ErrorBoundary>
-          } />
-
-          <Route path="/billing" element={
-            <ErrorBoundary
-              showRetry={true}
-              showHome={true}
-              errorMessage="ไม่สามารถโหลดหน้าจัดการ Billing ได้"
-              context={{ page: 'billing-management' }}
-            >
-              <ProtectedRouteSimple requireRole="owner">
-                <BillingManagement />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />

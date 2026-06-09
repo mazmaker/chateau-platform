@@ -146,7 +146,7 @@ export function DefaultErrorFallback({
             {/* Support Info */}
             <p className="text-center text-gray-500 text-sm mt-6">
               ถ้าปัญหายังไม่หาย กรุณาติดต่อ{' '}
-              <a href="mailto:support@chateau.com" className="text-red-600 hover:underline">
+              <a href="mailto:mazmakerdevai.1@gmail.com" className="text-red-600 hover:underline">
                 ผู้ดูแลระบบ
               </a>
             </p>

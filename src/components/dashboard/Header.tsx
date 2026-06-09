@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import {
   Bell, Menu, Settings, LogOut, Search, ChevronDown, Building2,
   CheckCircle2, AlertTriangle, UserPlus, Calendar, Megaphone, Users,
-  Home, X, Check
+  Home, X, Check, MessageCircle
 } from "lucide-react";
+import SupportTicketModal from "@/components/support/SupportTicketModal";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -108,10 +109,30 @@ const ENTITY_ICON: Record<SearchEntity, typeof Bell> = {
   segment: Users,
 };
 
+const SupportButton = () => {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="text-gray-500 hover:text-gray-700"
+        title="แจ้งปัญหา"
+        onClick={() => setOpen(true)}
+      >
+        <MessageCircle className="w-5 h-5" />
+      </Button>
+      <SupportTicketModal open={open} onClose={() => setOpen(false)} />
+    </>
+  );
+};
+
 const Header = ({ onMenuClick }: HeaderProps) => {
   const navigate = useNavigate();
   const { user, signOut, currentTenant, userRole, userProfile, switchTenantAsOwner } = useSimpleAuth();
   const { isOwner } = usePermissions();
+
+  const [supportOpen, setSupportOpen] = useState(false);
 
   // All tenants list — fetched once for Owner to enable tenant switching
   const [allTenants, setAllTenants] = useState<Tenant[]>([]);
@@ -353,52 +374,19 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         <Menu className="w-5 h-5" />
       </Button>
 
-      {/* Scope selector — hidden for Owner: the platform has no single-company scope
-          (Owner = control plane, sees platform-wide overview, not one tenant). Shown
-          for tenant roles as a context indicator of which company they belong to. */}
+      {/* Workspace badge — Linear/Vercel style: colored initial + name, no border */}
       {!isOwner && (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button className="flex items-center gap-2 h-11 px-4 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all flex-shrink-0 group">
-            <Building2 className="w-4 h-4 text-chateau" />
-            <span className="hidden sm:block text-sm font-medium text-gray-700">
-              ขอบเขต:{" "}
-              <span className="text-gray-900">{getScopeLabel()}</span>
-            </span>
-            <ChevronDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 transition-colors" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-60">
-          {isOwner && allTenants.length > 0 ? (
-            <>
-              <div className="px-3 py-2 border-b border-gray-100">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">เลือกบริษัท</p>
-              </div>
-              {allTenants.map((t) => (
-                <DropdownMenuItem
-                  key={t.id}
-                  onClick={() => { if (t.id !== currentTenant?.id) switchTenantAsOwner(t); }}
-                  className="text-sm gap-2 cursor-pointer"
-                >
-                  <Building2 className="w-4 h-4 text-chateau flex-shrink-0" />
-                  <span className="flex-1 truncate">{t.name}</span>
-                  {t.status === 'suspended' && (
-                    <span className="text-[10px] font-semibold text-red-500 bg-red-50 px-1.5 py-0.5 rounded">ระงับ</span>
-                  )}
-                  {t.id === currentTenant?.id && (
-                    <Check className="w-3.5 h-3.5 text-chateau flex-shrink-0" />
-                  )}
-                </DropdownMenuItem>
-              ))}
-            </>
-          ) : (
-            <DropdownMenuItem className="text-sm">
-              <Building2 className="w-4 h-4 mr-2 text-chateau" />
-              {currentTenant?.name || "บริษัทของฉัน"}
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+        <div className="hidden sm:flex items-center gap-2.5 flex-shrink-0">
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-white text-xs font-bold"
+            style={{ backgroundColor: "#e60023" }}
+          >
+            {getScopeLabel().charAt(0).toUpperCase()}
+          </div>
+          <span className="text-sm font-semibold text-gray-800 max-w-[160px] truncate">
+            {getScopeLabel()}
+          </span>
+        </div>
       )}
 
       {/* Search bar with dropdown */}
@@ -526,7 +514,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
               )}
             </div>
             <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50">
-              <button className="w-full text-xs font-semibold text-gray-600 hover:text-chateau text-center">
+              <button onClick={() => setNotifOpen(false)} className="w-full text-xs font-semibold text-gray-600 hover:text-chateau text-center">
                 ดูทั้งหมด →
               </button>
             </div>
@@ -564,6 +552,13 @@ const Header = ({ onMenuClick }: HeaderProps) => {
               แก้ไขโปรไฟล์
             </DropdownMenuItem>
 
+            {!isOwner && (
+              <DropdownMenuItem onClick={() => setSupportOpen(true)} className="gap-2 cursor-pointer">
+                <MessageCircle className="w-4 h-4" />
+                แจ้งปัญหา
+              </DropdownMenuItem>
+            )}
+
             <DropdownMenuSeparator />
 
             <DropdownMenuItem
@@ -576,6 +571,10 @@ const Header = ({ onMenuClick }: HeaderProps) => {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {!isOwner && (
+        <SupportTicketModal open={supportOpen} onClose={() => setSupportOpen(false)} />
+      )}
     </header>
   );
 };

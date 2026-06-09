@@ -21,6 +21,7 @@ import {
   Zap,
   Trophy,
   UserCheck,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -47,9 +48,9 @@ interface NavGroup {
 
 // Top items (no group label) + Collapsible groups (KK style)
 const NAV_GROUPS: NavGroup[] = [
-  { id: "top",       label: null,              hrefs: ["/", "/owner", "/analytics", "/team", "/my-dashboard"] },
-  { id: "platform",  label: "PLATFORM CORE",   icon: Building,  hrefs: ["/tenants", "/owner-leads", "/payments", "/owner-projects", "/properties"] },
-  { id: "crm",       label: "CRM & SALES",     icon: Users,     hrefs: ["/leads"] },
+  { id: "top",       label: null,              hrefs: ["/", "/owner", "/my-dashboard"] },
+  { id: "property",  label: "PROPERTY",        icon: Building,  hrefs: ["/properties"] },
+  { id: "sales",     label: "SALES",           icon: TrendingUp, hrefs: ["/leads", "/analytics", "/team"] },
   { id: "marketing", label: "MARKETING",       icon: Megaphone, hrefs: ["/campaigns", "/builder", "/triggers", "/marketing-analytics"] },
   { id: "admin",     label: "ADMIN",           icon: Wrench,    hrefs: ["/users", "/permissions", "/settings"] },
 ];
@@ -68,9 +69,9 @@ const NAV_GROUPS: NavGroup[] = [
 // NOTE: within-group order follows the master getAllNavItems() order, not hrefs order.
 const OWNER_NAV_GROUPS: NavGroup[] = [
   { id: "top",      label: null,              hrefs: ["/owner"] },
-  { id: "tenants",  label: "TENANTS",  icon: Building,  hrefs: ["/tenants", "/owner-projects", "/payments"] },
+  { id: "tenants",  label: "TENANTS",  icon: Building,  hrefs: ["/tenants", "/payments"] },
   { id: "sales",    label: "SALES",    icon: Briefcase, hrefs: ["/owner-leads"] },
-  { id: "settings", label: "SETTINGS", icon: Wrench,    hrefs: ["/users", "/settings"] },
+  { id: "settings", label: "SETTINGS", icon: Wrench,    hrefs: ["/users", "/owner-support", "/settings"] },
 ];
 
 const getAllNavItems = (): NavItem[] => [
@@ -82,14 +83,13 @@ const getAllNavItems = (): NavItem[] => [
   { icon: Trophy,          label: "แดชบอร์ดส่วนตัว",      href: "/my-dashboard",  requiredRoles: ["SALES", "AGENT"] },
   // tenant-scoped LEAD analytics (conversion/SLA/won-lost for one company) =
   // Admin's application-plane work, not the platform Owner's. ADMIN-only.
-  { icon: BarChart3,       label: "Analytics",           href: "/analytics",     requiredRoles: ["ADMIN"], requiredFeature: "analytics", isPremium: true },
   // Owner items are ordered to drive the sidebar groups (render order = this master
-  // order, filtered per group). TENANTS group → จัดการบริษัท · จัดการโครงการ · การชำระเงิน;
+  // order, filtered per group). TENANTS group → จัดการบริษัท · การชำระเงิน;
   // SALES group → Leads. Keep this order so billing reads last within TENANTS.
   { icon: Building2,       label: "จัดการบริษัท",         href: "/tenants",       requiredRoles: ["OWNER"] },
   // Owner gets the cross-tenant, read-only Project Dashboard (control-plane);
   // Admin/Sales/Agent keep the tenant-scoped editable /properties page.
-  { icon: Building2,       label: "จัดการโครงการ",       href: "/owner-projects", requiredRoles: ["OWNER"] },
+
   { icon: CreditCard,      label: "การชำระเงิน",          href: "/payments",      requiredRoles: ["OWNER"] },
   { icon: Briefcase,       label: "Leads",               href: "/owner-leads",   requiredRoles: ["OWNER"] },
   { icon: Building2,       label: "โครงการ",             href: "/properties",    requiredRoles: ["ADMIN", "SALES", "AGENT"] },
@@ -98,11 +98,14 @@ const getAllNavItems = (): NavItem[] => [
   // Deliberately ADMIN-only (cut from Owner) so the Owner menu stays a clean
   // control-plane. Owner can still reach them by URL for support if ever needed.
   { icon: UserCheck,       label: "ผลงานทีม",            href: "/team",          requiredRoles: ["ADMIN"] },
+  // Analytics last = action → result convention (same as Marketing Analytics at bottom of MARKETING)
+  { icon: BarChart3,       label: "Lead Analytics",      href: "/analytics",     requiredRoles: ["ADMIN"], requiredFeature: "analytics", isPremium: true },
   { icon: Megaphone,       label: "Campaigns",          href: "/campaigns",     requiredRoles: ["ADMIN"] },
   { icon: Wand2,           label: "Builder Wizard",     href: "/builder",       requiredRoles: ["ADMIN"] },
   { icon: Zap,             label: "Triggers",           href: "/triggers",      requiredRoles: ["ADMIN"] },
   { icon: BarChart3,       label: "Marketing Analytics",href: "/marketing-analytics", requiredRoles: ["ADMIN"] },
   { icon: Users,           label: "จัดการผู้ใช้",          href: "/users",         requiredRoles: ["OWNER", "ADMIN"] },
+  { icon: MessageSquare,   label: "Support",               href: "/owner-support", requiredRoles: ["OWNER"] },
   { icon: Lock,            label: "สิทธิ์ผู้ใช้งาน",        href: "/permissions",   requiredRoles: ["ADMIN"] },
   { icon: Settings,        label: "การตั้งค่า",           href: "/settings",      requiredRoles: ["OWNER", "ADMIN", "SALES", "AGENT", "CUSTOMER"] },
   { icon: LogOut,          label: "ออกจากระบบ",          href: "/logout",        isLogout: true },

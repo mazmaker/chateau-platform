@@ -178,7 +178,7 @@ export const SubscriptionGuard: React.FC<{
           className="mt-3 px-4 py-2 bg-chateau hover:bg-chateau-600 text-white text-sm font-medium rounded-lg transition-colors"
           onClick={() => {
             // Navigate to upgrade page or contact sales
-            window.open('mailto:sales@chateau-platform.com?subject=อัปเกรดแพ็กเกจ', '_blank');
+            window.open('mailto:mazmakerdevai.1@gmail.com?subject=อัปเกรดแพ็กเกจ', '_blank');
           }}
         >
           {isEnterprise ? ' ติดต่อขาย' : ' อัปเกรด'}

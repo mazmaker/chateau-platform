@@ -444,25 +444,21 @@ const TenantManagement = () => {
         if (!hasThai) return text; // No translation needed
 
         try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 3000);
           const response = await fetch('https://libretranslate.com/translate', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              q: text,
-              source: 'th',
-              target: 'en',
-              format: 'text'
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ q: text, source: 'th', target: 'en', format: 'text' }),
+            signal: controller.signal,
           });
-
+          clearTimeout(timer);
           if (response.ok) {
             const data = await response.json();
             return data.translatedText || text;
           }
-        } catch (error) {
-          console.log('Translation failed, using original text:', error);
+        } catch {
+          // timeout หรือ network error → fallback to timestamp slug
         }
         return text; // Fallback to original if translation fails
       };
@@ -843,45 +839,20 @@ const TenantManagement = () => {
 
   const openBillDialog = async (tenant: Tenant) => {
     setSelectedTenant(tenant);
-
-    // NOTE: still mock bills (a real per-tenant invoice fetch is a separate task), but the
-    // amount now reflects the tenant's actual plan price from the `plans` catalog.
-    const planAmount = Number(
-      packageConfig.find(p => p.id === tenant.subscription_plan)?.price.replace(/,/g, '') || 0
-    );
+    setTenantBills([]);
     try {
-      console.log('📊 Loading mock bill data for tenant:', tenant.name);
-
-      // Generate mock bills for this tenant
-      const mockBills = [
-        {
-          id: `bill-${tenant.id}-1`,
-          tenant_id: tenant.id,
-          invoice_number: `INV-${tenant.slug?.toUpperCase() || 'TENANT'}-001`,
-          amount: planAmount,
-          status: 'paid',
-          due_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-          created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-          paid_at: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString()
-        },
-        {
-          id: `bill-${tenant.id}-2`,
-          tenant_id: tenant.id,
-          invoice_number: `INV-${tenant.slug?.toUpperCase() || 'TENANT'}-002`,
-          amount: planAmount,
-          status: 'pending',
-          due_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-          created_at: new Date().toISOString(),
-          paid_at: null
-        }
-      ];
-
-      setTenantBills(mockBills as any);
+      // Real invoices for THIS tenant from the DB (replaces the old mock bills).
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('*')
+        .eq('tenant_id', tenant.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setTenantBills((data || []) as any);
     } catch (error) {
-      console.error('Error loading bill data:', error);
+      console.error('Error loading bills for tenant:', error);
       setTenantBills([]);
     }
-
     setShowBillDialog(true);
   };
 
@@ -1120,7 +1091,11 @@ const TenantManagement = () => {
                 filteredTenants.map((tenant) => {
                   const stats = tenantStats[tenant.id];
                   return (
-                    <TableRow key={tenant.id}>
+                    <TableRow
+                      key={tenant.id}
+                      className="cursor-pointer"
+                      onClick={() => openDetailDialog(tenant)}
+                    >
                       <TableCell>
                         <div>
                           <div className="font-medium">{tenant.name}</div>
@@ -1143,7 +1118,7 @@ const TenantManagement = () => {
                       <TableCell className="text-sm text-muted-foreground">
                         {new Date(tenant.created_at).toLocaleDateString('th-TH')}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="sm">
@@ -1222,13 +1197,18 @@ const TenantManagement = () => {
           filteredTenants.map((tenant) => {
             const stats = tenantStats[tenant.id];
             return (
-              <Card key={tenant.id} className="border-l-4 border-l-blue-500">
+              <Card
+                key={tenant.id}
+                className="border-l-4 border-l-blue-500 cursor-pointer"
+                onClick={() => openDetailDialog(tenant)}
+              >
                 <CardContent className="p-4">
                   <div className="flex justify-between items-start mb-3">
                     <div>
                       <h3 className="font-semibold text-lg">{tenant.name}</h3>
                       <p className="text-sm text-muted-foreground">/{tenant.slug}</p>
                     </div>
+                    <div onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm">
@@ -1277,6 +1257,7 @@ const TenantManagement = () => {
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 mb-3">
@@ -1392,32 +1373,56 @@ const TenantManagement = () => {
                     <CardHeader className="pb-4">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-3">
+                          <div className="flex items-center gap-3 mb-4 flex-wrap">
                             <CardTitle className="text-3xl font-bold">{selectedTenantFromUrl.name}</CardTitle>
                             {getStatusBadge(selectedTenantFromUrl.status)}
-                            {getPlanBadge(selectedTenantFromUrl.subscription_plan)}
+                            {(() => {
+                              const pkg = packageConfig.find(p => p.id === selectedTenantFromUrl.subscription_plan);
+                              return (
+                                <span className="inline-flex flex-col items-start gap-0 text-sm font-semibold px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-900">
+                                  <span>{pkg?.name || selectedTenantFromUrl.subscription_plan}</span>
+                                  <span className="text-xs font-normal text-gray-500">฿{pkg?.price || '0'}/เดือน</span>
+                                </span>
+                              );
+                            })()}
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
                             <div className="space-y-1">
                               <p className="text-sm font-medium text-muted-foreground">Slug</p>
-                              <div className="flex items-center gap-1">
-                                <span className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">/{selectedTenantFromUrl.slug}</span>
-                              </div>
+                              <span className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">/{selectedTenantFromUrl.slug}</span>
                             </div>
 
-                            <div className="space-y-1">
+                            <div className="space-y-2">
                               <p className="text-sm font-medium text-muted-foreground">ผู้ใช้</p>
-                              <span className="text-xl font-bold text-blue-600">
-                                {tenantStats[selectedTenantFromUrl.id]?.userCount || 0} / {selectedTenantFromUrl.max_users}
+                              <span className="text-xl font-bold text-gray-900">
+                                {tenantStats[selectedTenantFromUrl.id]?.userCount || 0} / {selectedTenantFromUrl.max_users > 0 ? selectedTenantFromUrl.max_users : (packageConfig.find(p => p.id === selectedTenantFromUrl.subscription_plan)?.users || '∞')}
                               </span>
                             </div>
 
-                            <div className="space-y-1">
+                            <div className="space-y-2">
                               <p className="text-sm font-medium text-muted-foreground">โครงการ</p>
-                              <span className="text-xl font-semibold">
-                                {tenantStats[selectedTenantFromUrl.id]?.propertyCount || 0} / {selectedTenantFromUrl.max_properties === -1 ? 'ไม่จำกัด' : selectedTenantFromUrl.max_properties}
-                              </span>
+                              {(() => {
+                                const used = tenantStats[selectedTenantFromUrl.id]?.propertyCount || 0;
+                                const limit = selectedTenantFromUrl.max_properties;
+                                const pct = limit > 0 && limit !== -1 ? Math.min(100, (used / limit) * 100) : 0;
+                                const near = limit > 0 && limit !== -1 && pct >= 80;
+                                return (
+                                  <div className="space-y-1.5">
+                                    <span className={`text-xl font-semibold ${near ? 'text-amber-600' : ''}`}>
+                                      {used} / {limit === -1 ? 'ไม่จำกัด' : limit}
+                                    </span>
+                                    {limit !== -1 && limit > 0 && (
+                                      <div className="w-full bg-gray-200 rounded-full h-2">
+                                        <div
+                                          className={`h-2 rounded-full transition-all ${near ? 'bg-amber-500' : 'bg-chateau'}`}
+                                          style={{ width: `${pct}%` }}
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
                         </div>
@@ -1496,29 +1501,33 @@ const TenantManagement = () => {
                         <div className="space-y-2">
                           <div className="flex justify-between text-sm">
                             <span>ผู้ใช้</span>
-                            <span>{tenantStats[selectedTenantFromUrl.id]?.userCount || 0} / {selectedTenantFromUrl.max_users}</span>
+                            <span>{tenantStats[selectedTenantFromUrl.id]?.userCount || 0} / {selectedTenantFromUrl.max_users > 0 ? selectedTenantFromUrl.max_users : (packageConfig.find(p => p.id === selectedTenantFromUrl.subscription_plan)?.users || '∞')}</span>
                           </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div
-                              className="bg-white shadow-sm0 h-2 rounded-full"
-                              style={{
-                                width: `${Math.min(100, ((tenantStats[selectedTenantFromUrl.id]?.userCount || 0) / selectedTenantFromUrl.max_users) * 100)}%`
-                              }}
-                            />
-                          </div>
+                          {(() => {
+                            const maxU = selectedTenantFromUrl.max_users > 0
+                              ? selectedTenantFromUrl.max_users
+                              : (packageConfig.find(p => p.id === selectedTenantFromUrl.subscription_plan)?.users || 0);
+                            if (!maxU) return null;
+                            return (
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div
+                                  className="bg-chateau h-2 rounded-full"
+                                  style={{ width: `${Math.min(100, ((tenantStats[selectedTenantFromUrl.id]?.userCount || 0) / maxU) * 100)}%` }}
+                                />
+                              </div>
+                            );
+                          })()}
                         </div>
                         <div className="space-y-2">
                           <div className="flex justify-between text-sm">
                             <span>โครงการ</span>
                             <span>{tenantStats[selectedTenantFromUrl.id]?.propertyCount || 0} / {selectedTenantFromUrl.max_properties === -1 ? '∞' : selectedTenantFromUrl.max_properties}</span>
                           </div>
-                          {selectedTenantFromUrl.max_properties !== -1 && (
+                          {selectedTenantFromUrl.max_properties !== -1 && selectedTenantFromUrl.max_properties > 0 && (
                             <div className="w-full bg-gray-200 rounded-full h-2">
                               <div
-                                className="bg-white shadow-sm0 h-2 rounded-full"
-                                style={{
-                                  width: `${Math.min(100, ((tenantStats[selectedTenantFromUrl.id]?.propertyCount || 0) / selectedTenantFromUrl.max_properties) * 100)}%`
-                                }}
+                                className="bg-chateau h-2 rounded-full"
+                                style={{ width: `${Math.min(100, ((tenantStats[selectedTenantFromUrl.id]?.propertyCount || 0) / selectedTenantFromUrl.max_properties) * 100)}%` }}
                               />
                             </div>
                           )}

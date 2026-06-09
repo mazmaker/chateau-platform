@@ -52,8 +52,8 @@ const SuspendedPage = () => {
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2 text-gray-700">
                 <Mail className="w-4 h-4" />
-                <a href="mailto:support@chateau.platform" className="hover:underline">
-                  support@chateau.platform
+                <a href="mailto:mazmakerdevai.1@gmail.com" className="hover:underline">
+                  mazmakerdevai.1@gmail.com
                 </a>
               </div>
               <div className="flex items-center gap-2 text-gray-700">
