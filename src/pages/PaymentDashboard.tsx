@@ -209,12 +209,31 @@ const PaymentDashboard = () => {
   const [showCalendarEventModal, setShowCalendarEventModal] = useState(false);
   const [selectedCalendarEvent, setSelectedCalendarEvent] = useState<CalendarEvent | null>(null);
 
-  // Package Pricing
-  const PACKAGE_PRICES = {
-    starter: { monthly: 2900, annual: 29000, label: 'Starter Plan' },
-    professional: { monthly: 5900, annual: 59000, label: 'Professional Plan' },
-    enterprise: { monthly: 15900, annual: 159000, label: 'Enterprise Plan' }
-  };
+  // Package pricing — loaded live from the Owner-managed `plans` catalog (no hardcoding)
+  // so amounts always match what the Owner set in PackageCatalog. Shape kept as
+  // { monthly, annual, label } so existing call sites work unchanged. Billable plans
+  // only (price_monthly > 0) — free plans aren't invoiced here.
+  const [PACKAGE_PRICES, setPackagePrices] = useState<Record<string, { monthly: number; annual: number; label: string }>>({});
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await (supabase as any)
+        .from('plans')
+        .select('id, name, price_monthly, price_yearly')
+        .gt('price_monthly', 0)
+        .order('sort_order');
+      if (!data) return;
+      const map: Record<string, { monthly: number; annual: number; label: string }> = {};
+      for (const p of data) {
+        map[p.id] = {
+          monthly: Number(p.price_monthly),
+          annual: Number(p.price_yearly ?? 0),
+          label: `${p.name} Plan`,
+        };
+      }
+      setPackagePrices(map);
+    })();
+  }, []);
 
   // Automation Status
   const [automationStatus, setAutomationStatus] = useState({
@@ -667,6 +686,7 @@ const PaymentDashboard = () => {
         .from('tenants')
         .select('id, name, subscription_plan')
         .eq('status', 'active')
+        .eq('is_platform' as any, false) // exclude our own platform tenant (MAZMAKER) from billing pickers
         .order('name');
 
       if (error) {
@@ -783,7 +803,8 @@ const PaymentDashboard = () => {
       const { data: tenants, error } = await supabase
         .from('tenants')
         .select('id, name, subscription_plan, created_at, status')
-        .eq('status', 'active');
+        .eq('status', 'active')
+        .eq('is_platform' as any, false); // never auto-bill our own platform tenant (MAZMAKER)
 
       if (error || !tenants) return;
 
@@ -836,7 +857,7 @@ const PaymentDashboard = () => {
     const invoiceData = {
       tenant_id: tenant.id,
       invoice_number: invoiceNumber,
-      amount: packagePrice?.monthly || 2900,
+      amount: packagePrice?.monthly || 0,
       currency: 'THB',
       status: 'pending',
       subscription_plan: tenant.subscription_plan,
@@ -951,7 +972,7 @@ const PaymentDashboard = () => {
     setNewInvoice(prev => ({
       ...prev,
       subscription_plan: plan,
-      amount: prev.custom_amount ? prev.amount : packageData?.monthly || 2900,
+      amount: prev.custom_amount ? prev.amount : packageData?.monthly || 0,
       description: `Monthly subscription - ${packageData?.label || 'Plan'}`
     }));
   };
@@ -970,7 +991,7 @@ const PaymentDashboard = () => {
       const packageData = PACKAGE_PRICES[tenant.subscription_plan as keyof typeof PACKAGE_PRICES];
       setNewInvoice(prev => ({
         ...prev,
-        amount: packageData?.monthly || 2900,
+        amount: packageData?.monthly || 0,
         description: `Monthly subscription - ${packageData?.label || 'Plan'}`
       }));
     }

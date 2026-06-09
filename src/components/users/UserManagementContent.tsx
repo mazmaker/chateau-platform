@@ -88,7 +88,7 @@ const UserManagementContent = () => {
       console.log('🏢 FetchTenants: Starting...');
       const { data, error } = await supabase
         .from('tenants')
-        .select('id, name')
+        .select('id, name, is_platform')
         .order('name');
 
       if (error) throw error;
@@ -527,7 +527,7 @@ const UserManagementContent = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">ทุกบริษัท</SelectItem>
-                  {tenants.map((tenant) => (
+                  {tenants.filter((t) => !(t as any).is_platform).map((tenant) => (
                     <SelectItem key={tenant.id} value={tenant.id}>
                       {tenant.name}
                     </SelectItem>

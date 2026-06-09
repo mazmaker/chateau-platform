@@ -105,10 +105,8 @@ const SOURCE_LABELS: Record<string, string> = {
 const PLAN_LABELS: Record<string, string> = {
   free: 'Free', starter: 'Starter', professional: 'Professional', enterprise: 'Enterprise',
 };
-// Monthly list price (THB) per plan — auto-fills estimated MRR when a plan is picked.
-// TODO: unify with the canonical package pricing (currently duplicated in
-// TenantManagement / PaymentDashboard / OwnerDashboard) — see finance-consolidation TODO.
-const PLAN_PRICES: Record<string, number> = { free: 0, starter: 2900, professional: 5900, enterprise: 15900 };
+// Monthly list price per plan is loaded live from the `plans` catalog inside the
+// component (see planPrices state) — auto-fills estimated MRR when a plan is picked.
 
 const emptyForm = {
   company_name: '', current_projects_count: '',
@@ -135,6 +133,7 @@ const OwnerLeads = () => {
   const [lostLead, setLostLead] = useState<PLead | null>(null);
   const [lostReason, setLostReason] = useState('');
   const [savingLost, setSavingLost] = useState(false);
+  const [planPrices, setPlanPrices] = useState<Record<string, number>>({}); // live from `plans` catalog
 
   const fetchLeads = async () => {
     setLoading(true);
@@ -153,7 +152,13 @@ const OwnerLeads = () => {
     setLoading(false);
   };
 
-  useEffect(() => { fetchLeads(); }, []);
+  useEffect(() => {
+    fetchLeads();
+    // Live plan prices from the Owner-managed catalog → estimated MRR stays in sync.
+    (supabase.from('plans') as any).select('id, price_monthly').then(({ data }: any) => {
+      if (data) setPlanPrices(Object.fromEntries(data.map((p: any) => [p.id, Number(p.price_monthly)])));
+    });
+  }, []);
 
   const setF = (k: keyof typeof emptyForm, v: string) => setForm((p) => ({ ...p, [k]: v }));
   const num = (v: string) => (v.trim() === '' ? null : Number(v));
@@ -176,7 +181,7 @@ const OwnerLeads = () => {
       contact_email: txt(form.contact_email),
       interested_plan: txt(form.interested_plan),
       seats_needed: num(form.seats_needed),
-      estimated_mrr: form.interested_plan ? PLAN_PRICES[form.interested_plan] : null, // derived from plan, not a manual field
+      estimated_mrr: form.interested_plan ? (planPrices[form.interested_plan] ?? null) : null, // derived from plan, not a manual field
       source: form.source,
       stage: form.stage,
       expected_close_date: txt(form.expected_close_date),
@@ -354,7 +359,7 @@ const OwnerLeads = () => {
                   className="bg-gray-900 hover:bg-black text-white shadow-lg w-full sm:w-auto"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  เพิ่มผู้สนใจ
+                  เพิ่ม Leads
                 </Button>
               </div>
             </div>
@@ -434,7 +439,7 @@ const OwnerLeads = () => {
                     </TableCell></TableRow>
                   ) : filtered.length === 0 ? (
                     <TableRow><TableCell colSpan={7} className="text-center py-10 text-gray-400">
-                      ยังไม่มีผู้สนใจ — กด “เพิ่มผู้สนใจ” เพื่อบันทึกบริษัทที่ติดต่อเข้ามา
+                      ยังไม่มีผู้สนใจ — กด “เพิ่ม Leads” เพื่อบันทึกบริษัทที่ติดต่อเข้ามา
                     </TableCell></TableRow>
                   ) : filtered.map((l) => (
                     <TableRow key={l.id} onClick={() => setDetailLead(l)} className="cursor-pointer hover:bg-gray-50">

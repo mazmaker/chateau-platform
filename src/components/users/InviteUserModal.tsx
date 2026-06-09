@@ -48,13 +48,15 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
       const { data, error } = await supabase
         .from('tenants')
         .select('id, name')
+        .eq('is_platform' as any, false) // exclude our own platform tenant (MAZMAKER) — not a customer company
         .order('name');
 
       if (error) throw error;
       setTenants((data as Tenant[]) || []);
 
-      // Auto-select current tenant if available
-      if (currentTenant) {
+      // Auto-select current tenant — but NOT the platform tenant (MAZMAKER): the Owner
+      // must consciously pick a customer company when adding a tenant-side user.
+      if (currentTenant && !(currentTenant as any).is_platform) {
         setSelectedTenantId(currentTenant.id);
       }
     } catch (error) {
@@ -68,7 +70,7 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
     setEmail("");
     setFullName("");
     setRole(isAdmin ? UserRole.SALES : UserRole.ADMIN);
-    setSelectedTenantId(isOwner && currentTenant ? currentTenant.id : "");
+    setSelectedTenantId(currentTenant && !(currentTenant as any).is_platform ? currentTenant.id : "");
     setError("");
     setSuccessInviteLink("");
   };

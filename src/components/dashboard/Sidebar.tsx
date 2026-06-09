@@ -54,15 +54,23 @@ const NAV_GROUPS: NavGroup[] = [
   { id: "admin",     label: "ADMIN",           icon: Wrench,    hrefs: ["/users", "/permissions", "/settings"] },
 ];
 
-// Owner = SaaS control-plane. Its menu is a deliberate 2-tier structure —
-// strategic OVERVIEW (top, no header) vs operational "จัดการระบบ" — distinct
-// from the tenant Admin's groups above. Tenant-ops menus (campaigns, triggers,
-// team, permissions, etc.) are intentionally NOT here: those are the Admin's
-// application-plane work, not the platform owner's.
+// Owner = SaaS control-plane. Its menu mirrors how the SaaS company is run, in
+// English UPPERCASE headers to match the app's KK-style groups above:
+//   (top, no header) strategic OVERVIEW — Executive Dashboard
+//   TENANTS          — operate EXISTING customers: manage company, watch usage, billing
+//   SALES            — acquire NEW customers (platform sales pipeline: prospect → tenant)
+//   SETTINGS         — user & platform config
+// Billing lives under TENANTS (it's about EXISTING customers paying); Leads gets its
+// own SALES group because acquisition is a distinct pre-customer stage with no home in
+// TENANTS. SALES is intentionally a single item for now and is expected to grow.
+// Tenant-ops menus (campaigns, triggers, team, permissions, etc.) are intentionally
+// NOT here: those are the Admin's application-plane work, not the platform owner's.
+// NOTE: within-group order follows the master getAllNavItems() order, not hrefs order.
 const OWNER_NAV_GROUPS: NavGroup[] = [
-  { id: "top",        label: null,           hrefs: ["/owner"] },
-  { id: "operations", label: "จัดการระบบ",    icon: Building, hrefs: ["/tenants", "/owner-projects", "/owner-leads", "/payments"] },
-  { id: "settings",   label: "ตั้งค่า",        icon: Wrench,  hrefs: ["/users", "/settings"] },
+  { id: "top",      label: null,              hrefs: ["/owner"] },
+  { id: "tenants",  label: "TENANTS",  icon: Building,  hrefs: ["/tenants", "/owner-projects", "/payments"] },
+  { id: "sales",    label: "SALES",    icon: Briefcase, hrefs: ["/owner-leads"] },
+  { id: "settings", label: "SETTINGS", icon: Wrench,    hrefs: ["/users", "/settings"] },
 ];
 
 const getAllNavItems = (): NavItem[] => [
@@ -75,12 +83,15 @@ const getAllNavItems = (): NavItem[] => [
   // tenant-scoped LEAD analytics (conversion/SLA/won-lost for one company) =
   // Admin's application-plane work, not the platform Owner's. ADMIN-only.
   { icon: BarChart3,       label: "Analytics",           href: "/analytics",     requiredRoles: ["ADMIN"], requiredFeature: "analytics", isPremium: true },
+  // Owner items are ordered to drive the sidebar groups (render order = this master
+  // order, filtered per group). TENANTS group → จัดการบริษัท · จัดการโครงการ · การชำระเงิน;
+  // SALES group → Leads. Keep this order so billing reads last within TENANTS.
   { icon: Building2,       label: "จัดการบริษัท",         href: "/tenants",       requiredRoles: ["OWNER"] },
-  { icon: Briefcase,       label: "Leads",               href: "/owner-leads",   requiredRoles: ["OWNER"] },
-  { icon: CreditCard,      label: "การชำระเงิน",          href: "/payments",      requiredRoles: ["OWNER"] },
   // Owner gets the cross-tenant, read-only Project Dashboard (control-plane);
   // Admin/Sales/Agent keep the tenant-scoped editable /properties page.
   { icon: Building2,       label: "จัดการโครงการ",       href: "/owner-projects", requiredRoles: ["OWNER"] },
+  { icon: CreditCard,      label: "การชำระเงิน",          href: "/payments",      requiredRoles: ["OWNER"] },
+  { icon: Briefcase,       label: "Leads",               href: "/owner-leads",   requiredRoles: ["OWNER"] },
   { icon: Building2,       label: "โครงการ",             href: "/properties",    requiredRoles: ["ADMIN", "SALES", "AGENT"] },
   { icon: FileText,        label: "Leads",              href: "/leads",         requiredRoles: ["ADMIN", "SALES", "AGENT"] },
   // Tenant-ops menus — Admin's application-plane work, NOT the platform Owner's.

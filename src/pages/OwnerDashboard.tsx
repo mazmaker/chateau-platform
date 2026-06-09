@@ -169,6 +169,7 @@ const OwnerDashboard = () => {
       const { data: tenants } = await supabase
         .from('tenants')
         .select('*')
+        .eq('is_platform' as any, false) // exclude our own platform tenant (MAZMAKER) from customer stats/MRR
         .order('created_at', { ascending: false });
 
       if (tenants) {
@@ -398,10 +399,11 @@ const OwnerDashboard = () => {
         setUpcomingRenewals(renewals);
       }
 
-      // Fetch total users count
+      // Fetch total users count — customer-side only; exclude platform owners (us).
       const { count: userCount } = await supabase
         .from('users')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .neq('role', 'owner');
 
       setStats(prev => ({ ...prev, totalUsers: userCount || 0 }));
 

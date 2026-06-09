@@ -353,7 +353,10 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         <Menu className="w-5 h-5" />
       </Button>
 
-      {/* Scope selector */}
+      {/* Scope selector — hidden for Owner: the platform has no single-company scope
+          (Owner = control plane, sees platform-wide overview, not one tenant). Shown
+          for tenant roles as a context indicator of which company they belong to. */}
+      {!isOwner && (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button className="flex items-center gap-2 h-11 px-4 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all flex-shrink-0 group">
@@ -396,6 +399,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+      )}
 
       {/* Search bar with dropdown */}
       <div className="flex-1 min-w-0 max-w-sm lg:max-w-md" ref={searchRef}>

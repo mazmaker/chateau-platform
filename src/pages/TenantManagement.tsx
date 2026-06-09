@@ -345,6 +345,7 @@ const TenantManagement = () => {
       const { data, error } = await supabase
         .from('tenants')
         .select('*')
+        .eq('is_platform' as any, false) // hide our own platform tenant (MAZMAKER) from the customer list
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -843,7 +844,11 @@ const TenantManagement = () => {
   const openBillDialog = async (tenant: Tenant) => {
     setSelectedTenant(tenant);
 
-    // For now, use mock data since invoices table doesn't exist yet
+    // NOTE: still mock bills (a real per-tenant invoice fetch is a separate task), but the
+    // amount now reflects the tenant's actual plan price from the `plans` catalog.
+    const planAmount = Number(
+      packageConfig.find(p => p.id === tenant.subscription_plan)?.price.replace(/,/g, '') || 0
+    );
     try {
       console.log('📊 Loading mock bill data for tenant:', tenant.name);
 
@@ -853,7 +858,7 @@ const TenantManagement = () => {
           id: `bill-${tenant.id}-1`,
           tenant_id: tenant.id,
           invoice_number: `INV-${tenant.slug?.toUpperCase() || 'TENANT'}-001`,
-          amount: 2900,
+          amount: planAmount,
           status: 'paid',
           due_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
           created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -863,7 +868,7 @@ const TenantManagement = () => {
           id: `bill-${tenant.id}-2`,
           tenant_id: tenant.id,
           invoice_number: `INV-${tenant.slug?.toUpperCase() || 'TENANT'}-002`,
-          amount: 2900,
+          amount: planAmount,
           status: 'pending',
           due_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
           created_at: new Date().toISOString(),

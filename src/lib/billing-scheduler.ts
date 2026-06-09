@@ -270,6 +270,9 @@ class BillingScheduler {
 
       if (error) throw error;
 
+      // Pull live prices from the Owner-managed plans catalog (no more hardcoding).
+      const planPrices = await this.fetchPlanPrices();
+
       const today = new Date();
       const invoicesGenerated: string[] = [];
 
@@ -297,9 +300,18 @@ class BillingScheduler {
             .lt('created_at', new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString()); // Check next 24 hours
 
           if (!existingInvoices || existingInvoices.length === 0) {
+            const amount = planPrices[tenant.subscription_plan] ?? 0;
+
+            // Free / ฿0 plans are not billed — skip. (The old hardcoded path wrongly
+            // charged them 2900 via a `|| 2900` fallback.)
+            if (amount <= 0) {
+              console.log(`⏭️ Skip billing ${tenant.name} — plan "${tenant.subscription_plan}" is ฿0`);
+              continue;
+            }
+
             // Generate invoice with 7-day payment terms
             const dueDate = new Date(invoiceDate.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days after invoice
-            const success = await this.createInvoiceForTenant(tenant, dueDate);
+            const success = await this.createInvoiceForTenant(tenant, dueDate, amount);
 
             if (success) {
               invoicesGenerated.push(`${tenant.name} (due: ${dueDate.toLocaleDateString('th-TH')})`);
@@ -309,7 +321,7 @@ class BillingScheduler {
                 emailService.scheduleInvoiceEmails({
                   tenant_name: tenant.name,
                   invoice_number: this.generateInvoiceNumber(),
-                  amount: this.getPackagePrice(tenant.subscription_plan),
+                  amount: amount,
                   due_date: dueDate.toISOString(),
                   tenant_email: tenant.email
                 });
@@ -421,23 +433,29 @@ class BillingScheduler {
     return `INV-${year}${month}${day}-${time}`;
   }
 
-  private getPackagePrice(plan: string): number {
-    const prices: Record<string, number> = {
-      starter: 2900,
-      professional: 5900,
-      enterprise: 15900
-    };
-    return prices[plan] || 2900;
+  // Live plan prices from the Owner-managed `plans` catalog (replaces hardcoded values
+  // so invoices always match what the Owner set in PackageCatalog). Returns
+  // { planId: price_monthly }; empty on error → callers treat missing as ฿0 (skip).
+  private async fetchPlanPrices(): Promise<Record<string, number>> {
+    const { data, error } = await (supabase as any)
+      .from('plans')
+      .select('id, price_monthly');
+
+    if (error || !data) {
+      console.error('❌ Could not load plan prices from `plans`:', error);
+      return {};
+    }
+    return Object.fromEntries(data.map((p: any) => [p.id, Number(p.price_monthly)]));
   }
 
-  private async createInvoiceForTenant(tenant: any, dueDate?: Date): Promise<boolean> {
+  private async createInvoiceForTenant(tenant: any, dueDate?: Date, amount: number = 0): Promise<boolean> {
     try {
       const defaultDueDate = dueDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // Default 7 days
 
       const invoiceData = {
         tenant_id: tenant.id,
         invoice_number: this.generateInvoiceNumber(),
-        amount: this.getPackagePrice(tenant.subscription_plan),
+        amount: amount,
         currency: 'THB',
         status: 'pending',
         subscription_plan: tenant.subscription_plan,

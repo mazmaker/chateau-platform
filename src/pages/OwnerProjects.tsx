@@ -173,7 +173,7 @@ const OwnerProjects = () => {
     setLoading(true);
     try {
       const [tRes, pRes, uRes] = await Promise.all([
-        supabase.from('tenants').select('id, name, status, subscription_plan'),
+        supabase.from('tenants').select('id, name, status, subscription_plan').eq('is_platform' as any, false),
         supabase.from('properties').select('id, tenant_id, name, developer, base_price, address, thumbnail_url, is_active, updated_at'),
         supabase.from('units').select('id, tenant_id, project_id, price, status, area_sqm, unit_number, floor_number, building, bedrooms, bathrooms, unit_type, updated_at'),
       ]);
@@ -305,7 +305,7 @@ const OwnerProjects = () => {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <KpiCard title="โครงการ" value={props.length.toLocaleString()} sub="ทั้งหมดของบริษัท" icon={Building2} color={KK.blue} bg={KK.blueLight} />
                 <KpiCard title="ยูนิตทั้งหมด" value={roll.total.toLocaleString()} sub={`${roll.sold} ขาย · ${roll.reserved} จอง · ${roll.available} ว่าง`} icon={Home} color={KK.slate} bg={KK.slateLight} />
-                <KpiCard title="มูลค่ารวม (GDV)" value={fmtCompact(roll.gdv)} sub="ขนาดพอร์ตของลูกค้า" icon={TrendingUp} color={KK.red} bg={KK.redLight} />
+                <KpiCard title="มูลค่ารวม" value={fmtCompact(roll.gdv)} sub="ขนาดพอร์ตของลูกค้า" icon={TrendingUp} color={KK.red} bg={KK.redLight} />
                 <KpiCard title="ใช้งานล่าสุด" value={fmtRelative(roll.lastUpdated)} sub="อัปเดตข้อมูลครั้งล่าสุด" icon={Clock} color={KK.green} bg={KK.greenLight} />
               </div>
 
@@ -404,7 +404,7 @@ const OwnerProjects = () => {
               <KpiCard title="บริษัทที่มีโครงการ" value={platform.companyCount.toLocaleString()} sub={`จาก ${tenants.length} บริษัท`} icon={Building2} color={KK.blue} bg={KK.blueLight} />
               <KpiCard title="โครงการทั้งหมด" value={platform.projectCount.toLocaleString()} sub="ทั่วทั้งแพลตฟอร์ม" icon={Building} color={KK.slate} bg={KK.slateLight} />
               <KpiCard title="ยูนิตทั้งหมด" value={platform.roll.total.toLocaleString()} sub={`${platform.roll.sold} ขาย · ${platform.roll.reserved} จอง · ${platform.roll.available} ว่าง`} icon={Home} color={KK.green} bg={KK.greenLight} />
-              <KpiCard title="มูลค่ารวม (GDV)" value={fmtCompact(platform.roll.gdv)} sub="มูลค่าอสังหาบนแพลตฟอร์ม" icon={TrendingUp} color={KK.red} bg={KK.redLight} />
+              <KpiCard title="มูลค่ารวม" value={fmtCompact(platform.roll.gdv)} sub="มูลค่าอสังหาบนแพลตฟอร์ม" icon={TrendingUp} color={KK.red} bg={KK.redLight} />
             </div>
 
             {/* Companies table */}
