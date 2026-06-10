@@ -439,7 +439,7 @@ const UserManagementContent = () => {
                     <User className="w-5 h-5 text-purple-600" />
                   </div>
                   <div className="ml-3">
-                    <p className="text-sm text-gray-600">เจ้าของ</p>
+                    <p className="text-sm text-gray-600">เจ้าของแพลตฟอร์ม</p>
                     <p className="text-xl font-semibold">{users.filter(u => u.role === 'owner').length}</p>
                   </div>
                 </div>
@@ -453,7 +453,7 @@ const UserManagementContent = () => {
                     <User className="w-5 h-5 text-blue-600" />
                   </div>
                   <div className="ml-3">
-                    <p className="text-sm text-gray-600">แอดมิน</p>
+                    <p className="text-sm text-gray-600">ผู้ดูแลบริษัท</p>
                     <p className="text-xl font-semibold">{users.filter(u => u.role === 'admin').length}</p>
                   </div>
                 </div>
@@ -789,7 +789,7 @@ const UserManagementContent = () => {
               <div className="space-y-1 text-sm">
                 <p><span className="font-medium">ชื่อ:</span> {deletingUser?.full_name || 'ไม่ระบุ'}</p>
                 <p><span className="font-medium">อีเมล:</span> {deletingUser?.email}</p>
-                <p><span className="font-medium">สิทธิ์:</span> {deletingUser?.role?.toUpperCase()}</p>
+                <p><span className="font-medium">สิทธิ์:</span> {deletingUser && getRoleBadge(deletingUser.role)}</p>
               </div>
             </div>
 

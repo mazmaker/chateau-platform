@@ -50,16 +50,25 @@ type RoleFilter = 'all' | 'sales' | 'agent';
 const ROLE_LABEL: Record<string, string> = {
   sales: 'พนักงานขาย',
   agent: 'นายหน้า',
-  admin: 'ผู้ดูแล',
-  owner: 'เจ้าของ',
+  admin: 'ผู้ดูแลบริษัท',
+  owner: 'เจ้าของแพลตฟอร์ม',
 };
 
-const formatTHB = (n: number) =>
-  n >= 1_000_000
-    ? `฿${(n / 1_000_000).toFixed(n >= 10_000_000 ? 1 : 2)}M`
-    : n > 0
-      ? `฿${n.toLocaleString('th-TH')}`
-      : '—';
+// Compact THB — Thai convention "X ล้าน" / "K" (matches canonical formatTHB in Index.tsx).
+const formatTHB = (n: number) => {
+  if (!Number.isFinite(n) || n === 0) return '฿0';
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1_000_000) {
+    const m = abs / 1_000_000;
+    if (m >= 1000) return `${sign}฿${Math.round(m).toLocaleString('en-US')} ล้าน`;
+    if (m >= 100) return `${sign}฿${Math.round(m)} ล้าน`;
+    if (m >= 10) return `${sign}฿${m.toFixed(1)} ล้าน`;
+    return `${sign}฿${m.toFixed(2)} ล้าน`;
+  }
+  if (abs >= 1_000) return `${sign}฿${(abs / 1_000).toFixed(0)}K`;
+  return `${sign}฿${abs.toFixed(0)}`;
+};
 
 const startOfMonth = () => {
   const d = new Date();

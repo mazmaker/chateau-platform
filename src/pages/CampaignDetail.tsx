@@ -120,15 +120,17 @@ const CampaignDetail = () => {
     load();
   }, [id]);
 
-  // Mock trend chart data (last 7 days)
+  // Trend chart (last 7 days). FIXED daily variation pattern (not Math.random) so the
+  // numbers stay stable across re-renders instead of re-rolling on every load.
+  const dayWave = [0.92, 1.06, 0.88, 1.12, 0.97, 1.08, 0.95];
   const trendData = Array.from({ length: 7 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (6 - i));
     const base = (campaign?.recipients_count || 1000) / 7;
     return {
       date: `${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getDate()}`,
-      opened: Math.round(base * 0.85 * (0.8 + Math.random() * 0.4)),
-      clicked: Math.round(base * 0.4 * (0.8 + Math.random() * 0.4)),
+      opened: Math.round(base * 0.85 * dayWave[i]),
+      clicked: Math.round(base * 0.4 * dayWave[(i + 3) % 7]),
     };
   });
 
@@ -402,6 +404,45 @@ const CampaignDetail = () => {
                       </div>
                     )}
                   </div>
+                </div>
+              </div>
+
+              {/* WeChat Preview (mockup) — same campaign data, WeChat broadcast (群发/图文) style.
+                  Chinese-buyer channel; real content would be in Chinese. Illustrative only. */}
+              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
+                <div className="flex items-center justify-between mb-1">
+                  <h2 className="text-base font-bold text-gray-900">WeChat Message</h2>
+                  <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded text-white" style={{ backgroundColor: "#07C160" }}>
+                    Broadcast 群发
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mb-4">ตัวอย่าง broadcast · ส่งหา followers (≤4 รอบ/เดือน)</p>
+                {/* WeChat chat background */}
+                <div className="rounded-xl p-3.5" style={{ backgroundColor: "#ededed" }}>
+                  {/* OA header */}
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <div className="w-7 h-7 rounded flex items-center justify-center text-white font-bold text-xs" style={{ backgroundColor: "#07C160" }}>C</div>
+                    <div>
+                      <p className="text-gray-800 text-xs font-semibold leading-tight">CHATEAU 置业</p>
+                      <p className="text-gray-400 text-[10px]">公众号 · Official Account</p>
+                    </div>
+                  </div>
+                  {/* 图文 article card */}
+                  <div className="bg-white rounded-lg overflow-hidden shadow-sm">
+                    {campaign.image_url && (
+                      <div className="h-28 bg-gray-100 relative">
+                        <img src={campaign.image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <div className="px-2.5 py-2">
+                      <p className="text-xs font-bold text-gray-900 leading-snug line-clamp-2">{campaign.headline || campaign.campaign_name}</p>
+                      <div className="flex items-center justify-between mt-1 gap-2">
+                        <p className="text-[11px] text-gray-500 line-clamp-1 flex-1">{campaign.message_body || campaign.detail || '-'}</p>
+                        <span className="text-[11px] text-gray-400 flex-shrink-0">阅读全文 ›</span>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-gray-400 text-[9px] mt-1.5">เนื้อหาจริง = ภาษาจีน (ผู้ซื้อชาวจีน)</p>
                 </div>
               </div>
               </div>

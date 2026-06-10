@@ -25,6 +25,7 @@ import {
   DollarSign,
   TrendingUp,
   Eye,
+  ChevronRight,
 } from 'lucide-react';
 
 const KK = {
@@ -511,6 +512,7 @@ const Analytics = () => {
       icon: UserPlus,
       color: KK.red,
       bg: KK.redLight,
+      onClick: undefined as (() => void) | undefined,
     },
     {
       title: 'ลีดเงียบ > 7 วัน',
@@ -519,6 +521,10 @@ const Analytics = () => {
       icon: PhoneOff,
       color: KK.orange,
       bg: KK.orangeLight,
+      // Drill into the Silent Leads panel already on this page (scrolls to the named list).
+      onClick: silent7.length > 0
+        ? () => document.getElementById('silent-leads')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        : undefined,
     },
     {
       title: 'ลีดเกิน SLA',
@@ -527,6 +533,9 @@ const Analytics = () => {
       icon: Clock,
       color: KK.amber,
       bg: KK.amberLight,
+      // SLA breaches = new + untouched + >2h. Deep-link with ?sla=1 so Leads filters to
+      // EXACTLY this cohort (matches the card count); ?status=new alone would over-count.
+      onClick: slaBreach.length > 0 ? () => navigate('/leads?sla=1') : undefined,
     },
     {
       // Renamed from "Pipeline Value" — sum of estimated_value for OPEN leads
@@ -539,6 +548,7 @@ const Analytics = () => {
       icon: TrendingUp,
       color: KK.blue,
       bg: KK.blueLight,
+      onClick: undefined,
     },
     {
       // Conversion rate replaces the redundant "รายได้รวม" card — revenue lives
@@ -552,6 +562,7 @@ const Analytics = () => {
       icon: DollarSign,
       color: KK.green,
       bg: KK.greenLight,
+      onClick: undefined,
     },
   ];
 
@@ -599,7 +610,14 @@ const Analytics = () => {
         {/* KPI Row */}
         <div className={`grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 ${loading ? 'opacity-30 pointer-events-none' : ''}`}>
           {kpiCards.map((k, i) => (
-            <div key={i} className="bg-white border border-gray-100 rounded-2xl p-6 shadow-soft">
+            <div
+              key={i}
+              onClick={k.onClick}
+              role={k.onClick ? 'button' : undefined}
+              tabIndex={k.onClick ? 0 : undefined}
+              onKeyDown={k.onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); k.onClick?.(); } } : undefined}
+              className={`bg-white border border-gray-100 rounded-2xl p-6 shadow-soft transition-all ${k.onClick ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-soft-md hover:border-gray-200' : ''}`}
+            >
               <div className="flex items-start justify-between mb-5">
                 <p className="text-sm font-medium text-gray-500 leading-tight pt-1.5">{k.title}</p>
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: k.bg }}>
@@ -607,7 +625,10 @@ const Analytics = () => {
                 </div>
               </div>
               <p className="text-[32px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{k.value}</p>
-              <p className="text-[12px] font-medium text-gray-500 mt-3.5">{k.sub}</p>
+              <div className="flex items-center justify-between mt-3.5">
+                <p className="text-[12px] font-medium text-gray-500">{k.sub}</p>
+                {k.onClick && <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />}
+              </div>
             </div>
           ))}
         </div>
@@ -861,7 +882,7 @@ const Analytics = () => {
             )}
           </div>
 
-          <div className="bg-white border rounded-2xl shadow-soft p-6" style={{ borderColor: KK.orangeLight }}>
+          <div id="silent-leads" className="bg-white border rounded-2xl shadow-soft p-6 scroll-mt-24" style={{ borderColor: KK.orangeLight }}>
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4" style={{ color: KK.orange }} />

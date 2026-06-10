@@ -349,7 +349,7 @@ export const SalesUnitMatrix = () => {
       <Card>
         <CardContent className="pt-10 pb-10 text-center text-gray-500">
           <Inbox className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-          ยังไม่มี Sales (พนักงานขาย) ในระบบ
+          ยังไม่มีพนักงานขาย (Sales) ในระบบ
         </CardContent>
       </Card>
     );
@@ -375,7 +375,7 @@ export const SalesUnitMatrix = () => {
           <ShieldCheck className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <div>
             <p className="font-medium">โหมดดูอย่างเดียว</p>
-            <p className="text-xs">เฉพาะ Owner / Admin เท่านั้นที่แก้ไขสิทธิ์ Sales ดูแลยูนิตได้</p>
+            <p className="text-xs">เฉพาะเจ้าของแพลตฟอร์ม / ผู้ดูแลบริษัทเท่านั้นที่แก้ไขสิทธิ์พนักงานขายดูแลยูนิตได้</p>
           </div>
         </div>
       )}
@@ -385,14 +385,14 @@ export const SalesUnitMatrix = () => {
         <Card className="h-fit">
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900">Sales (พนักงานขาย)</h3>
+              <h3 className="font-semibold text-gray-900">พนักงานขาย (Sales)</h3>
               <span className="text-xs text-gray-500">{salesUsers.length} คน</span>
             </div>
 
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
-                placeholder="ค้นหา sales..."
+                placeholder="ค้นหาพนักงานขาย..."
                 value={salesSearch}
                 onChange={(e) => setSalesSearch(e.target.value)}
                 className="pl-9 h-9"
@@ -451,15 +451,15 @@ export const SalesUnitMatrix = () => {
             {!selectedSales ? (
               <div className="py-20 text-center text-gray-500">
                 <Briefcase className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-                เลือก Sales ทางซ้ายเพื่อกำหนดยูนิตที่ปิดดีล
+                เลือกพนักงานขายทางซ้ายเพื่อกำหนดยูนิตที่ปิดดีล
               </div>
             ) : salesAssignedProjectIds.size === 0 ? (
               <div className="py-12 text-center">
                 <AlertTriangle className="w-10 h-10 mx-auto mb-3 text-amber-400" />
-                <h4 className="font-semibold text-gray-900 mb-1">Sales ยังไม่ได้รับสิทธิ์โครงการ</h4>
+                <h4 className="font-semibold text-gray-900 mb-1">พนักงานขายยังไม่ได้รับสิทธิ์โครงการ</h4>
                 <p className="text-sm text-gray-600 mb-4">
                   กำหนดสิทธิ์โครงการให้ <strong>{selectedSales.full_name || selectedSales.email}</strong> ก่อน
-                  <br />ที่ Tab <strong>"สิทธิ์ Sales ดูแลโครงการ"</strong>
+                  <br />ที่ Tab <strong>"สิทธิ์พนักงานขายดูแลโครงการ"</strong>
                 </p>
                 <p className="text-xs text-gray-500">
                   หลังจากนั้น units ของโครงการที่ assigned จะขึ้นมาให้เลือกที่นี่
@@ -489,7 +489,7 @@ export const SalesUnitMatrix = () => {
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                      รายการ unit นี้คือยูนิตในโครงการที่ sales ได้รับ assigned แล้ว
+                      รายการ unit นี้คือยูนิตในโครงการที่พนักงานขายได้รับ assigned แล้ว
                     </p>
                   </div>
                 </div>
@@ -543,10 +543,10 @@ export const SalesUnitMatrix = () => {
                     onClick={() => setCloneOpen(true)}
                     title={
                       selectedSalesItemCount === 0
-                        ? "Sales คนนี้ยังไม่มียูนิตที่รับผิดชอบ"
+                        ? "พนักงานขายคนนี้ยังไม่มียูนิตที่รับผิดชอบ"
                         : !hasOtherSameTenant
-                        ? "ไม่มี Sales คนอื่นใน tenant เดียวกัน"
-                        : "โคลนสิทธิ์ยูนิตไปยัง Sales คนอื่น"
+                        ? "ไม่มีพนักงานขายคนอื่นใน tenant เดียวกัน"
+                        : "โคลนสิทธิ์ยูนิตไปยังพนักงานขายคนอื่น"
                     }
                   >
                     <Copy className="w-4 h-4 mr-1" />
@@ -559,7 +559,7 @@ export const SalesUnitMatrix = () => {
                     <Inbox className="w-8 h-8 mx-auto mb-2 text-gray-300" />
                     {unitSearch
                       ? `ไม่พบยูนิตที่ค้นหา "${unitSearch}"`
-                      : "โครงการที่ sales ได้รับ assigned ยังไม่มียูนิต"}
+                      : "โครงการที่พนักงานขายได้รับ assigned ยังไม่มียูนิต"}
                   </div>
                 ) : (
                   <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
@@ -648,7 +648,7 @@ export const SalesUnitMatrix = () => {
         }}
         initialSourceId={selectedSales?.id}
         itemLabel="ยูนิต"
-        roleLabel="Sales"
+        roleLabel="พนักงานขาย"
         table="sales_unit_assignments"
         userColumn="sales_user_id"
         itemColumn="unit_id"

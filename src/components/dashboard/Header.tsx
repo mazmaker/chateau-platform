@@ -354,6 +354,8 @@ const Header = ({ onMenuClick }: HeaderProps) => {
       case "owner": return "เจ้าของแพลตฟอร์ม";
       case "admin": return "ผู้ดูแลบริษัท";
       case "sales": return "พนักงานขาย";
+      case "agent": return "นายหน้า";
+      case "customer": return "ลูกค้า";
       default: return "ผู้ใช้";
     }
   };

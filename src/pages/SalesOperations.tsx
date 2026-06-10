@@ -50,11 +50,20 @@ const tooltipStyle = {
   padding: '8px 12px',
 };
 
+// Compact THB — Thai convention "X ล้าน" / "K" (matches canonical formatTHB in Index.tsx).
 const formatTHB = (n: number) => {
-  if (n >= 1_000_000_000) return `฿${(n / 1_000_000_000).toFixed(2)}B`;
-  if (n >= 1_000_000) return `฿${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `฿${(n / 1_000).toFixed(0)}K`;
-  return `฿${n.toFixed(0)}`;
+  if (!Number.isFinite(n) || n === 0) return '฿0';
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1_000_000) {
+    const m = abs / 1_000_000;
+    if (m >= 1000) return `${sign}฿${Math.round(m).toLocaleString('en-US')} ล้าน`;
+    if (m >= 100) return `${sign}฿${Math.round(m)} ล้าน`;
+    if (m >= 10) return `${sign}฿${m.toFixed(1)} ล้าน`;
+    return `${sign}฿${m.toFixed(2)} ล้าน`;
+  }
+  if (abs >= 1_000) return `${sign}฿${(abs / 1_000).toFixed(0)}K`;
+  return `${sign}฿${abs.toFixed(0)}`;
 };
 
 const timeAgo = (iso: string | null) => {

@@ -3,9 +3,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { ShieldCheck, Construction } from "lucide-react";
 import { AdminProjectMatrix } from "./AdminProjectMatrix";
-import { SalesProjectMatrix } from "./SalesProjectMatrix";
-import { SalesUnitMatrix } from "./SalesUnitMatrix";
-import { AgentUnitMatrix } from "./AgentUnitMatrix";
+import { SalesScopeMatrix } from "./SalesScopeMatrix";
+import { AgentScopeMatrix } from "./AgentScopeMatrix";
 
 const ComingSoon = ({ name }: { name: string }) => (
   <Card>
@@ -34,28 +33,25 @@ const PermissionsContent = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">สิทธิ์ผู้ใช้งาน</h1>
             <p className="text-sm text-gray-600 mt-0.5">
-              จัดการการมอบหมายโครงการ / ยูนิต ให้ Admin / Sales / Agent
+              จัดการการมอบหมายโครงการ / ยูนิต ให้ผู้ดูแลบริษัท / พนักงานขาย / นายหน้า
             </p>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue={isOwner ? "admin-projects" : "sales-projects"} className="w-full">
+      <Tabs defaultValue={isOwner ? "admin-projects" : "sales-scope"} className="w-full">
         <TabsList className="w-full justify-start h-auto p-1 bg-gray-100">
           {isOwner && (
             <TabsTrigger value="admin-projects" className="data-[state=active]:bg-white">
-              สิทธิ์ Admin ดูแลโครงการ
+              สิทธิ์ผู้ดูแลบริษัทดูแลโครงการ
             </TabsTrigger>
           )}
-          <TabsTrigger value="sales-projects" className="data-[state=active]:bg-white">
-            สิทธิ์ Sales ดูแลโครงการ
-          </TabsTrigger>
-          <TabsTrigger value="sales-units" className="data-[state=active]:bg-white">
-            สิทธิ์ Sales ดูแลยูนิต
+          <TabsTrigger value="sales-scope" className="data-[state=active]:bg-white">
+            สิทธิ์พนักงานขาย (โครงการ + ยูนิต)
           </TabsTrigger>
           <TabsTrigger value="agent-units" className="data-[state=active]:bg-white">
-            สิทธิ์ Agent ดูแลยูนิต
+            สิทธิ์นายหน้าดูแลยูนิต
           </TabsTrigger>
         </TabsList>
 
@@ -65,16 +61,12 @@ const PermissionsContent = () => {
           </TabsContent>
         )}
 
-        <TabsContent value="sales-projects" className="pt-4">
-          <SalesProjectMatrix />
-        </TabsContent>
-
-        <TabsContent value="sales-units" className="pt-4">
-          <SalesUnitMatrix />
+        <TabsContent value="sales-scope" className="pt-4">
+          <SalesScopeMatrix />
         </TabsContent>
 
         <TabsContent value="agent-units" className="pt-4">
-          <AgentUnitMatrix />
+          <AgentScopeMatrix />
         </TabsContent>
       </Tabs>
     </div>

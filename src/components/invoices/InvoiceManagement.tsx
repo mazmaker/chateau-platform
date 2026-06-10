@@ -42,7 +42,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
-  Plus,
   Search,
   Edit,
   Trash2,
@@ -63,6 +62,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { suspensionService } from '@/lib/suspension-service';
 import { InvoiceDetailModal } from './InvoiceDetailModal';
 import { generateSimpleThaiPDF } from '@/lib/invoice-pdf-simple';
 import { generateReceiptPDF } from '@/lib/receipt-pdf';
@@ -93,16 +93,8 @@ interface Invoice {
   };
 }
 
-interface Tenant {
-  id: string;
-  name: string;
-  slug: string;
-  subscription_plan: string;
-}
-
 const InvoiceManagement = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Auto overdue detection (จะ setup หลัง fetchInvoices ถูก define)
@@ -110,7 +102,6 @@ const InvoiceManagement = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
@@ -129,7 +120,6 @@ const InvoiceManagement = () => {
 
   useEffect(() => {
     fetchInvoices();
-    fetchTenants();
   }, []);
 
   const fetchInvoices = useCallback(async () => {
@@ -179,26 +169,6 @@ const InvoiceManagement = () => {
     }
   };
 
-  const fetchTenants = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('tenants')
-        .select('id, name, slug, subscription_plan')
-        .order('name');
-
-      if (error) throw error;
-      setTenants(data || []);
-    } catch (error) {
-      console.error('Error fetching tenants:', error);
-    }
-  };
-
-  const generateInvoiceNumber = () => {
-    const year = new Date().getFullYear();
-    const randomNum = Math.floor(Math.random() * 9999) + 1;
-    return `INV-${year}-${randomNum.toString().padStart(4, '0')}`;
-  };
-
   const resetForm = () => {
     setInvoiceForm({
       tenant_id: '',
@@ -207,39 +177,6 @@ const InvoiceManagement = () => {
       due_date: '',
       description: ''
     });
-  };
-
-  const handleCreateInvoice = async () => {
-    try {
-      const selectedTenant = tenants.find(t => t.id === invoiceForm.tenant_id);
-      if (!selectedTenant) {
-        toast.error('กรุณาเลือกบริษัท');
-        return;
-      }
-
-      const invoiceNumber = generateInvoiceNumber();
-
-      const { error } = await supabase.from('invoices').insert({
-        tenant_id: invoiceForm.tenant_id,
-        invoice_number: invoiceNumber,
-        amount: parseFloat(invoiceForm.amount),
-        subscription_plan: invoiceForm.subscription_plan,
-        due_date: invoiceForm.due_date,
-        description: invoiceForm.description || `Monthly subscription - ${invoiceForm.subscription_plan}`,
-        status: 'pending',
-        currency: 'THB'
-      });
-
-      if (error) throw error;
-
-      toast.success('สร้างใบแจ้งหนี้สำเร็จ');
-      setShowCreateDialog(false);
-      resetForm();
-      fetchInvoices();
-    } catch (error) {
-      console.error('Error creating invoice:', error);
-      toast.error('ไม่สามารถสร้างใบแจ้งหนี้ได้');
-    }
   };
 
   const handleUpdateInvoice = async () => {
@@ -301,6 +238,38 @@ const InvoiceManagement = () => {
     setShowLogModal(true);
   };
 
+  // After an invoice is marked paid: if its tenant is currently suspended and has NO
+  // remaining past-due unpaid invoices, lift the suspension automatically. This is the
+  // "จ่าย → ปลดระงับ" step of the billing loop that used to be dead code (never called).
+  // If other overdue bills remain, the tenant stays suspended and we say so.
+  const maybeAutoRestoreTenant = async (tenantId: string) => {
+    try {
+      const { data: tenant } = await supabase
+        .from('tenants')
+        .select('status')
+        .eq('id', tenantId)
+        .single();
+      if (!tenant || (tenant as any).status !== 'suspended') return;
+
+      const { count } = await supabase
+        .from('invoices')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId)
+        .in('status', ['pending', 'overdue'])
+        .lt('due_date', new Date().toISOString());
+
+      const remaining = count || 0;
+      if (remaining === 0) {
+        const ok = await suspensionService.restoreTenant(tenantId, 'auto-payment');
+        if (ok) toast.success('ชำระครบแล้ว — ปลดระงับบริการให้บริษัทอัตโนมัติ');
+      } else {
+        toast.info(`ชำระแล้ว แต่ยังมีบิลค้างอีก ${remaining} ใบ — บริษัทยังถูกระงับ`);
+      }
+    } catch (e) {
+      console.error('auto-restore check failed:', e);
+    }
+  };
+
   const handleStatusConfirm = async (data: any) => {
     if (!selectedInvoice) return;
 
@@ -320,6 +289,11 @@ const InvoiceManagement = () => {
         .eq('id', selectedInvoice.id);
 
       if (error) throw error;
+
+      // จ่ายครบแล้ว → ปลดระงับ tenant อัตโนมัติ (ต่อ loop ที่เคยขาด)
+      if (data.newStatus === 'paid') {
+        await maybeAutoRestoreTenant(selectedInvoice.tenant_id);
+      }
 
       // เพิ่ม delay เล็กน้อยเพื่อให้ database commit ข้อมูล
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -510,10 +484,6 @@ const InvoiceManagement = () => {
             <RefreshCw className="w-4 h-4 mr-2" />
             เช็คเกินกำหนด
           </Button>
-          <Button onClick={() => setShowCreateDialog(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            สร้างใบแจ้งหนี้ใหม่
-          </Button>
         </div>
       </div>
 
@@ -653,91 +623,6 @@ const InvoiceManagement = () => {
           </Table>
         </CardContent>
       </Card>
-
-      {/* Create Invoice Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>สร้างใบแจ้งหนี้ใหม่</DialogTitle>
-            <DialogDescription>
-              สร้างใบแจ้งหนี้สำหรับบริษัท
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="tenant">บริษัท *</Label>
-              <Select value={invoiceForm.tenant_id} onValueChange={(value) => setInvoiceForm({...invoiceForm, tenant_id: value})}>
-                <SelectTrigger>
-                  <SelectValue placeholder="เลือกบริษัท" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tenants.map((tenant) => (
-                    <SelectItem key={tenant.id} value={tenant.id}>
-                      {tenant.name} (/{tenant.slug})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="amount">จำนวนเงิน (บาท) *</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  step="0.01"
-                  value={invoiceForm.amount}
-                  onChange={(e) => setInvoiceForm({...invoiceForm, amount: e.target.value})}
-                  placeholder="0.00"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="plan">แพ็คเกจ</Label>
-                <Select value={invoiceForm.subscription_plan} onValueChange={(value) => setInvoiceForm({...invoiceForm, subscription_plan: value})}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="starter">Starter</SelectItem>
-                    <SelectItem value="professional">Professional</SelectItem>
-                    <SelectItem value="enterprise">Enterprise</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="due_date">วันครบกำหนด *</Label>
-              <Input
-                id="due_date"
-                type="date"
-                value={invoiceForm.due_date}
-                onChange={(e) => setInvoiceForm({...invoiceForm, due_date: e.target.value})}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="description">คำอธิบาย</Label>
-              <Textarea
-                id="description"
-                value={invoiceForm.description}
-                onChange={(e) => setInvoiceForm({...invoiceForm, description: e.target.value})}
-                placeholder="รายละเอียดใบแจ้งหนี้..."
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
-              ยกเลิก
-            </Button>
-            <Button onClick={handleCreateInvoice}>
-              สร้างใบแจ้งหนี้
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Edit Invoice Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>

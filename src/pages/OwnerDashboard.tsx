@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
@@ -18,7 +18,6 @@ import {
   TrendingUp,
   TrendingDown,
   Activity,
-  DollarSign,
   AlertCircle,
   CheckCircle,
   ArrowUpRight,
@@ -34,7 +33,9 @@ import {
   Trash2,
   Ban,
   Building,
-  RefreshCw
+  Layers,
+  RefreshCw,
+  Receipt
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -87,6 +88,7 @@ interface DashboardStats {
   activeTenants: number;
   trialTenants: number;
   totalUsers: number;
+  totalProjects: number;
   monthlyRevenue: number;
   annualRunRate: number;
   churnRate: number;
@@ -96,6 +98,7 @@ interface DashboardStats {
 interface RevenueData {
   month: string;
   revenue: number;
+  arr: number;
   tenants: number;
 }
 
@@ -112,6 +115,17 @@ interface TenantWithStats extends Tenant {
   revenue: number;
 }
 
+// Thai Baht glyph that drops into the same slot as a lucide icon (lucide has no ฿ icon).
+// Accepts the same className/style props the icon map passes, so money cards read in THB not $.
+// Sized/weighted to visually match the lucide line-icons next to it (bigger + heavier than the
+// raw glyph default). w-4 callers (section headers) get a smaller size than w-5 KPI badges.
+const BahtSign = ({ className = '', style }: { className?: string; style?: CSSProperties; strokeWidth?: number }) => (
+  <span
+    className="inline-flex items-center justify-center leading-none"
+    style={{ ...style, fontSize: className.includes('w-4') ? '17px' : '23px', fontWeight: 800 }}
+  >฿</span>
+);
+
 const OwnerDashboard = () => {
   const navigate = useNavigate();
   const { user } = useSimpleAuth();
@@ -123,6 +137,7 @@ const OwnerDashboard = () => {
     activeTenants: 0,
     trialTenants: 0,
     totalUsers: 0,
+    totalProjects: 0,
     monthlyRevenue: 0,
     annualRunRate: 0,
     churnRate: 0,
@@ -131,8 +146,10 @@ const OwnerDashboard = () => {
   const [recentTenants, setRecentTenants] = useState<Tenant[]>([]);
   const [atRiskTenants, setAtRiskTenants] = useState<Tenant[]>([]);
   const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
+  const [ytdData, setYtdData] = useState<RevenueData[]>([]);
   const [recentActivities, setRecentActivities] = useState<ActivityItem[]>([]);
   const [topTenants, setTopTenants] = useState<TenantWithStats[]>([]);
+  const [planPopularity, setPlanPopularity] = useState<{ plan: string; tenantCount: number; userCount: number }[]>([]);
   const [upcomingRenewals, setUpcomingRenewals] = useState<Tenant[]>([]);
   const [revenueByPlan, setRevenueByPlan] = useState<{
     enterprise: number;
@@ -142,6 +159,8 @@ const OwnerDashboard = () => {
   // Plan list prices, read from the `plans` table (single source of truth) so
   // this matches the จัดการแพ็กเกจ editor instead of a hardcoded copy.
   const [planPrices, setPlanPrices] = useState<Record<string, { monthly: number; annual: number }>>({});
+  // AR / cash health — money owed but not yet collected (≠ MRR). Sourced from invoices.
+  const [arSummary, setArSummary] = useState({ overdue: 0, overdueCount: 0, pending: 0, pendingCount: 0 });
 
   useEffect(() => {
     if (!isOwner) {
@@ -236,6 +255,7 @@ const OwnerDashboard = () => {
           activeTenants: activeCount,
           trialTenants: trialCount,
           totalUsers: 0, // Will fetch from users table
+          totalProjects: 0, // Will fetch from properties table
           monthlyRevenue: mrr,
           annualRunRate: mrr * 12,
           churnRate: Math.round(realChurnRate * 100) / 100,
@@ -287,35 +307,66 @@ const OwnerDashboard = () => {
           const year = currentMonth - i < 0 ? currentYear - 1 : currentYear;
           const monthName = months[monthIndex];
 
-          // Get start and end of this month
           const monthStart = new Date(year, monthIndex, 1);
           const monthEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59);
 
-          // Calculate actual revenue for this month
+          // Cash collected this month — all tenants who actually paid (historical fact)
           const monthInvoices = historicalInvoices?.filter(inv => {
             const paidDate = new Date(inv.paid_at || inv.created_at);
             return paidDate >= monthStart && paidDate <= monthEnd;
           }) || [];
 
           let monthRevenue = monthInvoices.reduce((sum, inv) => sum + inv.amount, 0);
-
-          // Calculate unique tenants who paid in this month
           let uniqueTenants = new Set(monthInvoices.map(inv => inv.tenant_id)).size;
 
-          // The in-progress current month (i === 0) usually has few/no settled invoices yet,
-          // so show the recurring run-rate (MRR) instead of a misleading partial/zero figure.
           if (i === 0 && monthRevenue < mrr) {
             monthRevenue = mrr;
             uniqueTenants = activeTenantIds.size;
           }
 
+          // ARR run-rate at month-end: for each active tenant, their latest invoice
+          // rate paid ON OR BEFORE this month-end, summed then × 12.
+          // This is consistent with the big-number ARR (MRR × 12) rather than lumpy cash flow.
+          const rateAtMonth = new Map<string, number>();
+          const timeAtMonth = new Map<string, number>();
+          (paidInvoices || []).forEach((inv: any) => {
+            if (!activeTenantIds.has(inv.tenant_id)) return;
+            const t = new Date(inv.paid_at || inv.created_at).getTime();
+            if (t > monthEnd.getTime()) return;
+            if (!timeAtMonth.has(inv.tenant_id) || t > (timeAtMonth.get(inv.tenant_id) as number)) {
+              timeAtMonth.set(inv.tenant_id, t);
+              rateAtMonth.set(inv.tenant_id, Number(inv.amount));
+            }
+          });
+          const mrrAtMonth = Array.from(rateAtMonth.values()).reduce((s, a) => s + a, 0);
+
           revenueTrend.push({
             month: monthName,
             revenue: monthRevenue,
+            arr: i === 0 ? mrr * 12 : mrrAtMonth * 12,
             tenants: uniqueTenants
           });
         }
         setRevenueData(revenueTrend);
+
+        // YTD revenue — actual cash collected Jan–today (all tenants, not just active).
+        // This is the real "how much did we make this year" number.
+        const thisYearStart = new Date(currentYear, 0, 1);
+        let ytdTotal = 0;
+        const ytdMonthly: RevenueData[] = [];
+        for (let m = 0; m <= currentMonth; m++) {
+          const mStart = new Date(currentYear, m, 1);
+          const mEnd = new Date(currentYear, m + 1, 0, 23, 59, 59);
+          let mRevenue = 0;
+          (paidInvoices || []).forEach((inv: any) => {
+            const t = new Date(inv.paid_at || inv.created_at);
+            if (t >= mStart && t <= mEnd) mRevenue += Number(inv.amount);
+          });
+          ytdTotal += mRevenue;
+          ytdMonthly.push({ month: months[m], revenue: mRevenue, arr: 0, tenants: 0 });
+        }
+        setYtdData(ytdMonthly);
+        setStats(prev => ({ ...prev, annualRunRate: ytdTotal }));
 
         // Fetch recent activities from database
         const { data: activityData, error: activityError } = await supabase
@@ -366,6 +417,36 @@ const OwnerDashboard = () => {
           .slice(0, 5) as TenantWithStats[];
         setTopTenants(tenantsWithRealData);
 
+        // Plan popularity — tenants active/created in last 6 months, grouped by plan
+        const planPopularityCutoff = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: planRows } = await (supabase.from('tenants') as any)
+          .select('id, subscription_plan')
+          .eq('is_platform', false)
+          .neq('status', 'cancelled')
+          .gte('created_at', planPopularityCutoff);
+        if (planRows) {
+          const planMap = new Map<string, { tenantIds: string[] }>();
+          (planRows as any[]).forEach((t: any) => {
+            if (!t.subscription_plan) return;
+            const entry = planMap.get(t.subscription_plan) || { tenantIds: [] };
+            entry.tenantIds.push(t.id);
+            planMap.set(t.subscription_plan, entry);
+          });
+          const planOrder = ['enterprise', 'professional', 'starter', 'free'];
+          const popularity = planOrder
+            .filter(p => planMap.has(p))
+            .map(p => {
+              const tenantIds = planMap.get(p)!.tenantIds;
+              return {
+                plan: p,
+                tenantCount: tenantIds.length,
+                userCount: tenantIds.reduce((s, id) => s + (userCountMap.get(id) || 0), 0),
+              };
+            })
+            .sort((a, b) => b.tenantCount - a.tenantCount);
+          setPlanPopularity(popularity);
+        }
+
         // Revenue by plan — each active tenant's current monthly rate, grouped by plan
         // (same recurring basis as the MRR card, so the parts sum to MRR).
         const planRevenue = {
@@ -380,6 +461,20 @@ const OwnerDashboard = () => {
             .reduce((sum, t) => sum + (latestRate.get(t.id) || 0), 0)
         };
         setRevenueByPlan(planRevenue);
+
+        // AR / cash health — outstanding invoices (money owed but not yet collected).
+        const { data: openInvoices } = await (supabase as any)
+          .from('invoices')
+          .select('amount, status')
+          .in('status', ['overdue', 'pending']);
+        if (openInvoices) {
+          const ar = { overdue: 0, overdueCount: 0, pending: 0, pendingCount: 0 };
+          (openInvoices as any[]).forEach((inv: any) => {
+            if (inv.status === 'overdue') { ar.overdue += Number(inv.amount) || 0; ar.overdueCount++; }
+            else if (inv.status === 'pending') { ar.pending += Number(inv.amount) || 0; ar.pendingCount++; }
+          });
+          setArSummary(ar);
+        }
 
         // Upcoming renewals (trial ending or subscriptions ending in 30 days)
         const thirtyDaysFromNow = new Date();
@@ -407,6 +502,18 @@ const OwnerDashboard = () => {
         .neq('role', 'owner');
 
       setStats(prev => ({ ...prev, totalUsers: userCount || 0 }));
+
+      // Total projects across the whole platform — an Owner "scale of usage" metric
+      // (aggregate count only, NOT per-project management). Scoped to customer tenants
+      // so our own platform tenant (MAZMAKER) can't inflate it.
+      const customerTenantIds = (tenants || []).map((t: any) => t.id);
+      if (customerTenantIds.length > 0) {
+        const { count: projectCount } = await supabase
+          .from('properties')
+          .select('*', { count: 'exact', head: true })
+          .in('tenant_id', customerTenantIds);
+        setStats(prev => ({ ...prev, totalProjects: projectCount || 0 }));
+      }
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -485,6 +592,10 @@ const OwnerDashboard = () => {
     );
   }
 
+  const thaiMonthShort = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const todayMonth = new Date().getMonth();
+  const todayYear = new Date().getFullYear();
+
   // Soft luxury palette — matches Executive Dashboard / My Dashboard for consistency
   const KK = {
     red: '#ef4444', redLight: '#fef2f2', redBorder: '#fecaca',
@@ -534,18 +645,18 @@ const OwnerDashboard = () => {
                   Platform
                 </span>
                 <h1 className="text-2xl font-bold text-gray-900">Executive Dashboard</h1>
-                <p className="text-[15px] text-gray-500 mt-1.5">ภาพรวมระบบแพลตฟอร์ม · รายได้ · บริษัท · อัตราเลิกใช้ · อัปเดตล่าสุด {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
+                <p className="text-[15px] text-gray-500 mt-1.5">ภาพรวมระบบแพลตฟอร์ม · รายได้ · บริษัท · โครงการ · อัตราเลิกใช้ · อัปเดตล่าสุด {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
               </div>
             </div>
 
-            {/* === KPI Row (5 cards) === */}
+            {/* === KPI Row (6 uniform cards — matches Admin density) === */}
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
               {([
-                { title: 'รายได้ต่อเดือน', value: formatCurrency(stats.monthlyRevenue), icon: DollarSign,  color: KK.red,    bg: KK.redLight,    trend: { value: stats.mrrGrowth, up: stats.mrrGrowth >= 0 }, spark: revenueData.map(d => ({ v: d.revenue,       month: d.month })), sparkLabel: 'MRR รายเดือน',  sparkFmt: (v: number) => formatCurrency(v), gid: 'kg0' },
-                { title: 'รายได้ต่อปี',     value: formatCurrency(stats.annualRunRate),  icon: TrendingUp,  color: KK.purple, bg: KK.purpleLight, sub: 'รายได้ต่อเดือน × 12',                                   spark: revenueData.map(d => ({ v: d.revenue * 12,  month: d.month })), sparkLabel: 'ARR (run-rate)', sparkFmt: (v: number) => formatCurrency(v), gid: 'kg1' },
-                { title: 'บริษัททั้งหมด',   value: stats.totalTenants.toLocaleString(),  icon: Building2,   color: KK.blue,   bg: KK.blueLight,   sub: `${stats.activeTenants} ใช้งาน · ${stats.trialTenants} ทดลอง`, spark: null, sparkLabel: '', sparkFmt: null, gid: 'kg2' },
-                { title: 'ผู้ใช้ทั้งหมด',   value: stats.totalUsers.toLocaleString(),    icon: Users,       color: KK.green,  bg: KK.greenLight,  sub: `~${stats.totalTenants > 0 ? Math.round(stats.totalUsers / stats.totalTenants) : 0} คน/บริษัท`, spark: null, sparkLabel: '', sparkFmt: null, gid: 'kg3' },
-                { title: 'อัตราเลิกใช้',    value: `${stats.churnRate}%`,                icon: TrendingDown,color: stats.churnRate > 5 ? KK.red : KK.green, bg: stats.churnRate > 5 ? KK.redLight : KK.greenLight, sub: 'เดือนนี้', spark: null, sparkLabel: '', sparkFmt: null, gid: 'kg4' },
+                { title: 'รายได้ต่อเดือน', value: formatCurrency(stats.monthlyRevenue), icon: BahtSign,    color: KK.red,    bg: KK.redLight,    trend: { value: stats.mrrGrowth, up: stats.mrrGrowth >= 0 }, spark: revenueData.map(d => ({ v: d.revenue,       month: d.month })), sparkLabel: 'MRR รายเดือน',  sparkFmt: (v: number) => formatCurrency(v) },
+                { title: 'รายได้รวมปีนี้',   value: formatCurrency(stats.annualRunRate),  icon: TrendingUp,  color: KK.red,    bg: KK.redLight,    sub: `ม.ค. – ${thaiMonthShort[todayMonth]} ${todayYear}`,     spark: ytdData.map(d => ({ v: d.revenue,          month: d.month })), sparkLabel: 'รายเดือน', sparkFmt: (v: number) => formatCurrency(v) },
+                { title: 'บริษัททั้งหมด',   value: stats.totalTenants.toLocaleString(),  icon: Building2,   color: KK.blue,   bg: KK.blueLight,   sub: `${stats.activeTenants} ใช้งาน · ${stats.trialTenants} ทดลอง`,  spark: null, sparkLabel: '', sparkFmt: null },
+                { title: 'โครงการทั้งหมด',  value: stats.totalProjects.toLocaleString(), icon: Layers,      color: KK.amber,  bg: KK.amberLight,  sub: `~${stats.totalTenants > 0 ? Math.round(stats.totalProjects / stats.totalTenants) : 0} โครงการ/บริษัท`, spark: null, sparkLabel: '', sparkFmt: null },
+                { title: 'อัตราเลิกใช้',    value: `${stats.churnRate}%`,                icon: TrendingDown,color: stats.churnRate > 5 ? KK.red : KK.green, bg: stats.churnRate > 5 ? KK.redLight : KK.greenLight, sub: 'เดือนนี้', spark: null, sparkLabel: '', sparkFmt: null },
               ] as const).map((kpi, i) => (
                 <div key={i} className="bg-white border border-gray-100 rounded-2xl shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col">
                   <div className="p-5 pb-2 flex-1">
@@ -573,10 +684,9 @@ const OwnerDashboard = () => {
                       <p className="text-[13px] text-gray-400 mt-2.5 truncate">{'sub' in kpi ? kpi.sub : ''}</p>
                     )}
                   </div>
-                  {/* Sparkline with label + tooltip */}
+                  {/* Sparkline (revenue cards only) — count cards get a matching spacer so heights stay even */}
                   {kpi.spark && kpi.spark.length > 1 ? (
-                    <div className="overflow-hidden rounded-b-2xl">
-                      {/* Label row: what this chart shows + month range */}
+                    <div className="rounded-b-2xl">
                       <div className="px-5 pb-1 flex items-center justify-between">
                         <span className="text-[11px] font-medium" style={{ color: kpi.color }}>{kpi.sparkLabel}</span>
                         <span className="text-[11px] text-gray-400">
@@ -591,6 +701,8 @@ const OwnerDashboard = () => {
                               formatter={(v: any) => [kpi.sparkFmt ? kpi.sparkFmt(Number(v)) : v, kpi.sparkLabel]}
                               labelFormatter={(_, payload) => (payload?.[0]?.payload as any)?.month ?? ''}
                               cursor={false}
+                              allowEscapeViewBox={{ x: true, y: true }}
+                              wrapperStyle={{ zIndex: 30 }}
                             />
                             <Area type="monotone" dataKey="v" stroke={kpi.color} strokeWidth={2} fill={kpi.color} fillOpacity={0.12} dot={false} isAnimationActive={false} />
                           </AreaChart>
@@ -604,34 +716,34 @@ const OwnerDashboard = () => {
               ))}
             </div>
 
-            {/* === Row 1: Revenue Trend (2/3) + Tenant Status Donut (1/3) === */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              {/* Revenue Trend — Smooth area chart */}
-              <div className="xl:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h2 className="text-base font-bold text-gray-900">แนวโน้มรายได้</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">6 เดือนที่ผ่านมา · รวมทุกแพ็กเกจ</p>
-                  </div>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: KK.red, backgroundColor: KK.redLight }}>6 เดือน</span>
+            {/* === Revenue Trend — full-width hero chart === */}
+            <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">แนวโน้มรายได้</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">6 เดือนที่ผ่านมา · รวมทุกแพ็กเกจ</p>
                 </div>
-                <ResponsiveContainer width="100%" height={280}>
-                  <AreaChart data={revenueData} margin={{ top: 10, right: 8, left: -10, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="ownerRevGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%"  stopColor={KK.red} stopOpacity={0.35} />
-                        <stop offset="100%" stopColor={KK.red} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                    <Tooltip contentStyle={kkTooltipStyle} formatter={((v: any) => [formatCurrency(Number(v ?? 0)), 'MRR']) as any} />
-                    <Area type="monotone" dataKey="revenue" stroke={KK.red} strokeWidth={2.5} fill="url(#ownerRevGrad)" dot={false} activeDot={{ r: 4, fill: KK.red, stroke: '#fff', strokeWidth: 2 }} />
-                  </AreaChart>
-                </ResponsiveContainer>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: KK.red, backgroundColor: KK.redLight }}>6 เดือน</span>
               </div>
+              <ResponsiveContainer width="100%" height={280}>
+                <AreaChart data={revenueData} margin={{ top: 10, right: 8, left: -10, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="ownerRevGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%"  stopColor={KK.red} stopOpacity={0.35} />
+                      <stop offset="100%" stopColor={KK.red} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip contentStyle={kkTooltipStyle} formatter={((v: any) => [formatCurrency(Number(v ?? 0)), 'MRR']) as any} />
+                  <Area type="monotone" dataKey="revenue" stroke={KK.red} strokeWidth={2.5} fill="url(#ownerRevGrad)" dot={false} activeDot={{ r: 4, fill: KK.red, stroke: '#fff', strokeWidth: 2 }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
 
+            {/* === Composition: Tenant Status donut (1/3) + Plan Summary (2/3) === */}
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
               {/* Tenant Status — Donut */}
               <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                 <div className="flex items-center gap-2 mb-1">
@@ -664,93 +776,58 @@ const OwnerDashboard = () => {
                   ))}
                 </div>
               </div>
-            </div>
 
-            {/* === Row 2: Plan Revenue (1/3) + Top Tenants (2/3) === */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              {/* Plan Revenue — Horizontal bars */}
-              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-                <div className="flex items-center gap-2 mb-1">
-                  <DollarSign className="w-4 h-4" style={{ color: KK.green }} />
-                  <h2 className="text-base font-bold text-gray-900">รายได้ตามแพ็กเกจ</h2>
+              {/* Plan Summary (merged revenue + popularity) */}
+              <div className="xl:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex flex-col">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <BahtSign className="w-4 h-4" style={{ color: KK.green }} />
+                    <h2 className="text-base font-bold text-gray-900">สรุปตามแพ็กเกจ</h2>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">จำนวนบริษัท · ผู้ใช้งาน · MRR รายเดือน</p>
                 </div>
-                <p className="text-xs text-gray-500 mb-4">รายได้ต่อเดือน แยกตามระดับการสมัครสมาชิก</p>
-                <div className="space-y-3">
-                  {planRevenueData.map((item, i) => {
-                    const widthPct = (item.value / maxPlanRevenue) * 100;
-                    return (
-                      <div key={i}>
-                        <div className="flex justify-between items-center mb-1.5">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
-                            <span className="text-xs font-medium text-gray-700">{item.name}</span>
-                          </div>
-                          <span className="text-xs font-semibold text-gray-800 tabular-nums">{formatCurrency(item.value)}</span>
-                        </div>
-                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${widthPct}%`, backgroundColor: item.color }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="mt-4 pt-3 border-t border-gray-100 flex justify-between items-center">
-                  <span className="text-xs text-gray-500">รวม MRR</span>
-                  <span className="text-sm font-bold text-gray-900 tabular-nums">{formatCurrency(planRevenueData.reduce((s, p) => s + p.value, 0))}</span>
-                </div>
+                <span className="text-xs text-gray-400">รวม MRR <span className="font-bold text-gray-700 tabular-nums ml-1">{formatCurrency(planRevenueData.reduce((s, p) => s + p.value, 0))}</span></span>
               </div>
-
-              {/* Top Tenants */}
-              <div className="xl:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Star className="w-4 h-4" style={{ color: KK.amber }} />
-                      <h2 className="text-base font-bold text-gray-900">บริษัทยอดนิยม</h2>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-0.5">เรียงตามรายได้/เดือน สูงสุด</p>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => navigate('/tenants')} className="rounded-lg text-xs h-8 border-gray-200">
-                    ดูทั้งหมด <ArrowUpRight className="w-3 h-3 ml-1" />
-                  </Button>
-                </div>
-                {topTenants.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Star className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-                    <p className="text-sm text-gray-500">ยังไม่มีข้อมูล</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {topTenants.slice(0, 5).map((tenant, index) => (
-                      <div
-                        key={tenant.id}
-                        className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer border border-gray-50"
-                        onClick={() => navigate(`/tenants/${tenant.id}`)}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0" style={{
-                            backgroundColor: index === 0 ? KK.amberLight : index === 1 ? KK.grayLight : index === 2 ? KK.orangeLight : '#fafafa',
-                            color: index === 0 ? KK.amber : index === 1 ? KK.gray : index === 2 ? KK.orange : '#9ca3af',
-                          }}>
-                            {index + 1}
+              {(() => {
+                const PLAN_META: Record<string, { label: string; color: string; bg: string; revenue: number }> = {
+                  enterprise:   { label: 'Enterprise',   color: KK.amber,  bg: KK.amberLight,  revenue: revenueByPlan.enterprise   },
+                  professional: { label: 'Professional', color: KK.blue,   bg: KK.blueLight,   revenue: revenueByPlan.professional },
+                  starter:      { label: 'Starter',      color: KK.green,  bg: KK.greenLight,  revenue: revenueByPlan.starter      },
+                  free:         { label: 'Free',         color: KK.gray,   bg: KK.grayLight,   revenue: 0                         },
+                };
+                const allPlans = ['enterprise', 'professional', 'starter', 'free'];
+                const rows = allPlans.map(key => {
+                  const pop = planPopularity.find(p => p.plan === key);
+                  const meta = PLAN_META[key];
+                  return { key, ...meta, tenantCount: pop?.tenantCount || 0, userCount: pop?.userCount || 0 };
+                });  // show all 4 plan tiers — even 0-tenant ones — so the breakdown reads as a full price ladder
+                const maxCount = Math.max(...rows.map(r => r.tenantCount), 1);
+                const totalMrr = rows.reduce((s, r) => s + r.revenue, 0);
+                return (
+                  <div className="flex-1 flex flex-col divide-y divide-gray-100">
+                    {rows.map((r) => {
+                      const pct = totalMrr > 0 ? Math.round((r.revenue / totalMrr) * 100) : 0;
+                      return (
+                        <div key={r.key} className="flex-1 flex items-center gap-4">
+                          <div className="flex items-center gap-2.5 w-32 flex-shrink-0">
+                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }} />
+                            <span className="text-sm font-medium text-gray-700">{r.label}</span>
                           </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 truncate">{tenant.name}</p>
-                            <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1.5">
-                              <Users className="w-3 h-3" /> {tenant.userCount} ผู้ใช้
-                              <span className="text-gray-300">·</span>
-                              <span className="capitalize">{tenant.subscription_plan}</span>
-                            </p>
+                          <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
+                            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.round((r.tenantCount / maxCount) * 100)}%`, backgroundColor: r.color, opacity: 0.85 }} />
+                          </div>
+                          <span className="text-xs text-gray-400 tabular-nums w-32 text-right flex-shrink-0">{r.tenantCount} บริษัท · {r.userCount} ผู้ใช้</span>
+                          <div className="w-24 text-right flex-shrink-0">
+                            <div className="text-sm font-bold tabular-nums" style={{ color: r.revenue > 0 ? '#111827' : '#d1d5db' }}>{formatCurrency(r.revenue)}</div>
+                            <div className="text-[11px] text-gray-400 tabular-nums">{pct}% ของ MRR</div>
                           </div>
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-sm font-bold tabular-nums" style={{ color: KK.red }}>{formatCurrency(tenant.revenue)}</p>
-                          <p className="text-[11px] text-gray-400">/เดือน</p>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                )}
+                );
+              })()}
               </div>
             </div>
 
@@ -760,9 +837,9 @@ const OwnerDashboard = () => {
               <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                 <div className="flex items-center gap-2 mb-1">
                   <Calendar className="w-4 h-4" style={{ color: KK.amber }} />
-                  <h2 className="text-base font-bold text-gray-900">ต่ออายุเร็วๆ นี้</h2>
+                  <h2 className="text-base font-bold text-gray-900">ใกล้ครบกำหนดต่ออายุ</h2>
                 </div>
-                <p className="text-xs text-gray-500 mb-4">30 วันข้างหน้า</p>
+                <p className="text-xs text-gray-500 mb-4">ภายใน 30 วันข้างหน้า</p>
                 {upcomingRenewals.length === 0 ? (
                   <div className="text-center py-8">
                     <Calendar className="w-10 h-10 mx-auto mb-2 text-gray-300" />
@@ -838,105 +915,6 @@ const OwnerDashboard = () => {
               </div>
             </div>
 
-            {/* === Row 4: Recent Tenants + At-Risk Tenants === */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              {/* Recent Tenants */}
-              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <UserPlusIcon className="w-4 h-4" style={{ color: KK.green }} />
-                      <h2 className="text-base font-bold text-gray-900">บริษัทใหม่ล่าสุด</h2>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-0.5">7 วันที่ผ่านมา</p>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => navigate('/tenants')} className="rounded-lg text-xs h-8 border-gray-200">
-                    ดูทั้งหมด <ArrowUpRight className="w-3 h-3 ml-1" />
-                  </Button>
-                </div>
-                {recentTenants.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Building2 className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-                    <p className="text-sm text-gray-500">ไม่มีบริษัทใหม่ใน 7 วัน</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {recentTenants.slice(0, 5).map((tenant) => (
-                      <div key={tenant.id} className="flex items-center justify-between p-3 rounded-xl border border-gray-50 hover:bg-gray-50 transition-colors">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <p className="text-sm font-semibold text-gray-900 truncate">{tenant.name}</p>
-                            {getStatusBadge(tenant.status)}
-                          </div>
-                          <p className="text-xs text-gray-500 capitalize">{tenant.subscription_plan} plan</p>
-                        </div>
-                        <p className="text-sm font-bold tabular-nums flex-shrink-0" style={{ color: KK.red }}>
-                          {formatCurrency(getSubscriptionPrice(tenant.subscription_plan).monthly)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* At-Risk Tenants */}
-              <div className="bg-white border rounded-2xl shadow-soft p-5" style={{ borderColor: atRiskTenants.length > 0 ? KK.amberLight : '#f3f4f6' }}>
-                <div className="flex items-center gap-2 mb-1">
-                  <AlertCircle className="w-4 h-4" style={{ color: atRiskTenants.length > 0 ? KK.amber : KK.green }} />
-                  <h2 className="text-base font-bold text-gray-900">ต้องเฝ้าระวัง</h2>
-                </div>
-                <p className="text-xs text-gray-500 mb-4">Trial ใกล้หมด หรือถูกระงับ</p>
-                {atRiskTenants.length === 0 ? (
-                  <div className="text-center py-8">
-                    <CheckCircle className="w-10 h-10 mx-auto mb-2" style={{ color: KK.green }} />
-                    <p className="text-sm text-gray-500">ไม่มีบริษัทที่ต้องเฝ้าระวัง</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {atRiskTenants.slice(0, 5).map((tenant) => {
-                      const daysUntilEnd = tenant.trial_ends_at
-                        ? Math.floor((new Date(tenant.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-                        : 0;
-                      const isCritical = daysUntilEnd <= 3 && tenant.status === 'trial';
-                      return (
-                        <div
-                          key={tenant.id}
-                          className="flex items-center justify-between p-3 rounded-xl border transition-colors hover:bg-gray-50"
-                          style={{
-                            borderColor: isCritical ? KK.redBorder : '#f3f4f6',
-                            backgroundColor: isCritical ? KK.redLight : 'transparent',
-                          }}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#fff' }}>
-                              <AlertCircle className="w-4 h-4" style={{ color: isCritical ? KK.red : KK.amber }} />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 truncate">{tenant.name}</p>
-                              <p className="text-xs text-gray-500 capitalize">
-                                {tenant.status === 'trial' ? `เหลือ ${daysUntilEnd} วัน` : tenant.status} · {tenant.subscription_plan}
-                              </p>
-                            </div>
-                          </div>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 flex-shrink-0">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => navigate(`/tenants/${tenant.id}`)}>ดูรายละเอียด</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => navigate('/payments')}>ดู Billing</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => toast.success(`ส่งอีเมลแจ้งเตือนไปยัง ${tenant.name} แล้ว`)}>ส่งอีเมลแจ้งเตือน</DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
 
           </main>
         </div>

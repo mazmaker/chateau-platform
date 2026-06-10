@@ -931,10 +931,10 @@ const CampaignBuilderWizard = () => {
                             onChange={(e) => setApproverId(e.target.value)}
                             className="mt-1 w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white"
                           >
-                            <option value="">-- เลือก Owner/Admin ที่จะอนุมัติ --</option>
+                            <option value="">-- เลือกเจ้าของแพลตฟอร์ม/ผู้ดูแลบริษัทที่จะอนุมัติ --</option>
                             {approvers.map((u) => (
                               <option key={u.id} value={u.id}>
-                                {u.full_name || u.email} ({u.role})
+                                {u.full_name || u.email} ({u.role === 'owner' ? 'เจ้าของแพลตฟอร์ม' : u.role === 'admin' ? 'ผู้ดูแลบริษัท' : u.role})
                               </option>
                             ))}
                           </select>

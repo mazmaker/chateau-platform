@@ -155,7 +155,7 @@ export function LoginFormSimple() {
               </span>
             </label>
             <a
-              href="#"
+              href="/auth/forgot-password"
               className="text-sm text-gray-800 hover:text-black font-medium transition-colors"
             >
               ลืมรหัสผ่าน?

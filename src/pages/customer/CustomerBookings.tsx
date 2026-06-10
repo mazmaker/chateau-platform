@@ -112,6 +112,7 @@ const CustomerBookings = () => {
       case 'pending': return { label: 'รอชำระมัดจำ', icon: Clock, color: 'text-orange-700 bg-orange-50 border-orange-100' };
       case 'confirmed': return { label: '✓ ชำระแล้ว · รอทำสัญญา', icon: CheckCircle2, color: 'text-blue-700 bg-blue-50 border-blue-100' };
       case 'checked_in': return { label: 'โอนกรรมสิทธิ์แล้ว', icon: Home, color: 'text-green-700 bg-green-50 border-green-100' };
+      case 'checked_out': return { label: 'เสร็จสมบูรณ์', icon: CheckCircle2, color: 'text-green-700 bg-green-50 border-green-100' };
       case 'cancelled': return { label: 'ยกเลิก', icon: XCircle, color: 'text-gray-600 bg-gray-100 border-gray-200' };
       default: return { label: s, icon: FileText, color: 'text-gray-600 bg-gray-100 border-gray-200' };
     }

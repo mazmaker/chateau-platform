@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   Building2, Plus, Search, Users, Loader2, TrendingUp, Trophy, Trash2, Briefcase, FileText, Pencil,
-  MoreHorizontal, Eye, Rocket, CheckCircle2,
+  MoreHorizontal, Eye, Rocket, CheckCircle2, Flame, Phone,
 } from 'lucide-react';
 
 // Prospective developer company interested in subscribing to Chateau (platform-level).
@@ -47,6 +47,8 @@ interface PLead {
   converted_tenant_id: string | null;
   converted_at: string | null;
   created_at: string;
+  last_contact_date: string | null;
+  is_hot: boolean;
 }
 
 // Palette + THB currency formatting — kept identical to OwnerDashboard so the two
@@ -56,6 +58,7 @@ const KK = {
   blue: '#1e3a5f', blueLight: '#eff6ff',
   green: '#16a34a', greenLight: '#f0fdf4',
   orange: '#d97706', orangeLight: '#fef3c7',
+  brand: '#e60023', brandLight: '#fff1f2',
 };
 const formatCurrency = (amount: number | null | undefined) =>
   new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', minimumFractionDigits: 0 }).format(Number(amount) || 0);
@@ -113,6 +116,7 @@ const emptyForm = {
   province: '', contact_name: '', contact_title: '', contact_phone: '', contact_line_id: '',
   contact_email: '', interested_plan: '', seats_needed: '',
   source: 'line', stage: 'new', expected_close_date: '', notes: '',
+  is_hot: false,
 };
 
 const OwnerLeads = () => {
@@ -123,6 +127,8 @@ const OwnerLeads = () => {
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
+  // Health-card filter (ลีดใหม่ / SLA / เงียบ / hot). Mutually exclusive with the
+  // stage dropdown so they can't intersect into a confusing empty result.
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
@@ -186,6 +192,7 @@ const OwnerLeads = () => {
       stage: form.stage,
       expected_close_date: txt(form.expected_close_date),
       notes: txt(form.notes),
+      is_hot: form.is_hot,
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const q = supabase.from('platform_leads') as any;
@@ -221,6 +228,7 @@ const OwnerLeads = () => {
       stage: l.stage || 'new',
       expected_close_date: l.expected_close_date || '',
       notes: l.notes || '',
+      is_hot: l.is_hot ?? false,
     });
     setEditingId(l.id);
     setDetailLead(null);
@@ -233,10 +241,23 @@ const OwnerLeads = () => {
     if (stage === 'won' && lead && !lead.converted_tenant_id) { setConvertLead(lead); return; }
     // "ไม่สำเร็จ" prompts for a reason.
     if (stage === 'lost' && lead) { setLostReason(lead.lost_reason || ''); setLostLead(lead); return; }
+    // Moving a prospect's stage = you just engaged them → stamp last_contact_date so
+    // the SLA / silent health signals clear automatically.
+    const nowIso = new Date().toISOString();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase.from('platform_leads') as any).update({ stage }).eq('id', id);
+    const { error } = await (supabase.from('platform_leads') as any).update({ stage, last_contact_date: nowIso }).eq('id', id);
     if (error) { toast.error('อัปเดตสถานะไม่สำเร็จ'); return; }
-    setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, stage } : l)));
+    setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, stage, last_contact_date: nowIso } : l)));
+  };
+
+  // Log a contact without changing the stage — clears the SLA / silent flags.
+  const markContacted = async (id: string, name: string) => {
+    const nowIso = new Date().toISOString();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase.from('platform_leads') as any).update({ last_contact_date: nowIso }).eq('id', id);
+    if (error) { toast.error('บันทึกไม่สำเร็จ'); return; }
+    setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, last_contact_date: nowIso } : l)));
+    toast.success('บันทึกการติดต่อแล้ว', { description: name });
   };
 
   const handleDelete = async (id: string, name: string) => {
@@ -309,6 +330,15 @@ const OwnerLeads = () => {
     setLostLead(null);
     setLostReason('');
     fetchLeads();
+  };
+
+  const toggleHot = async (l: PLead) => {
+    const next = !l.is_hot;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase.from('platform_leads') as any).update({ is_hot: next }).eq('id', l.id);
+    if (error) { toast.error('บันทึกไม่สำเร็จ'); return; }
+    setLeads((prev) => prev.map((x) => (x.id === l.id ? { ...x, is_hot: next } : x)));
+    toast.success(next ? `${l.company_name} — แท็กเป็น Hot แล้ว` : `${l.company_name} — ยกเลิก Hot แล้ว`);
   };
 
   const filtered = leads.filter((l) => {
@@ -401,7 +431,7 @@ const OwnerLeads = () => {
                     className="pl-9"
                   />
                 </div>
-                <Select value={stageFilter} onValueChange={setStageFilter}>
+                <Select value={stageFilter} onValueChange={(v) => setStageFilter(v)}>
                   <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="สถานะ" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">ทุกสถานะ</SelectItem>
@@ -444,7 +474,10 @@ const OwnerLeads = () => {
                   ) : filtered.map((l) => (
                     <TableRow key={l.id} onClick={() => setDetailLead(l)} className="cursor-pointer hover:bg-gray-50">
                       <TableCell>
-                        <div className="font-medium text-gray-900">{l.company_name}</div>
+                        <div className="flex items-center gap-1.5">
+                          {l.is_hot && <Flame className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />}
+                          <span className="font-medium text-gray-900">{l.company_name}</span>
+                        </div>
                         <div className="text-xs text-gray-400">
                           {[l.province, l.current_projects_count != null ? `${l.current_projects_count} โครงการ` : null]
                             .filter(Boolean).join(' · ') || '—'}
@@ -492,6 +525,12 @@ const OwnerLeads = () => {
                               <Pencil className="w-4 h-4 mr-2" />
                               แก้ไข
                             </DropdownMenuItem>
+                            {OPEN_STAGES.includes(l.stage) && (
+                              <DropdownMenuItem onClick={() => markContacted(l.id, l.company_name)}>
+                                <Phone className="w-4 h-4 mr-2" />
+                                บันทึกว่าติดต่อแล้ว
+                              </DropdownMenuItem>
+                            )}
                             {l.converted_tenant_id ? (
                               <DropdownMenuItem disabled className="text-green-600">
                                 <CheckCircle2 className="w-4 h-4 mr-2" />
@@ -612,6 +651,18 @@ const OwnerLeads = () => {
                 <Label>บันทึก</Label>
                 <Input value={form.notes} onChange={(e) => setF('notes', e.target.value)} placeholder="โน้ตการคุย / ความต้องการพิเศษ" />
               </div>
+              <div>
+                <Label>ความสำคัญ</Label>
+                <Select value={form.is_hot ? 'hot' : 'normal'} onValueChange={(v) => setForm((p) => ({ ...p, is_hot: v === 'hot' }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="normal">ปกติ</SelectItem>
+                    <SelectItem value="hot">Hot Lead</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
@@ -687,6 +738,7 @@ const OwnerLeads = () => {
                     <Field label="ช่องทางที่มา" value={detailLead.source ? (SOURCE_LABELS[detailLead.source] || detailLead.source) : '—'} />
                     <Field label="วันคาดปิด" value={detailLead.expected_close_date} />
                     <Field label="วันที่เพิ่ม" value={detailLead.created_at ? new Date(detailLead.created_at).toLocaleDateString('th-TH') : '—'} />
+                    <Field label="ติดต่อล่าสุด" value={detailLead.last_contact_date ? new Date(detailLead.last_contact_date).toLocaleDateString('th-TH') : 'ยังไม่ติดต่อ'} />
                     {detailLead.stage === 'lost' && (
                       <Field label="เหตุผลที่ไม่สำเร็จ" value={detailLead.lost_reason} />
                     )}

@@ -909,10 +909,10 @@ const TenantManagement = () => {
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { label: string; className: string }> = {
-      active:    { label: 'Active',  className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
-      trial:     { label: 'Trial',   className: 'bg-amber-50 text-amber-700 border border-amber-200' },
-      suspended: { label: 'ระงับ',   className: 'bg-red-50 text-red-700 border border-red-200' },
-      cancelled: { label: 'ยกเลิก',  className: 'bg-gray-100 text-gray-600 border border-gray-300' },
+      active:    { label: 'ใช้งานอยู่', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+      trial:     { label: 'ทดลองใช้',  className: 'bg-amber-50 text-amber-700 border border-amber-200' },
+      suspended: { label: 'ระงับ',     className: 'bg-red-50 text-red-700 border border-red-200' },
+      cancelled: { label: 'ยกเลิก',    className: 'bg-gray-100 text-gray-600 border border-gray-300' },
     };
     const badge = badges[status] || { label: status, className: 'bg-gray-50 text-gray-700 border border-gray-200' };
     return (

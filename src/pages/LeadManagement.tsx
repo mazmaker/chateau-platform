@@ -203,12 +203,13 @@ const LeadManagement = () => {
   const [interestCounts, setInterestCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  // URL drives the initial filter values so deep-links can land pre-filtered:
+  //   ?status=new   → Lead Analytics "ลีดเกิน SLA" card drops in on untouched new leads
+  //   ?priority=high → MyDashboard "ลูกค้าด่วน" card. The popover then lets the user override.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') || 'all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [propertyFilter, setPropertyFilter] = useState<string>('all');
-  // Priority filter — URL drives the initial value so MyDashboard's "ลูกค้าด่วน" card
-  // can deep-link in; the popover then lets Sales override / clear it.
-  const [searchParams, setSearchParams] = useSearchParams();
   const [priorityFilter, setPriorityFilterState] = useState<string>(searchParams.get('priority') || 'all');
   const setPriorityFilter = (v: string) => {
     setPriorityFilterState(v);
@@ -959,7 +960,7 @@ const LeadManagement = () => {
       'line_oa': 'LINE OA',
       'google': 'Google',
       'referral': 'แนะนำ',
-      'agent_referral': 'Agent แนะนำ',
+      'agent_referral': 'นายหน้าแนะนำ',
       'walk_in': 'Walk-in',
       'advertising': 'โฆษณา',
       'online': 'ออนไลน์',
@@ -1108,6 +1109,12 @@ const LeadManagement = () => {
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
 
+  // URL-driven SLA filter (from Lead Analytics "ลีดเกิน SLA" deep-link, ?sla=1).
+  // Must match Analytics' slaBreach definition EXACTLY so the count and this list agree:
+  //   status='new' · created > 2h ago · never contacted (last_contact_date is null).
+  const slaActive = searchParams.get('sla') === '1';
+  const slaCutoff = Date.now() - 2 * 60 * 60 * 1000;
+
   const filteredLeads = leads.filter(lead => {
     const customerName = getCustomerName(lead).toLowerCase();
     const propertyName = getPropertyName(lead).toLowerCase();
@@ -1121,7 +1128,9 @@ const LeadManagement = () => {
     const openSet = new Set(['new','contacted','qualified','negotiating']);
     const matchesPriority = priorityFilter === 'all'
       || (lead.priority === priorityFilter && (priorityFilter !== 'high' || openSet.has(lead.status || '')));
-    return matchesSearch && matchesStatus && matchesSource && matchesProperty && matchesPriority;
+    const matchesSla = !slaActive
+      || (lead.status === 'new' && !lead.last_contact_date && new Date(lead.created_at).getTime() < slaCutoff);
+    return matchesSearch && matchesStatus && matchesSource && matchesProperty && matchesPriority && matchesSla;
   }).sort((a, b) => {
     if (!sortByScore) return 0;
     const scoreA = (a as any).potential_score ?? -1;

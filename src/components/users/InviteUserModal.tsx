@@ -279,7 +279,7 @@ const InviteUserModal = ({ isOpen, onClose, onInviteSuccess, currentUserRole }: 
             </Select>
             {isAdmin && (
               <p className="text-xs text-gray-500 mt-1">
-                * แอดมินสามารถเพิ่มได้เฉพาะพนักงานขายและนายหน้า
+                * ผู้ดูแลบริษัทสามารถเพิ่มได้เฉพาะพนักงานขายและนายหน้า
               </p>
             )}
           </div>

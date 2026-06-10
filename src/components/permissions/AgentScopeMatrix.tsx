@@ -16,11 +16,26 @@ import {
   MapPin,
   Inbox,
   Home,
+  ChevronRight,
+  ChevronDown,
   Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import CloneAssignmentsModal, { CloneUser } from "./CloneAssignmentsModal";
+
+/*
+ * AgentScopeMatrix — nested "project → units" UI for Agents, consistent with SalesScopeMatrix.
+ *
+ * Agents are UNIT-LEVEL ONLY (broker scope): there is NO agent_project_assignments table —
+ * project visibility is derived from assigned units by RLS. So here the project checkbox is a
+ * pure convenience that reflects/controls its units:
+ *   - Project checked  ⟺  ≥1 unit in it assigned (derived, no separate row).
+ *   - Tick project  -> assign ALL units in it · Untick project -> clear all its units.
+ *   - Remove every unit -> project unticks naturally (no "assigned but 0 units" ghost).
+ *
+ * Only agent_unit_assignments is touched — same insert/revoke patterns as the original.
+ */
 
 interface AgentUser {
   id: string;
@@ -36,11 +51,11 @@ interface Unit {
   project_id: string;
   price: number;
   status: string;
-  project_name?: string;
   tenant_id: string;
+  project_name: string;
 }
 
-interface Assignment {
+interface UnitLink {
   agent_user_id: string;
   unit_id: string;
 }
@@ -59,7 +74,7 @@ const CoverageBadge = ({ assigned, total }: { assigned: number; total: number })
   );
 };
 
-export const AgentUnitMatrix = () => {
+export const AgentScopeMatrix = () => {
   const { userRole, currentTenant } = useSimpleAuth();
   const queryClient = useQueryClient();
   const isOwner = userRole === "owner";
@@ -67,11 +82,12 @@ export const AgentUnitMatrix = () => {
   const canEdit = isOwner || isAdmin;
 
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [cloneOpen, setCloneOpen] = useState(false);
   const [agentSearch, setAgentSearch] = useState("");
-  const [unitSearch, setUnitSearch] = useState("");
+  const [projectSearch, setProjectSearch] = useState("");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [cloneOpen, setCloneOpen] = useState(false);
 
-  /* Agent users */
+  /* ───── Agent users ───── */
   const { data: agents = [], isLoading: loadingAgents } = useQuery<AgentUser[]>({
     queryKey: ["permissions", "agents", isOwner ? "all" : currentTenant?.id],
     queryFn: async () => {
@@ -94,7 +110,7 @@ export const AgentUnitMatrix = () => {
     },
   });
 
-  /* Units (RLS scopes to current user's access) */
+  /* ───── Units (RLS-scoped) + project names ───── */
   const { data: rawUnits = [], isLoading: loadingUnits } = useQuery<any[]>({
     queryKey: ["permissions", "units-for-agent-assignment"],
     queryFn: async () => {
@@ -107,7 +123,6 @@ export const AgentUnitMatrix = () => {
     },
   });
 
-  /* Project name map */
   const { data: projectNameMap = {}, isLoading: loadingProjectNames } = useQuery<Record<string, string>>({
     queryKey: ["permissions", "project-name-map"],
     queryFn: async () => {
@@ -133,8 +148,8 @@ export const AgentUnitMatrix = () => {
     [rawUnits, projectNameMap]
   );
 
-  /* Agent-unit assignments */
-  const { data: assignments = [], isLoading: loadingAssignments } = useQuery<Assignment[]>({
+  /* ───── Agent-unit assignments ───── */
+  const { data: unitLinks = [], isLoading: loadingLinks } = useQuery<UnitLink[]>({
     queryKey: ["permissions", "agent-unit-assignments"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -147,9 +162,7 @@ export const AgentUnitMatrix = () => {
   });
 
   useEffect(() => {
-    if (agents.length > 0 && !selectedAgentId) {
-      setSelectedAgentId(agents[0].id);
-    }
+    if (agents.length > 0 && !selectedAgentId) setSelectedAgentId(agents[0].id);
   }, [agents, selectedAgentId]);
 
   const selectedAgent = useMemo(
@@ -157,45 +170,37 @@ export const AgentUnitMatrix = () => {
     [agents, selectedAgentId]
   );
 
-  /* Agent sees only units in their tenant (admin's tenant for admin view; same tenant filter) */
   const unitsForSelectedAgent = useMemo(
     () => (selectedAgent ? units.filter((u) => u.tenant_id === selectedAgent.tenant_id) : []),
     [units, selectedAgent]
   );
 
-  const filteredUnits = useMemo(() => {
-    const q = unitSearch.trim().toLowerCase();
-    if (!q) return unitsForSelectedAgent;
-    return unitsForSelectedAgent.filter(
-      (u) =>
-        u.unit_number.toLowerCase().includes(q) ||
-        (u.project_name || "").toLowerCase().includes(q)
+  /* Group units by project (id → {name, units}) */
+  const projectGroups = useMemo(() => {
+    const groups = new Map<string, { project_id: string; project_name: string; units: Unit[] }>();
+    for (const u of unitsForSelectedAgent) {
+      if (!groups.has(u.project_id)) {
+        groups.set(u.project_id, { project_id: u.project_id, project_name: u.project_name, units: [] });
+      }
+      groups.get(u.project_id)!.units.push(u);
+    }
+    return Array.from(groups.values()).sort((a, b) => a.project_name.localeCompare(b.project_name));
+  }, [unitsForSelectedAgent]);
+
+  const filteredGroups = useMemo(() => {
+    const q = projectSearch.trim().toLowerCase();
+    if (!q) return projectGroups;
+    return projectGroups.filter(
+      (g) =>
+        g.project_name.toLowerCase().includes(q) ||
+        g.units.some((u) => u.unit_number.toLowerCase().includes(q))
     );
-  }, [unitsForSelectedAgent, unitSearch]);
+  }, [projectGroups, projectSearch]);
 
-  const isAssigned = (agentId: string, unitId: string) =>
-    assignments.some((a) => a.agent_user_id === agentId && a.unit_id === unitId);
-
-  /* ───── Clone helpers ───── */
-  const cloneAllUsers: CloneUser[] = useMemo(
-    () =>
-      agents.map((a) => ({
-        id: a.id,
-        name: a.full_name || a.email,
-        email: a.email,
-        tenantId: a.tenant_id,
-        tenantName: a.tenant_name,
-        subtitle: a.email,
-      })),
-    [agents]
-  );
-
-  const getItemsForAgent = (userId: string) =>
-    assignments.filter((a) => a.agent_user_id === userId).map((a) => a.unit_id);
-
-  const selectedAgentItemCount = selectedAgent ? getItemsForAgent(selectedAgent.id).length : 0;
-  const hasOtherSameTenant = !!selectedAgent &&
-    agents.some((a) => a.id !== selectedAgent.id && a.tenant_id === selectedAgent.tenant_id);
+  const isUnitAssigned = (agentId: string, unitId: string) =>
+    unitLinks.some((l) => l.agent_user_id === agentId && l.unit_id === unitId);
+  const assignedUnitCountInProject = (agentId: string, projUnits: Unit[]) =>
+    projUnits.filter((u) => isUnitAssigned(agentId, u.id)).length;
 
   /* Group agents by tenant */
   const agentsByTenant = useMemo(() => {
@@ -209,9 +214,7 @@ export const AgentUnitMatrix = () => {
     );
     const groups = new Map<string, { tenant_name: string; agents: AgentUser[] }>();
     for (const a of filtered) {
-      if (!groups.has(a.tenant_id)) {
-        groups.set(a.tenant_id, { tenant_name: a.tenant_name, agents: [] });
-      }
+      if (!groups.has(a.tenant_id)) groups.set(a.tenant_id, { tenant_name: a.tenant_name, agents: [] });
       groups.get(a.tenant_id)!.agents.push(a);
     }
     return Array.from(groups.values());
@@ -219,31 +222,17 @@ export const AgentUnitMatrix = () => {
 
   const getCoverage = (agent: AgentUser) => {
     const tenantUnits = units.filter((u) => u.tenant_id === agent.tenant_id);
-    const assignedCount = assignments.filter(
-      (a) => a.agent_user_id === agent.id && tenantUnits.some((u) => u.id === a.unit_id)
+    const assigned = unitLinks.filter(
+      (l) => l.agent_user_id === agent.id && tenantUnits.some((u) => u.id === l.unit_id)
     ).length;
-    return { assigned: assignedCount, total: tenantUnits.length };
+    return { assigned, total: tenantUnits.length };
   };
 
-  /* Group units by project for display */
-  const unitsByProject = useMemo(() => {
-    const groups = new Map<string, { project_name: string; project_id: string; units: Unit[] }>();
-    for (const u of filteredUnits) {
-      const key = u.project_id;
-      if (!groups.has(key)) {
-        groups.set(key, {
-          project_id: u.project_id,
-          project_name: u.project_name || "(unknown project)",
-          units: [],
-        });
-      }
-      groups.get(key)!.units.push(u);
-    }
-    return Array.from(groups.values()).sort((a, b) => a.project_name.localeCompare(b.project_name));
-  }, [filteredUnits]);
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["permissions", "agent-unit-assignments"] });
 
-  /* Mutations */
-  const toggleOne = useMutation({
+  /* ───── Single unit toggle ───── */
+  const toggleUnit = useMutation({
     mutationFn: async (params: { agentId: string; unitId: string; assigned: boolean; tenantId: string }) => {
       const { agentId, unitId, assigned, tenantId } = params;
       if (assigned) {
@@ -267,25 +256,22 @@ export const AgentUnitMatrix = () => {
         if (insErr && (insErr as any).code !== "23505") throw insErr;
       }
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["permissions", "agent-unit-assignments"] }),
+    onSuccess: () => invalidate(),
     onError: (err: any) => toast.error(`บันทึกไม่สำเร็จ: ${err?.message || "ไม่ทราบสาเหตุ"}`),
   });
 
-  const bulkAssign = useMutation({
+  /* ───── Bulk units (project checkbox / per-project bulk / select-all) ───── */
+  const bulkUnits = useMutation({
     mutationFn: async (params: { agentId: string; tenantId: string; unitIds: string[]; assign: boolean }) => {
       const { agentId, tenantId, unitIds, assign } = params;
+      if (unitIds.length === 0) return;
       if (assign) {
         await supabase
           .from("agent_unit_assignments")
           .update({ revoked_at: null })
           .eq("agent_user_id", agentId)
           .in("unit_id", unitIds);
-        const rows = unitIds.map((uid) => ({
-          agent_user_id: agentId,
-          unit_id: uid,
-          tenant_id: tenantId,
-        }));
+        const rows = unitIds.map((uid) => ({ agent_user_id: agentId, unit_id: uid, tenant_id: tenantId }));
         const { error } = await supabase
           .from("agent_unit_assignments")
           .upsert(rows, { onConflict: "agent_user_id,unit_id", ignoreDuplicates: false });
@@ -300,14 +286,37 @@ export const AgentUnitMatrix = () => {
         if (error) throw error;
       }
     },
-    onSuccess: (_d, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["permissions", "agent-unit-assignments"] });
-      toast.success(variables.assign ? "เลือกทั้งหมดเรียบร้อย" : "ล้างทั้งหมดเรียบร้อย");
-    },
+    onSuccess: () => invalidate(),
     onError: (err: any) => toast.error(`บันทึกไม่สำเร็จ: ${err?.message || "ไม่ทราบสาเหตุ"}`),
   });
 
-  const loading = loadingAgents || loadingUnits || loadingProjectNames || loadingAssignments;
+  /* ───── Clone helpers ───── */
+  const cloneAllUsers: CloneUser[] = useMemo(
+    () =>
+      agents.map((a) => ({
+        id: a.id,
+        name: a.full_name || a.email,
+        email: a.email,
+        tenantId: a.tenant_id,
+        tenantName: a.tenant_name,
+        subtitle: a.email,
+      })),
+    [agents]
+  );
+  const getItemsForAgent = (userId: string) =>
+    unitLinks.filter((l) => l.agent_user_id === userId).map((l) => l.unit_id);
+  const selectedHasUnits = selectedAgent ? getItemsForAgent(selectedAgent.id).length > 0 : false;
+  const hasOtherSameTenant =
+    !!selectedAgent && agents.some((a) => a.id !== selectedAgent.id && a.tenant_id === selectedAgent.tenant_id);
+
+  const toggleExpand = (projectId: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(projectId) ? next.delete(projectId) : next.add(projectId);
+      return next;
+    });
+
+  const loading = loadingAgents || loadingUnits || loadingProjectNames || loadingLinks;
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -332,13 +341,17 @@ export const AgentUnitMatrix = () => {
     if (price >= 1_000_000) return `${(price / 1_000_000).toFixed(2)} ล้าน`;
     return price.toLocaleString();
   };
+  const statusLabel = (s: string) =>
+    s === "available" ? "ว่าง" : s === "reserved" ? "จอง" : s === "sold" ? "ขาย" : s;
+  const statusColor = (s: string) =>
+    s === "available" ? "bg-green-100 text-green-700"
+      : s === "reserved" ? "bg-amber-100 text-amber-700"
+      : s === "sold" ? "bg-red-100 text-red-700"
+      : "bg-gray-100 text-gray-600";
 
-  const statusColor = (status: string) => {
-    if (status === "available") return "bg-green-100 text-green-700";
-    if (status === "reserved") return "bg-amber-100 text-amber-700";
-    if (status === "sold") return "bg-red-100 text-red-700";
-    return "bg-gray-100 text-gray-600";
-  };
+  const totalAssigned = selectedAgent
+    ? unitsForSelectedAgent.filter((u) => isUnitAssigned(selectedAgent.id, u.id)).length
+    : 0;
 
   return (
     <div className="space-y-4">
@@ -364,14 +377,17 @@ export const AgentUnitMatrix = () => {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
-                placeholder="ค้นหานายหน้า..."
+                placeholder="ค้นหานายหน้า / บริษัท..."
                 value={agentSearch}
                 onChange={(e) => setAgentSearch(e.target.value)}
                 className="pl-9 h-9"
               />
             </div>
 
-            <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-[640px] overflow-y-auto pr-1">
+              {agentsByTenant.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-4">ไม่พบรายการที่ค้นหา</p>
+              )}
               {agentsByTenant.map((group) => (
                 <div key={group.tenant_name} className="space-y-1">
                   <div className="flex items-center gap-1.5 text-xs font-medium text-gray-600 px-1 pt-1">
@@ -389,7 +405,7 @@ export const AgentUnitMatrix = () => {
                         className={cn(
                           "w-full text-left px-3 py-2.5 rounded-lg transition-all flex items-center gap-2.5",
                           isSelected
-                            ? "bg-amber-50 border-2 border-amber-500 ring-1 ring-amber-300/30"
+                            ? "border-2 border-amber-500 ring-1 ring-amber-300/30"
                             : "border-2 border-transparent hover:bg-gray-50"
                         )}
                       >
@@ -417,7 +433,7 @@ export const AgentUnitMatrix = () => {
           </CardContent>
         </Card>
 
-        {/* RIGHT: Units for selected agent */}
+        {/* RIGHT: Nested projects → units */}
         <Card>
           <CardContent className="p-4">
             {!selectedAgent ? (
@@ -427,7 +443,7 @@ export const AgentUnitMatrix = () => {
               </div>
             ) : (
               <>
-                <div className="flex items-start justify-between gap-4 mb-4">
+                <div className="flex items-start justify-between gap-4 mb-3">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">
                       {selectedAgent.full_name || selectedAgent.email}
@@ -437,73 +453,73 @@ export const AgentUnitMatrix = () => {
                       {selectedAgent.tenant_name}
                       <span className="text-gray-300">·</span>
                       <span>
-                        ขาย{" "}
-                        <span className="font-semibold text-amber-600">
-                          {assignments.filter(
-                            (a) =>
-                              a.agent_user_id === selectedAgent.id &&
-                              unitsForSelectedAgent.some((u) => u.id === a.unit_id)
-                          ).length}
-                        </span>{" "}
-                        / {unitsForSelectedAgent.length} ยูนิต
+                        ขาย <span className="font-semibold text-amber-600">{totalAssigned}</span> /{" "}
+                        {unitsForSelectedAgent.length} ยูนิต
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      นายหน้าสามารถขายยูนิตที่ผู้ดูแลบริษัทมอบหมายให้ (ข้ามโครงการได้)
-                    </p>
                   </div>
+                </div>
+
+                {/* legend */}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 mb-3 bg-gray-50 rounded-lg px-3 py-2">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-sm bg-amber-500 inline-block" /> ติ๊กโครงการ = มอบทุกยูนิตในโครงการ
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Home className="w-3 h-3" /> ติ๊กยูนิต = มอบเฉพาะบางยูนิต · เอาออกจนหมด = โครงการหลุดเอง
+                  </span>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 mb-3">
                   <div className="relative flex-1 min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <Input
-                      placeholder="ค้นหายูนิต (เลขที่ / โครงการ)..."
-                      value={unitSearch}
-                      onChange={(e) => setUnitSearch(e.target.value)}
+                      placeholder="ค้นหาโครงการ / ยูนิต..."
+                      value={projectSearch}
+                      onChange={(e) => setProjectSearch(e.target.value)}
                       className="pl-9 h-9"
                     />
                   </div>
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={!canEdit || bulkAssign.isPending || filteredUnits.length === 0}
+                    disabled={!canEdit || bulkUnits.isPending || filteredGroups.length === 0}
                     onClick={() =>
-                      bulkAssign.mutate({
+                      bulkUnits.mutate({
                         agentId: selectedAgent.id,
                         tenantId: selectedAgent.tenant_id,
-                        unitIds: filteredUnits.map((u) => u.id),
+                        unitIds: filteredGroups.flatMap((g) => g.units.map((u) => u.id)),
                         assign: true,
                       })
                     }
                   >
                     <Check className="w-4 h-4 mr-1" />
-                    เลือกทั้งหมด{unitSearch && " (ที่กรอง)"}
+                    เลือกทุกโครงการ{projectSearch && " (ที่กรอง)"}
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={!canEdit || bulkAssign.isPending || filteredUnits.length === 0}
+                    disabled={!canEdit || bulkUnits.isPending || filteredGroups.length === 0}
                     onClick={() =>
-                      bulkAssign.mutate({
+                      bulkUnits.mutate({
                         agentId: selectedAgent.id,
                         tenantId: selectedAgent.tenant_id,
-                        unitIds: filteredUnits.map((u) => u.id),
+                        unitIds: filteredGroups.flatMap((g) => g.units.map((u) => u.id)),
                         assign: false,
                       })
                     }
                   >
                     <X className="w-4 h-4 mr-1" />
-                    ล้างทั้งหมด{unitSearch && " (ที่กรอง)"}
+                    ล้างทั้งหมด{projectSearch && " (ที่กรอง)"}
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={!canEdit || selectedAgentItemCount === 0 || !hasOtherSameTenant}
+                    disabled={!canEdit || !selectedHasUnits || !hasOtherSameTenant}
                     onClick={() => setCloneOpen(true)}
                     title={
-                      selectedAgentItemCount === 0
-                        ? "นายหน้าคนนี้ยังไม่มียูนิตที่รับผิดชอบ"
+                      !selectedHasUnits
+                        ? "นายหน้าคนนี้ยังไม่มียูนิตที่ขาย"
                         : !hasOtherSameTenant
                         ? "ไม่มีนายหน้าคนอื่นใน tenant เดียวกัน"
                         : "โคลนสิทธิ์ยูนิตไปยังนายหน้าคนอื่น"
@@ -514,82 +530,147 @@ export const AgentUnitMatrix = () => {
                   </Button>
                 </div>
 
-                {filteredUnits.length === 0 ? (
+                {filteredGroups.length === 0 ? (
                   <div className="py-10 text-center text-gray-500 text-sm">
                     <Inbox className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                    {unitSearch
-                      ? `ไม่พบยูนิตที่ค้นหา "${unitSearch}"`
-                      : "บริษัทนี้ยังไม่มียูนิต"}
+                    {projectSearch ? `ไม่พบโครงการ/ยูนิตที่ค้นหา "${projectSearch}"` : "บริษัทนี้ยังไม่มียูนิต"}
                   </div>
                 ) : (
-                  <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-                    {unitsByProject.map((group) => (
-                      <div key={group.project_id}>
-                        <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 px-1 pb-1.5 pt-2">
-                          <Home className="w-3.5 h-3.5" />
-                          {group.project_name}
-                          <span className="text-xs text-gray-400 font-normal">
-                            ({group.units.length} ยูนิต)
-                          </span>
-                        </div>
-                        <div className="space-y-1.5">
-                          {group.units.map((u) => {
-                            const checked = isAssigned(selectedAgent.id, u.id);
-                            return (
-                              <label
-                                key={u.id}
-                                className={cn(
-                                  "flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-all border border-gray-200 hover:bg-gray-50",
-                                  !canEdit && "cursor-not-allowed opacity-90"
-                                )}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  disabled={!canEdit || toggleOne.isPending}
-                                  onChange={() =>
-                                    toggleOne.mutate({
+                  <div className="space-y-1.5 max-h-[640px] overflow-y-auto pr-1">
+                    {filteredGroups.map((g) => {
+                      const assignedCount = assignedUnitCountInProject(selectedAgent.id, g.units);
+                      const projChecked = assignedCount > 0;
+                      const isOpen = expanded.has(g.project_id);
+                      return (
+                        <div
+                          key={g.project_id}
+                          className={cn(
+                            "rounded-lg border transition-all",
+                            projChecked ? "border-amber-400/50" : "border-gray-200"
+                          )}
+                        >
+                          {/* PROJECT row */}
+                          <div className="flex items-center gap-2 p-3">
+                            <input
+                              type="checkbox"
+                              checked={projChecked}
+                              disabled={!canEdit || bulkUnits.isPending}
+                              onChange={() =>
+                                bulkUnits.mutate({
+                                  agentId: selectedAgent.id,
+                                  tenantId: selectedAgent.tenant_id,
+                                  unitIds: g.units.map((u) => u.id),
+                                  assign: !projChecked,
+                                })
+                              }
+                              className="w-4 h-4 accent-amber-500 cursor-pointer disabled:cursor-not-allowed flex-shrink-0"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => toggleExpand(g.project_id)}
+                              className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                            >
+                              {isOpen ? (
+                                <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-sm text-gray-900 truncate">{g.project_name}</div>
+                                <div className="text-xs text-gray-500 mt-0.5">{g.units.length} ยูนิต</div>
+                              </div>
+                            </button>
+                            <span className="text-xs text-gray-500 flex-shrink-0">
+                              ขาย <span className="font-semibold text-amber-600">{assignedCount}</span>/{g.units.length}
+                            </span>
+                            {projChecked && (
+                              <span className="text-xs font-medium text-amber-600 flex-shrink-0">มอบหมายแล้ว</span>
+                            )}
+                          </div>
+
+                          {/* UNITS (expanded) */}
+                          {isOpen && (
+                            <div className="border-t border-gray-100 px-3 py-2 space-y-1 bg-white/60 rounded-b-lg">
+                              <div className="flex items-center justify-end gap-2 pb-1">
+                                <button
+                                  type="button"
+                                  disabled={!canEdit || bulkUnits.isPending}
+                                  onClick={() =>
+                                    bulkUnits.mutate({
                                       agentId: selectedAgent.id,
-                                      unitId: u.id,
-                                      assigned: checked,
                                       tenantId: selectedAgent.tenant_id,
+                                      unitIds: g.units.map((u) => u.id),
+                                      assign: true,
                                     })
                                   }
-                                  className="w-4 h-4 accent-amber-500 cursor-pointer disabled:cursor-not-allowed"
-                                />
-                                <div className="flex-1 min-w-0 flex items-center gap-3">
-                                  <div className="font-mono text-sm font-medium text-gray-900">
-                                    {u.unit_number}
-                                  </div>
-                                  <div className="text-sm text-gray-600">
-                                    {formatPrice(u.price)}
-                                  </div>
-                                </div>
-                                <span
-                                  className={cn(
-                                    "text-xs px-2 py-0.5 rounded-full font-medium",
-                                    statusColor(u.status)
-                                  )}
+                                  className="text-[11px] text-amber-600 hover:underline disabled:opacity-40"
                                 >
-                                  {u.status === "available"
-                                    ? "ว่าง"
-                                    : u.status === "reserved"
-                                    ? "จอง"
-                                    : u.status === "sold"
-                                    ? "ขาย"
-                                    : u.status}
-                                </span>
-                                {checked && (
-                                  <span className="text-xs font-medium text-amber-600">
-                                    ขายได้
-                                  </span>
-                                )}
-                              </label>
-                            );
-                          })}
+                                  เลือกยูนิตทั้งหมด
+                                </button>
+                                <span className="text-gray-300 text-[11px]">·</span>
+                                <button
+                                  type="button"
+                                  disabled={!canEdit || bulkUnits.isPending}
+                                  onClick={() =>
+                                    bulkUnits.mutate({
+                                      agentId: selectedAgent.id,
+                                      tenantId: selectedAgent.tenant_id,
+                                      unitIds: g.units.map((u) => u.id),
+                                      assign: false,
+                                    })
+                                  }
+                                  className="text-[11px] text-gray-500 hover:underline disabled:opacity-40"
+                                >
+                                  ล้างยูนิต
+                                </button>
+                              </div>
+                              {g.units.map((u) => {
+                                const uChecked = isUnitAssigned(selectedAgent.id, u.id);
+                                return (
+                                  <label
+                                    key={u.id}
+                                    className={cn(
+                                      "flex items-center gap-3 p-2 pl-6 rounded-md cursor-pointer transition-all hover:bg-gray-50",
+                                      !canEdit && "cursor-not-allowed opacity-90"
+                                    )}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={uChecked}
+                                      disabled={!canEdit || toggleUnit.isPending}
+                                      onChange={() =>
+                                        toggleUnit.mutate({
+                                          agentId: selectedAgent.id,
+                                          unitId: u.id,
+                                          assigned: uChecked,
+                                          tenantId: selectedAgent.tenant_id,
+                                        })
+                                      }
+                                      className="w-4 h-4 accent-amber-500 cursor-pointer disabled:cursor-not-allowed flex-shrink-0"
+                                    />
+                                    <span className="font-mono text-sm font-medium text-gray-900">
+                                      {u.unit_number}
+                                    </span>
+                                    <span className="text-sm text-gray-600">{formatPrice(u.price)}</span>
+                                    <span
+                                      className={cn(
+                                        "text-xs px-2 py-0.5 rounded-full font-medium ml-auto",
+                                        statusColor(u.status)
+                                      )}
+                                    >
+                                      {statusLabel(u.status)}
+                                    </span>
+                                    {uChecked && (
+                                      <span className="text-xs font-medium text-amber-600">ขายได้</span>
+                                    )}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </>
@@ -606,7 +687,7 @@ export const AgentUnitMatrix = () => {
         getItemName={(id) => {
           const u = units.find((x) => x.id === id);
           if (!u) return id;
-          return u.project_name ? `${u.unit_number} · ${u.project_name}` : u.unit_number;
+          return `${u.unit_number} · ${u.project_name}`;
         }}
         initialSourceId={selectedAgent?.id}
         itemLabel="ยูนิต"
@@ -619,3 +700,5 @@ export const AgentUnitMatrix = () => {
     </div>
   );
 };
+
+export default AgentScopeMatrix;

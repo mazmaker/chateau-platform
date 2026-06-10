@@ -866,7 +866,7 @@ const EditLeadModal = ({ isOpen, onClose, onLeadUpdated, lead }: EditLeadModalPr
                               </SelectContent>
                             </Select>
                             {!canAssignSales && (
-                              <p className="text-xs text-gray-400 mt-1">เฉพาะผู้ดูแลระบบกำหนดผู้รับผิดชอบได้</p>
+                              <p className="text-xs text-gray-400 mt-1">เฉพาะผู้ดูแลบริษัทกำหนดผู้รับผิดชอบได้</p>
                             )}
                           </div>
 

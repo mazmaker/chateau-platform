@@ -58,7 +58,7 @@ export function LeadSourceEditor({ leadId, currentSource, onUpdated, variant = '
   const currentLabel = (() => {
     // Static aliases for values that aren't in the dropdown but need a clean label
     const aliases: Record<string, string> = {
-      agent_referral: 'Agent แนะนำ',
+      agent_referral: 'นายหน้าแนะนำ',
       instagram: 'Instagram',
       facebook: 'Facebook',
       tiktok: 'TikTok',

@@ -221,15 +221,16 @@ class SuspensionService {
         return false;
       }
 
-      // Update tenant status to active
+      // Update tenant status to active.
+      // NOTE: `tenants` has no restored_at/restored_by columns — including them made
+      // PostgREST reject the whole UPDATE, so restoration silently failed and the tenant
+      // stayed suspended. Who/when restored is captured in the activity log below instead.
       const { error: updateError } = await supabase
         .from('tenants')
         .update({
           status: 'active',
           suspended_at: null,
-          suspension_reason: null,
-          restored_at: new Date().toISOString(),
-          restored_by: restoredBy
+          suspension_reason: null
         })
         .eq('id', tenantId);
 
@@ -336,31 +337,32 @@ class SuspensionService {
     performed_at: string;
   }): Promise<void> {
     try {
-      // In a real app, this would go to an audit_logs table
-      console.log('📝 Suspension Activity:', {
-        tenant_id: activity.tenant_id,
-        action: activity.action,
-        reason: activity.reason,
-        performed_by: activity.performed_by,
-        timestamp: activity.performed_at
-      });
+      // Persist to the activity feed via the SECURITY DEFINER `log_activity` RPC — the
+      // same pipeline get_recent_activities reads for the Owner "กิจกรรมล่าสุด" panel.
+      // (Direct audit_logs/activity_logs inserts are RLS-blocked from the client; the RPC
+      // is the supported path. The old commented insert also targeted columns that don't
+      // exist — activity_logs uses activity_type/description/metadata, not details.)
+      const activityType =
+        activity.action === 'suspended' ? 'tenant_suspended'
+        : activity.action === 'restored' ? 'tenant_activated'
+        : 'tenant_updated';
+      const description =
+        activity.action === 'suspended' ? `ระงับบริการ — ${activity.reason}`
+        : activity.action === 'restored' ? `ปลดระงับบริการ — ${activity.reason}`
+        : `อัปเดตสถานะบริการ — ${activity.reason}`;
 
-      // TODO: Insert into audit_logs table
-      /*
-      await supabase
-        .from('audit_logs')
-        .insert([{
-          entity_type: 'tenant',
-          entity_id: activity.tenant_id,
-          action: activity.action,
-          details: {
-            reason: activity.reason,
-            invoice_id: activity.invoice_id
-          },
-          performed_by: activity.performed_by,
-          performed_at: activity.performed_at
-        }]);
-      */
+      const { error } = await (supabase as any).rpc('log_activity', {
+        p_tenant_id: activity.tenant_id,
+        p_user_id: null,
+        p_activity_type: activityType,
+        p_description: description,
+        p_metadata: {
+          reason: activity.reason,
+          invoice_id: activity.invoice_id ?? null,
+          performed_by: activity.performed_by
+        }
+      });
+      if (error) console.error('❌ Error logging suspension activity:', error);
     } catch (error) {
       console.error('❌ Error logging suspension activity:', error);
     }

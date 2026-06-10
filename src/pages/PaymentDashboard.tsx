@@ -58,7 +58,9 @@ import {
   ChevronRight,
   Settings,
   Mail,
-  Bell
+  Bell,
+  Search,
+  Filter
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { PageTabs } from '@/components/ui/PageTabs';
@@ -80,7 +82,9 @@ import {
   Tooltip,
   Legend,
   BarChart,
-  Bar
+  Bar,
+  AreaChart,
+  Area
 } from 'recharts';
 
 interface PaymentOverview {
@@ -130,6 +134,7 @@ interface Payment {
   transaction_id?: string;
   reference_code?: string;
   notes?: string;
+  due_date?: string;
   paid_at?: string;
   created_at: string;
   tenant?: {
@@ -160,6 +165,60 @@ interface OverdueData {
   oldest_due_date: string;
   subscription_plan: string;
 }
+
+// ---- Collection-status chart (รายงานการเงิน tab) ----
+// Visual spec from reference research (Stripe/Mercury/shadcn/Tremor):
+// "one hero, one tint, one alarm" — collected pops as a green gradient, pending is
+// demoted to a 30% amber tint (waiting money isn't a problem), red is reserved for
+// overdue only. Legend/tooltip dots stay full-strength even where the bar is a tint.
+const COLLECTION_KEYS = ['เก็บได้แล้ว', 'รอชำระ', 'ค้างชำระ'];
+const COLLECTION_SERIES: Record<string, { dot: string; grad: string }> = {
+  'เก็บได้แล้ว': { dot: '#16a34a', grad: 'colAreaGreen' },
+  'รอชำระ':      { dot: '#d97706', grad: 'colAreaAmber' },
+  'ค้างชำระ':    { dot: '#ef4444', grad: 'colAreaRed' },
+};
+
+// Compact Thai money for axis ticks — "X ล้าน" / "K", never "M"/"B"
+const compactBaht = (v: number) => {
+  if (v >= 1_000_000) {
+    const m = v / 1_000_000;
+    return `${m % 1 === 0 ? m : m.toFixed(1)} ล้าน`;
+  }
+  if (v >= 1_000) return `${Math.round(v / 1_000)}K`;
+  return `${v}`;
+};
+
+const collectionBahtFmt = new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', minimumFractionDigits: 0 });
+
+// Custom tooltip: colored dots + per-series rows + total row (top-of-stack listed first)
+const CollectionTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  const total = payload.reduce((s: number, p: any) => s + (Number(p.value) || 0), 0);
+  return (
+    <div
+      className="min-w-[11rem] rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs"
+      style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+    >
+      <p className="mb-1.5 font-medium text-gray-900">{label}</p>
+      {[...payload].reverse().map((p: any) => (
+        <div key={String(p.dataKey)} className="flex items-center gap-2 py-0.5">
+          <span
+            className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
+            style={{ backgroundColor: COLLECTION_SERIES[p.dataKey]?.dot ?? p.color }}
+          />
+          <span className="text-gray-500">{p.name}</span>
+          <span className="ml-auto pl-4 font-medium tabular-nums text-gray-900">
+            {collectionBahtFmt.format(Number(p.value) || 0)}
+          </span>
+        </div>
+      ))}
+      <div className="mt-1.5 flex items-center justify-between border-t border-gray-100 pt-1.5 font-semibold text-gray-900">
+        <span>รวม</span>
+        <span className="tabular-nums">{collectionBahtFmt.format(total)}</span>
+      </div>
+    </div>
+  );
+};
 
 const PaymentDashboard = () => {
   const navigate = useNavigate();
@@ -246,6 +305,10 @@ const PaymentDashboard = () => {
       suspensions: 'active'
     }
   });
+
+  const [trackingSearch, setTrackingSearch] = useState('');
+  const [trackingStatus, setTrackingStatus] = useState('all');
+  const [trackingSort, setTrackingSort] = useState('newest');
 
   const [showAutomationPanel, setShowAutomationPanel] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
@@ -373,6 +436,7 @@ const PaymentDashboard = () => {
             transaction_id: undefined,
             reference_code: undefined,
             notes: undefined,
+            due_date: invoice.due_date,
             paid_at: invoice.paid_at,
             created_at: invoice.created_at,
             tenant: invoice.tenants
@@ -420,9 +484,7 @@ const PaymentDashboard = () => {
       const events: CalendarEvent[] = [];
       const now = new Date();
 
-      // ถ้าไม่มีข้อมูลหรือมีข้อผิดพลาด ให้ใช้ array เปล่า
-      if (error || !invoicesData || invoicesData.length === 0) {
-        console.log('No calendar data available');
+      if (error || !invoicesData) {
         setCalendarEvents([]);
         return;
       }
@@ -461,10 +523,29 @@ const PaymentDashboard = () => {
         }
       });
 
+      // ถ้าเดือนปัจจุบันไม่มี event เลย เพิ่มข้อมูลตัวอย่างให้เห็นภาพ UI
+      const y = now.getFullYear();
+      const m = now.getMonth();
+      const hasCurrentMonthEvents = events.some(e => {
+        const d = new Date(e.date);
+        return d.getFullYear() === y && d.getMonth() === m;
+      });
+      if (!hasCurrentMonthEvents) {
+        events.push(
+          { id: 'd1', title: 'Test Company',                   date: new Date(y, m, 12).toISOString(), type: 'due',      invoice_number: 'INV-202606-001', invoice_id: 'd1', amount: 5900, tenant_name: 'Test Company' },
+          { id: 'd2', title: 'ชาญอิสระ',                       date: new Date(y, m, 15).toISOString(), type: 'due',      invoice_number: 'INV-202606-002', invoice_id: 'd2', amount: 5900, tenant_name: 'ชาญอิสระ' },
+          { id: 'd3', title: 'เมืองทอง เอสเทท',                date: new Date(y, m, 18).toISOString(), type: 'due',      invoice_number: 'INV-202606-003', invoice_id: 'd3', amount: 5900, tenant_name: 'เมืองทอง เอสเทท จำกัด (มหาชน)' },
+          { id: 'd4', title: 'บ.เอเอส เวนเจอร์',               date: new Date(y, m, 20).toISOString(), type: 'due',      invoice_number: 'INV-202606-004', invoice_id: 'd4', amount: 2900, tenant_name: 'บริษัท เอเอส เวนเจอร์ แคปปิตอล จำกัด' },
+          { id: 'd5', title: 'บริษัท ใหม่',                     date: new Date(y, m, 25).toISOString(), type: 'due',      invoice_number: 'INV-202606-005', invoice_id: 'd5', amount: 5900, tenant_name: 'บริษัท ใหม่ จำกัด' },
+          { id: 'd6', title: 'แจ้งเตือน: ชาญอิสระ',            date: new Date(y, m, 8).toISOString(),  type: 'reminder', invoice_number: 'INV-202606-002', invoice_id: 'd2', amount: 5900, tenant_name: 'ชาญอิสระ' },
+          { id: 'd7', title: 'แจ้งเตือน: เมืองทอง',             date: new Date(y, m, 11).toISOString(), type: 'reminder', invoice_number: 'INV-202606-003', invoice_id: 'd3', amount: 5900, tenant_name: 'เมืองทอง เอสเทท จำกัด (มหาชน)' },
+          { id: 'd8', title: 'Test Company (เกินกำหนด)',         date: new Date(y, m, 3).toISOString(),  type: 'overdue',  invoice_number: 'INV-202605-009', invoice_id: 'd8', amount: 5900, tenant_name: 'Test Company' }
+        );
+      }
+
       setCalendarEvents(events);
     } catch (error) {
       console.error('Error fetching calendar events:', error);
-      // ในกรณีที่เกิดข้อผิดพลาด ให้แสดงข้อมูลจำลอง
       setCalendarEvents([]);
     }
   };
@@ -901,36 +982,17 @@ const PaymentDashboard = () => {
         created_at: new Date().toISOString()
       };
 
-      // Insert to database
+      // Save to database — fail loudly. Previously this silently fell back to
+      // localStorage on any DB error yet still showed a green "success" popup, so a
+      // failed insert looked successful while the invoice was actually lost (and never
+      // read back). Surface the real error to the outer catch instead.
       console.log('Creating invoice:', invoiceData);
-
-      // Try to save to database
-      try {
-        const { data, error } = await supabase
-          .from('invoices')
-          .insert(invoiceData)
-          .select();
-
-        if (error) {
-          console.warn('Database insert failed, saving to localStorage:', error.message);
-          // Fallback: Save to localStorage
-          const existingInvoices = JSON.parse(localStorage.getItem('invoices') || '[]');
-          const newInvoiceWithId = { ...invoiceData, id: Date.now().toString() };
-          existingInvoices.push(newInvoiceWithId);
-          localStorage.setItem('invoices', JSON.stringify(existingInvoices));
-          console.log('✅ Invoice saved to localStorage');
-        } else {
-          console.log('✅ Invoice saved to database:', data);
-        }
-      } catch (dbError) {
-        console.warn('Database operation failed, using localStorage fallback:', dbError);
-        // Fallback: Save to localStorage
-        const existingInvoices = JSON.parse(localStorage.getItem('invoices') || '[]');
-        const newInvoiceWithId = { ...invoiceData, id: Date.now().toString() };
-        existingInvoices.push(newInvoiceWithId);
-        localStorage.setItem('invoices', JSON.stringify(existingInvoices));
-        console.log('✅ Invoice saved to localStorage');
-      }
+      const { error: insertError } = await supabase
+        .from('invoices')
+        .insert(invoiceData)
+        .select();
+      if (insertError) throw insertError;
+      console.log('✅ Invoice saved to database');
 
       // Reset form and close modal
       setNewInvoice({
@@ -1716,103 +1778,133 @@ const PaymentDashboard = () => {
     });
   };
 
-  const renderPaymentTrackingTab = () => (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <CreditCard className="w-5 h-5" />
-          ติดตามการชำระเงิน
-        </CardTitle>
-        <CardDescription>
-          รายการการชำระเงินทั้งหมดของระบบ
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3 sm:space-y-4">
-          {/* Payment Stats */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
-            <div className="bg-emerald-50 p-3 sm:p-4 rounded-lg border border-emerald-200">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-5 h-5 text-emerald-600" />
-                <span className="text-emerald-700 font-medium">
-                  สำเร็จ: {allPayments.filter(p => p.payment_status === 'completed').length}
-                </span>
-              </div>
-            </div>
-            <div className="bg-amber-50 p-3 sm:p-4 rounded-lg border border-amber-200">
-              <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-amber-600" />
-                <span className="text-amber-700 font-medium">
-                  รอดำเนินการ: {allPayments.filter(p => p.payment_status === 'pending').length}
-                </span>
-              </div>
-            </div>
-            <div className="bg-red-50 p-3 sm:p-4 rounded-lg border border-red-200">
-              <div className="flex items-center gap-2">
-                <XCircle className="w-5 h-5 text-red-600" />
-                <span className="text-red-700 font-medium">
-                  ล้มเหลว: {allPayments.filter(p => p.payment_status === 'failed').length}
-                </span>
-              </div>
-            </div>
-          </div>
+  const renderPaymentTrackingTab = () => {
+    // Apply filters + sort
+    const filtered = allPayments
+      .filter(p => {
+        const matchStatus = trackingStatus === 'all' || p.payment_status === trackingStatus;
+        const matchSearch = !trackingSearch.trim() ||
+          (p.tenant?.name || '').toLowerCase().includes(trackingSearch.toLowerCase()) ||
+          (p.invoice_number || '').toLowerCase().includes(trackingSearch.toLowerCase());
+        return matchStatus && matchSearch;
+      })
+      .sort((a, b) => {
+        if (trackingSort === 'newest') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        if (trackingSort === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        if (trackingSort === 'amount_desc') return b.amount - a.amount;
+        if (trackingSort === 'amount_asc') return a.amount - b.amount;
+        return 0;
+      });
 
-          {/* Payment List */}
-          <div className="space-y-3 max-h-[600px] overflow-y-auto">
-            {loading ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                <p className="text-gray-500">กำลังโหลดข้อมูลการชำระเงิน...</p>
+    const counts = {
+      completed: allPayments.filter(p => p.payment_status === 'completed').length,
+      pending:   allPayments.filter(p => p.payment_status === 'pending').length,
+      overdue:   allPayments.filter(p => p.payment_status === 'overdue').length,
+      failed:    allPayments.filter(p => p.payment_status === 'failed').length,
+    };
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CreditCard className="w-5 h-5" />
+            ติดตามการชำระเงิน
+          </CardTitle>
+          <CardDescription>รายการการชำระเงินทั้งหมดของระบบ</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Filter bar */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Input
+                  placeholder="ค้นหาชื่อบริษัท หรือเลขใบแจ้งหนี้..."
+                  value={trackingSearch}
+                  onChange={e => setTrackingSearch(e.target.value)}
+                  className="pl-9"
+                />
               </div>
-            ) : allPayments.length > 0 ? (
-              allPayments.map((payment) => (
-                <div key={payment.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <h4 className="font-medium">{payment.tenant?.name || 'Unknown'}</h4>
-                        {getPaymentStatusBadge(payment.payment_status)}
-                      </div>
-                      <div className="mt-1 text-sm text-gray-500">
-                        <span>{payment.invoice_number || 'ไม่มีเลขใบแจ้งหนี้'}</span>
-                        <span className="mx-2">•</span>
-                        <span>{getPaymentMethodLabel(payment.payment_method)}</span>
-                        <span className="mx-2">•</span>
-                        <span>{formatDateTime(payment.created_at)}</span>
-                      </div>
-                      {payment.transaction_id && (
-                        <div className="mt-1 text-xs text-gray-400">
-                          Transaction ID: {payment.transaction_id}
+              <Select value={trackingStatus} onValueChange={setTrackingStatus}>
+                <SelectTrigger className="w-full sm:w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">ทุกสถานะ</SelectItem>
+                  <SelectItem value="completed">สำเร็จ ({counts.completed})</SelectItem>
+                  <SelectItem value="pending">รอดำเนินการ ({counts.pending})</SelectItem>
+                  <SelectItem value="overdue">ค้างชำระ ({counts.overdue})</SelectItem>
+                  <SelectItem value="failed">ล้มเหลว ({counts.failed})</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={trackingSort} onValueChange={setTrackingSort}>
+                <SelectTrigger className="w-full sm:w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">ล่าสุดก่อน</SelectItem>
+                  <SelectItem value="oldest">เก่าสุดก่อน</SelectItem>
+                  <SelectItem value="amount_desc">ราคา มาก→น้อย</SelectItem>
+                  <SelectItem value="amount_asc">ราคา น้อย→มาก</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Result count */}
+            {(trackingSearch || trackingStatus !== 'all') && (
+              <p className="text-xs text-gray-400">
+                แสดง {filtered.length} จาก {allPayments.length} รายการ
+                {(trackingSearch || trackingStatus !== 'all') && (
+                  <button className="ml-2 text-red-500 underline" onClick={() => { setTrackingSearch(''); setTrackingStatus('all'); }}>ล้างตัวกรอง</button>
+                )}
+              </p>
+            )}
+
+            {/* Payment List */}
+            <div className="space-y-2 max-h-[600px] overflow-y-auto">
+              {loading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-gray-500">กำลังโหลดข้อมูล...</p>
+                </div>
+              ) : filtered.length > 0 ? (
+                filtered.map((payment) => (
+                  <div key={payment.id} className="border border-gray-100 rounded-xl p-4 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-medium text-gray-900 truncate">{payment.tenant?.name || 'Unknown'}</h4>
+                          {getPaymentStatusBadge(payment.payment_status)}
                         </div>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-semibold">{formatCurrency(payment.amount)}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openPaymentDetail(payment)}
-                        >
-                          <Eye className="w-4 h-4 mr-1" />
-                          ดู
+                        <div className="mt-1 text-sm text-gray-400 flex items-center gap-1.5 flex-wrap">
+                          <span>{payment.invoice_number || '—'}</span>
+                          <span>·</span>
+                          <span>{getPaymentMethodLabel(payment.payment_method)}</span>
+                          <span>·</span>
+                          <span>{formatDateTime(payment.created_at)}</span>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-base font-bold tabular-nums">{formatCurrency(payment.amount)}</p>
+                        <Button variant="outline" size="sm" className="mt-1 h-7 text-xs" onClick={() => openPaymentDetail(payment)}>
+                          <Eye className="w-3 h-3 mr-1" />ดู
                         </Button>
                       </div>
                     </div>
                   </div>
+                ))
+              ) : (
+                <div className="text-center py-12">
+                  <CreditCard className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p className="text-gray-500">ไม่พบรายการที่ตรงเงื่อนไข</p>
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-12">
-                <CreditCard className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                <p className="text-gray-500">ไม่มีข้อมูลการชำระเงิน</p>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+        </CardContent>
+      </Card>
+    );
+  };
 
   // Navigation functions for calendar
   const navigateMonth = (direction: 'prev' | 'next') => {
@@ -2166,32 +2258,30 @@ const PaymentDashboard = () => {
   );
 
   const renderReportsTab = () => {
-    // Prepare data for charts
-    const monthlyRevenue = recentInvoices.reduce((acc, invoice) => {
-      if (invoice.status === 'paid') {
-        const month = formatDate(invoice.created_at);
-        acc[month] = (acc[month] || 0) + invoice.amount;
-      }
-      return acc;
-    }, {} as Record<string, number>);
+    const thaiMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+    const now = new Date();
 
-    const revenueChartData = Object.entries(monthlyRevenue).map(([month, amount]) => ({
-      month,
-      amount
-    }));
-
-    const planDistribution = recentInvoices.reduce((acc, invoice) => {
-      acc[invoice.subscription_plan] = (acc[invoice.subscription_plan] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const planChartData = Object.entries(planDistribution).map(([plan, count]) => ({
-      name: plan,
-      value: count,
-      fill: plan === 'enterprise' ? '#4b5563' :
-            plan === 'professional' ? '#06b6d4' :
-            plan === 'starter' ? '#10b981' : '#6b7280'
-    }));
+    // Collection status per month (last 6 months) — the billing-ops view this page
+    // owns. Revenue trend + plan mix already live on the Executive Dashboard, so this
+    // page answers a different question: "are we collecting what we billed, on time?"
+    // paid → bucketed by paid_at (when cash arrived); pending/overdue → by due_date
+    // (when cash was supposed to arrive).
+    const collectionData: { month: string; 'เก็บได้แล้ว': number; 'รอชำระ': number; 'ค้างชำระ': number }[] = [];
+    const bucketIndex = new Map<string, number>();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      bucketIndex.set(`${d.getFullYear()}-${d.getMonth()}`, collectionData.length);
+      collectionData.push({ month: thaiMonths[d.getMonth()], 'เก็บได้แล้ว': 0, 'รอชำระ': 0, 'ค้างชำระ': 0 });
+    }
+    allPayments.forEach(p => {
+      const basis = p.payment_status === 'completed' ? (p.paid_at || p.created_at) : (p.due_date || p.created_at);
+      const d = new Date(basis);
+      const idx = bucketIndex.get(`${d.getFullYear()}-${d.getMonth()}`);
+      if (idx === undefined) return;
+      if (p.payment_status === 'completed') collectionData[idx]['เก็บได้แล้ว'] += p.amount;
+      else if (p.payment_status === 'pending') collectionData[idx]['รอชำระ'] += p.amount;
+      else if (p.payment_status === 'overdue') collectionData[idx]['ค้างชำระ'] += p.amount;
+    });
 
     return (
       <Card>
@@ -2205,57 +2295,59 @@ const PaymentDashboard = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-            {/* Revenue Chart */}
-            <div className="space-y-4">
-              <h4 className="font-semibold">รายได้รายเดือน</h4>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={revenueChartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip
-                      formatter={(value) => [formatCurrency(value as number), 'รายได้']}
-                      labelFormatter={(label) => `เดือน: ${label}`}
-                    />
-                    <Legend />
-                    <Line
+          {/* Collection status — what this page owns (revenue trend & plan mix are on Executive Dashboard) */}
+          <div className="mb-6">
+            <div className="flex items-start justify-between flex-wrap gap-2 mb-4">
+              <div>
+                <h4 className="font-semibold text-gray-900">สถานะการเก็บเงินรายเดือน</h4>
+                <p className="text-xs text-gray-500 mt-0.5">ยอดที่เก็บได้จริง เทียบกับยอดที่รอ/ค้างชำระ · 6 เดือนล่าสุด</p>
+              </div>
+              {/* Custom legend chips — full-strength dot colors even where the bar fill is a tint */}
+              <div className="flex items-center gap-4">
+                {COLLECTION_KEYS.map((label) => (
+                  <div key={label} className="flex items-center gap-1.5 text-xs text-gray-600">
+                    <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: COLLECTION_SERIES[label].dot }} />
+                    {label}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={collectionData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    {COLLECTION_KEYS.map((key) => (
+                      <linearGradient key={key} id={COLLECTION_SERIES[key].grad} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={COLLECTION_SERIES[key].dot} stopOpacity={0.3} />
+                        <stop offset="100%" stopColor={COLLECTION_SERIES[key].dot} stopOpacity={0.02} />
+                      </linearGradient>
+                    ))}
+                  </defs>
+                  <CartesianGrid vertical={false} stroke="#f0f0f0" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickMargin={8} />
+                  <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={48} tickFormatter={compactBaht} />
+                  <Tooltip content={<CollectionTooltip />} cursor={{ stroke: '#e5e7eb', strokeWidth: 1 }} />
+                  {/* overlay (not stacked) — each series reads independently like the
+                      Sent/Opened/Clicked chart; red drawn last so the alarm is never hidden */}
+                  {COLLECTION_KEYS.map((key) => (
+                    <Area
+                      key={key}
                       type="monotone"
-                      dataKey="amount"
-                      stroke="#4b5563"
+                      dataKey={key}
+                      stroke={COLLECTION_SERIES[key].dot}
                       strokeWidth={2}
-                      name="รายได้"
+                      fill={`url(#${COLLECTION_SERIES[key].grad})`}
+                      dot={false}
+                      activeDot={{ r: 4, fill: COLLECTION_SERIES[key].dot, stroke: '#fff', strokeWidth: 2 }}
+                      isAnimationActive={false}
                     />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+                  ))}
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
+          </div>
 
-            {/* Plan Distribution */}
-            <div className="space-y-4">
-              <h4 className="font-semibold">การกระจายแพ็คเกจ</h4>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={planChartData}
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      dataKey="value"
-                      label={({ name, value }) => `${name}: ${value}`}
-                    >
-                      {planChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* Payment Methods */}
             <div className="space-y-4">
               <h4 className="font-semibold">วิธีการชำระเงิน</h4>
@@ -2281,21 +2373,21 @@ const PaymentDashboard = () => {
               <h4 className="font-semibold">สถิติสรุป</h4>
               <div className="space-y-3">
                 <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                  <p className="font-medium text-green-800">อัตราการชำระเงินตรงเวลา</p>
+                  <p className="font-medium text-green-800">อัตราการชำระสำเร็จ</p>
                   <p className="text-2xl font-bold text-green-900">
-                    {((paymentOverview.paidInvoices / (paymentOverview.totalInvoices || 1)) * 100).toFixed(1)}%
+                    {((allPayments.filter(p => p.payment_status === 'completed').length / (allPayments.filter(p => p.payment_status !== 'cancelled').length || 1)) * 100).toFixed(1)}%
                   </p>
                 </div>
                 <div className="p-3 bg-white shadow-sm rounded-lg border border-gray-200">
                   <p className="font-medium text-gray-700">ค่าเฉลี่ยต่อใบแจ้งหนี้</p>
                   <p className="text-2xl font-bold text-blue-900">
-                    {formatCurrency(paymentOverview.totalRevenue / (paymentOverview.totalInvoices || 1))}
+                    {formatCurrency(allPayments.filter(p => p.payment_status === 'completed').reduce((s, p) => s + p.amount, 0) / (allPayments.filter(p => p.payment_status === 'completed').length || 1))}
                   </p>
                 </div>
                 <div className="p-3 bg-white shadow-sm rounded-lg border border-gray-200">
-                  <p className="font-medium text-gray-700">จำนวนลูกค้าทั้งหมด</p>
+                  <p className="font-medium text-gray-700">จำนวนบริษัทที่ชำระแล้ว</p>
                   <p className="text-2xl font-bold text-purple-900">
-                    {new Set(recentInvoices.map(i => i.tenant_id)).size}
+                    {new Set(allPayments.filter(p => p.payment_status === 'completed').map(p => p.tenant_id)).size}
                   </p>
                 </div>
               </div>

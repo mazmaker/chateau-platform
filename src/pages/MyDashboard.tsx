@@ -51,10 +51,20 @@ const C = {
   indigo:     '#4f46e5',
 };
 
+// Compact THB — Thai convention "X ล้าน" / "K" (matches canonical formatTHB in Index.tsx).
 const formatTHB = (n: number) => {
-  if (n >= 1_000_000) return `฿${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `฿${(n / 1_000).toFixed(0)}K`;
-  return `฿${n.toFixed(0)}`;
+  if (!Number.isFinite(n) || n === 0) return '฿0';
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1_000_000) {
+    const m = abs / 1_000_000;
+    if (m >= 1000) return `${sign}฿${Math.round(m).toLocaleString('en-US')} ล้าน`;
+    if (m >= 100) return `${sign}฿${Math.round(m)} ล้าน`;
+    if (m >= 10) return `${sign}฿${m.toFixed(1)} ล้าน`;
+    return `${sign}฿${m.toFixed(2)} ล้าน`;
+  }
+  if (abs >= 1_000) return `${sign}฿${(abs / 1_000).toFixed(0)}K`;
+  return `${sign}฿${abs.toFixed(0)}`;
 };
 
 const timeAgo = (iso: string | null) => {
@@ -455,7 +465,7 @@ const MyDashboard = () => {
     online_facebook: { label: 'Facebook',  color: C.indigo },
     online_google:   { label: 'Google',    color: C.amber },
     online_line:     { label: 'LINE',      color: C.green },
-    agent_referral:  { label: 'นายหน้า',   color: C.redDeep },
+    agent_referral:  { label: 'นายหน้าแนะนำ',   color: C.redDeep },
     offline:         { label: 'Walk-in',   color: C.charcoal },
   };
   const sourceCounts: Record<string, number> = {};
@@ -1031,7 +1041,7 @@ const MyDashboard = () => {
                   <p className="text-xs text-gray-500 mb-5">เรียงตามขั้นตอนการปิดดีล</p>
                   {activeDeals.length === 0 ? (
                     <div className="h-[180px] flex items-center justify-center text-sm text-gray-400">
-                      ยังไม่มีดีลที่ดูแล — ขอให้แอดมินมอบหมายลูกค้าให้
+                      ยังไม่มีดีลที่ดูแล — ขอให้ผู้ดูแลบริษัทมอบหมายลูกค้าให้
                     </div>
                   ) : (
                     <div className="overflow-auto max-h-[480px]">

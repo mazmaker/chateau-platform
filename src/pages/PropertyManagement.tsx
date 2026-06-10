@@ -177,6 +177,11 @@ const PropertyManagement = () => {
   // Agent's referral code → powers the "คัดลอกลิงก์แนะนำ" button in the header.
   const [myReferralCode, setMyReferralCode] = useState<string | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
+  // IDs that exist in the public `properties` table → safe to hand customers a
+  // /customer/properties/:id share link (the public page reads from that table only).
+  // Projects that live only in the `projects` table aren't publicly viewable, so we hide
+  // their share button rather than copy a link that 404s.
+  const [publicPropertyIds, setPublicPropertyIds] = useState<Set<string>>(new Set());
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [units, setUnits] = useState<Unit[]>([]);
   const [unitSalesMap, setUnitSalesMap] = useState<Record<string, string[]>>({});
@@ -610,6 +615,23 @@ const PropertyManagement = () => {
     }
   };
 
+  // Only admin/sales get the project-level share button. Agents are intentionally excluded:
+  // they already share their own per-unit referral links, and a whole-project link could
+  // surface units outside an agent's allotment (see the agent note in the list header).
+  const canShareProject = userRole === 'admin' || userRole === 'sales';
+
+  // Project-level share link — admin/sales copy a project's public page URL to send a
+  // customer. Plain public link (no ?ref= — agent attribution work is deferred).
+  const handleShareProject = async (projectId: string, projectName: string) => {
+    const link = `${window.location.origin}/customer/properties/${projectId}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success(`คัดลอกลิงก์โครงการ "${projectName}" แล้ว — ส่งให้ลูกค้าได้เลย`);
+    } catch {
+      toast.error('คัดลอกไม่สำเร็จ');
+    }
+  };
+
   const canManageUnit = (unitId: string, projectId?: string): boolean => {
     if (userRole === 'owner' || userRole === 'admin') return true;
     if (userRole === 'sales') {
@@ -681,6 +703,8 @@ const PropertyManagement = () => {
         propertiesMap.set(p.id, p);
       }
       setProperties(Array.from(propertiesMap.values()));
+      // Track which ids are publicly viewable (exist in `properties`) for the share button.
+      setPublicPropertyIds(new Set((propertiesData || []).map((p: any) => p.id)));
     } catch (error) {
       console.error('Error fetching properties:', error);
     } finally {
@@ -951,7 +975,7 @@ const PropertyManagement = () => {
 
         if (error) throw error;
         if (!data || data.length === 0) {
-          throw new Error('คุณไม่มีสิทธิ์แก้ไขยูนิตนี้ — ติดต่อแอดมินเพื่อมอบหมายสิทธิ์');
+          throw new Error('คุณไม่มีสิทธิ์แก้ไขยูนิตนี้ — ติดต่อผู้ดูแลบริษัทเพื่อมอบหมายสิทธิ์');
         }
         unitId = editingUnit.id;
 
@@ -1691,6 +1715,17 @@ const PropertyManagement = () => {
                       <Badge variant="outline" className="absolute top-2 right-2 bg-white/90">
                         {getPropertyTypeLabel(property.type)}
                       </Badge>
+                      {canShareProject && publicPropertyIds.has(property.id) && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleShareProject(property.id, property.name); }}
+                          className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-white/90 hover:bg-white shadow-sm flex items-center justify-center text-gray-600 hover:text-chateau transition-colors"
+                          title="คัดลอกลิงก์แชร์ให้ลูกค้า"
+                          aria-label="คัดลอกลิงก์แชร์โครงการ"
+                        >
+                          <Link2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                     <CardHeader className="pb-2">
                       <div className="flex-1">
@@ -1757,24 +1792,32 @@ const PropertyManagement = () => {
                       {selectedProperty.address?.district || '-'} {selectedProperty.address?.province ? `, ${selectedProperty.address.province}` : ''}
                     </CardDescription>
                   </div>
-                  <ManagePropertiesGuard fallback={null} showMessage={false}>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => navigate(`/properties/${selectedProperty.id}/plans`)}>
-                        <MapPin className="w-4 h-4 mr-2" />
-                        ผังโครงการ
+                  <div className="flex gap-2">
+                    {canShareProject && publicPropertyIds.has(selectedProperty.id) && (
+                      <Button variant="outline" size="sm" onClick={() => handleShareProject(selectedProperty.id, selectedProperty.name)}>
+                        <Link2 className="w-4 h-4 mr-2" />
+                        แชร์ลิงก์
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => navigate(`/properties/${selectedProperty.id}/edit`)}>
-                        <Edit className="w-4 h-4 mr-2" />
-                        แก้ไข
-                      </Button>
-                      {inOwnTenant && (
-                        <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          ลบ
+                    )}
+                    <ManagePropertiesGuard fallback={null} showMessage={false}>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => navigate(`/properties/${selectedProperty.id}/plans`)}>
+                          <MapPin className="w-4 h-4 mr-2" />
+                          ผังโครงการ
                         </Button>
-                      )}
-                    </div>
-                  </ManagePropertiesGuard>
+                        <Button variant="outline" size="sm" onClick={() => navigate(`/properties/${selectedProperty.id}/edit`)}>
+                          <Edit className="w-4 h-4 mr-2" />
+                          แก้ไข
+                        </Button>
+                        {inOwnTenant && (
+                          <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            ลบ
+                          </Button>
+                        )}
+                      </div>
+                    </ManagePropertiesGuard>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>

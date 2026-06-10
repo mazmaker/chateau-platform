@@ -60,7 +60,7 @@ const ApiManagement: React.FC = () => {
     { id: 'read', label: 'อ่านข้อมูล (Read)', description: 'เข้าถึงข้อมูลแคมเปญและลีด' },
     { id: 'write', label: 'เขียนข้อมูล (Write)', description: 'สร้างและแก้ไขแคมเปญ' },
     { id: 'delete', label: 'ลบข้อมูล (Delete)', description: 'ลบแคมเปญและลีด' },
-    { id: 'admin', label: 'ผู้ดูแลระบบ (Admin)', description: 'เข้าถึงการตั้งค่าระดับสูง' }
+    { id: 'admin', label: 'ผู้ดูแลบริษัท (Admin)', description: 'เข้าถึงการตั้งค่าระดับสูง' }
   ];
 
   const rateLimits = {

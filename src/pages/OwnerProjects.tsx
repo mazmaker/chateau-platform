@@ -163,6 +163,7 @@ const OwnerProjects = () => {
   const [properties, setProperties] = useState<Property[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [search, setSearch] = useState('');
+  const [planLimits, setPlanLimits] = useState<Record<string, number>>({}); // planId → max_properties limit
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
@@ -172,14 +173,16 @@ const OwnerProjects = () => {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const [tRes, pRes, uRes] = await Promise.all([
+      const [tRes, pRes, uRes, planRes] = await Promise.all([
         supabase.from('tenants').select('id, name, status, subscription_plan').eq('is_platform' as any, false),
         supabase.from('properties').select('id, tenant_id, name, developer, base_price, address, thumbnail_url, is_active, updated_at'),
         supabase.from('units').select('id, tenant_id, project_id, price, status, area_sqm, unit_number, floor_number, building, bedrooms, bathrooms, unit_type, updated_at'),
+        (supabase as any).from('plans').select('id, max_properties'),
       ]);
       setTenants((tRes.data || []) as Tenant[]);
       setProperties((pRes.data || []) as Property[]);
       setUnits((uRes.data || []) as Unit[]);
+      if (planRes.data) setPlanLimits(Object.fromEntries((planRes.data as any[]).map((p) => [p.id, p.max_properties])));
     } catch (e) {
       console.error('OwnerProjects fetch error:', e);
     } finally {
@@ -217,7 +220,7 @@ const OwnerProjects = () => {
         return { tenant: t, projectCount: props.length, roll: { ...roll, lastUpdated } };
       })
       .filter((row) => row.projectCount > 0)
-      .sort((a, b) => b.roll.gdv - a.roll.gdv);
+      .sort((a, b) => b.projectCount - a.projectCount);
   }, [tenants, properties, unitsByProject]);
 
   // L0 platform totals.
@@ -232,7 +235,9 @@ const OwnerProjects = () => {
       lastUpdated: Math.max(acc.lastUpdated, r.roll.lastUpdated),
     }), { total: 0, sold: 0, reserved: 0, available: 0, gdv: 0, soldValue: 0, lastUpdated: 0 });
     const projectCount = tenantRows.reduce((s, r) => s + r.projectCount, 0);
-    return { roll, projectCount, companyCount: tenantRows.length };
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const active7d = tenantRows.filter((r) => r.roll.lastUpdated >= weekAgo).length;
+    return { roll, projectCount, companyCount: tenantRows.length, active7d };
   }, [tenantRows]);
 
   if (loading) {
@@ -271,6 +276,13 @@ const OwnerProjects = () => {
     </div>
   );
 
+  // Project usage vs the tenant's plan limit — the Owner's upsell/churn signal.
+  const projectQuota = (used: number, planId: string): { text: string; near: boolean } => {
+    const limit = planLimits[planId];
+    if (limit == null || limit === -1) return { text: `${used} / ไม่จำกัด`, near: false };
+    return { text: `${used} / ${limit}`, near: limit > 0 && used / limit >= 0.8 };
+  };
+
   // ════════════════════════════════════ L1 — one company ════════════════════
   if (tenantId) {
     const tenant = tenants.find((t) => t.id === tenantId);
@@ -280,7 +292,7 @@ const OwnerProjects = () => {
     const filtered = props
       .filter((p) => !search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.developer || '').toLowerCase().includes(search.toLowerCase()))
       .map((p) => ({ p, roll: rollUp(unitsByProject.get(p.id) || []) }))
-      .sort((a, b) => b.roll.gdv - a.roll.gdv);
+      .sort((a, b) => b.roll.total - a.roll.total);
 
     return (
       <OwnerGuard>
@@ -304,8 +316,8 @@ const OwnerProjects = () => {
               {/* KPIs — usage + account size (Owner lens), no sales performance */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <KpiCard title="โครงการ" value={props.length.toLocaleString()} sub="ทั้งหมดของบริษัท" icon={Building2} color={KK.blue} bg={KK.blueLight} />
-                <KpiCard title="ยูนิตทั้งหมด" value={roll.total.toLocaleString()} sub={`${roll.sold} ขาย · ${roll.reserved} จอง · ${roll.available} ว่าง`} icon={Home} color={KK.slate} bg={KK.slateLight} />
-                <KpiCard title="มูลค่ารวม" value={fmtCompact(roll.gdv)} sub="ขนาดพอร์ตของลูกค้า" icon={TrendingUp} color={KK.red} bg={KK.redLight} />
+                <KpiCard title="ยูนิตทั้งหมด" value={roll.total.toLocaleString()} sub="ในระบบของบริษัทนี้" icon={Home} color={KK.slate} bg={KK.slateLight} />
+                <KpiCard title="โควต้าโครงการ" value={projectQuota(props.length, tenant?.subscription_plan || '').text} sub="โครงการที่ใช้ / ลิมิตแพ็กเกจ" icon={TrendingUp} color={KK.red} bg={KK.redLight} />
                 <KpiCard title="ใช้งานล่าสุด" value={fmtRelative(roll.lastUpdated)} sub="อัปเดตข้อมูลครั้งล่าสุด" icon={Clock} color={KK.green} bg={KK.greenLight} />
               </div>
 
@@ -352,19 +364,10 @@ const OwnerProjects = () => {
                                 {p.address?.province ? <><MapPin className="w-3 h-3 flex-shrink-0" /> {p.address.province}</> : (p.developer || '–')}
                               </p>
                             </div>
-                            {/* status breakdown — usage/activity, not performance */}
-                            <div className="flex items-center gap-2 text-xs">
-                              <span style={{ color: KK.slate }}>ขาย {pr.sold}</span>
-                              <span className="text-gray-300">·</span>
-                              <span style={{ color: KK.amber }}>จอง {pr.reserved}</span>
-                              <span className="text-gray-300">·</span>
-                              <span style={{ color: KK.green }}>ว่าง {pr.available}</span>
-                            </div>
-                            <div className="flex justify-between items-center pt-1 border-t border-gray-50">
+                            <div className="flex items-center pt-1 border-t border-gray-50">
                               <span className="text-xs text-gray-400 flex items-center gap-1 pt-2">
                                 <Clock className="w-3 h-3" /> {fmtRelative(projLast)}
                               </span>
-                              <span className="text-sm font-bold tabular-nums pt-2" style={{ color: KK.red }}>{fmtCompact(pr.gdv)}</span>
                             </div>
                           </div>
                         </div>
@@ -403,16 +406,16 @@ const OwnerProjects = () => {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <KpiCard title="บริษัทที่มีโครงการ" value={platform.companyCount.toLocaleString()} sub={`จาก ${tenants.length} บริษัท`} icon={Building2} color={KK.blue} bg={KK.blueLight} />
               <KpiCard title="โครงการทั้งหมด" value={platform.projectCount.toLocaleString()} sub="ทั่วทั้งแพลตฟอร์ม" icon={Building} color={KK.slate} bg={KK.slateLight} />
-              <KpiCard title="ยูนิตทั้งหมด" value={platform.roll.total.toLocaleString()} sub={`${platform.roll.sold} ขาย · ${platform.roll.reserved} จอง · ${platform.roll.available} ว่าง`} icon={Home} color={KK.green} bg={KK.greenLight} />
-              <KpiCard title="มูลค่ารวม" value={fmtCompact(platform.roll.gdv)} sub="มูลค่าอสังหาบนแพลตฟอร์ม" icon={TrendingUp} color={KK.red} bg={KK.redLight} />
+              <KpiCard title="ยูนิตทั้งหมด" value={platform.roll.total.toLocaleString()} sub="ยูนิตที่ลูกค้าสร้างในระบบ" icon={Home} color={KK.green} bg={KK.greenLight} />
+              <KpiCard title="ใช้งานใน 7 วัน" value={String(platform.active7d)} sub={`จาก ${platform.companyCount} บริษัทที่มีข้อมูล · engagement`} icon={Clock} color={KK.red} bg={KK.redLight} />
             </div>
 
             {/* Companies table */}
             <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
               <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
                 <div>
-                  <h2 className="text-base font-bold text-gray-900">สต๊อกยูนิต ตามบริษัท</h2>
-                  <p className="text-xs text-gray-500 mt-0.5">พร้อมขาย/จอง/ขายแล้ว · เรียงตามมูลค่ารวม · คลิกเพื่อเจาะเข้าโครงการ</p>
+                  <h2 className="text-base font-bold text-gray-900">การใช้งานตามบริษัท</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">เรียงตามขนาดพอร์ต · คลิกเพื่อดูรายโครงการ</p>
                 </div>
                 <div className="relative w-full sm:w-64">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -431,11 +434,9 @@ const OwnerProjects = () => {
                       <TableRow>
                         <TableHead>บริษัท</TableHead>
                         <TableHead className="text-center">แพ็กเกจ</TableHead>
-                        <TableHead className="text-right">โครงการ</TableHead>
+                        <TableHead className="text-right">โครงการ (ใช้/ลิมิต)</TableHead>
                         <TableHead className="text-right">ยูนิต</TableHead>
-                        <TableHead className="text-right">สถานะยูนิต (ขายแล้ว/จอง/ว่าง)</TableHead>
                         <TableHead className="text-right">ใช้งานล่าสุด</TableHead>
-                        <TableHead className="text-right">มูลค่ารวม</TableHead>
                         <TableHead></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -444,13 +445,13 @@ const OwnerProjects = () => {
                         <TableRow key={tenant.id} className="cursor-pointer hover:bg-gray-50" onClick={() => navigate(`/owner-projects/${tenant.id}`)}>
                           <TableCell className="font-semibold text-gray-900">{tenant.name}</TableCell>
                           <TableCell className="text-center"><Badge variant="outline" className="capitalize">{planBadge(tenant.subscription_plan)}</Badge></TableCell>
-                          <TableCell className="text-right tabular-nums">{projectCount}</TableCell>
-                          <TableCell className="text-right tabular-nums">{roll.total}</TableCell>
-                          <TableCell className="text-right tabular-nums text-gray-500">
-                            <span style={{ color: KK.slate }}>{roll.sold}</span> / <span style={{ color: KK.amber }}>{roll.reserved}</span> / <span style={{ color: KK.green }}>{roll.available}</span>
+                          <TableCell className="text-right tabular-nums">
+                            <span style={projectQuota(projectCount, tenant.subscription_plan).near ? { color: KK.amber, fontWeight: 600 } : undefined}>
+                              {projectQuota(projectCount, tenant.subscription_plan).text}
+                            </span>
                           </TableCell>
+                          <TableCell className="text-right tabular-nums">{roll.total}</TableCell>
                           <TableCell className="text-right text-gray-500 tabular-nums">{fmtRelative(roll.lastUpdated)}</TableCell>
-                          <TableCell className="text-right font-bold tabular-nums" style={{ color: KK.red }}>{fmtCompact(roll.gdv)}</TableCell>
                           <TableCell className="text-right"><ArrowUpRight className="w-4 h-4 text-gray-400 inline" /></TableCell>
                         </TableRow>
                       ))}

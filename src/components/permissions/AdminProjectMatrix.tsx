@@ -284,7 +284,7 @@ export const AdminProjectMatrix = () => {
       <Card>
         <CardContent className="pt-10 pb-10 text-center text-gray-500">
           <Inbox className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-          ยังไม่มี admin ในระบบ — สร้าง admin ก่อนค่อยกำหนดสิทธิ์
+          ยังไม่มีผู้ดูแลบริษัท (Admin) ในระบบ — สร้างผู้ดูแลบริษัทก่อนค่อยกำหนดสิทธิ์
         </CardContent>
       </Card>
     );
@@ -298,7 +298,7 @@ export const AdminProjectMatrix = () => {
           <ShieldCheck className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <div>
             <p className="font-medium">โหมดดูอย่างเดียว</p>
-            <p className="text-xs">เฉพาะ Owner เท่านั้นที่แก้ไขสิทธิ์ Admin ดูแลโครงการได้</p>
+            <p className="text-xs">เฉพาะเจ้าของแพลตฟอร์มเท่านั้นที่แก้ไขสิทธิ์ผู้ดูแลบริษัทดูแลโครงการได้</p>
           </div>
         </div>
       )}
@@ -309,14 +309,14 @@ export const AdminProjectMatrix = () => {
         <Card className="h-fit">
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900">Admins</h3>
+              <h3 className="font-semibold text-gray-900">ผู้ดูแลบริษัท (Admin)</h3>
               <span className="text-xs text-gray-500">{admins.length} คน</span>
             </div>
 
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
-                placeholder="ค้นหา admin / บริษัท..."
+                placeholder="ค้นหาผู้ดูแลบริษัท / บริษัท..."
                 value={adminSearch}
                 onChange={(e) => setAdminSearch(e.target.value)}
                 className="pl-9 h-9"
@@ -379,7 +379,7 @@ export const AdminProjectMatrix = () => {
             {!selectedAdmin ? (
               <div className="py-20 text-center text-gray-500">
                 <UserIcon className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-                เลือก Admin ทางซ้ายเพื่อจัดการสิทธิ์
+                เลือกผู้ดูแลบริษัททางซ้ายเพื่อจัดการสิทธิ์
               </div>
             ) : (
               <>
@@ -460,8 +460,8 @@ export const AdminProjectMatrix = () => {
                       selectedAdminItemCount === 0
                         ? "ผู้ใช้นี้ไม่มีโครงการที่ดูแล"
                         : !hasOtherSameTenant
-                        ? "ไม่มี admin คนอื่นใน tenant เดียวกัน"
-                        : "โคลนสิทธิ์ไปยัง admin คนอื่น"
+                        ? "ไม่มีผู้ดูแลบริษัทคนอื่นใน tenant เดียวกัน"
+                        : "โคลนสิทธิ์ไปยังผู้ดูแลบริษัทคนอื่น"
                     }
                   >
                     <Copy className="w-4 h-4 mr-1" />
@@ -537,7 +537,7 @@ export const AdminProjectMatrix = () => {
         getItemName={(id) => projects.find((p) => p.id === id)?.name || id}
         initialSourceId={selectedAdmin?.id}
         itemLabel="โครงการ"
-        roleLabel="Admin"
+        roleLabel="ผู้ดูแลบริษัท"
         table="admin_project_assignments"
         userColumn="admin_user_id"
         itemColumn="project_id"

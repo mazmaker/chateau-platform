@@ -212,7 +212,7 @@ const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess, currentUserRole
             </p>
             {isAdmin && (
               <p className="text-xs text-gray-500 mt-1">
-                * แอดมินสามารถจัดการได้เฉพาะตำแหน่งพนักงานขาย
+                * ผู้ดูแลบริษัทสามารถจัดการได้เฉพาะตำแหน่งพนักงานขาย
               </p>
             )}
           </div>
