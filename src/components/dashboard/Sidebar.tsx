@@ -16,6 +16,7 @@ import {
   Lock,
   ChevronDown,
   Building,
+  MapPin,
   Wrench,
   Wand2,
   Zap,
@@ -55,23 +56,24 @@ const NAV_GROUPS: NavGroup[] = [
   { id: "admin",     label: "ADMIN",           icon: Wrench,    hrefs: ["/users", "/permissions", "/settings"] },
 ];
 
-// Owner = SaaS control-plane. Its menu mirrors how the SaaS company is run, in
-// English UPPERCASE headers to match the app's KK-style groups above:
-//   (top, no header) strategic OVERVIEW — Executive Dashboard
-//   TENANTS          — operate EXISTING customers: manage company, watch usage, billing
-//   SALES            — acquire NEW customers (platform sales pipeline: prospect → tenant)
-//   SETTINGS         — user & platform config
-// Billing lives under TENANTS (it's about EXISTING customers paying); Leads gets its
-// own SALES group because acquisition is a distinct pre-customer stage with no home in
-// TENANTS. SALES is intentionally a single item for now and is expected to grow.
+// Owner = SaaS control-plane + real-estate HQ. English UPPERCASE headers match
+// the app's KK-style groups above:
+//   (top, no header) ภาพรวมแพลตฟอร์ม — Executive Dashboard
+//   ANALYTICS        — cross-tenant real-estate intelligence (market, geo, company,
+//                      sales-team performance) = the HQ lens added per the Owner
+//                      redesign. See documents/owner-hq-dashboard-plan.md.
+//   TENANTS          — operate EXISTING customers: manage company, projects, billing
+//   GROWTH           — acquire NEW customers (platform sales pipeline: prospect → tenant)
+//   SETTINGS         — users, support, audit, platform config
 // Tenant-ops menus (campaigns, triggers, team, permissions, etc.) are intentionally
 // NOT here: those are the Admin's application-plane work, not the platform owner's.
 // NOTE: within-group order follows the master getAllNavItems() order, not hrefs order.
 const OWNER_NAV_GROUPS: NavGroup[] = [
-  { id: "top",      label: null,              hrefs: ["/owner"] },
-  { id: "tenants",  label: "TENANTS",  icon: Building,  hrefs: ["/tenants", "/payments"] },
-  { id: "sales",    label: "SALES",    icon: Briefcase, hrefs: ["/owner-leads"] },
-  { id: "settings", label: "SETTINGS", icon: Wrench,    hrefs: ["/users", "/owner-support", "/settings"] },
+  { id: "top",       label: null,                hrefs: ["/owner"] },
+  { id: "analytics", label: "ANALYTICS", icon: BarChart3, hrefs: ["/owner-market", "/owner-geography", "/owner-companies", "/owner-agents"] },
+  { id: "tenants",   label: "TENANTS",   icon: Building,  hrefs: ["/tenants", "/owner-projects", "/payments"] },
+  { id: "growth",    label: "GROWTH",    icon: Briefcase, hrefs: ["/owner-leads"] },
+  { id: "settings",  label: "SETTINGS",  icon: Wrench,    hrefs: ["/users", "/owner-support", "/owner-audit", "/settings"] },
 ];
 
 const getAllNavItems = (): NavItem[] => [
@@ -79,7 +81,14 @@ const getAllNavItems = (): NavItem[] => [
   //   Admin → "/"      tenant-level Executive Dashboard (that company's sales / GDV / inventory)
   //   Owner → "/owner" platform-wide view (MRR, churn, tenants) = the Owner's own Executive Dashboard
   { icon: LayoutDashboard, label: "Executive Dashboard", href: "/",            requiredRoles: ["ADMIN"] },
-  { icon: TrendingUp,      label: "Executive Dashboard", href: "/owner",         requiredRoles: ["OWNER"] },
+  { icon: LayoutDashboard, label: "ภาพรวมแพลตฟอร์ม",      href: "/owner",         requiredRoles: ["OWNER"] },
+  // Owner ANALYTICS group — cross-tenant real-estate intelligence (HQ lens).
+  // Data: units→properties→tenants via live Owner RLS; no migration needed.
+  // See documents/owner-hq-dashboard-plan.md.
+  { icon: TrendingUp,      label: "ภาพรวมตลาด",          href: "/owner-market",    requiredRoles: ["OWNER"] },
+  { icon: MapPin,          label: "ทำเลและจังหวัด",       href: "/owner-geography", requiredRoles: ["OWNER"] },
+  { icon: BarChart3,       label: "ประสิทธิภาพบริษัท",     href: "/owner-companies", requiredRoles: ["OWNER"] },
+  { icon: Trophy,          label: "ประสิทธิภาพทีมขาย",     href: "/owner-agents",    requiredRoles: ["OWNER"] },
   { icon: Trophy,          label: "แดชบอร์ดส่วนตัว",      href: "/my-dashboard",  requiredRoles: ["SALES", "AGENT"] },
   // tenant-scoped LEAD analytics (conversion/SLA/won-lost for one company) =
   // Admin's application-plane work, not the platform Owner's. ADMIN-only.
@@ -89,9 +98,9 @@ const getAllNavItems = (): NavItem[] => [
   { icon: Building2,       label: "จัดการบริษัท",         href: "/tenants",       requiredRoles: ["OWNER"] },
   // Owner gets the cross-tenant, read-only Project Dashboard (control-plane);
   // Admin/Sales/Agent keep the tenant-scoped editable /properties page.
-
+  { icon: Building,        label: "โครงการทั้งหมด",        href: "/owner-projects", requiredRoles: ["OWNER"] },
   { icon: CreditCard,      label: "การชำระเงิน",          href: "/payments",      requiredRoles: ["OWNER"] },
-  { icon: Briefcase,       label: "Leads",               href: "/owner-leads",   requiredRoles: ["OWNER"] },
+  { icon: Briefcase,       label: "การขายแพลตฟอร์ม",      href: "/owner-leads",   requiredRoles: ["OWNER"] },
   { icon: Building2,       label: "โครงการ",             href: "/properties",    requiredRoles: ["ADMIN", "SALES", "AGENT"] },
   { icon: FileText,        label: "Leads",              href: "/leads",         requiredRoles: ["ADMIN", "SALES", "AGENT"] },
   // Tenant-ops menus — Admin's application-plane work, NOT the platform Owner's.
@@ -105,7 +114,8 @@ const getAllNavItems = (): NavItem[] => [
   { icon: Zap,             label: "Triggers",           href: "/triggers",      requiredRoles: ["ADMIN"] },
   { icon: BarChart3,       label: "Marketing Analytics",href: "/marketing-analytics", requiredRoles: ["ADMIN"] },
   { icon: Users,           label: "จัดการผู้ใช้",          href: "/users",         requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: MessageSquare,   label: "Support",               href: "/owner-support", requiredRoles: ["OWNER"] },
+  { icon: MessageSquare,   label: "ศูนย์ช่วยเหลือ",        href: "/owner-support", requiredRoles: ["OWNER"] },
+  { icon: Shield,          label: "บันทึกการตรวจสอบ",      href: "/owner-audit",   requiredRoles: ["OWNER"] },
   { icon: Lock,            label: "สิทธิ์ผู้ใช้งาน",        href: "/permissions",   requiredRoles: ["ADMIN"] },
   { icon: Settings,        label: "การตั้งค่า",           href: "/settings",      requiredRoles: ["OWNER", "ADMIN", "SALES", "AGENT", "CUSTOMER"] },
   { icon: LogOut,          label: "ออกจากระบบ",          href: "/logout",        isLogout: true },
@@ -203,7 +213,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
       })
       .map((item) => {
         if (item.href === "/users" && isAdmin && !isOwner) {
-          return { ...item, label: "ทีมงาน" };
+          return { ...item, label: "จัดการผู้ใช้งาน" };
         }
         return item;
       });

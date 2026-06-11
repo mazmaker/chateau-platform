@@ -10,6 +10,11 @@ import OwnerDashboard from "./pages/OwnerDashboard";
 import OwnerLeads from "./pages/OwnerLeads";
 import OwnerSupport from "./pages/OwnerSupport";
 import OwnerProjects from "./pages/OwnerProjects";
+import OwnerMarket from "./pages/OwnerMarket";
+import OwnerGeography from "./pages/OwnerGeography";
+import OwnerCompanies from "./pages/OwnerCompanies";
+import OwnerAgents from "./pages/OwnerAgents";
+import OwnerAudit from "./pages/OwnerAudit";
 import TenantManagement from "./pages/TenantManagement";
 import PaymentDashboard from "./pages/PaymentDashboard";
 import PropertyManagement from "./pages/PropertyManagement";
@@ -208,6 +213,73 @@ const App = () => (
             >
               <ProtectedRouteSimple requireRole="owner">
                 <OwnerProjects />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          {/* Owner ANALYTICS — cross-tenant real-estate intelligence (HQ lens).
+              See documents/owner-hq-dashboard-plan.md. */}
+          <Route path="/owner-market" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้าภาพรวมตลาดได้"
+              context={{ page: 'owner-market' }}
+            >
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerMarket />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/owner-geography" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้าทำเลและจังหวัดได้"
+              context={{ page: 'owner-geography' }}
+            >
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerGeography />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/owner-companies" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้าประสิทธิภาพบริษัทได้"
+              context={{ page: 'owner-companies' }}
+            >
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerCompanies />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/owner-agents" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้าประสิทธิภาพทีมขายได้"
+              context={{ page: 'owner-agents' }}
+            >
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerAgents />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/owner-audit" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้าบันทึกการตรวจสอบได้"
+              context={{ page: 'owner-audit' }}
+            >
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerAudit />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />
