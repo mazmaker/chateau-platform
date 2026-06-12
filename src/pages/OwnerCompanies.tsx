@@ -198,9 +198,9 @@ const OwnerCompanies = () => {
                 {/* KPIs */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <KpiCard title="บริษัทที่มีสินค้า" value={totals.companies.toLocaleString()} sub="มียูนิตในระบบ" icon={Building2} color={KK.blue} bg={KK.blueLight} />
-                  <KpiCard title="มูลค่าขายรวม" value={fmtCompact(totals.soldValue)} sub={`${totals.sold} ยูนิต`} icon={TrendingUp} color={KK.green} bg={KK.greenLight} />
+                  <KpiCard title="มูลค่าขายเฉลี่ย/บริษัท" value={fmtCompact(totals.companies > 0 ? totals.soldValue / totals.companies : 0)} sub="ต่อบริษัทที่มีสินค้า" icon={TrendingUp} color={KK.green} bg={KK.greenLight} />
                   <KpiCard title="Sell-through เฉลี่ย" value={`${totals.sellThrough}%`} sub="ขายแล้ว / ทั้งหมด" icon={Percent} color={KK.amber} bg={KK.amberLight} />
-                  <KpiCard title="มูลค่าพอร์ต (GDV)" value={fmtCompact(totals.gdv)} sub="มูลค่ารวมที่บริหาร" icon={Banknote} color={KK.red} bg={KK.redLight} />
+                  <KpiCard title="ยูนิตขายเฉลี่ย/บริษัท" value={(totals.companies > 0 ? Math.round(totals.sold / totals.companies) : 0).toLocaleString()} sub="ยูนิต/บริษัท" icon={Home} color={KK.red} bg={KK.redLight} />
                 </div>
 
                 {/* Best / Worst */}

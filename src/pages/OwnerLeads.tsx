@@ -96,6 +96,15 @@ const Field = ({ label, value }: { label: string; value: string | number | null 
 const STAGE_ORDER = ['new','contacted','qualified','demo_scheduled','proposal_sent','negotiation','won','lost'];
 const OPEN_STAGES = ['new','contacted','qualified','demo_scheduled','proposal_sent','negotiation'];
 
+// Follow-up health buckets (เฮีย's triage). Counts + per-lead tagging computed
+// in-component; clicking a card filters the list (mutually exclusive with stage).
+const HEALTH_CARDS = [
+  { key: 'new',   label: 'ลีดใหม่',     desc: 'ยังไม่ติดต่อ',        color: KK.blue },
+  { key: 'sla',   label: 'เกิน SLA',    desc: 'ไม่ติดต่อใน 2 ชม.',   color: KK.red },
+  { key: 'quiet', label: 'เงียบ',       desc: 'เกิน 7 วัน',          color: KK.orange },
+  { key: 'hot',   label: 'สำคัญ (Hot)', desc: 'โอกาสปิดสูง',         color: KK.green },
+];
+
 // ที่มาของลีด — ช่องทางจริงที่บริษัทมาถึงเรา (must match the source CHECK constraint in DB).
 const SOURCE_LABELS: Record<string, string> = {
   line:     'LINE',
@@ -129,6 +138,7 @@ const OwnerLeads = () => {
   const [sourceFilter, setSourceFilter] = useState('all');
   // Health-card filter (ลีดใหม่ / SLA / เงียบ / hot). Mutually exclusive with the
   // stage dropdown so they can't intersect into a confusing empty result.
+  const [healthFilter, setHealthFilter] = useState<string>('');
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
@@ -341,15 +351,34 @@ const OwnerLeads = () => {
     toast.success(next ? `${l.company_name} — แท็กเป็น Hot แล้ว` : `${l.company_name} — ยกเลิก Hot แล้ว`);
   };
 
+  // Lead follow-up health — the triage buckets เฮีย asked for. A lead can carry
+  // more than one tag; the cards filter, they don't classify exclusively.
+  const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+  const QUIET_MS = 7 * 24 * 60 * 60 * 1000;
+  const leadHealth = (l: PLead): string[] => {
+    const open = OPEN_STAGES.includes(l.stage);
+    const tags: string[] = [];
+    if (l.stage === 'new') tags.push('new');
+    if (open && !l.last_contact_date && Date.now() - new Date(l.created_at).getTime() > TWO_HOURS_MS) tags.push('sla');
+    if (open && l.last_contact_date && Date.now() - new Date(l.last_contact_date).getTime() > QUIET_MS) tags.push('quiet');
+    if (open && l.is_hot) tags.push('hot');
+    return tags;
+  };
+  const healthCounts: Record<string, number> = { new: 0, sla: 0, quiet: 0, hot: 0 };
+  leads.forEach((l) => leadHealth(l).forEach((t) => { healthCounts[t] = (healthCounts[t] || 0) + 1; }));
+
   const filtered = leads.filter((l) => {
     const q = search.trim().toLowerCase();
     const matchSearch = !q ||
       l.company_name.toLowerCase().includes(q) ||
       (l.contact_name || '').toLowerCase().includes(q) ||
       (l.province || '').toLowerCase().includes(q);
-    const matchStage = stageFilter === 'all' || l.stage === stageFilter;
     const matchSource = sourceFilter === 'all' || l.source === sourceFilter;
-    return matchSearch && matchStage && matchSource;
+    // Health filter and stage dropdown are mutually exclusive — when a health card
+    // is active we ignore the stage filter (and the card-click clears the stage).
+    const matchHealth = !healthFilter || leadHealth(l).includes(healthFilter);
+    const matchStage = healthFilter ? true : (stageFilter === 'all' || l.stage === stageFilter);
+    return matchSearch && matchSource && matchHealth && matchStage;
   });
 
   const openLeads = leads.filter((l) => OPEN_STAGES.includes(l.stage));
@@ -419,6 +448,28 @@ const OwnerLeads = () => {
               ))}
             </div>
 
+            {/* Health triage — click a card to filter by follow-up status.
+                Mutually exclusive with the stage dropdown (clicking clears stage). */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+              {HEALTH_CARDS.map((h) => {
+                const active = healthFilter === h.key;
+                return (
+                  <button
+                    key={h.key}
+                    onClick={() => { setHealthFilter(active ? '' : h.key); setStageFilter('all'); }}
+                    className={`text-left bg-white border rounded-xl p-4 transition-all duration-150 ${active ? 'shadow-soft-md' : 'border-gray-100 shadow-soft hover:-translate-y-0.5'}`}
+                    style={active ? { borderColor: h.color, boxShadow: `0 0 0 2px ${h.color}33` } : undefined}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-gray-700">{h.label}</span>
+                      <span className="text-xl font-bold tabular-nums" style={{ color: h.color }}>{healthCounts[h.key]}</span>
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{h.desc}</p>
+                  </button>
+                );
+              })}
+            </div>
+
             {/* Filters */}
             <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 mb-4">
               <div className="flex flex-col sm:flex-row gap-3">
@@ -431,7 +482,7 @@ const OwnerLeads = () => {
                     className="pl-9"
                   />
                 </div>
-                <Select value={stageFilter} onValueChange={(v) => setStageFilter(v)}>
+                <Select value={stageFilter} onValueChange={(v) => { setStageFilter(v); setHealthFilter(''); }}>
                   <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="สถานะ" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">ทุกสถานะ</SelectItem>

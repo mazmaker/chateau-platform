@@ -48,7 +48,22 @@
 - commit ทั้งหมด (เฟส 2-7 + dedup + English nav + RF) — แตะเฉพาะไฟล์ Owner HQ + `rfModel.ts`/`recomputeLeadScore.ts`/`leadScoringModel.json`; **ไม่แตะ** ไฟล์ที่ user แก้ค้างเอง
 - QA login owner ดูหน้าจริง (ยังไม่เคยเปิด browser)
 - (optional) batch recompute lead เก่าให้ได้คะแนน RF
-- (อนาคต) เทรน RF ใหม่ด้วยข้อมูลจริง · ปุ่มสลับภาษา 2 ภาษา · customer journey timeline
+- (อนาคต) เทรน RF ใหม่ด้วยข้อมูลจริง · ปุ่มสลับภาษา 2 ภาษา
+
+---
+
+## 🆕 อัปเดต (2026-06-11 รอบ 3) — UI focus + ขอบเขตเมนู
+
+**ทำเพิ่ม (typecheck ผ่าน, ยังไม่ commit):**
+- 6a: เติม "N ผู้ใช้" ใน scope chip หน้า Executive (ไม่เพิ่มการ์ดใหม่)
+- #3: **ไทม์ไลน์กิจกรรมลูกค้า** ในหน้า `LeadCDP` (`/leads/:leadId/cdp`) — ดึง `activity_logs` ของ lead นั้น แสดงเป็นเส้นเวลา (Sales/Admin ใช้ตามงาน). มีข้อมูลจริง (lead active สุด 53 events)
+- **De-dup Executive:** ลบบล็อกบริษัท (best/worst + ปุ่มเปรียบเทียบ) ออกจาก Executive — user ทักว่าซ้ำกับ Company Performance
+
+**📐 กฎขอบเขตเมนู (IA) — "1 เมนู = ข้อมูล 1 ชนิด เห็นที่เดียว ห้ามโชว์ซ้ำ":**
+- **Executive Dashboard** = ยอดรวมแพลตฟอร์ม (GDV/ยูนิต/leads/ขายแล้ว) + SaaS health (MRR/churn/สถานะบริษัท/แพ็กเกจ/ต่ออายุ) + เทรนด์รายได้ + scope chip. **ห้ามมี ranking/breakdown** (พวกนั้นอยู่เมนูเฉพาะ)
+- **Market Overview** = แยกราคา/ประเภททรัพย์ · **Geography** = แยกจังหวัด · **Company Performance** = อันดับบริษัท + best/worst (**ที่เดียว**) · **Sales Performance** = อันดับคนขาย
+- 3 เลนส์ของ "บริษัท" คนละงาน: **Companies**(จัดการ/แก้ไข) ≠ **Company Performance**(analytics อ่านอย่างเดียว) ≠ **All Projects**(ไล่ดู inventory)
+- ทำหน้าใหม่/แก้หน้าเดิม **ต้องเช็กกฎนี้ก่อน** ห้ามเอา metric ของเมนูอื่นมาโชว์ซ้ำ
 
 **ที่มา:** คลิปเสียงประชุม "Chateau น้องบอล.m4a" (สรุปผ่าน NotebookLM) + เว็บอ้างอิง https://kids-kingdom-hq.vercel.app/ (HQ เชนร้านเด็ก 4 สาขา) ที่เฮียยกเป็นตัวอย่างความครอบคลุมของข้อมูล
 **อัปเดตล่าสุด:** 2026-06-11

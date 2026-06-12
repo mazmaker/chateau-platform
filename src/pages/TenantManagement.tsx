@@ -1008,6 +1008,18 @@ const TenantManagement = () => {
     return matchesSearch && matchesStatus && matchesPlan;
   });
 
+  // Companies whose trial ends within 30 days — surfaced so the owner can follow up
+  // before they lapse. Moved here from the Executive Dashboard: tenant lifecycle
+  // belongs with company management, not the platform overview.
+  const daysUntilEnd = (d?: string) => (d ? Math.floor((new Date(d).getTime() - Date.now()) / 86400000) : null);
+  const upcomingRenewals = tenants
+    .filter((t) => {
+      if (t.status !== 'trial' || !t.trial_ends_at) return false;
+      const d = daysUntilEnd(t.trial_ends_at);
+      return d !== null && d >= 0 && d <= 30;
+    })
+    .sort((a, b) => new Date(a.trial_ends_at || 0).getTime() - new Date(b.trial_ends_at || 0).getTime());
+
   const getPlanPrice = (plan: string): number => {
     const pkg = packageConfig.find(p => p.id === plan);
     return pkg ? parseInt(pkg.price.replace(/,/g, ''), 10) : 0;
@@ -1017,6 +1029,47 @@ const TenantManagement = () => {
   // Render Tenants List Tab
   const renderTenantsTab = () => (
     <div className="space-y-6">
+      {/* Upcoming renewals — trials ending within 30 days. Moved from the Executive
+          Dashboard; tenant lifecycle belongs with company management. */}
+      {upcomingRenewals.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50/40">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-600" /> ใกล้ครบกำหนดต่ออายุ
+              <Badge variant="outline" className="ml-1">{upcomingRenewals.length}</Badge>
+            </CardTitle>
+            <CardDescription>บริษัทที่ทดลองใช้จะครบกำหนดภายใน 30 วัน — ติดตามก่อนหลุด</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {upcomingRenewals.slice(0, 6).map((t) => {
+                const d = daysUntilEnd(t.trial_ends_at);
+                const urgent = d !== null && d <= 7;
+                return (
+                  <div key={t.id} className={`flex items-center justify-between p-3 rounded-lg border ${urgent ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'}`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Building2 className={`w-4 h-4 flex-shrink-0 ${urgent ? 'text-red-500' : 'text-gray-400'}`} />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{t.name}</p>
+                        <p className="text-xs text-gray-500 capitalize">{t.subscription_plan}</p>
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className={`text-sm font-bold tabular-nums ${urgent ? 'text-red-600' : 'text-gray-700'}`}>
+                        {d === 0 ? 'วันนี้' : d === 1 ? 'พรุ่งนี้' : `อีก ${d} วัน`}
+                      </p>
+                      <p className="text-[11px] text-gray-400">
+                        {t.trial_ends_at && new Date(t.trial_ends_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">

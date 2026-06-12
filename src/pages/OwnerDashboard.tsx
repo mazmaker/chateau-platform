@@ -195,6 +195,8 @@ const OwnerDashboard = () => {
   // aggregated across all customer tenants, plus per-company comparison rows.
   const [salesStats, setSalesStats] = useState({ gdv: 0, soldValue: 0, soldUnits: 0, soldUnitsThisMonth: 0, totalUnits: 0, newLeadsThisMonth: 0, totalLeads: 0 });
   const [companyRows, setCompanyRows] = useState<CompanyRow[]>([]);
+  // Platform sales pipeline — companies interested in buying the platform, new this month.
+  const [platformLeadsNew, setPlatformLeadsNew] = useState(0);
 
   useEffect(() => {
     if (!isOwner) {
@@ -598,6 +600,15 @@ const OwnerDashboard = () => {
         setCompanyRows(rows);
       }
 
+      // Platform sales pipeline — companies interested in buying the platform this
+      // month (the Owner's OWN pipeline, distinct from tenants' home-buyer leads).
+      const plMonthStart = new Date();
+      plMonthStart.setDate(1); plMonthStart.setHours(0, 0, 0, 0);
+      const { count: plNew } = await (supabase.from('platform_leads') as any)
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', plMonthStart.toISOString());
+      setPlatformLeadsNew(plNew || 0);
+
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -731,7 +742,7 @@ const OwnerDashboard = () => {
                 <p className="text-[15px] text-gray-500 mt-1.5">มุมมอง HQ ข้ามทุกบริษัท · อัปเดตล่าสุด {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
                 <div className="mt-2.5 inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full" style={{ color: KK.blue, backgroundColor: KK.blueLight }}>
                   <Layers className="w-3.5 h-3.5" />
-                  ทั้งแพลตฟอร์ม · {stats.totalTenants} บริษัท · {stats.totalProjects} โครงการ
+                  ทั้งแพลตฟอร์ม · {stats.totalTenants} บริษัท · {stats.totalProjects} โครงการ · {stats.totalUsers.toLocaleString()} ผู้ใช้
                 </div>
               </div>
             </div>
@@ -739,12 +750,12 @@ const OwnerDashboard = () => {
             {/* === KPI Row (6 uniform cards — matches Admin density) === */}
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
               {([
-                { title: 'GDV รวมทั้งแพลตฟอร์ม', value: fmtCompact(salesStats.gdv), icon: BahtSign, color: KK.red, bg: KK.redLight, sub: 'มูลค่าพอร์ตอสังหาฯ ทุกบริษัท', spark: null, sparkLabel: '', sparkFmt: null },
-                { title: 'ยูนิตขายแล้ว', value: salesStats.soldUnits.toLocaleString(), icon: CheckCircle, color: KK.green, bg: KK.greenLight, sub: `+${salesStats.soldUnitsThisMonth} เดือนนี้ · ${salesStats.totalUnits} ยูนิตทั้งหมด`, spark: null, sparkLabel: '', sparkFmt: null },
-                { title: 'Leads ใหม่เดือนนี้', value: salesStats.newLeadsThisMonth.toLocaleString(), icon: UserPlusIcon, color: KK.blue, bg: KK.blueLight, sub: `${salesStats.totalLeads.toLocaleString()} leads สะสม`, spark: null, sparkLabel: '', sparkFmt: null },
-                { title: 'รายได้แพ็กเกจ/เดือน', value: formatCurrency(stats.monthlyRevenue), icon: TrendingUp, color: KK.red, bg: KK.redLight, trend: { value: stats.mrrGrowth, up: stats.mrrGrowth >= 0 }, spark: revenueData.map(d => ({ v: d.revenue, month: d.month })), sparkLabel: 'MRR รายเดือน', sparkFmt: (v: number) => formatCurrency(v) },
-                { title: 'มูลค่าขายแล้ว', value: fmtCompact(salesStats.soldValue), icon: Receipt, color: KK.green, bg: KK.greenLight, sub: salesStats.gdv > 0 ? `${Math.round(salesStats.soldValue / salesStats.gdv * 100)}% ของมูลค่าพอร์ต` : 'ของมูลค่าพอร์ต', spark: null, sparkLabel: '', sparkFmt: null },
-                { title: 'อัตราเลิกใช้', value: `${stats.churnRate}%`, icon: TrendingDown, color: stats.churnRate > 5 ? KK.red : KK.green, bg: stats.churnRate > 5 ? KK.redLight : KK.greenLight, sub: 'เดือนนี้', spark: null, sparkLabel: '', sparkFmt: null },
+                { title: 'รายได้แพ็กเกจ/เดือน', value: formatCurrency(stats.monthlyRevenue), icon: TrendingUp, color: KK.red, bg: KK.redLight, trend: { value: stats.mrrGrowth, up: stats.mrrGrowth >= 0 } },
+                { title: 'รายได้รวมปีนี้', value: formatCurrency(stats.annualRunRate), icon: Receipt, color: KK.green, bg: KK.greenLight, sub: `ม.ค. – ${thaiMonthShort[todayMonth]} ${todayYear}` },
+                { title: 'บริษัททั้งหมด', value: stats.totalTenants.toLocaleString(), icon: Building2, color: KK.blue, bg: KK.blueLight, sub: `${stats.activeTenants} ใช้งาน · ${stats.trialTenants} ทดลอง` },
+                { title: 'ผู้สนใจแพลตฟอร์มใหม่', value: platformLeadsNew.toLocaleString(), icon: UserPlusIcon, color: KK.amber, bg: KK.amberLight, sub: 'บริษัทสนใจซื้อ เดือนนี้' },
+                { title: 'เงินค้างชำระ', value: fmtCompact(arSummary.overdue), icon: AlertCircle, color: KK.red, bg: KK.redLight, sub: `${arSummary.overdueCount} ใบเกินกำหนด` },
+                { title: 'อัตราเลิกใช้', value: `${stats.churnRate}%`, icon: TrendingDown, color: stats.churnRate > 5 ? KK.red : KK.green, bg: stats.churnRate > 5 ? KK.redLight : KK.greenLight, sub: 'เดือนนี้' },
               ] as const).map((kpi, i) => (
                 <div key={i} className="bg-white border border-gray-100 rounded-2xl shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col">
                   <div className="p-5 pb-2 flex-1">
@@ -772,76 +783,14 @@ const OwnerDashboard = () => {
                       <p className="text-[13px] text-gray-400 mt-2.5 truncate">{'sub' in kpi ? kpi.sub : ''}</p>
                     )}
                   </div>
-                  {/* Sparkline (revenue cards only) — count cards get a matching spacer so heights stay even */}
-                  {kpi.spark && kpi.spark.length > 1 ? (
-                    <div className="rounded-b-2xl">
-                      <div className="px-5 pb-1 flex items-center justify-between">
-                        <span className="text-[11px] font-medium" style={{ color: kpi.color }}>{kpi.sparkLabel}</span>
-                        <span className="text-[11px] text-gray-400">
-                          {(kpi.spark as {v:number;month:string}[])[0]?.month} – {(kpi.spark as {v:number;month:string}[])[kpi.spark.length - 1]?.month}
-                        </span>
-                      </div>
-                      <div className="px-1 pb-1">
-                        <ResponsiveContainer width="100%" height={32}>
-                          <AreaChart data={kpi.spark as {v:number;month:string}[]} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-                            <Tooltip
-                              contentStyle={{ ...kkTooltipStyle, fontSize: '11px', padding: '4px 8px' }}
-                              formatter={(v: any) => [kpi.sparkFmt ? kpi.sparkFmt(Number(v)) : v, kpi.sparkLabel]}
-                              labelFormatter={(_, payload) => (payload?.[0]?.payload as any)?.month ?? ''}
-                              cursor={false}
-                              allowEscapeViewBox={{ x: true, y: true }}
-                              wrapperStyle={{ zIndex: 30 }}
-                            />
-                            <Area type="monotone" dataKey="v" stroke={kpi.color} strokeWidth={2} fill={kpi.color} fillOpacity={0.12} dot={false} animationDuration={900} animationEasing="ease-out" />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="h-5" />
-                  )}
+                  <div className="h-3" />{/* uniform bottom spacing — all KPI cards same height */}
                 </div>
               ))}
             </div>
 
-            {/* === Company Performance (cross-tenant HQ) — best/worst + ranking === */}
-            {companyRows.length > 0 && (() => {
-              const best = companyRows[0];
-              const worst = companyRows[companyRows.length - 1];
-              return (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex items-center gap-4">
-                      <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: KK.greenLight }}>
-                        <TrendingUp className="w-5 h-5" style={{ color: KK.green }} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs text-gray-500">บริษัทขายดีที่สุด</p>
-                        <p className="text-base font-bold text-gray-900 truncate">{best.name}</p>
-                        <p className="text-sm text-gray-500 tabular-nums">{fmtCompact(best.soldValue)} · ขาย {best.sold} ยูนิต</p>
-                      </div>
-                    </div>
-                    <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex items-center gap-4">
-                      <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: KK.amberLight }}>
-                        <TrendingDown className="w-5 h-5" style={{ color: KK.amber }} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs text-gray-500">บริษัทที่ต้องดูแล</p>
-                        <p className="text-base font-bold text-gray-900 truncate">{worst.name}</p>
-                        <p className="text-sm text-gray-500 tabular-nums">{fmtCompact(worst.soldValue)} · ขาย {worst.sold} ยูนิต</p>
-                      </div>
-                    </div>
-                  </div>
-                  <button onClick={() => navigate('/owner-companies')} className="w-full bg-white border border-gray-100 rounded-2xl shadow-soft p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
-                    <div className="text-left">
-                      <p className="text-sm font-bold text-gray-900">เปรียบเทียบบริษัททั้งหมด</p>
-                      <p className="text-xs text-gray-500 mt-0.5">ยอดขาย · sell-through · sparkline รายบริษัท</p>
-                    </div>
-                    <span className="flex items-center gap-1 text-sm font-medium" style={{ color: KK.red }}>ดูทั้งหมด <ArrowUpRight className="w-4 h-4" /></span>
-                  </button>
-                </div>
-              );
-            })()}
+            {/* Company best/worst + comparison intentionally NOT here — that lives on
+                the Company Performance page only (clear menu boundaries: Executive owns
+                platform totals + SaaS health + trend, not per-company rankings). */}
 
             {/* === Revenue Trend — full-width hero chart === */}
             <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
@@ -958,89 +907,6 @@ const OwnerDashboard = () => {
               </div>
             </div>
 
-            {/* === Row 3: Upcoming Renewals + Recent Activity === */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              {/* Upcoming Renewals */}
-              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-                <div className="flex items-center gap-2 mb-1">
-                  <Calendar className="w-4 h-4" style={{ color: KK.amber }} />
-                  <h2 className="text-base font-bold text-gray-900">ใกล้ครบกำหนดต่ออายุ</h2>
-                </div>
-                <p className="text-xs text-gray-500 mb-4">ภายใน 30 วันข้างหน้า</p>
-                {upcomingRenewals.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Calendar className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-                    <p className="text-sm text-gray-500">ไม่มีการต่ออายุใน 30 วัน</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {upcomingRenewals.slice(0, 5).map((tenant) => {
-                      const daysUntilEnd = getDaysUntilEnd(tenant.trial_ends_at);
-                      const isUrgent = daysUntilEnd !== null && daysUntilEnd <= 7;
-                      return (
-                        <div
-                          key={tenant.id}
-                          className="flex items-center justify-between p-3 rounded-xl border transition-colors hover:bg-gray-50"
-                          style={{
-                            borderColor: isUrgent ? KK.redBorder : '#f3f4f6',
-                            backgroundColor: isUrgent ? KK.redLight : 'transparent',
-                          }}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: isUrgent ? '#fff' : KK.grayLight }}>
-                              <Building2 className="w-4 h-4" style={{ color: isUrgent ? KK.red : KK.gray }} />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 truncate">{tenant.name}</p>
-                              <p className="text-xs text-gray-500 capitalize">{tenant.subscription_plan} plan</p>
-                            </div>
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <p className="text-sm font-bold tabular-nums" style={{ color: isUrgent ? KK.red : '#374151' }}>
-                              {daysUntilEnd === 0 ? 'วันนี้' : daysUntilEnd === 1 ? 'พรุ่งนี้' : `อีก ${daysUntilEnd} วัน`}
-                            </p>
-                            <p className="text-[11px] text-gray-400">
-                              {tenant.trial_ends_at && new Date(tenant.trial_ends_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Recent Activity */}
-              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-                <div className="flex items-center gap-2 mb-1">
-                  <Activity className="w-4 h-4" style={{ color: KK.purple }} />
-                  <h2 className="text-base font-bold text-gray-900">กิจกรรมล่าสุด</h2>
-                </div>
-                <p className="text-xs text-gray-500 mb-4">การเปลี่ยนแปลงในระบบ</p>
-                {recentActivities.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Activity className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-                    <p className="text-sm text-gray-500">ไม่มีกิจกรรมล่าสุด</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {recentActivities.slice(0, 6).map((activity) => (
-                      <div key={activity.id} className="flex items-start gap-3">
-                        <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: KK.purple }} />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm text-gray-800 leading-tight">{activity.description}</p>
-                          <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
-                            {activity.tenantName && <><span className="truncate max-w-[140px]">{activity.tenantName}</span><span className="text-gray-300">·</span></>}
-                            <Clock className="w-3 h-3" />
-                            {formatTimestamp(activity.timestamp)}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
 
 
           </main>

@@ -33,6 +33,7 @@ import {
   CreditCard,
   Home,
   BarChart3,
+  Activity,
   CheckCircle,
   XCircle,
   Globe,
@@ -165,6 +166,42 @@ interface LeadInterestWithDetails {
   unit?: Unit;
 }
 
+// Customer journey — one row per activity_logs event for this lead.
+interface TimelineEvent {
+  id: string;
+  activity_type: string;
+  description: string | null;
+  created_at: string;
+}
+
+// Thai labels for the lead-related activity types shown on the journey timeline.
+const JOURNEY_LABELS: Record<string, string> = {
+  lead_created: 'สร้าง Lead', lead_contacted: 'ติดต่อลูกค้า', lead_status_updated: 'อัปเดตสถานะ',
+  lead_qualified: 'ผ่านคุณสมบัติ', lead_auto_qualified: 'คัดกรองอัตโนมัติ', lead_won: 'ปิดการขาย',
+  lead_assigned: 'มอบหมายเซลล์', handoff_to_sales: 'ส่งต่อให้เซลล์',
+  lead_interest_created: 'สนใจยูนิต', interest_added: 'สนใจยูนิต', lead_interest_updated: 'แก้ไขความสนใจ',
+  interest_cancelled: 'ยกเลิกความสนใจ', lead_interest_deleted: 'ลบความสนใจ', lead_interest_removed: 'นำความสนใจออก',
+  viewing_scheduled: 'นัดชมโครงการ', viewing_completed: 'ชมโครงการแล้ว', site_visit_confirmed: 'ยืนยันเข้าชม',
+  contract_signed: 'เซ็นสัญญา', booking_created: 'สร้างการจอง', soft_reserve: 'จองชั่วคราว',
+  unit_reserved: 'จองยูนิต', brochure_downloaded: 'ดาวน์โหลดโบรชัวร์', payment_received: 'รับชำระเงิน',
+};
+const journeyTimeAgo = (ts: string) => {
+  const diff = Date.now() - new Date(ts).getTime();
+  const m = Math.floor(diff / 60000), h = Math.floor(diff / 3600000), d = Math.floor(diff / 86400000);
+  if (m < 1) return 'เมื่อสักครู่';
+  if (m < 60) return `${m} นาทีที่แล้ว`;
+  if (h < 24) return `${h} ชม.ที่แล้ว`;
+  if (d < 30) return `${d} วันที่แล้ว`;
+  return new Date(ts).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
+};
+const journeyColor = (t: string) => {
+  if (/won|contract|payment|reserved|booking|qualified/.test(t)) return '#16a34a';
+  if (/viewing|site_visit/.test(t)) return '#2563eb';
+  if (/interest|brochure/.test(t)) return '#d97706';
+  if (/lost|cancel|delet|removed/.test(t)) return '#ef4444';
+  return '#94a3b8';
+};
+
 const LeadCDP = () => {
   const { leadId } = useParams<{ leadId: string }>();
   const navigate = useNavigate();
@@ -183,6 +220,23 @@ const LeadCDP = () => {
   const [leadScore, setLeadScore] = useState<PotentialScore | null>(null);
   const [loanEstimation, setLoanEstimation] = useState<LoanEstimation | null>(null);
   const [mlProbability, setMlProbability] = useState<number | null>(null);
+  // Customer journey timeline — activity_logs for this lead so Sales can see the
+  // full follow-up history (views, calls, status changes) at a glance.
+  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
+
+  useEffect(() => {
+    if (!leadId) return;
+    (async () => {
+      try {
+        const { data } = await (supabase.from('activity_logs') as any)
+          .select('id, activity_type, description, created_at')
+          .filter('metadata->>lead_id', 'eq', leadId)
+          .order('created_at', { ascending: false })
+          .limit(50);
+        setTimeline((data || []) as TimelineEvent[]);
+      } catch { /* non-blocking — timeline is best-effort */ }
+    })();
+  }, [leadId]);
 
   // Get currently selected interest
   const selectedInterest = interests.find(i => i.id === selectedInterestId);
@@ -828,6 +882,38 @@ const LeadCDP = () => {
               </Card>
             )}
           </div>
+
+          {/* Activity Timeline — customer journey (helps Sales follow up precisely) */}
+          <Card className="shadow-soft border border-gray-200 mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Activity className="w-5 h-5 text-chateau" /> ไทม์ไลน์กิจกรรมลูกค้า
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {timeline.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-6">ยังไม่มีบันทึกกิจกรรมของลูกค้ารายนี้</p>
+              ) : (
+                <div className="space-y-0">
+                  {timeline.map((ev, i) => (
+                    <div key={ev.id} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <div className="w-3 h-3 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: journeyColor(ev.activity_type) }} />
+                        {i < timeline.length - 1 && <div className="w-px flex-1 bg-gray-200 my-1" />}
+                      </div>
+                      <div className="flex-1 min-w-0 pb-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-sm font-medium text-gray-900">{JOURNEY_LABELS[ev.activity_type] || ev.activity_type}</p>
+                          <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">{journeyTimeAgo(ev.created_at)}</span>
+                        </div>
+                        {ev.description && <p className="text-xs text-gray-500 mt-0.5 break-words">{ev.description}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
         </main>
       </div>
