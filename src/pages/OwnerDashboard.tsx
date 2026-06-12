@@ -115,6 +115,18 @@ interface TenantWithStats extends Tenant {
   revenue: number;
 }
 
+// Per-company real-estate rollup (Owner HQ lens) — cross-tenant comparison row.
+interface CompanyRow {
+  id: string;
+  name: string;
+  plan: string;
+  gdv: number;       // total managed property value (all units)
+  sold: number;      // sold unit count
+  total: number;     // total unit count
+  soldValue: number; // value of sold units
+  leads: number;     // total leads
+}
+
 // Thai Baht glyph that drops into the same slot as a lucide icon (lucide has no ฿ icon).
 // Accepts the same className/style props the icon map passes, so money cards read in THB not $.
 // Sized/weighted to visually match the lucide line-icons next to it (bigger + heavier than the
@@ -125,6 +137,24 @@ const BahtSign = ({ className = '', style }: { className?: string; style?: CSSPr
     style={{ ...style, fontSize: className.includes('w-4') ? '17px' : '23px', fontWeight: 800 }}
   >฿</span>
 );
+
+// Compact THB — Thai real-estate convention "X ล้าน" / "K" (NOT M/B). Copied from
+// Index.tsx / OwnerProjects.tsx (canonical). Used for large GDV / sales-value figures
+// where the full formatCurrency would be unreadable (e.g. ฿3,820,000,000).
+const fmtCompact = (n: number) => {
+  if (!Number.isFinite(n) || n === 0) return '฿0';
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1_000_000) {
+    const m = abs / 1_000_000;
+    if (m >= 1000) return `${sign}฿${Math.round(m).toLocaleString('en-US')} ล้าน`;
+    if (m >= 100) return `${sign}฿${Math.round(m)} ล้าน`;
+    if (m >= 10) return `${sign}฿${m.toFixed(1)} ล้าน`;
+    return `${sign}฿${m.toFixed(2)} ล้าน`;
+  }
+  if (abs >= 1_000) return `${sign}฿${(abs / 1_000).toFixed(0)}K`;
+  return `${sign}฿${abs.toFixed(0)}`;
+};
 
 const OwnerDashboard = () => {
   const navigate = useNavigate();
@@ -161,6 +191,10 @@ const OwnerDashboard = () => {
   const [planPrices, setPlanPrices] = useState<Record<string, { monthly: number; annual: number }>>({});
   // AR / cash health — money owed but not yet collected (≠ MRR). Sourced from invoices.
   const [arSummary, setArSummary] = useState({ overdue: 0, overdueCount: 0, pending: 0, pendingCount: 0 });
+  // Cross-tenant real-estate rollup (Owner HQ lens) — GDV / sold units / new leads
+  // aggregated across all customer tenants, plus per-company comparison rows.
+  const [salesStats, setSalesStats] = useState({ gdv: 0, soldValue: 0, soldUnits: 0, soldUnitsThisMonth: 0, totalUnits: 0, newLeadsThisMonth: 0, totalLeads: 0 });
+  const [companyRows, setCompanyRows] = useState<CompanyRow[]>([]);
 
   useEffect(() => {
     if (!isOwner) {
@@ -515,6 +549,55 @@ const OwnerDashboard = () => {
         setStats(prev => ({ ...prev, totalProjects: projectCount || 0 }));
       }
 
+      // === Cross-tenant real-estate rollup (Owner HQ lens) ===
+      // units & leads carry tenant_id directly; Owner RLS permits cross-tenant read.
+      // Scoped to customer tenants so our own platform tenant can't inflate it.
+      if (customerTenantIds.length > 0) {
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
+
+        const [unitsRes, leadsRes] = await Promise.all([
+          supabase.from('units').select('tenant_id, price, status, sold_at').in('tenant_id', customerTenantIds),
+          supabase.from('leads').select('tenant_id, created_at').in('tenant_id', customerTenantIds),
+        ]);
+        const unitRows = (unitsRes.data || []) as { tenant_id: string; price: number | null; status: string | null; sold_at: string | null }[];
+        const leadRows = (leadsRes.data || []) as { tenant_id: string; created_at: string | null }[];
+
+        let gdv = 0, soldValueAll = 0, soldUnits = 0, soldUnitsThisMonth = 0, newLeadsThisMonth = 0;
+        const agg = new Map<string, { gdv: number; sold: number; total: number; soldValue: number; leads: number }>();
+        const slot = (id: string) => {
+          let r = agg.get(id);
+          if (!r) { r = { gdv: 0, sold: 0, total: 0, soldValue: 0, leads: 0 }; agg.set(id, r); }
+          return r;
+        };
+        unitRows.forEach((u) => {
+          const price = Number(u.price) || 0;
+          gdv += price;
+          const r = slot(u.tenant_id);
+          r.gdv += price; r.total += 1;
+          if (u.status === 'sold') {
+            soldUnits += 1; soldValueAll += price; r.sold += 1; r.soldValue += price;
+            if (u.sold_at && new Date(u.sold_at) >= monthStart) soldUnitsThisMonth += 1;
+          }
+        });
+        leadRows.forEach((l) => {
+          slot(l.tenant_id).leads += 1;
+          if (l.created_at && new Date(l.created_at) >= monthStart) newLeadsThisMonth += 1;
+        });
+
+        setSalesStats({ gdv, soldValue: soldValueAll, soldUnits, soldUnitsThisMonth, totalUnits: unitRows.length, newLeadsThisMonth, totalLeads: leadRows.length });
+
+        const rows: CompanyRow[] = ((tenants || []) as Tenant[])
+          .map((t) => {
+            const r = agg.get(t.id);
+            return { id: t.id, name: t.name, plan: t.subscription_plan, gdv: r?.gdv || 0, sold: r?.sold || 0, total: r?.total || 0, soldValue: r?.soldValue || 0, leads: r?.leads || 0 };
+          })
+          .filter((r) => r.total > 0)
+          .sort((a, b) => b.soldValue - a.soldValue);
+        setCompanyRows(rows);
+      }
+
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -645,18 +728,23 @@ const OwnerDashboard = () => {
                   Platform
                 </span>
                 <h1 className="text-2xl font-bold text-gray-900">Executive Dashboard</h1>
-                <p className="text-[15px] text-gray-500 mt-1.5">ภาพรวมระบบแพลตฟอร์ม · รายได้ · บริษัท · โครงการ · อัตราเลิกใช้ · อัปเดตล่าสุด {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
+                <p className="text-[15px] text-gray-500 mt-1.5">มุมมอง HQ ข้ามทุกบริษัท · อัปเดตล่าสุด {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
+                <div className="mt-2.5 inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full" style={{ color: KK.blue, backgroundColor: KK.blueLight }}>
+                  <Layers className="w-3.5 h-3.5" />
+                  ทั้งแพลตฟอร์ม · {stats.totalTenants} บริษัท · {stats.totalProjects} โครงการ
+                </div>
               </div>
             </div>
 
             {/* === KPI Row (6 uniform cards — matches Admin density) === */}
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
               {([
-                { title: 'รายได้ต่อเดือน', value: formatCurrency(stats.monthlyRevenue), icon: BahtSign,    color: KK.red,    bg: KK.redLight,    trend: { value: stats.mrrGrowth, up: stats.mrrGrowth >= 0 }, spark: revenueData.map(d => ({ v: d.revenue,       month: d.month })), sparkLabel: 'MRR รายเดือน',  sparkFmt: (v: number) => formatCurrency(v) },
-                { title: 'รายได้รวมปีนี้',   value: formatCurrency(stats.annualRunRate),  icon: TrendingUp,  color: KK.red,    bg: KK.redLight,    sub: `ม.ค. – ${thaiMonthShort[todayMonth]} ${todayYear}`,     spark: ytdData.map(d => ({ v: d.revenue,          month: d.month })), sparkLabel: 'รายเดือน', sparkFmt: (v: number) => formatCurrency(v) },
-                { title: 'บริษัททั้งหมด',   value: stats.totalTenants.toLocaleString(),  icon: Building2,   color: KK.blue,   bg: KK.blueLight,   sub: `${stats.activeTenants} ใช้งาน · ${stats.trialTenants} ทดลอง`,  spark: null, sparkLabel: '', sparkFmt: null },
-                { title: 'โครงการทั้งหมด',  value: stats.totalProjects.toLocaleString(), icon: Layers,      color: KK.amber,  bg: KK.amberLight,  sub: `~${stats.totalTenants > 0 ? Math.round(stats.totalProjects / stats.totalTenants) : 0} โครงการ/บริษัท`, spark: null, sparkLabel: '', sparkFmt: null },
-                { title: 'อัตราเลิกใช้',    value: `${stats.churnRate}%`,                icon: TrendingDown,color: stats.churnRate > 5 ? KK.red : KK.green, bg: stats.churnRate > 5 ? KK.redLight : KK.greenLight, sub: 'เดือนนี้', spark: null, sparkLabel: '', sparkFmt: null },
+                { title: 'GDV รวมทั้งแพลตฟอร์ม', value: fmtCompact(salesStats.gdv), icon: BahtSign, color: KK.red, bg: KK.redLight, sub: 'มูลค่าพอร์ตอสังหาฯ ทุกบริษัท', spark: null, sparkLabel: '', sparkFmt: null },
+                { title: 'ยูนิตขายแล้ว', value: salesStats.soldUnits.toLocaleString(), icon: CheckCircle, color: KK.green, bg: KK.greenLight, sub: `+${salesStats.soldUnitsThisMonth} เดือนนี้ · ${salesStats.totalUnits} ยูนิตทั้งหมด`, spark: null, sparkLabel: '', sparkFmt: null },
+                { title: 'Leads ใหม่เดือนนี้', value: salesStats.newLeadsThisMonth.toLocaleString(), icon: UserPlusIcon, color: KK.blue, bg: KK.blueLight, sub: `${salesStats.totalLeads.toLocaleString()} leads สะสม`, spark: null, sparkLabel: '', sparkFmt: null },
+                { title: 'รายได้แพ็กเกจ/เดือน', value: formatCurrency(stats.monthlyRevenue), icon: TrendingUp, color: KK.red, bg: KK.redLight, trend: { value: stats.mrrGrowth, up: stats.mrrGrowth >= 0 }, spark: revenueData.map(d => ({ v: d.revenue, month: d.month })), sparkLabel: 'MRR รายเดือน', sparkFmt: (v: number) => formatCurrency(v) },
+                { title: 'มูลค่าขายแล้ว', value: fmtCompact(salesStats.soldValue), icon: Receipt, color: KK.green, bg: KK.greenLight, sub: salesStats.gdv > 0 ? `${Math.round(salesStats.soldValue / salesStats.gdv * 100)}% ของมูลค่าพอร์ต` : 'ของมูลค่าพอร์ต', spark: null, sparkLabel: '', sparkFmt: null },
+                { title: 'อัตราเลิกใช้', value: `${stats.churnRate}%`, icon: TrendingDown, color: stats.churnRate > 5 ? KK.red : KK.green, bg: stats.churnRate > 5 ? KK.redLight : KK.greenLight, sub: 'เดือนนี้', spark: null, sparkLabel: '', sparkFmt: null },
               ] as const).map((kpi, i) => (
                 <div key={i} className="bg-white border border-gray-100 rounded-2xl shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col">
                   <div className="p-5 pb-2 flex-1">
@@ -704,7 +792,7 @@ const OwnerDashboard = () => {
                               allowEscapeViewBox={{ x: true, y: true }}
                               wrapperStyle={{ zIndex: 30 }}
                             />
-                            <Area type="monotone" dataKey="v" stroke={kpi.color} strokeWidth={2} fill={kpi.color} fillOpacity={0.12} dot={false} isAnimationActive={false} />
+                            <Area type="monotone" dataKey="v" stroke={kpi.color} strokeWidth={2} fill={kpi.color} fillOpacity={0.12} dot={false} animationDuration={900} animationEasing="ease-out" />
                           </AreaChart>
                         </ResponsiveContainer>
                       </div>
@@ -715,6 +803,45 @@ const OwnerDashboard = () => {
                 </div>
               ))}
             </div>
+
+            {/* === Company Performance (cross-tenant HQ) — best/worst + ranking === */}
+            {companyRows.length > 0 && (() => {
+              const best = companyRows[0];
+              const worst = companyRows[companyRows.length - 1];
+              return (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex items-center gap-4">
+                      <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: KK.greenLight }}>
+                        <TrendingUp className="w-5 h-5" style={{ color: KK.green }} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs text-gray-500">บริษัทขายดีที่สุด</p>
+                        <p className="text-base font-bold text-gray-900 truncate">{best.name}</p>
+                        <p className="text-sm text-gray-500 tabular-nums">{fmtCompact(best.soldValue)} · ขาย {best.sold} ยูนิต</p>
+                      </div>
+                    </div>
+                    <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex items-center gap-4">
+                      <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: KK.amberLight }}>
+                        <TrendingDown className="w-5 h-5" style={{ color: KK.amber }} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs text-gray-500">บริษัทที่ต้องดูแล</p>
+                        <p className="text-base font-bold text-gray-900 truncate">{worst.name}</p>
+                        <p className="text-sm text-gray-500 tabular-nums">{fmtCompact(worst.soldValue)} · ขาย {worst.sold} ยูนิต</p>
+                      </div>
+                    </div>
+                  </div>
+                  <button onClick={() => navigate('/owner-companies')} className="w-full bg-white border border-gray-100 rounded-2xl shadow-soft p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                    <div className="text-left">
+                      <p className="text-sm font-bold text-gray-900">เปรียบเทียบบริษัททั้งหมด</p>
+                      <p className="text-xs text-gray-500 mt-0.5">ยอดขาย · sell-through · sparkline รายบริษัท</p>
+                    </div>
+                    <span className="flex items-center gap-1 text-sm font-medium" style={{ color: KK.red }}>ดูทั้งหมด <ArrowUpRight className="w-4 h-4" /></span>
+                  </button>
+                </div>
+              );
+            })()}
 
             {/* === Revenue Trend — full-width hero chart === */}
             <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
@@ -737,7 +864,7 @@ const OwnerDashboard = () => {
                   <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                   <Tooltip contentStyle={kkTooltipStyle} formatter={((v: any) => [formatCurrency(Number(v ?? 0)), 'MRR']) as any} />
-                  <Area type="monotone" dataKey="revenue" stroke={KK.red} strokeWidth={2.5} fill="url(#ownerRevGrad)" dot={false} activeDot={{ r: 4, fill: KK.red, stroke: '#fff', strokeWidth: 2 }} />
+                  <Area type="monotone" dataKey="revenue" stroke={KK.red} strokeWidth={2.5} fill="url(#ownerRevGrad)" dot={false} activeDot={{ r: 4, fill: KK.red, stroke: '#fff', strokeWidth: 2 }} animationDuration={1300} animationEasing="ease-in-out" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>

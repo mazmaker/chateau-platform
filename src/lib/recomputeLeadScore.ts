@@ -145,6 +145,45 @@ export async function recomputeLeadScore(leadId: string): Promise<void> {
       updates.loan_last_updated = null;
     }
 
+    // === Random Forest model inference (the trained lead_scoring_rf model, see
+    // src/lib/rfModel.ts). Replaces the rule-based conversion_probability with the
+    // actual ML prediction of "likely to close". Rule-based component scores
+    // (financial/engagement/urgency/fit) still feed the model. Non-blocking: if
+    // the model can't run, the rule-based conversion_probability already set above
+    // stays in place.
+    try {
+      const { predictLeadQuality } = await import('./rfModel');
+      const b01 = (v: boolean | null | undefined) => (v === true ? 1 : v === false ? 0 : null);
+      const rfProba = predictLeadQuality({
+        credit_score: lead.credit_score ?? 700,
+        monthly_income: lead.monthly_income,
+        monthly_debt: lead.monthly_debt,
+        down_payment_ready: lead.down_payment_ready,
+        savings: lead.savings,
+        years_employed: lead.years_employed,
+        dti_ratio: loanResult?.dti_ratio,
+        ltv_ratio: loanResult?.ltv_ratio,
+        website_visits: lead.website_visits,
+        pages_viewed: lead.pages_viewed,
+        time_on_site: lead.time_on_site,
+        brochure_downloads: lead.brochure_downloads,
+        site_visit_attended: b01(lead.site_visit_attended),
+        financial_score: score.score_breakdown.financial_score,
+        engagement_score: score.score_breakdown.engagement_score,
+        urgency_score: score.score_breakdown.urgency_score,
+        fit_score: score.score_breakdown.fit_score,
+        age: lead.age,
+        decision_maker: b01(lead.decision_maker),
+        financing_approved: b01(lead.financing_approved),
+        estimated_value: lead.estimated_value,
+      });
+      if (rfProba !== null && Number.isFinite(rfProba)) {
+        updates.conversion_probability = Math.round(rfProba * 1000) / 1000;
+      }
+    } catch (e) {
+      console.warn('[recomputeLeadScore] RF inference skipped:', e);
+    }
+
     // Auto-qualify: promote contacted leads whose financial profile passes the
     // threshold. We only promote upward from 'contacted' (never from 'new' — Sales
     // should call first, never downgrade later stages). Threshold is currently a

@@ -81,44 +81,44 @@ const getAllNavItems = (): NavItem[] => [
   //   Admin → "/"      tenant-level Executive Dashboard (that company's sales / GDV / inventory)
   //   Owner → "/owner" platform-wide view (MRR, churn, tenants) = the Owner's own Executive Dashboard
   { icon: LayoutDashboard, label: "Executive Dashboard", href: "/",            requiredRoles: ["ADMIN"] },
-  { icon: LayoutDashboard, label: "ภาพรวมแพลตฟอร์ม",      href: "/owner",         requiredRoles: ["OWNER"] },
+  { icon: LayoutDashboard, label: "Executive Dashboard",  href: "/owner",         requiredRoles: ["OWNER"] },
   // Owner ANALYTICS group — cross-tenant real-estate intelligence (HQ lens).
   // Data: units→properties→tenants via live Owner RLS; no migration needed.
   // See documents/owner-hq-dashboard-plan.md.
-  { icon: TrendingUp,      label: "ภาพรวมตลาด",          href: "/owner-market",    requiredRoles: ["OWNER"] },
-  { icon: MapPin,          label: "ทำเลและจังหวัด",       href: "/owner-geography", requiredRoles: ["OWNER"] },
-  { icon: BarChart3,       label: "ประสิทธิภาพบริษัท",     href: "/owner-companies", requiredRoles: ["OWNER"] },
-  { icon: Trophy,          label: "ประสิทธิภาพทีมขาย",     href: "/owner-agents",    requiredRoles: ["OWNER"] },
-  { icon: Trophy,          label: "แดชบอร์ดส่วนตัว",      href: "/my-dashboard",  requiredRoles: ["SALES", "AGENT"] },
+  { icon: TrendingUp,      label: "Market Overview",     href: "/owner-market",    requiredRoles: ["OWNER"] },
+  { icon: MapPin,          label: "Geography",           href: "/owner-geography", requiredRoles: ["OWNER"] },
+  { icon: BarChart3,       label: "Company Performance", href: "/owner-companies", requiredRoles: ["OWNER"] },
+  { icon: Trophy,          label: "Sales Performance",   href: "/owner-agents",    requiredRoles: ["OWNER"] },
+  { icon: Trophy,          label: "My Dashboard",        href: "/my-dashboard",  requiredRoles: ["SALES", "AGENT"] },
   // tenant-scoped LEAD analytics (conversion/SLA/won-lost for one company) =
   // Admin's application-plane work, not the platform Owner's. ADMIN-only.
   // Owner items are ordered to drive the sidebar groups (render order = this master
   // order, filtered per group). TENANTS group → จัดการบริษัท · การชำระเงิน;
   // SALES group → Leads. Keep this order so billing reads last within TENANTS.
-  { icon: Building2,       label: "จัดการบริษัท",         href: "/tenants",       requiredRoles: ["OWNER"] },
+  { icon: Building2,       label: "Companies",           href: "/tenants",       requiredRoles: ["OWNER"] },
   // Owner gets the cross-tenant, read-only Project Dashboard (control-plane);
   // Admin/Sales/Agent keep the tenant-scoped editable /properties page.
-  { icon: Building,        label: "โครงการทั้งหมด",        href: "/owner-projects", requiredRoles: ["OWNER"] },
-  { icon: CreditCard,      label: "การชำระเงิน",          href: "/payments",      requiredRoles: ["OWNER"] },
-  { icon: Briefcase,       label: "การขายแพลตฟอร์ม",      href: "/owner-leads",   requiredRoles: ["OWNER"] },
-  { icon: Building2,       label: "โครงการ",             href: "/properties",    requiredRoles: ["ADMIN", "SALES", "AGENT"] },
+  { icon: Building,        label: "All Projects",        href: "/owner-projects", requiredRoles: ["OWNER"] },
+  { icon: CreditCard,      label: "Payments",            href: "/payments",      requiredRoles: ["OWNER"] },
+  { icon: Briefcase,       label: "Leads",               href: "/owner-leads",   requiredRoles: ["OWNER"] },
+  { icon: Building2,       label: "Projects",            href: "/properties",    requiredRoles: ["ADMIN", "SALES", "AGENT"] },
   { icon: FileText,        label: "Leads",              href: "/leads",         requiredRoles: ["ADMIN", "SALES", "AGENT"] },
   // Tenant-ops menus — Admin's application-plane work, NOT the platform Owner's.
   // Deliberately ADMIN-only (cut from Owner) so the Owner menu stays a clean
   // control-plane. Owner can still reach them by URL for support if ever needed.
-  { icon: UserCheck,       label: "ผลงานทีม",            href: "/team",          requiredRoles: ["ADMIN"] },
+  { icon: UserCheck,       label: "Team Performance",    href: "/team",          requiredRoles: ["ADMIN"] },
   // Analytics last = action → result convention (same as Marketing Analytics at bottom of MARKETING)
   { icon: BarChart3,       label: "Lead Analytics",      href: "/analytics",     requiredRoles: ["ADMIN"], requiredFeature: "analytics", isPremium: true },
   { icon: Megaphone,       label: "Campaigns",          href: "/campaigns",     requiredRoles: ["ADMIN"] },
   { icon: Wand2,           label: "Builder Wizard",     href: "/builder",       requiredRoles: ["ADMIN"] },
   { icon: Zap,             label: "Triggers",           href: "/triggers",      requiredRoles: ["ADMIN"] },
   { icon: BarChart3,       label: "Marketing Analytics",href: "/marketing-analytics", requiredRoles: ["ADMIN"] },
-  { icon: Users,           label: "จัดการผู้ใช้",          href: "/users",         requiredRoles: ["OWNER", "ADMIN"] },
-  { icon: MessageSquare,   label: "ศูนย์ช่วยเหลือ",        href: "/owner-support", requiredRoles: ["OWNER"] },
-  { icon: Shield,          label: "บันทึกการตรวจสอบ",      href: "/owner-audit",   requiredRoles: ["OWNER"] },
-  { icon: Lock,            label: "สิทธิ์ผู้ใช้งาน",        href: "/permissions",   requiredRoles: ["ADMIN"] },
-  { icon: Settings,        label: "การตั้งค่า",           href: "/settings",      requiredRoles: ["OWNER", "ADMIN", "SALES", "AGENT", "CUSTOMER"] },
-  { icon: LogOut,          label: "ออกจากระบบ",          href: "/logout",        isLogout: true },
+  { icon: Users,           label: "Users",               href: "/users",         requiredRoles: ["OWNER", "ADMIN"] },
+  { icon: MessageSquare,   label: "Support",             href: "/owner-support", requiredRoles: ["OWNER"] },
+  { icon: Shield,          label: "Audit Log",           href: "/owner-audit",   requiredRoles: ["OWNER"] },
+  { icon: Lock,            label: "Permissions",         href: "/permissions",   requiredRoles: ["ADMIN"] },
+  { icon: Settings,        label: "Settings",            href: "/settings",      requiredRoles: ["OWNER", "ADMIN", "SALES", "AGENT", "CUSTOMER"] },
+  { icon: LogOut,          label: "Log Out",             href: "/logout",        isLogout: true },
 ];
 
 const getRoleLabel = (userRole: string | null) => {
@@ -213,7 +213,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
       })
       .map((item) => {
         if (item.href === "/users" && isAdmin && !isOwner) {
-          return { ...item, label: "จัดการผู้ใช้งาน" };
+          return { ...item, label: "User Management" };
         }
         return item;
       });

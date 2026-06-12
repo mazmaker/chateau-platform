@@ -6,18 +6,49 @@
 > 3. ห้ามข้ามกฎใน §8 (ขอบเขต/ข้อห้าม) เด็ดขาด
 > 4. ชื่อเมนูใน §4 = ชื่อสุดท้ายที่ตกลงแล้ว อย่าเปลี่ยนเองโดยไม่ถาม
 
-## 🔖 RESUME — เริ่มตรงนี้ (อัปเดต 2026-06-11, หยุดหลังเฟส 1)
+## 🔖 RESUME — สถานะ (อัปเดต 2026-06-11)
 
-**เสร็จแล้ว + ปลอดภัย (typecheck ผ่าน):**
-- Phase 0 เช็ค DB → ผลอยู่ §6.1
-- Phase 1 → แก้ `src/components/dashboard/Sidebar.tsx` (กลุ่ม ANALYTICS + เปลี่ยนชื่อ + audit) · สร้าง 5 หน้า `src/pages/Owner{Market,Geography,Companies,Agents,Audit}.tsx` (ตอนนี้เป็น placeholder "กำลังพัฒนา") · ลงทะเบียน import+route ใน `src/App.tsx`
+**✅ เสร็จครบทั้ง 7 เฟส · typecheck ผ่าน (exit 0) · เฟส 2-7 ยังไม่ commit**
+- Phase 0 → เช็ค DB (§6.1)
+- Phase 1 → Sidebar ANALYTICS + 5 หน้า + routes (**commit f03cc27**)
+- Phase 2 → `OwnerDashboard.tsx`: หัว "ภาพรวมแพลตฟอร์ม" + scope chip · KPI 6 ใบ · ตารางบริษัท + best/worst (units+leads ข้าม tenant · `fmtCompact`/`salesStats`/`companyRows`)
+- Phase 3 → `OwnerMarket.tsx`: KPI + กราฟช่วงราคา(bar)/ประเภท(donut)/เทรนด์(area)
+- Phase 4 → `OwnerCompanies.tsx`: best/worst + sparkline ต่อบริษัท + ตารางอันดับ
+- Phase 5 → `OwnerGeography.tsx`: bar แนวนอนต่อจังหวัด + ตาราง
+- Phase 6 → `OwnerAgents.tsx`: อันดับทีมขายจาก leads (assigned/won/conversion/มูลค่าดีล)
+- Phase 7 → `OwnerAudit.tsx`: ตาราง activity_logs + ฟิลเตอร์หมวด + ค้นหา
 
-**ค้างอยู่ = Phase 2** (ปรับ `src/pages/OwnerDashboard.tsx` — อ่านไฟล์แล้ว **ยังไม่แก้สักบรรทัด**). จุดแก้ที่อ่านมาแล้ว ไม่ต้องอ่านซ้ำ:
-- **หัวเรื่อง+scope chip** → `OwnerDashboard.tsx:642-650`: เปลี่ยน "Executive Dashboard" → **"ภาพรวมแพลตฟอร์ม"**, เพิ่ม chip "ทั้งแพลตฟอร์ม · N บริษัท · M โครงการ" (ใช้ `stats.totalTenants`/`stats.totalProjects` ที่มีอยู่แล้ว)
-- **KPI row** → `:653-717` (ตอนนี้ 6 การ์ด MRR/YTD/บริษัท/โครงการ/churn) → เพิ่มมิติอสังหาฯ: **GDV รวม · ยูนิตขายเดือนนี้ · Leads ใหม่**
-- **`topTenants` คำนวณแล้วแต่ไม่ render** → `:410-418`. เอามาทำ **ตารางบริษัท + การ์ดเด่น/ร่วง**; คลิกแถว `navigate('/owner-projects/'+id)`
-- **ต้องเพิ่ม fetch ข้าม tenant**: `units(price,status,project_id,sold_at)` + `leads(created_at,status)`. reuse `customerTenantIds` ที่มีแล้ว `:509`. join `units→properties` ผ่าน `project_id = properties.id`; ใช้ `rollUp` แบบ `OwnerProjects.tsx:134` (sold = status==='sold')
-- **tokens พร้อมใช้ในไฟล์**: palette `KK` `:600` · `formatCurrency` `:542` · `BahtSign` `:122` · recharts imported. สำหรับ GDV อยากได้ "X ล้าน" ให้ใช้ `fmtCompact` แบบ `OwnerProjects.tsx:108` แทน `formatCurrency`
+**หมายเหตุสำคัญ:** บั๊ก audit enum (campaign_*) ที่เคยสงสัย — **ไม่มีในDBจริง** (activity_type ไม่มี CHECK constraint แล้ว, campaign_* เขียนได้) → **ไม่ต้อง migration**
+
+**ถัดไป (ถ้าจะทำ):** commit เฟส 2-7 · QA หน้าจริงด้วย login owner (`.env.test.local`) · อนาคต: heat-map จังหวัด, ต่อสาย RF model ทำ predictive (Tier 3), **ปุ่มสลับภาษา ไทย/อังกฤษ (i18n ทั้งระบบ — งานใหญ่ ทำหลังเดโม)**
+
+**ภาษา UI (สรุป 2026-06-11):** เมนู+หัวหน้า Owner = **อังกฤษ** (Executive Dashboard / Market Overview / Geography / Company Performance / Sales Performance / Leads / Support / Audit Log); เนื้อหา/คำอธิบาย/ปุ่ม = ไทย. คำว่า "ใช้ไทย" ของ user = ให้ Claude คุยไทย ไม่ใช่แปล UI — ดู [[feedback_thai_is_conversation_not_ui]]
+
+---
+
+## 🆕 อัปเดตล่าสุด (2026-06-11 รอบ 2) — งานหลังเฟส 7 (ยังไม่ commit)
+
+**ทำเพิ่มแล้ว (typecheck ผ่านทุกครั้ง):**
+- **แก้การ์ดซ้ำ 5 หน้า Owner** (เลขซ้ำในหน้าเดียว/การ์ดผิดกลุ่ม): Dashboard ตัด KPI "บริษัท" ซ้ำ → "มูลค่าขายแล้ว" · ตารางบริษัท → ปุ่มลิงก์ไป Company Performance · Companies card4 → "มูลค่าพอร์ต (GDV)" · Market card1 → "ราคาเฉลี่ยต่อยูนิต" · Geography card3/4 → "จังหวัดที่มียอดขาย"/"มูลค่าขายเฉลี่ย/จังหวัด" · Agents → "มูลค่าดีล (ประเมิน)"
+- **เมนูเป็นอังกฤษทั้งหมด ทุก role** (`Sidebar.tsx`): Executive Dashboard / Market Overview / Geography / Company Performance / Sales Performance / Companies / All Projects / Payments / Leads / Users / Support / Audit Log / Settings / My Dashboard / Team Performance / Permissions / Log Out. หัวหน้า Owner ก็อังกฤษตรงกัน. **หัวข้อ "ข้างใน" หน้าเก่า (Tenants/Payments/Properties/Team/Permissions/Settings/MyDashboard) ยังเป็นไทย — user บอก "ข้างในยังไม่เป็นไร" ยังไม่ต้องแก้**
+- **✅ ต่อสาย Random Forest เสร็จ:** `src/lib/rfModel.ts` (inference 50 ต้นไม้) + ฝังโมเดล `src/lib/leadScoringModel.json` (18KB = lead_scoring_rf v2) + ต่อใน `src/lib/recomputeLeadScore.ts` (ทับ conversion_probability ด้วยผลโมเดล). ทดสอบ: เกรดดี→1.0, แย่→0.04 ✅. **โมเดล overfit (accuracy 100%, ค่ากลาง→0.996) คะแนนเอียงสูง → ควรเทรนใหม่ด้วยข้อมูลจริงทีหลัง.** เลือกฝังไฟล์เพราะ RLS `ml_models` ให้อ่านเฉพาะ owner/platform-tenant (sales/admin อ่านไม่ได้)
+
+**Requirement ใหม่จากเฮีย (รอบ 2) + การตัดสินใจ:**
+1. RFM model (กลุ่มบริษัทจ่าย subscription) → ❌ **ตัดทิ้ง**
+2. Random Forest (quality คนซื้อบ้าน) → ✅ **ทำแล้ว**
+3. Activity Logs / Customer Journey timeline (หน้าไทม์ไลน์ลูกค้าให้เซลล์ตามงาน) → 🟡 **รอ user เคาะ** (มีข้อมูลดิบแล้ว: property_views + leads behavioral + ตาราง `customer_interactions` ที่ยังว่าง — แค่ยังไม่ทำ UI ไทม์ไลน์)
+4. ส่งแคมเปญจริง (LINE/Email/WhatsApp/WeChat) → ❌ **ข้าม** (เน้น UI ก่อน)
+5. แชร์ลิงก์ให้ Sales → **แค่มีปุ่มลิงก์พอ** ไม่ทำระบบ track (ปัจจุบันปุ่ม `?ref=` track เฉพาะ agent ใน `UnitDetail.tsx`)
+
+**เหลือ user ตัดสินใจ:**
+- **#6** บน Executive: (ก) การ์ด "จำนวน User ทั้งหมด" (เฮียขอใน point 1; ตอนนี้ chip มีแค่บริษัท+โครงการ) + (ข) teaser insight 1 บรรทัด (ราคา/จังหวัด/เอเจนท์ขายดีสุด + ลิงก์) → ยังไม่เคาะ
+- **#3** customer journey timeline → ยังไม่เคาะ
+
+**งานค้างทำ (เมื่อ user พร้อม):**
+- commit ทั้งหมด (เฟส 2-7 + dedup + English nav + RF) — แตะเฉพาะไฟล์ Owner HQ + `rfModel.ts`/`recomputeLeadScore.ts`/`leadScoringModel.json`; **ไม่แตะ** ไฟล์ที่ user แก้ค้างเอง
+- QA login owner ดูหน้าจริง (ยังไม่เคยเปิด browser)
+- (optional) batch recompute lead เก่าให้ได้คะแนน RF
+- (อนาคต) เทรน RF ใหม่ด้วยข้อมูลจริง · ปุ่มสลับภาษา 2 ภาษา · customer journey timeline
 
 **ที่มา:** คลิปเสียงประชุม "Chateau น้องบอล.m4a" (สรุปผ่าน NotebookLM) + เว็บอ้างอิง https://kids-kingdom-hq.vercel.app/ (HQ เชนร้านเด็ก 4 สาขา) ที่เฮียยกเป็นตัวอย่างความครอบคลุมของข้อมูล
 **อัปเดตล่าสุด:** 2026-06-11
