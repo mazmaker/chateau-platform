@@ -46,11 +46,12 @@ const fmtCompact = (n: number) => {
   return `${sign}฿${abs.toFixed(0)}`;
 };
 
-interface PropRow { id: string; name: string | null; developer: string | null; address: { province?: string } | null; }
+interface PropRow { id: string; name: string | null; developer: string | null; address: { province?: string; district?: string } | null; }
 interface UnitRow { project_id: string; price: number | null; status: string | null; }
 interface ProvinceAgg { province: string; sold: number; soldValue: number; total: number; gdv: number; projects: number; }
-// Drill-down: the projects (properties) inside a province + their unit rollup.
-interface ProvinceProperty { id: string; name: string; developer: string | null; sold: number; total: number; soldValue: number; }
+// Drill-down: province → อำเภอ (district) → โครงการ (property) + unit rollup.
+interface ProvinceProperty { id: string; name: string; developer: string | null; district: string; sold: number; total: number; soldValue: number; }
+interface DistrictGroup { district: string; sold: number; total: number; soldValue: number; projects: ProvinceProperty[]; }
 
 const OwnerGeography = () => {
   const navigate = useNavigate();
@@ -58,8 +59,8 @@ const OwnerGeography = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [provinces, setProvinces] = useState<ProvinceAgg[]>([]);
-  // Drill-down: province → projects in it (read-only). Proves "เรียก data ขึ้นมาดูได้".
-  const [propsByProvince, setPropsByProvince] = useState<Record<string, ProvinceProperty[]>>({});
+  // Drill-down: province → อำเภอ → โครงการ (read-only). "เรียก data ขึ้นมาดูได้" + เจาะอำเภอ.
+  const [distByProvince, setDistByProvince] = useState<Record<string, DistrictGroup[]>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
@@ -113,15 +114,25 @@ const OwnerGeography = () => {
           if (u.status === 'sold') { r.sold += 1; r.soldValue += price; pr.sold += 1; pr.soldValue += price; }
         });
 
-        // Group properties under their province (the drill-down list).
-        const byProv: Record<string, ProvinceProperty[]> = {};
+        // Group properties: province → อำเภอ (district) → โครงการ, with a district rollup.
+        const byProv: Record<string, Record<string, DistrictGroup>> = {};
         props.forEach((p) => {
           const prov = p.address?.province || 'ไม่ระบุ';
+          const dist = p.address?.district || 'ไม่ระบุอำเภอ';
           const pr = propAgg.get(p.id) || { sold: 0, total: 0, soldValue: 0 };
-          (byProv[prov] = byProv[prov] || []).push({ id: p.id, name: p.name || 'ไม่มีชื่อ', developer: p.developer, sold: pr.sold, total: pr.total, soldValue: pr.soldValue });
+          const distMap = byProv[prov] = byProv[prov] || {};
+          const dg = distMap[dist] = distMap[dist] || { district: dist, sold: 0, total: 0, soldValue: 0, projects: [] };
+          dg.sold += pr.sold; dg.total += pr.total; dg.soldValue += pr.soldValue;
+          dg.projects.push({ id: p.id, name: p.name || 'ไม่มีชื่อ', developer: p.developer, district: dist, sold: pr.sold, total: pr.total, soldValue: pr.soldValue });
         });
-        Object.values(byProv).forEach((list) => list.sort((a, b) => b.soldValue - a.soldValue));
-        setPropsByProvince(byProv);
+        const distByProv: Record<string, DistrictGroup[]> = {};
+        Object.entries(byProv).forEach(([prov, distMap]) => {
+          const groups = Object.values(distMap);
+          groups.forEach((g) => g.projects.sort((a, b) => b.soldValue - a.soldValue));
+          groups.sort((a, b) => b.soldValue - a.soldValue);
+          distByProv[prov] = groups;
+        });
+        setDistByProvince(distByProv);
 
         setProvinces(Array.from(provAggM.values()).sort((a, b) => b.soldValue - a.soldValue));
       }
@@ -235,7 +246,7 @@ const OwnerGeography = () => {
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                   <div className="mb-4">
                     <h2 className="text-base font-bold text-gray-900">รายละเอียดตามจังหวัด</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">เรียงตามมูลค่าขาย · คลิกจังหวัดเพื่อดูโครงการในจังหวัดนั้น</p>
+                    <p className="text-xs text-gray-500 mt-0.5">เรียงตามมูลค่าขาย · คลิกจังหวัดเพื่อดูอำเภอและโครงการในจังหวัดนั้น</p>
                   </div>
                   <div className="overflow-x-auto">
                     <Table>
@@ -251,7 +262,7 @@ const OwnerGeography = () => {
                       <TableBody>
                         {provinces.map((r) => {
                           const isOpen = expanded === r.province;
-                          const items = propsByProvince[r.province] || [];
+                          const groups = distByProvince[r.province] || [];
                           return (
                             <Fragment key={r.province}>
                               <TableRow className="cursor-pointer hover:bg-gray-50" onClick={() => setExpanded(isOpen ? null : r.province)}>
@@ -266,19 +277,36 @@ const OwnerGeography = () => {
                                 <TableCell className="text-right tabular-nums">{fmtCompact(r.soldValue)}</TableCell>
                                 <TableCell className="text-right tabular-nums text-gray-500">{fmtCompact(r.gdv)}</TableCell>
                               </TableRow>
-                              {isOpen && items.map((p) => (
-                                <TableRow key={p.id} className="bg-gray-50/60">
-                                  <TableCell className="pl-10">
-                                    <span className="text-sm text-gray-700">{p.name}</span>
-                                    {p.developer && <span className="text-xs text-gray-400 ml-2">· {p.developer}</span>}
-                                  </TableCell>
-                                  <TableCell></TableCell>
-                                  <TableCell className="text-right tabular-nums text-gray-600">{p.sold}/{p.total}</TableCell>
-                                  <TableCell className="text-right tabular-nums text-gray-600">{fmtCompact(p.soldValue)}</TableCell>
-                                  <TableCell></TableCell>
-                                </TableRow>
+                              {isOpen && groups.map((g) => (
+                                <Fragment key={g.district}>
+                                  {/* อำเภอ sub-header — province → district → project */}
+                                  <TableRow className="bg-gray-50">
+                                    <TableCell className="pl-10">
+                                      <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-700">
+                                        <MapPin className="w-3.5 h-3.5 text-gray-400" />
+                                        {g.district}
+                                      </span>
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums text-xs text-gray-400">{g.projects.length} โครงการ</TableCell>
+                                    <TableCell className="text-right tabular-nums text-gray-600">{g.sold}/{g.total}</TableCell>
+                                    <TableCell className="text-right tabular-nums text-gray-600">{fmtCompact(g.soldValue)}</TableCell>
+                                    <TableCell></TableCell>
+                                  </TableRow>
+                                  {g.projects.map((p) => (
+                                    <TableRow key={p.id} className="bg-gray-50/40">
+                                      <TableCell className="pl-16">
+                                        <span className="text-sm text-gray-600">{p.name}</span>
+                                        {p.developer && <span className="text-xs text-gray-400 ml-2">· {p.developer}</span>}
+                                      </TableCell>
+                                      <TableCell></TableCell>
+                                      <TableCell className="text-right tabular-nums text-gray-500">{p.sold}/{p.total}</TableCell>
+                                      <TableCell className="text-right tabular-nums text-gray-500">{fmtCompact(p.soldValue)}</TableCell>
+                                      <TableCell></TableCell>
+                                    </TableRow>
+                                  ))}
+                                </Fragment>
                               ))}
-                              {isOpen && items.length === 0 && (
+                              {isOpen && groups.length === 0 && (
                                 <TableRow className="bg-gray-50/60">
                                   <TableCell colSpan={5} className="pl-10 text-sm text-gray-400">ไม่มีโครงการในจังหวัดนี้</TableCell>
                                 </TableRow>

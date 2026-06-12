@@ -219,7 +219,8 @@ const OwnerProjects = () => {
         const lastUpdated = props.reduce((mx, p) => Math.max(mx, toEpoch(p.updated_at)), roll.lastUpdated);
         return { tenant: t, projectCount: props.length, roll: { ...roll, lastUpdated } };
       })
-      .filter((row) => row.projectCount > 0)
+      // Show ALL companies — even those with 0 projects (เฮีย: ทุกบริษัทต้องโผล่, แสดง "0/limit").
+      // Companies with projects rank first; empty ones fall to the bottom.
       .sort((a, b) => b.projectCount - a.projectCount);
   }, [tenants, properties, unitsByProject]);
 

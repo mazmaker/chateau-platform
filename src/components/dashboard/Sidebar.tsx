@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   LayoutDashboard,
   Building2,
@@ -85,7 +85,7 @@ const getAllNavItems = (): NavItem[] => [
   // Owner ANALYTICS group — cross-tenant real-estate intelligence (HQ lens).
   // Data: units→properties→tenants via live Owner RLS; no migration needed.
   // See documents/owner-hq-dashboard-plan.md.
-  { icon: TrendingUp,      label: "Market Overview",     href: "/owner-market",    requiredRoles: ["OWNER"] },
+  { icon: TrendingUp,      label: "Sales Overview",      href: "/owner-market",    requiredRoles: ["OWNER"] },
   { icon: MapPin,          label: "Geography",           href: "/owner-geography", requiredRoles: ["OWNER"] },
   { icon: BarChart3,       label: "Company Performance", href: "/owner-companies", requiredRoles: ["OWNER"] },
   { icon: Trophy,          label: "Sales Performance",   href: "/owner-agents",    requiredRoles: ["OWNER"] },
@@ -140,6 +140,12 @@ interface SidebarProps {
 const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
+  // Keep the active menu item scrolled into view — otherwise the last item
+  // (e.g. Audit Log) sinks behind the Log Out / profile footer.
+  const activeItemRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    activeItemRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [location.pathname]);
   const { user, signOut, userRole, userProfile, passwordResetRequired } = useSimpleAuth();
   const { isOwner, isAdmin } = usePermissions();
   const { hasFeature } = useSubscriptionFeatures();
@@ -232,6 +238,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     return (
       <button
         key={item.href}
+        ref={active ? activeItemRef : undefined}
         onClick={() => handleNavClick(item)}
         disabled={!!isLocked}
         className={cn(
@@ -268,8 +275,12 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
         {/* Logo */}
         <div style={{ padding: "20px 22px", borderBottom: "1px solid #f3f4f6" }}>
           <div className="flex items-center gap-3">
-            <div className="sidebar-logo-icon w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0">
-              <span className="font-bold text-lg leading-none">C</span>
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden bg-white border border-gray-100">
+              <img
+                src="https://pqnjvcbmnatrtvpqnrdx.supabase.co/storage/v1/object/public/company-logos/00000000-0000-0000-0000-000000000001/1766926562152.png"
+                alt="CHATEAU"
+                className="w-full h-full object-cover"
+              />
             </div>
             <div className="min-w-0">
               <p className="sidebar-logo-text font-bold text-base leading-tight">CHATEAU</p>
@@ -286,7 +297,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
         </div>
 
         {/* Navigation — Owner uses its own 2-tier control-plane grouping */}
-        <nav className="flex-1 overflow-y-auto" style={{ padding: "12px 12px 8px" }}>
+        <nav className="flex-1 overflow-y-auto" style={{ padding: "12px 12px 16px" }}>
           {(isOwner ? OWNER_NAV_GROUPS : NAV_GROUPS).map((group) => {
             const groupItems = mainItems.filter((item) => group.hrefs.includes(item.href));
             if (groupItems.length === 0) return null;

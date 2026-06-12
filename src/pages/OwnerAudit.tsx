@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Shield, Search, Clock } from 'lucide-react';
+import { Shield, Search, Clock, Building2, ChevronDown, ChevronRight } from 'lucide-react';
 
 // ──────────────────────────────────────────────────────────────────────────
 // บันทึกการตรวจสอบ — platform-wide audit log over activity_logs (Owner RLS:
@@ -82,9 +82,14 @@ const fmtTimeAgo = (ts: string) => {
   return new Date(ts).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
 };
 
+const THAI_MONTH_FULL = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+const ymOf = (ts: string) => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const monthLabel = (ym: string) => { const [y, mo] = ym.split('-').map(Number); return `${THAI_MONTH_FULL[mo - 1]} ${y + 543}`; };
+
 interface LogRow {
   id: string; tenant_id: string | null; user_id: string | null;
   activity_type: string; description: string | null; created_at: string;
+  metadata: any;
 }
 
 const OwnerAudit = () => {
@@ -95,8 +100,14 @@ const OwnerAudit = () => {
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [tenantName, setTenantName] = useState<Record<string, string>>({});
   const [userName, setUserName] = useState<Record<string, string>>({});
+  const [customerName, setCustomerName] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
   const [cat, setCat] = useState('all');
+  const [month, setMonth] = useState('all');
+  const [day, setDay] = useState('all');
+  const [company, setCompany] = useState('all');
+  const [type, setType] = useState('all');
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
@@ -107,17 +118,29 @@ const OwnerAudit = () => {
     setLoading(true);
     try {
       const [logRes, tRes, uRes] = await Promise.all([
-        supabase.from('activity_logs').select('id, tenant_id, user_id, activity_type, description, created_at').order('created_at', { ascending: false }).limit(200),
+        supabase.from('activity_logs').select('id, tenant_id, user_id, activity_type, description, created_at, metadata').order('created_at', { ascending: false }).limit(500),
         supabase.from('tenants').select('id, name'),
         supabase.from('users').select('id, full_name'),
       ]);
-      setLogs((logRes.data || []) as LogRow[]);
+      const logRows = (logRes.data || []) as LogRow[];
+      setLogs(logRows);
       const tmap: Record<string, string> = {};
       (tRes.data || []).forEach((t: any) => { tmap[t.id] = t.name; });
       setTenantName(tmap);
       const umap: Record<string, string> = {};
       (uRes.data || []).forEach((u: any) => { umap[u.id] = u.full_name; });
       setUserName(umap);
+      // Resolve customer names for lead/interest events that only stored a customer_id
+      // (e.g. bare "ปิดการขาย") — so the audit detail shows WHO the deal was with.
+      const custIds = Array.from(new Set(
+        logRows.map((l) => l.metadata?.customer_id).filter(Boolean)
+      )) as string[];
+      if (custIds.length > 0) {
+        const { data: custs } = await supabase.from('customers').select('id, full_name').in('id', custIds);
+        const cmap: Record<string, string> = {};
+        (custs || []).forEach((c: any) => { cmap[c.id] = c.full_name; });
+        setCustomerName(cmap);
+      }
     } catch (e) {
       console.error('OwnerAudit fetch error:', e);
     } finally {
@@ -125,15 +148,95 @@ const OwnerAudit = () => {
     }
   };
 
+  const monthOptions = useMemo(() => {
+    if (logs.length === 0) return [];
+    const yms = logs.map((l) => ymOf(l.created_at));
+    const newest = yms.reduce((a, b) => (a > b ? a : b));
+    const oldest = yms.reduce((a, b) => (a < b ? a : b));
+    // Fill EVERY month from newest → oldest (no gaps), newest first.
+    // Months with no events still appear (selecting one shows the empty state).
+    const out: string[] = [];
+    let [y, m] = newest.split('-').map(Number);
+    const [oy, om] = oldest.split('-').map(Number);
+    while (y > oy || (y === oy && m >= om)) {
+      out.push(`${y}-${String(m).padStart(2, '0')}`);
+      m -= 1;
+      if (m === 0) { m = 12; y -= 1; }
+    }
+    return out;
+  }, [logs]);
+
+  // All days of the selected month, newest first (cascade month → day). For the current
+  // month, stop at today (no future days). Days with no events show the empty state.
+  const dayOptions = useMemo(() => {
+    if (month === 'all') return [];
+    const [y, mo] = month.split('-').map(Number);
+    const now = new Date();
+    const last = (y === now.getFullYear() && mo === now.getMonth() + 1)
+      ? now.getDate()
+      : new Date(y, mo, 0).getDate();
+    const out: number[] = [];
+    for (let d = last; d >= 1; d--) out.push(d);
+    return out;
+  }, [month]);
+
+  const companyOptions = useMemo(() => {
+    const ids = Array.from(new Set(logs.map((l) => l.tenant_id).filter(Boolean))) as string[];
+    return ids.map((id) => ({ id, name: tenantName[id] || 'ไม่ทราบบริษัท' }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'th'));
+  }, [logs, tenantName]);
+
+  // Event types present in the data — narrowed to the selected category (cascade ใหญ่→เล็ก).
+  const typeOptions = useMemo(() => {
+    const set = new Set<string>();
+    logs.forEach((l) => {
+      if (cat !== 'all' && categoryOf(l.activity_type) !== cat) return;
+      set.add(l.activity_type);
+    });
+    return Array.from(set)
+      .map((t) => ({ type: t, label: TYPE_TH[t] || t }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'th'));
+  }, [logs, cat]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return logs.filter((l) => {
       if (cat !== 'all' && categoryOf(l.activity_type) !== cat) return false;
+      if (type !== 'all' && l.activity_type !== type) return false;
+      if (company !== 'all' && l.tenant_id !== company) return false;
+      if (month !== 'all' && ymOf(l.created_at) !== month) return false;
+      if (day !== 'all' && new Date(l.created_at).getDate() !== Number(day)) return false;
       if (!q) return true;
       const hay = `${l.description || ''} ${TYPE_TH[l.activity_type] || l.activity_type} ${tenantName[l.tenant_id || ''] || ''} ${userName[l.user_id || ''] || ''}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [logs, search, cat, tenantName, userName]);
+  }, [logs, search, cat, type, company, month, day, tenantName, userName]);
+
+  // Group big→small: platform → company → its events (เฮีย: audit ต้องจัดใหญ่ไปเล็ก ระบุบริษัท ไม่ใช่ flat ยาวเป็นพืด).
+  const grouped = useMemo(() => {
+    const m = new Map<string, LogRow[]>();
+    filtered.forEach((l) => {
+      const key = l.tenant_id || '__none__';
+      const arr = m.get(key) || []; arr.push(l); m.set(key, arr);
+    });
+    return Array.from(m.entries())
+      .map(([tid, events]) => ({
+        tid,
+        name: tid === '__none__' ? 'ระบบ / ไม่ระบุบริษัท' : (tenantName[tid] || 'ไม่ทราบบริษัท'),
+        events: events.slice().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+        latest: events.reduce((mx, e) => Math.max(mx, new Date(e.created_at).getTime()), 0),
+      }))
+      .sort((a, b) => b.events.length - a.events.length || b.latest - a.latest);
+  }, [filtered, tenantName]);
+
+  // Append the customer name to events that only logged a customer_id (no name in text).
+  const descOf = (l: LogRow) => {
+    const base = l.description || '–';
+    const cid = l.metadata?.customer_id as string | undefined;
+    const cname = cid ? customerName[cid] : undefined;
+    if (cname && !base.includes(cname)) return `${base} — ลูกค้า: ${cname}`;
+    return base;
+  };
 
   const stats = useMemo(() => ({
     total: logs.length,
@@ -178,7 +281,7 @@ const OwnerAudit = () => {
             {/* KPI strip */}
             <div className="grid grid-cols-3 gap-4">
               {[
-                { label: 'เหตุการณ์ล่าสุด', value: stats.total, sub: 'สูงสุด 200 รายการ' },
+                { label: 'เหตุการณ์ล่าสุด', value: stats.total, sub: 'สูงสุด 500 รายการ' },
                 { label: 'บริษัทที่มีกิจกรรม', value: stats.companies, sub: 'มีเหตุการณ์' },
                 { label: 'ประเภทเหตุการณ์', value: stats.types, sub: 'ที่พบ' },
               ].map((s, i) => (
@@ -197,7 +300,7 @@ const OwnerAudit = () => {
                   {CATEGORIES.map((c) => (
                     <button
                       key={c.key}
-                      onClick={() => setCat(c.key)}
+                      onClick={() => { setCat(c.key); setType('all'); }}
                       className="text-xs font-medium px-3 py-1.5 rounded-full transition-colors"
                       style={cat === c.key
                         ? { backgroundColor: KK.red, color: '#fff' }
@@ -207,9 +310,53 @@ const OwnerAudit = () => {
                     </button>
                   ))}
                 </div>
-                <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <Input placeholder="ค้นหา บริษัท / รายละเอียด" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
+                <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                  <select
+                    value={company}
+                    onChange={(e) => setCompany(e.target.value)}
+                    className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 max-w-[200px] focus:outline-none focus:ring-2 focus:ring-red-100"
+                  >
+                    <option value="all">ทุกบริษัท</option>
+                    {companyOptions.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={type}
+                    onChange={(e) => setType(e.target.value)}
+                    className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 max-w-[190px] focus:outline-none focus:ring-2 focus:ring-red-100"
+                  >
+                    <option value="all">ทุกประเภท</option>
+                    {typeOptions.map((t) => (
+                      <option key={t.type} value={t.type}>{t.label}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={month}
+                    onChange={(e) => { setMonth(e.target.value); setDay('all'); }}
+                    className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-100"
+                  >
+                    <option value="all">ทุกเดือน</option>
+                    {monthOptions.map((ym) => (
+                      <option key={ym} value={ym}>{monthLabel(ym)}</option>
+                    ))}
+                  </select>
+                  {month !== 'all' && dayOptions.length > 0 && (
+                    <select
+                      value={day}
+                      onChange={(e) => setDay(e.target.value)}
+                      className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-100"
+                    >
+                      <option value="all">ทุกวัน</option>
+                      {dayOptions.map((d) => (
+                        <option key={d} value={d}>วันที่ {d}</option>
+                      ))}
+                    </select>
+                  )}
+                  <div className="relative w-full sm:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Input placeholder="ค้นหา บริษัท / รายละเอียด" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
+                  </div>
                 </div>
               </div>
 
@@ -225,30 +372,48 @@ const OwnerAudit = () => {
                       <TableRow>
                         <TableHead className="w-40">เวลา</TableHead>
                         <TableHead>ประเภท</TableHead>
-                        <TableHead>บริษัท</TableHead>
                         <TableHead>รายละเอียด</TableHead>
                         <TableHead>โดย</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filtered.map((l) => {
-                        const c = CAT_COLOR[categoryOf(l.activity_type)];
-                        return (
-                          <TableRow key={l.id}>
-                            <TableCell className="text-gray-500 whitespace-nowrap">
-                              <span className="flex items-center gap-1.5"><Clock className="w-3 h-3 text-gray-400" />{fmtTimeAgo(l.created_at)}</span>
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-xs font-semibold px-2 py-0.5 rounded-md whitespace-nowrap" style={{ color: c.color, backgroundColor: c.bg }}>
-                                {TYPE_TH[l.activity_type] || l.activity_type}
+                      {grouped.map((g) => (
+                        <Fragment key={g.tid}>
+                          {/* Company group header (big→small) — คลิกเพื่อย่อ/ขยาย */}
+                          <TableRow
+                            className="bg-gray-50 hover:bg-gray-100 border-t-2 border-gray-100 cursor-pointer"
+                            onClick={() => setCollapsed((prev) => { const n = new Set(prev); if (n.has(g.tid)) n.delete(g.tid); else n.add(g.tid); return n; })}
+                          >
+                            <TableCell colSpan={4} className="py-2.5">
+                              <span className="flex items-center gap-2">
+                                {collapsed.has(g.tid)
+                                  ? <ChevronRight className="w-4 h-4 text-gray-400" />
+                                  : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                                <Building2 className="w-4 h-4 text-gray-400" />
+                                <span className="font-bold text-gray-900">{g.name}</span>
+                                <span className="text-xs text-gray-400">· {g.events.length} เหตุการณ์</span>
                               </span>
                             </TableCell>
-                            <TableCell className="text-gray-700">{tenantName[l.tenant_id || ''] || '–'}</TableCell>
-                            <TableCell className="text-gray-600 max-w-[360px] truncate">{l.description || '–'}</TableCell>
-                            <TableCell className="text-gray-500">{userName[l.user_id || ''] || '–'}</TableCell>
                           </TableRow>
-                        );
-                      })}
+                          {!collapsed.has(g.tid) && g.events.map((l) => {
+                            const c = CAT_COLOR[categoryOf(l.activity_type)];
+                            return (
+                              <TableRow key={l.id}>
+                                <TableCell className="text-gray-500 whitespace-nowrap pl-8">
+                                  <span className="flex items-center gap-1.5"><Clock className="w-3 h-3 text-gray-400" />{fmtTimeAgo(l.created_at)}</span>
+                                </TableCell>
+                                <TableCell>
+                                  <span className="text-xs font-semibold px-2 py-0.5 rounded-md whitespace-nowrap" style={{ color: c.color, backgroundColor: c.bg }}>
+                                    {TYPE_TH[l.activity_type] || l.activity_type}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="text-gray-600 max-w-[460px] truncate">{descOf(l)}</TableCell>
+                                <TableCell className="text-gray-500">{userName[l.user_id || ''] || '–'}</TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </Fragment>
+                      ))}
                     </TableBody>
                   </Table>
                 </div>

@@ -76,6 +76,8 @@ const TIERS = [
 ];
 const DONUT_COLORS = [KK.blue, KK.red, KK.green, KK.amber, KK.slate];
 const THAI_MONTH = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+const ymOf = (ts: string | null) => { if (!ts) return ''; const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const monthLabelTH = (ym: string) => { const [y, m] = ym.split('-').map(Number); return `${THAI_MONTH[m - 1]} ${y + 543}`; };
 
 interface UnitRow {
   tenant_id: string;
@@ -93,6 +95,7 @@ const OwnerMarket = () => {
   const [loading, setLoading] = useState(true);
   const [units, setUnits] = useState<UnitRow[]>([]);
   const [typeById, setTypeById] = useState<Record<string, string>>({});
+  const [month, setMonth] = useState('all');
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
@@ -123,20 +126,30 @@ const OwnerMarket = () => {
 
   const sold = useMemo(() => units.filter((u) => u.status === 'sold'), [units]);
 
+  // Months that have sales — newest first, for the month filter.
+  const monthOptions = useMemo(() => {
+    const set = new Set<string>();
+    sold.forEach((u) => { const ym = ymOf(u.sold_at); if (ym) set.add(ym); });
+    return Array.from(set).sort().reverse();
+  }, [sold]);
+
+  // KPI + price-tier + type views respect the month filter; the trend stays full 12-month.
+  const view = useMemo(() => (month === 'all' ? sold : sold.filter((u) => ymOf(u.sold_at) === month)), [sold, month]);
+
   // Sold units bucketed by price tier — bar chart + "best tier" KPI.
   const tierData = useMemo(() => TIERS.map((t) => {
-    const inTier = sold.filter((u) => { const p = Number(u.price) || 0; return p >= t.min && p < t.max; });
+    const inTier = view.filter((u) => { const p = Number(u.price) || 0; return p >= t.min && p < t.max; });
     return { label: t.label, count: inTier.length, value: inTier.reduce((s, u) => s + (Number(u.price) || 0), 0) };
-  }), [sold]);
+  }), [view]);
 
   // Sold units by property type — donut + "best type" KPI.
   const typeData = useMemo(() => {
     const m = new Map<string, number>();
-    sold.forEach((u) => { const ty = typeById[u.project_id] || 'unknown'; m.set(ty, (m.get(ty) || 0) + 1); });
+    view.forEach((u) => { const ty = typeById[u.project_id] || 'unknown'; m.set(ty, (m.get(ty) || 0) + 1); });
     return Array.from(m.entries())
       .map(([k, v], i) => ({ name: TYPE_TH[k] || k, value: v, color: DONUT_COLORS[i % DONUT_COLORS.length] }))
       .sort((a, b) => b.value - a.value);
-  }, [sold, typeById]);
+  }, [view, typeById]);
 
   // Sold units per month — last 12 months trend.
   const trendData = useMemo(() => {
@@ -158,10 +171,10 @@ const OwnerMarket = () => {
   const bestTier = useMemo(() => tierData.reduce((a, b) => (b.count > a.count ? b : a), tierData[0]), [tierData]);
   const bestType = typeData[0];
   const avgPpsqm = useMemo(() => {
-    const arr = sold.map((u) => Number(u.price_per_sqm) || 0).filter((v) => v > 0);
+    const arr = view.map((u) => Number(u.price_per_sqm) || 0).filter((v) => v > 0);
     return arr.length ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : 0;
-  }, [sold]);
-  const avgUnitPrice = useMemo(() => (sold.length ? Math.round(sold.reduce((s, u) => s + (Number(u.price) || 0), 0) / sold.length) : 0), [sold]);
+  }, [view]);
+  const avgUnitPrice = useMemo(() => (view.length ? Math.round(view.reduce((s, u) => s + (Number(u.price) || 0), 0) / view.length) : 0), [view]);
 
   // Reusable KPI card — same shape as OwnerProjects/OwnerDashboard.
   const KpiCard = ({ title, value, sub, icon: Icon, color, bg }: {
@@ -207,12 +220,26 @@ const OwnerMarket = () => {
           <Header onMenuClick={() => setSidebarOpen(true)} />
           <main className="p-6 lg:p-8 space-y-7">
             {/* Title */}
-            <div>
-              <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
-                Analytics
-              </span>
-              <h1 className="text-2xl font-bold text-gray-900">Market Overview</h1>
-              <p className="text-[15px] text-gray-500 mt-1.5">วิเคราะห์การขายข้ามทุกบริษัท · ช่วงราคา · ประเภททรัพย์ · แนวโน้ม</p>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
+                  Analytics
+                </span>
+                <h1 className="text-2xl font-bold text-gray-900">Sales Overview</h1>
+                <p className="text-[15px] text-gray-500 mt-1.5">วิเคราะห์การขายข้ามทุกบริษัท · ช่วงราคา · ประเภททรัพย์ · แนวโน้ม</p>
+              </div>
+              {sold.length > 0 && (
+                <select
+                  value={month}
+                  onChange={(e) => setMonth(e.target.value)}
+                  className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 mt-1 focus:outline-none focus:ring-2 focus:ring-red-100"
+                >
+                  <option value="all">ทุกเดือน</option>
+                  {monthOptions.map((ym) => (
+                    <option key={ym} value={ym}>{monthLabelTH(ym)}</option>
+                  ))}
+                </select>
+              )}
             </div>
 
             {sold.length === 0 ? (
@@ -265,7 +292,7 @@ const OwnerMarket = () => {
                         </PieChart>
                       </ResponsiveContainer>
                       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        <div className="text-2xl font-bold text-gray-900 tabular-nums">{sold.length}</div>
+                        <div className="text-2xl font-bold text-gray-900 tabular-nums">{view.length}</div>
                         <div className="text-[11px] text-gray-500">ขายแล้ว</div>
                       </div>
                     </div>
@@ -275,7 +302,7 @@ const OwnerMarket = () => {
                           <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
                           <span className="text-gray-600 flex-1">{item.name}</span>
                           <span className="font-semibold text-gray-800 tabular-nums">{item.value}</span>
-                          <span className="text-gray-400 tabular-nums">({Math.round((item.value / sold.length) * 100)}%)</span>
+                          <span className="text-gray-400 tabular-nums">({Math.round((item.value / (view.length || 1)) * 100)}%)</span>
                         </div>
                       ))}
                     </div>

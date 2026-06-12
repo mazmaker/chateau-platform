@@ -8,7 +8,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Building2, TrendingUp, TrendingDown, Percent, ArrowUpRight, Home, Banknote } from 'lucide-react';
-import { ResponsiveContainer, AreaChart, Area, Tooltip } from 'recharts';
+import { ResponsiveContainer, AreaChart, Area, Tooltip, PieChart, Pie, Cell } from 'recharts';
 
 // ──────────────────────────────────────────────────────────────────────────
 // ประสิทธิภาพบริษัท — Owner cross-tenant company performance (HQ lens).
@@ -46,6 +46,8 @@ const fmtCompact = (n: number) => {
   return `${sign}฿${abs.toFixed(0)}`;
 };
 const THAI_MONTH = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+// Donut slice palette — distinct hues so each company reads apart at a glance.
+const PIE_COLORS = ['#1e3a5f', '#ef4444', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#475569'];
 
 interface UnitRow { tenant_id: string; price: number | null; status: string | null; sold_at: string | null; }
 interface CompanyAgg {
@@ -135,6 +137,21 @@ const OwnerCompanies = () => {
     return { companies: rows.length, soldValue, sold, gdv, sellThrough: total > 0 ? Math.round((sold / total) * 100) : 0 };
   }, [rows]);
 
+  // Donut data: share of sold value by company. Top 8 explicit, rest pooled into "อื่น ๆ".
+  const pieData = useMemo(() => {
+    const withVal = rows.filter((r) => r.soldValue > 0);
+    const grand = withVal.reduce((s, r) => s + r.soldValue, 0) || 1;
+    const TOP = 8;
+    const top = withVal.slice(0, TOP);
+    const restVal = withVal.slice(TOP).reduce((s, r) => s + r.soldValue, 0);
+    const items = top.map((r, i) => ({
+      name: r.name, value: r.soldValue, color: PIE_COLORS[i % PIE_COLORS.length],
+      pct: Math.round((r.soldValue / grand) * 100),
+    }));
+    if (restVal > 0) items.push({ name: 'อื่น ๆ', value: restVal, color: KK.gray, pct: Math.round((restVal / grand) * 100) });
+    return items;
+  }, [rows]);
+
   const KpiCard = ({ title, value, sub, icon: Icon, color, bg }: {
     title: string; value: string; sub?: string; icon: React.ElementType; color: string; bg: string;
   }) => (
@@ -202,6 +219,42 @@ const OwnerCompanies = () => {
                   <KpiCard title="Sell-through เฉลี่ย" value={`${totals.sellThrough}%`} sub="ขายแล้ว / ทั้งหมด" icon={Percent} color={KK.amber} bg={KK.amberLight} />
                   <KpiCard title="ยูนิตขายเฉลี่ย/บริษัท" value={(totals.companies > 0 ? Math.round(totals.sold / totals.companies) : 0).toLocaleString()} sub="ยูนิต/บริษัท" icon={Home} color={KK.red} bg={KK.redLight} />
                 </div>
+
+                {/* Overview donut: share of sold value by company (เฮีย: ภาพรวมต้องเป็นวงกลม เห็นก้อนใหญ่สุด) */}
+                {pieData.length > 0 && (
+                  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
+                    <div className="mb-4">
+                      <h2 className="text-base font-bold text-gray-900">สัดส่วนมูลค่าขายตามบริษัท</h2>
+                      <p className="text-xs text-gray-500 mt-0.5">ก้อนใหญ่สุด = บริษัทที่ทำยอดขายได้มากสุด · ชี้ที่กราฟเพื่อดูมูลค่า</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                      <div className="h-[260px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={62} outerRadius={100} paddingAngle={2} stroke="white" strokeWidth={2}>
+                              {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                            </Pie>
+                            <Tooltip contentStyle={kkTooltipStyle} formatter={((v: any, n: any) => [fmtCompact(Number(v)), n]) as any} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="space-y-2">
+                        {pieData.map((d, i) => (
+                          <div key={i} className="flex items-center justify-between gap-3 text-sm">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: d.color }} />
+                              <span className="truncate text-gray-700">{d.name}</span>
+                            </div>
+                            <div className="flex items-center gap-3 flex-shrink-0 tabular-nums">
+                              <span className="text-gray-900 font-semibold">{fmtCompact(d.value)}</span>
+                              <span className="text-gray-400 w-10 text-right">{d.pct}%</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Best / Worst */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

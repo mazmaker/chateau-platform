@@ -748,13 +748,13 @@ const OwnerDashboard = () => {
             </div>
 
             {/* === KPI Row (6 uniform cards — matches Admin density) === */}
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
               {([
                 { title: 'รายได้แพ็กเกจ/เดือน', value: formatCurrency(stats.monthlyRevenue), icon: TrendingUp, color: KK.red, bg: KK.redLight, trend: { value: stats.mrrGrowth, up: stats.mrrGrowth >= 0 } },
                 { title: 'รายได้รวมปีนี้', value: formatCurrency(stats.annualRunRate), icon: Receipt, color: KK.green, bg: KK.greenLight, sub: `ม.ค. – ${thaiMonthShort[todayMonth]} ${todayYear}` },
                 { title: 'บริษัททั้งหมด', value: stats.totalTenants.toLocaleString(), icon: Building2, color: KK.blue, bg: KK.blueLight, sub: `${stats.activeTenants} ใช้งาน · ${stats.trialTenants} ทดลอง` },
                 { title: 'ผู้สนใจแพลตฟอร์มใหม่', value: platformLeadsNew.toLocaleString(), icon: UserPlusIcon, color: KK.amber, bg: KK.amberLight, sub: 'บริษัทสนใจซื้อ เดือนนี้' },
-                { title: 'เงินค้างชำระ', value: fmtCompact(arSummary.overdue), icon: AlertCircle, color: KK.red, bg: KK.redLight, sub: `${arSummary.overdueCount} ใบเกินกำหนด` },
+                // "เงินค้างชำระ" lives on the Payments report only — removed here to avoid duplication (1 เมนู 1 ข้อมูล).
                 { title: 'อัตราเลิกใช้', value: `${stats.churnRate}%`, icon: TrendingDown, color: stats.churnRate > 5 ? KK.red : KK.green, bg: stats.churnRate > 5 ? KK.redLight : KK.greenLight, sub: 'เดือนนี้' },
               ] as const).map((kpi, i) => (
                 <div key={i} className="bg-white border border-gray-100 rounded-2xl shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col">
