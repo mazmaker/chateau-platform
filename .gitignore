@@ -127,3 +127,8 @@ scripts/model_params.json
 scripts/seed_leads.py
 # local QA screenshots (not part of the app)
 /screenshots/
+
+# Local dev/setup scripts & guides — embed hardcoded keys; keep out of remote
+scripts/
+docs/AUTH_SETUP_GUIDE.md
+docs/setup-supabase-instructions.md
