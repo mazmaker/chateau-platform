@@ -132,3 +132,6 @@ scripts/seed_leads.py
 scripts/
 docs/AUTH_SETUP_GUIDE.md
 docs/setup-supabase-instructions.md
+
+# Claude Code personal/local settings — never commit (contains local creds)
+.claude/settings.local.json
