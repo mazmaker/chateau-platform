@@ -4,6 +4,7 @@ import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
+import PeriodFilter, { type PeriodKey, DEFAULT_PERIOD, periodRangeLabel } from '@/components/dashboard/PeriodFilter';
 import {
   Card,
   CardContent,
@@ -35,7 +36,14 @@ import {
   Building,
   Layers,
   RefreshCw,
-  Receipt
+  Receipt,
+  MapPin,
+  Trophy,
+  CreditCard,
+  Contact,
+  Filter,
+  ChevronRight,
+  Home
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -197,6 +205,13 @@ const OwnerDashboard = () => {
   const [companyRows, setCompanyRows] = useState<CompanyRow[]>([]);
   // Platform sales pipeline — companies interested in buying the platform, new this month.
   const [platformLeadsNew, setPlatformLeadsNew] = useState(0);
+  // Global period filter — tells the owner what date range the dashboard reflects.
+  // Executive = strategic tier (trend-level: เดือน/ไตรมาส/ปี, no single-day — that lives on
+  // operational pages like Payments/Support).
+  const [period, setPeriod] = useState<PeriodKey>(DEFAULT_PERIOD.strategic);
+  // Month-over-month deltas (real, derived from sold_at / created_at) for KPI ↑↓ arrows.
+  // null = no prior-month data to compare against (so we show no fake delta).
+  const [momDelta, setMomDelta] = useState<{ soldUnits: number | null; leads: number | null; tenants: number | null }>({ soldUnits: null, leads: null, tenants: null });
 
   useEffect(() => {
     if (!isOwner) {
@@ -558,6 +573,9 @@ const OwnerDashboard = () => {
         const monthStart = new Date();
         monthStart.setDate(1);
         monthStart.setHours(0, 0, 0, 0);
+        // Prior calendar month window [lastMonthStart, monthStart) for real MoM deltas.
+        const lastMonthStart = new Date(monthStart);
+        lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
 
         const [unitsRes, leadsRes] = await Promise.all([
           supabase.from('units').select('tenant_id, price, status, sold_at').in('tenant_id', customerTenantIds),
@@ -567,6 +585,7 @@ const OwnerDashboard = () => {
         const leadRows = (leadsRes.data || []) as { tenant_id: string; created_at: string | null }[];
 
         let gdv = 0, soldValueAll = 0, soldUnits = 0, soldUnitsThisMonth = 0, newLeadsThisMonth = 0;
+        let soldUnitsLastMonth = 0, newLeadsLastMonth = 0;
         const agg = new Map<string, { gdv: number; sold: number; total: number; soldValue: number; leads: number }>();
         const slot = (id: string) => {
           let r = agg.get(id);
@@ -580,15 +599,38 @@ const OwnerDashboard = () => {
           r.gdv += price; r.total += 1;
           if (u.status === 'sold') {
             soldUnits += 1; soldValueAll += price; r.sold += 1; r.soldValue += price;
-            if (u.sold_at && new Date(u.sold_at) >= monthStart) soldUnitsThisMonth += 1;
+            if (u.sold_at) {
+              const sd = new Date(u.sold_at);
+              if (sd >= monthStart) soldUnitsThisMonth += 1;
+              else if (sd >= lastMonthStart) soldUnitsLastMonth += 1;
+            }
           }
         });
         leadRows.forEach((l) => {
           slot(l.tenant_id).leads += 1;
-          if (l.created_at && new Date(l.created_at) >= monthStart) newLeadsThisMonth += 1;
+          if (l.created_at) {
+            const cd = new Date(l.created_at);
+            if (cd >= monthStart) newLeadsThisMonth += 1;
+            else if (cd >= lastMonthStart) newLeadsLastMonth += 1;
+          }
         });
 
         setSalesStats({ gdv, soldValue: soldValueAll, soldUnits, soldUnitsThisMonth, totalUnits: unitRows.length, newLeadsThisMonth, totalLeads: leadRows.length });
+
+        // Real MoM deltas — null when there's no prior-month baseline (avoid fake %).
+        const pct = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null);
+        let tenantsThisMonth = 0, tenantsLastMonth = 0;
+        ((tenants || []) as Tenant[]).forEach((t) => {
+          if (!t.created_at) return;
+          const cd = new Date(t.created_at);
+          if (cd >= monthStart) tenantsThisMonth += 1;
+          else if (cd >= lastMonthStart) tenantsLastMonth += 1;
+        });
+        setMomDelta({
+          soldUnits: pct(soldUnitsThisMonth, soldUnitsLastMonth),
+          leads: pct(newLeadsThisMonth, newLeadsLastMonth),
+          tenants: pct(tenantsThisMonth, tenantsLastMonth),
+        });
 
         const rows: CompanyRow[] = ((tenants || []) as Tenant[])
           .map((t) => {
@@ -723,6 +765,109 @@ const OwnerDashboard = () => {
   ];
   const maxPlanRevenue = Math.max(...planRevenueData.map(p => p.value), 1);
 
+  // ── Analysis mini-widget data ──
+  // REAL where the aggregate is already in scope (inventory, top company). The rest are
+  // clearly-labeled "ตัวอย่าง" (mock) placeholders kept for UI-first validation — they mark
+  // IMPORTANT owner metrics whose source data isn't wired yet (monthly series, price buckets,
+  // lead-stage breakdown, occupation, province) and carry a badge so no fake number reads as truth.
+  const wSalesTrend = [{ m: 'ม.ค.', v: 18 }, { m: 'ก.พ.', v: 22 }, { m: 'มี.ค.', v: 19 }, { m: 'เม.ย.', v: 27 }, { m: 'พ.ค.', v: 31 }, { m: 'มิ.ย.', v: salesStats.soldUnitsThisMonth || 24 }];
+  const wTopProvince = [{ label: 'กรุงเทพฯ', v: 14 }, { label: 'ประจวบฯ', v: 9 }, { label: 'สมุทรปราการ', v: 7 }, { label: 'เชียงใหม่', v: 5 }, { label: 'นนทบุรี', v: 4 }];
+  const provMax = Math.max(...wTopProvince.map(p => p.v));
+  // REAL — derived from live aggregates already fetched (no mock):
+  const wInventory = [
+    { name: 'ขายแล้ว', v: salesStats.soldUnits, c: KK.green },
+    { name: 'ยังว่าง', v: Math.max(0, salesStats.totalUnits - salesStats.soldUnits), c: KK.blue },
+  ];
+  const wTopCompany = companyRows.slice(0, 3).map((c) => ({ name: c.name, v: fmtCompact(c.soldValue) }));
+
+  // Reusable summary-widget shell: title (+ optional 'ตัวอย่าง' mock badge) + "ดูเพิ่ม →" drill link + inline mini-chart.
+  const Widget = ({ title, sub, href, mock, children }: { title: string; sub?: string; href: string; mock?: boolean; children: React.ReactNode }) => (
+    <div
+      onClick={() => navigate(href)}
+      className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex flex-col cursor-pointer hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 group"
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-sm font-bold text-gray-900 truncate">{title}</h3>
+            {mock && <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0" style={{ color: KK.amber, backgroundColor: KK.amberLight }}>ตัวอย่าง</span>}
+          </div>
+          {sub && <p className="text-[11px] text-gray-400 mt-0.5 truncate">{sub}</p>}
+        </div>
+        <span className="text-[11px] font-medium flex items-center gap-0.5 flex-shrink-0 ml-2 group-hover:underline" style={{ color: KK.red }}>
+          ดูเพิ่ม <ChevronRight className="w-3 h-3" />
+        </span>
+      </div>
+      <div className="flex-1">{children}</div>
+    </div>
+  );
+
+  // Resolved date-range label for the header (strategic tier).
+  const periodRange = periodRangeLabel(period);
+
+  // Executive = command center of BOTH worlds. Split into 2 labeled zones so it reads
+  // as "everything at a glance" without feeling mixed: SaaS business vs cross-tenant real-estate.
+  // MoM delta -> KPI trend object (↑↓ vs last month); undefined when no baseline (no fake %).
+  const mkTrend = (d: number | null | undefined) => (d != null ? { value: Math.abs(d), up: d >= 0 } : undefined);
+  const saasKpis = [
+    { title: 'รายได้ค่าเช่า/เดือน (MRR)', value: formatCurrency(stats.monthlyRevenue), icon: Receipt, color: KK.blue, bg: KK.blueLight, trend: mkTrend(stats.mrrGrowth), href: '/payments' },
+    { title: 'บริษัทในระบบ', value: stats.totalTenants.toLocaleString(), icon: Building2, color: KK.blue, bg: KK.blueLight, trend: mkTrend(momDelta.tenants), sub: `${stats.activeTenants} ใช้งาน · ${stats.trialTenants} ทดลอง`, href: '/tenants' },
+    { title: 'อัตราเลิกใช้ (Churn)', value: `${stats.churnRate}%`, icon: TrendingDown, color: stats.churnRate > 5 ? KK.red : KK.green, bg: stats.churnRate > 5 ? KK.redLight : KK.greenLight, sub: 'เดือนนี้', href: '/owner-health' },
+  ];
+  const reKpis = [
+    { title: 'ยอดขายรวมทั้งแพลตฟอร์ม', value: fmtCompact(salesStats.soldValue), icon: TrendingUp, color: KK.red, bg: KK.redLight, sub: `ขายแล้ว ${salesStats.soldUnits.toLocaleString()} ยูนิต`, href: '/owner-market' },
+    { title: 'ขายได้เดือนนี้', value: `${salesStats.soldUnitsThisMonth.toLocaleString()} ยูนิต`, icon: CheckCircle, color: KK.green, bg: KK.greenLight, trend: mkTrend(momDelta.soldUnits), sub: `จากทั้งหมด ${salesStats.soldUnits.toLocaleString()} ยูนิต`, href: '/owner-market' },
+    { title: 'ผู้ติดต่อทั้งหมด', value: salesStats.totalLeads.toLocaleString(), icon: Users, color: KK.amber, bg: KK.amberLight, trend: mkTrend(momDelta.leads), sub: 'ผู้ติดต่อข้ามทุกบริษัท', href: '/owner-customers' },
+  ];
+
+  // Zone divider header — icon chip + title + subtitle, separates the two worlds.
+  const ZoneHeader = ({ icon: Icon, title, sub, color, bg }: { icon: any; title: string; sub: string; color: string; bg: string }) => (
+    <div className="flex items-center gap-3">
+      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: bg }}>
+        <Icon className="w-5 h-5" style={{ color }} strokeWidth={2.2} />
+      </div>
+      <div>
+        <h2 className="text-lg font-bold text-gray-900">{title}</h2>
+        <p className="text-xs text-gray-500">{sub}</p>
+      </div>
+    </div>
+  );
+
+  // One KPI "pulse" card — shared by both zones.
+  const PulseCard = (kpi: any, i: number) => (
+    <div
+      key={i}
+      onClick={() => kpi.href && navigate(kpi.href)}
+      className={`bg-white border border-gray-100 rounded-2xl shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col ${kpi.href ? 'cursor-pointer' : ''}`}
+    >
+      <div className="p-5 pb-2 flex-1">
+        <div className="flex items-start justify-between mb-4">
+          <p className="text-sm font-medium text-gray-500 leading-tight pt-1.5">{kpi.title}</p>
+          <div
+            className="kpi-icon-bg w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{
+              background: `linear-gradient(135deg, ${kpi.bg}f0 0%, ${kpi.bg} 100%)`,
+              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 2px ${kpi.color}15`,
+            }}
+          >
+            <kpi.icon className="w-5 h-5" style={{ color: kpi.color, filter: `drop-shadow(0 1px 1px ${kpi.color}20)` }} strokeWidth={2.2} />
+          </div>
+        </div>
+        <p className="text-[28px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{kpi.value}</p>
+        {kpi.trend && (
+          <div className="flex items-center gap-1.5 mt-2.5">
+            <span className="text-[13px] font-semibold" style={{ color: kpi.trend.up ? KK.green : KK.red }}>
+              {kpi.trend.up ? '↗' : '↘'} {Math.abs(kpi.trend.value)}%
+            </span>
+            <span className="text-[13px] text-gray-400">vs เดือนก่อน</span>
+          </div>
+        )}
+        {kpi.sub && <p className={`text-[13px] text-gray-400 truncate ${kpi.trend ? 'mt-1' : 'mt-2.5'}`}>{kpi.sub}</p>}
+      </div>
+      <div className="h-3" />{/* uniform bottom spacing — all KPI cards same height */}
+    </div>
+  );
+
   return (
     <OwnerGuard>
       <div className="min-h-screen bg-gray-50">
@@ -739,58 +884,23 @@ const OwnerDashboard = () => {
                   Platform
                 </span>
                 <h1 className="text-2xl font-bold text-gray-900">Executive Dashboard</h1>
-                <p className="text-[15px] text-gray-500 mt-1.5">มุมมอง HQ ข้ามทุกบริษัท · อัปเดตล่าสุด {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
+                <p className="text-[15px] text-gray-500 mt-1.5">มุมมอง HQ ข้ามทุกบริษัท · ข้อมูลช่วง <span className="font-semibold text-gray-700">{periodRange}</span></p>
                 <div className="mt-2.5 inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full" style={{ color: KK.blue, backgroundColor: KK.blueLight }}>
                   <Layers className="w-3.5 h-3.5" />
-                  ทั้งแพลตฟอร์ม · {stats.totalTenants} บริษัท · {stats.totalProjects} โครงการ · {stats.totalUsers.toLocaleString()} ผู้ใช้
+                  ทั้งแพลตฟอร์ม · {stats.totalTenants} บริษัท · {stats.totalProjects} โครงการ · {salesStats.totalUnits.toLocaleString()} ยูนิต · {salesStats.totalLeads.toLocaleString()} ผู้ติดต่อ
                 </div>
               </div>
+              {/* Period filter — strategic tier (เดือน/ไตรมาส/ปี); บอกว่าข้อมูลที่โชว์เป็นของช่วงไหน */}
+              <PeriodFilter value={period} onChange={setPeriod} tier="strategic" className="self-start sm:self-auto" />
             </div>
 
-            {/* === KPI Row (6 uniform cards — matches Admin density) === */}
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-              {([
-                { title: 'รายได้แพ็กเกจ/เดือน', value: formatCurrency(stats.monthlyRevenue), icon: TrendingUp, color: KK.red, bg: KK.redLight, trend: { value: stats.mrrGrowth, up: stats.mrrGrowth >= 0 } },
-                { title: 'รายได้รวมปีนี้', value: formatCurrency(stats.annualRunRate), icon: Receipt, color: KK.green, bg: KK.greenLight, sub: `ม.ค. – ${thaiMonthShort[todayMonth]} ${todayYear}` },
-                { title: 'บริษัททั้งหมด', value: stats.totalTenants.toLocaleString(), icon: Building2, color: KK.blue, bg: KK.blueLight, sub: `${stats.activeTenants} ใช้งาน · ${stats.trialTenants} ทดลอง` },
-                { title: 'ผู้สนใจแพลตฟอร์มใหม่', value: platformLeadsNew.toLocaleString(), icon: UserPlusIcon, color: KK.amber, bg: KK.amberLight, sub: 'บริษัทสนใจซื้อ เดือนนี้' },
-                // "เงินค้างชำระ" lives on the Payments report only — removed here to avoid duplication (1 เมนู 1 ข้อมูล).
-                { title: 'อัตราเลิกใช้', value: `${stats.churnRate}%`, icon: TrendingDown, color: stats.churnRate > 5 ? KK.red : KK.green, bg: stats.churnRate > 5 ? KK.redLight : KK.greenLight, sub: 'เดือนนี้' },
-              ] as const).map((kpi, i) => (
-                <div key={i} className="bg-white border border-gray-100 rounded-2xl shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col">
-                  <div className="p-5 pb-2 flex-1">
-                    <div className="flex items-start justify-between mb-4">
-                      <p className="text-sm font-medium text-gray-500 leading-tight pt-1.5">{kpi.title}</p>
-                      <div
-                        className="kpi-icon-bg w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                        style={{
-                          background: `linear-gradient(135deg, ${kpi.bg}f0 0%, ${kpi.bg} 100%)`,
-                          boxShadow: `inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 2px ${kpi.color}15`,
-                        }}
-                      >
-                        <kpi.icon className="w-5 h-5" style={{ color: kpi.color, filter: `drop-shadow(0 1px 1px ${kpi.color}20)` }} strokeWidth={2.2} />
-                      </div>
-                    </div>
-                    <p className="text-[28px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{kpi.value}</p>
-                    {'trend' in kpi && kpi.trend ? (
-                      <div className="flex items-center gap-1.5 mt-2.5">
-                        <span className="text-[13px] font-semibold" style={{ color: kpi.trend.up ? KK.green : KK.red }}>
-                          {kpi.trend.up ? '↗' : '↘'} {Math.abs(kpi.trend.value)}%
-                        </span>
-                        <span className="text-[13px] text-gray-400">vs เดือนก่อน</span>
-                      </div>
-                    ) : (
-                      <p className="text-[13px] text-gray-400 mt-2.5 truncate">{'sub' in kpi ? kpi.sub : ''}</p>
-                    )}
-                  </div>
-                  <div className="h-3" />{/* uniform bottom spacing — all KPI cards same height */}
-                </div>
-              ))}
+            {/* ━━━━━━━━━━ ZONE 1 · ธุรกิจแพลตฟอร์ม (SaaS) ━━━━━━━━━━ */}
+            <div className="pt-2">
+              <ZoneHeader icon={Receipt} title="ธุรกิจแพลตฟอร์ม (SaaS)" sub="รายได้ค่าเช่าระบบ · ผู้เช่า · การเติบโตของธุรกิจเราเอง" color={KK.blue} bg={KK.blueLight} />
             </div>
-
-            {/* Company best/worst + comparison intentionally NOT here — that lives on
-                the Company Performance page only (clear menu boundaries: Executive owns
-                platform totals + SaaS health + trend, not per-company rankings). */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {saasKpis.map(PulseCard)}
+            </div>
 
             {/* === Revenue Trend — full-width hero chart === */}
             <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
@@ -907,7 +1017,60 @@ const OwnerDashboard = () => {
               </div>
             </div>
 
+            {/* ━━━━━━━━━━ ZONE 2 · ภาพรวมอสังหาฯ ข้ามทุกบริษัท ━━━━━━━━━━ */}
+            <div className="pt-2">
+              <ZoneHeader icon={Home} title="ภาพรวมอสังหาฯ ข้ามทุกบริษัท" sub="ยอดขาย · ลูกค้า · สต็อก — สุขภาพของลูกค้า (สัญญาณว่าจะอยู่ต่อหรือเลิกใช้)" color={KK.red} bg={KK.redLight} />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {reKpis.map(PulseCard)}
+            </div>
 
+            {/* ภาพรวมวิเคราะห์แต่ละด้าน — มินิกราฟ inline (สรุป → "ดูเพิ่ม" เพื่อเจาะลึก) */}
+            <div>
+              <h2 className="text-base font-bold text-gray-900 mb-1">ภาพรวมวิเคราะห์</h2>
+              <p className="text-xs text-gray-500 mb-4">สรุปทุกด้านในหน้าเดียว · กด "ดูเพิ่ม →" เพื่อเจาะลึกแต่ละเมนู · ป้าย <span className="font-semibold" style={{ color: KK.amber }}>ตัวอย่าง</span> = ยังไม่ได้ต่อข้อมูลจริง</p>
+              <div className="space-y-5">
+
+                <Widget title="แนวโน้มยอดขาย" sub="ยูนิตที่ขายได้ · 6 เดือนล่าสุด" href="/owner-market" mock>
+                  <ResponsiveContainer width="100%" height={170}>
+                    <AreaChart data={wSalesTrend} margin={{ top: 6, right: 6, left: -20, bottom: 0 }}>
+                      <defs><linearGradient id="wSales" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={KK.red} stopOpacity={0.3} /><stop offset="100%" stopColor={KK.red} stopOpacity={0} /></linearGradient></defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                      <XAxis dataKey="m" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={28} />
+                      <Tooltip contentStyle={kkTooltipStyle} formatter={((v: any) => [`${v} ยูนิต`, '']) as any} />
+                      <Area type="monotone" dataKey="v" stroke={KK.red} strokeWidth={2.5} fill="url(#wSales)" dot={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </Widget>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+                <Widget title="สถานะสินค้าคงคลัง" sub="ขายแล้ว / ยังว่าง" href="/owner-inventory">
+                  <div className="flex items-center gap-3">
+                    <div className="w-[120px] h-[120px] flex-shrink-0">
+                      <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={wInventory} dataKey="v" nameKey="name" cx="50%" cy="50%" innerRadius={38} outerRadius={56} paddingAngle={2}>{wInventory.map((d, i) => <Cell key={i} fill={d.c} />)}</Pie><Tooltip contentStyle={kkTooltipStyle} formatter={((v: any, n: any) => [`${v} ยูนิต`, n]) as any} /></PieChart></ResponsiveContainer>
+                    </div>
+                    <div className="flex-1 space-y-1">{wInventory.map((d, i) => (<div key={i} className="flex items-center gap-1.5 text-[11px]"><span className="w-2 h-2 rounded-sm" style={{ backgroundColor: d.c }} /><span className="text-gray-600 flex-1 truncate">{d.name}</span><span className="tabular-nums text-gray-800 font-semibold">{d.v}</span></div>))}</div>
+                  </div>
+                </Widget>
+
+                <Widget title="ทำเลขายดี" sub="Top จังหวัด (ยูนิตที่ขายได้)" href="/owner-geography" mock>
+                  <div className="space-y-1.5 pt-1">
+                    {wTopProvince.map((p, i) => (<div key={p.label}>
+                      <div className="flex justify-between text-[11px] mb-0.5"><span className="text-gray-600">{p.label}</span><span className="tabular-nums text-gray-400">{p.v}</span></div>
+                      <div className="h-3 rounded bg-gray-100 overflow-hidden"><div className="h-full rounded" style={{ width: `${Math.max((p.v / provMax) * 100, 3)}%`, background: i === 0 ? KK.red : '#fca5a5' }} /></div>
+                    </div>))}
+                  </div>
+                </Widget>
+
+                <Widget title="บริษัททำยอดสูงสุด" sub="Top 3 · มูลค่าขาย (รวมอันดับผู้ขายในหน้านี้)" href="/owner-companies">
+                  <div className="space-y-2.5 pt-1">{wTopCompany.length === 0 ? <p className="text-xs text-gray-400">ยังไม่มีข้อมูลยอดขาย</p> : wTopCompany.map((c, i) => (<div key={i} className="flex items-center gap-2 text-sm"><span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0" style={{ color: KK.blue, backgroundColor: KK.blueLight }}>{i + 1}</span><span className="text-gray-700 flex-1 truncate">{c.name}</span><span className="tabular-nums font-semibold text-gray-900">{c.v}</span></div>))}</div>
+                </Widget>
+
+                </div>
+              </div>
+            </div>
 
           </main>
         </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
+import PeriodFilter, { type PeriodKey, DEFAULT_PERIOD } from '@/components/dashboard/PeriodFilter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -42,6 +43,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 const OwnerSupport = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [period, setPeriod] = useState<PeriodKey>(DEFAULT_PERIOD.operational);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'open' | 'in_progress' | 'resolved'>('open');
@@ -108,10 +110,13 @@ const OwnerSupport = () => {
                       <p className="text-sm text-gray-500">ติดตามและจัดการปัญหาที่ลูกค้าแจ้งเข้ามา</p>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm" onClick={fetchTickets}>
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    รีเฟรช
-                  </Button>
+                  <div className="flex items-center gap-3">
+                    <PeriodFilter value={period} onChange={setPeriod} tier="operational" />
+                    <Button variant="outline" size="sm" onClick={fetchTickets}>
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      รีเฟรช
+                    </Button>
+                  </div>
                 </div>
 
                 {/* KPI strip */}

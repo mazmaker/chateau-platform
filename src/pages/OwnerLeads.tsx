@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
+import PeriodFilter, { type PeriodKey, DEFAULT_PERIOD } from '@/components/dashboard/PeriodFilter';
 import { supabase } from '@/lib/supabase';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { toast } from 'sonner';
@@ -21,7 +22,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-  Building2, Plus, Search, Users, Loader2, TrendingUp, Trophy, Trash2, Briefcase, FileText, Pencil,
+  Building2, Plus, Search, Users, Loader2, TrendingUp, Trophy, Trash2, Briefcase, FileText, Pencil, ChevronRight,
   MoreHorizontal, Eye, Rocket, CheckCircle2, Flame, Phone,
 } from 'lucide-react';
 
@@ -131,9 +132,12 @@ const emptyForm = {
 const OwnerLeads = () => {
   const { user } = useSimpleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [period, setPeriod] = useState<PeriodKey>(DEFAULT_PERIOD.operational);
   const [leads, setLeads] = useState<PLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
   const [stageFilter, setStageFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
   // Health-card filter (ลีดใหม่ / SLA / เงียบ / hot). Mutually exclusive with the
@@ -381,6 +385,11 @@ const OwnerLeads = () => {
     return matchSearch && matchSource && matchHealth && matchStage;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * pageSize;
+  const paginated = filtered.slice(pageStart, pageStart + pageSize);
+
   const openLeads = leads.filter((l) => OPEN_STAGES.includes(l.stage));
   const wonLeads = leads.filter((l) => l.stage === 'won');
   const pipelineMrr = openLeads.reduce((s, l) => s + Number(l.estimated_mrr || 0), 0);
@@ -407,19 +416,22 @@ const OwnerLeads = () => {
                     <Users className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Leads (ผู้สนใจแพลตฟอร์ม)</h1>
+                    <h1 className="text-2xl font-bold text-gray-900">บริษัทที่สนใจสมัคร — Developer ที่สนใจซื้อแพลตฟอร์ม</h1>
                     <p className="text-sm sm:text-base text-gray-600 mt-1">
                       บริษัท Developer ที่สนใจสมัครใช้ Chateau — pipeline การขายแพ็กเกจ
                     </p>
                   </div>
                 </div>
-                <Button
-                  onClick={() => { setForm({ ...emptyForm }); setEditingId(null); setShowCreate(true); }}
-                  className="bg-gray-900 hover:bg-black text-white shadow-lg w-full sm:w-auto"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  เพิ่ม Leads
-                </Button>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+                  <PeriodFilter value={period} onChange={setPeriod} tier="operational" />
+                  <Button
+                    onClick={() => { setForm({ ...emptyForm }); setEditingId(null); setShowCreate(true); }}
+                    className="bg-gray-900 hover:bg-black text-white shadow-lg w-full sm:w-auto"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    เพิ่ม Leads
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -522,7 +534,7 @@ const OwnerLeads = () => {
                     <TableRow><TableCell colSpan={7} className="text-center py-10 text-gray-400">
                       ยังไม่มีผู้สนใจ — กด “เพิ่ม Leads” เพื่อบันทึกบริษัทที่ติดต่อเข้ามา
                     </TableCell></TableRow>
-                  ) : filtered.map((l) => (
+                  ) : paginated.map((l) => (
                     <TableRow key={l.id} onClick={() => setDetailLead(l)} className="cursor-pointer hover:bg-gray-50">
                       <TableCell>
                         <div className="flex items-center gap-1.5">
@@ -607,6 +619,38 @@ const OwnerLeads = () => {
                   ))}
                 </TableBody>
               </Table>
+              {!loading && filtered.length > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 pt-4 mt-2 border-t border-gray-100">
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <span>แสดง {pageStart + 1}–{Math.min(pageStart + pageSize, filtered.length)} จาก {filtered.length} ราย</span>
+                    <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                      <SelectTrigger className="h-8 w-[110px] text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10 / หน้า</SelectItem>
+                        <SelectItem value="25">25 / หน้า</SelectItem>
+                        <SelectItem value="50">50 / หน้า</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button variant="outline" size="sm" className="h-8 px-2" disabled={safePage <= 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>
+                      <ChevronRight className="w-4 h-4 rotate-180" />
+                    </Button>
+                    {(() => {
+                      const pages: number[] = [];
+                      const from = Math.max(1, safePage - 2);
+                      const to = Math.min(totalPages, from + 4);
+                      for (let i = Math.max(1, to - 4); i <= to; i++) pages.push(i);
+                      return pages.map((p) => (
+                        <Button key={p} variant={p === safePage ? 'default' : 'outline'} size="sm" className={`h-8 w-8 p-0 text-xs ${p === safePage ? 'bg-chateau hover:bg-chateau-700 text-white' : ''}`} onClick={() => setCurrentPage(p)}>{p}</Button>
+                      ));
+                    })()}
+                    <Button variant="outline" size="sm" className="h-8 px-2" disabled={safePage >= totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </main>
         </div>

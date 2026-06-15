@@ -193,11 +193,11 @@ export function LoginFormSimple() {
         <div className="mt-6 text-center">
           <p className="text-xs text-gray-500">
             โดยการเข้าสู่ระบบ คุณยอมรับ{' '}
-            <a href="#" className="text-gray-800 hover:text-black font-medium">
+            <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-gray-800 hover:text-black font-medium">
               เงื่อนไขการให้บริการ
             </a>{' '}
             และ{' '}
-            <a href="#" className="text-gray-800 hover:text-black font-medium">
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-gray-800 hover:text-black font-medium">
               นโยบายความเป็นส่วนตัว
             </a>
           </p>

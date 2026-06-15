@@ -7,8 +7,11 @@ import { supabase } from '@/lib/supabase';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Building2, TrendingUp, TrendingDown, Percent, ArrowUpRight, Home, Banknote } from 'lucide-react';
-import { ResponsiveContainer, AreaChart, Area, Tooltip, PieChart, Pie, Cell } from 'recharts';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Building2, TrendingUp, Percent, ArrowUpRight, Home, ChevronRight } from 'lucide-react';
+import { ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from 'recharts';
+import SalesAgentsSection from '@/components/owner/SalesAgentsSection';
 
 // ──────────────────────────────────────────────────────────────────────────
 // ประสิทธิภาพบริษัท — Owner cross-tenant company performance (HQ lens).
@@ -77,6 +80,8 @@ const OwnerCompanies = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<CompanyAgg[]>([]);
+  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
@@ -187,8 +192,10 @@ const OwnerCompanies = () => {
     );
   }
 
-  const best = rows[0];
-  const worst = rows.length > 1 ? rows[rows.length - 1] : null;
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * pageSize;
+  const paginated = rows.slice(pageStart, pageStart + pageSize);
 
   return (
     <OwnerGuard>
@@ -201,8 +208,8 @@ const OwnerCompanies = () => {
               <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
                 Analytics
               </span>
-              <h1 className="text-2xl font-bold text-gray-900">Company Performance</h1>
-              <p className="text-[15px] text-gray-500 mt-1.5">เปรียบเทียบยอดขายแต่ละบริษัทข้ามทั้งแพลตฟอร์ม · คลิกเพื่อเจาะรายโครงการ</p>
+              <h1 className="text-2xl font-bold text-gray-900">อันดับยอดขาย</h1>
+              <p className="text-[15px] text-gray-500 mt-1.5">ดูภาพรวมรายบริษัทก่อน แล้วเจาะลงรายผู้ขาย · ข้ามทั้งแพลตฟอร์ม</p>
             </div>
 
             {rows.length === 0 ? (
@@ -256,77 +263,6 @@ const OwnerCompanies = () => {
                   </div>
                 )}
 
-                {/* Best / Worst */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex items-center gap-4">
-                    <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: KK.greenLight }}>
-                      <TrendingUp className="w-5 h-5" style={{ color: KK.green }} />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs text-gray-500">บริษัทขายดีที่สุด</p>
-                      <p className="text-base font-bold text-gray-900 truncate">{best?.name}</p>
-                      <p className="text-sm text-gray-500 tabular-nums">{fmtCompact(best?.soldValue || 0)} · ขาย {best?.sold} ยูนิต · {best?.sellThrough}%</p>
-                    </div>
-                  </div>
-                  {worst && (
-                    <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex items-center gap-4">
-                      <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: KK.amberLight }}>
-                        <TrendingDown className="w-5 h-5" style={{ color: KK.amber }} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs text-gray-500">บริษัทที่ต้องดูแล</p>
-                        <p className="text-base font-bold text-gray-900 truncate">{worst.name}</p>
-                        <p className="text-sm text-gray-500 tabular-nums">{fmtCompact(worst.soldValue)} · ขาย {worst.sold} ยูนิต · {worst.sellThrough}%</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Per-company sparkline small-multiples */}
-                <div>
-                  <h2 className="text-base font-bold text-gray-900 mb-1">แนวโน้มยอดขายรายบริษัท</h2>
-                  <p className="text-xs text-gray-500 mb-4">ยูนิตที่ขายได้ · 12 เดือนล่าสุด</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {rows.map((r) => (
-                      <div
-                        key={r.id}
-                        className="bg-white border border-gray-100 rounded-2xl shadow-soft p-4 cursor-pointer hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200"
-                        onClick={() => navigate(`/owner-projects/${r.id}`)}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-gray-900 truncate">{r.name}</p>
-                            <p className="text-[11px] text-gray-400 mt-0.5">{r.sold}/{r.total} ยูนิต · {r.sellThrough}%</p>
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <p className="text-sm font-bold tabular-nums" style={{ color: KK.green }}>{fmtCompact(r.soldValue)}</p>
-                            <p className="text-[11px] text-gray-400">มูลค่าขาย</p>
-                          </div>
-                        </div>
-                        <div className="mt-2 -mx-1">
-                          <ResponsiveContainer width="100%" height={48}>
-                            <AreaChart data={r.series} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-                              <defs>
-                                <linearGradient id={`spark-${r.id}`} x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={KK.red} stopOpacity={0.3} />
-                                  <stop offset="100%" stopColor={KK.red} stopOpacity={0} />
-                                </linearGradient>
-                              </defs>
-                              <Tooltip
-                                contentStyle={kkTooltipStyle}
-                                cursor={false}
-                                formatter={((v: any) => [`${v} ยูนิต`, '']) as any}
-                                labelFormatter={(_, p) => (p?.[0]?.payload as any)?.month ?? ''}
-                              />
-                              <Area type="monotone" dataKey="count" stroke={KK.red} strokeWidth={2} fill={`url(#spark-${r.id})`} dot={false} animationDuration={800} />
-                            </AreaChart>
-                          </ResponsiveContainer>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
                 {/* Ranking table */}
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                   <div className="mb-4">
@@ -348,9 +284,9 @@ const OwnerCompanies = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {rows.map((r, i) => (
+                        {paginated.map((r, i) => (
                           <TableRow key={r.id} className="cursor-pointer hover:bg-gray-50" onClick={() => navigate(`/owner-projects/${r.id}`)}>
-                            <TableCell className="text-gray-400 tabular-nums">{i + 1}</TableCell>
+                            <TableCell className="text-gray-400 tabular-nums">{pageStart + i + 1}</TableCell>
                             <TableCell className="font-semibold text-gray-900">{r.name}</TableCell>
                             <TableCell className="text-right tabular-nums">{fmtCompact(r.soldValue)}</TableCell>
                             <TableCell className="text-right tabular-nums">{r.sold}/{r.total}</TableCell>
@@ -363,7 +299,42 @@ const OwnerCompanies = () => {
                       </TableBody>
                     </Table>
                   </div>
+                  {rows.length > 0 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 pt-4 mt-2 border-t border-gray-100">
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <span>แสดง {pageStart + 1}–{Math.min(pageStart + pageSize, rows.length)} จาก {rows.length} บริษัท</span>
+                        <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                          <SelectTrigger className="h-8 w-[110px] text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="10">10 / หน้า</SelectItem>
+                            <SelectItem value="25">25 / หน้า</SelectItem>
+                            <SelectItem value="50">50 / หน้า</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button variant="outline" size="sm" className="h-8 px-2" disabled={safePage <= 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>
+                          <ChevronRight className="w-4 h-4 rotate-180" />
+                        </Button>
+                        {(() => {
+                          const pages: number[] = [];
+                          const from = Math.max(1, safePage - 2);
+                          const to = Math.min(totalPages, from + 4);
+                          for (let i = Math.max(1, to - 4); i <= to; i++) pages.push(i);
+                          return pages.map((p) => (
+                            <Button key={p} variant={p === safePage ? 'default' : 'outline'} size="sm" className={`h-8 w-8 p-0 text-xs ${p === safePage ? 'bg-chateau hover:bg-chateau-700 text-white' : ''}`} onClick={() => setCurrentPage(p)}>{p}</Button>
+                          ));
+                        })()}
+                        <Button variant="outline" size="sm" className="h-8 px-2" disabled={safePage >= totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
+
+                {/* เจาะลึก: อันดับผู้ขายรายคน (ยุบรวมจาก Sales Performance เดิม — ดูรวมก่อน แล้วเจาะ) */}
+                <SalesAgentsSection />
               </>
             )}
           </main>

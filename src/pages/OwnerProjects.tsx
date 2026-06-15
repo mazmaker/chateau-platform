@@ -6,6 +6,8 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -24,6 +26,7 @@ import {
   MapPin,
   TrendingUp,
   Clock,
+  ChevronRight,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -163,6 +166,8 @@ const OwnerProjects = () => {
   const [properties, setProperties] = useState<Property[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [search, setSearch] = useState('');
+  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
   const [planLimits, setPlanLimits] = useState<Record<string, number>>({}); // planId → max_properties limit
 
   useEffect(() => {
@@ -386,6 +391,10 @@ const OwnerProjects = () => {
 
   // ════════════════════════════════════ L0 — all companies ══════════════════
   const filteredTenants = tenantRows.filter((r) => !search || r.tenant.name.toLowerCase().includes(search.toLowerCase()));
+  const totalPages = Math.max(1, Math.ceil(filteredTenants.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * pageSize;
+  const paginatedTenants = filteredTenants.slice(pageStart, pageStart + pageSize);
 
   return (
     <OwnerGuard>
@@ -442,7 +451,7 @@ const OwnerProjects = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredTenants.map(({ tenant, projectCount, roll }) => (
+                      {paginatedTenants.map(({ tenant, projectCount, roll }) => (
                         <TableRow key={tenant.id} className="cursor-pointer hover:bg-gray-50" onClick={() => navigate(`/owner-projects/${tenant.id}`)}>
                           <TableCell className="font-semibold text-gray-900">{tenant.name}</TableCell>
                           <TableCell className="text-center"><Badge variant="outline" className="capitalize">{planBadge(tenant.subscription_plan)}</Badge></TableCell>
@@ -458,6 +467,38 @@ const OwnerProjects = () => {
                       ))}
                     </TableBody>
                   </Table>
+                </div>
+              )}
+              {filteredTenants.length > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 pt-4 mt-2 border-t border-gray-100">
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <span>แสดง {pageStart + 1}–{Math.min(pageStart + pageSize, filteredTenants.length)} จาก {filteredTenants.length} บริษัท</span>
+                    <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                      <SelectTrigger className="h-8 w-[110px] text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10 / หน้า</SelectItem>
+                        <SelectItem value="25">25 / หน้า</SelectItem>
+                        <SelectItem value="50">50 / หน้า</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button variant="outline" size="sm" className="h-8 px-2" disabled={safePage <= 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>
+                      <ChevronRight className="w-4 h-4 rotate-180" />
+                    </Button>
+                    {(() => {
+                      const pages: number[] = [];
+                      const from = Math.max(1, safePage - 2);
+                      const to = Math.min(totalPages, from + 4);
+                      for (let i = Math.max(1, to - 4); i <= to; i++) pages.push(i);
+                      return pages.map((p) => (
+                        <Button key={p} variant={p === safePage ? 'default' : 'outline'} size="sm" className={`h-8 w-8 p-0 text-xs ${p === safePage ? 'bg-chateau hover:bg-chateau-700 text-white' : ''}`} onClick={() => setCurrentPage(p)}>{p}</Button>
+                      ));
+                    })()}
+                    <Button variant="outline" size="sm" className="h-8 px-2" disabled={safePage >= totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>

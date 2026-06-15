@@ -53,6 +53,18 @@ interface ProvinceAgg { province: string; sold: number; soldValue: number; total
 interface ProvinceProperty { id: string; name: string; developer: string | null; district: string; sold: number; total: number; soldValue: number; }
 interface DistrictGroup { district: string; sold: number; total: number; soldValue: number; projects: ProvinceProperty[]; }
 
+// Province → region (ภาค) for the macro rollup (เฮีย: เริ่มระดับประเทศ → ภูมิภาค).
+const REGION_OF: Record<string, string> = {
+  'กรุงเทพมหานคร': 'กรุงเทพฯ & ปริมณฑล', 'นนทบุรี': 'กรุงเทพฯ & ปริมณฑล', 'ปทุมธานี': 'กรุงเทพฯ & ปริมณฑล', 'สมุทรปราการ': 'กรุงเทพฯ & ปริมณฑล', 'สมุทรสาคร': 'กรุงเทพฯ & ปริมณฑล', 'นครปฐม': 'กรุงเทพฯ & ปริมณฑล',
+  'เชียงใหม่': 'ภาคเหนือ', 'เชียงราย': 'ภาคเหนือ', 'ลำปาง': 'ภาคเหนือ', 'พิษณุโลก': 'ภาคเหนือ',
+  'นครราชสีมา': 'ภาคอีสาน', 'ขอนแก่น': 'ภาคอีสาน', 'อุดรธานี': 'ภาคอีสาน', 'อุบลราชธานี': 'ภาคอีสาน',
+  'ชลบุรี': 'ภาคตะวันออก', 'ระยอง': 'ภาคตะวันออก', 'จันทบุรี': 'ภาคตะวันออก',
+  'ประจวบคีรีขันธ์': 'ภาคตะวันตก', 'เพชรบุรี': 'ภาคตะวันตก', 'ราชบุรี': 'ภาคตะวันตก', 'กาญจนบุรี': 'ภาคตะวันตก',
+  'ภูเก็ต': 'ภาคใต้', 'สงขลา': 'ภาคใต้', 'สุราษฎร์ธานี': 'ภาคใต้', 'กระบี่': 'ภาคใต้', 'นครศรีธรรมราช': 'ภาคใต้',
+  'พระนครศรีอยุธยา': 'ภาคกลาง', 'สระบุรี': 'ภาคกลาง',
+};
+const regionOf = (p: string) => REGION_OF[p] || 'อื่น ๆ';
+
 const OwnerGeography = () => {
   const navigate = useNavigate();
   const { isOwner } = usePermissions();
@@ -153,6 +165,19 @@ const OwnerGeography = () => {
   // Bars: provinces that actually have sold units, by sold count (descending).
   const barData = useMemo(() => provinces.filter((p) => p.sold > 0).map((p) => ({ province: p.province, sold: p.sold, soldValue: p.soldValue })), [provinces]);
 
+  // Region rollup: aggregate provinces into ภาค (the macro layer above provinces).
+  const regionData = useMemo(() => {
+    const m = new Map<string, { sold: number; soldValue: number; provinces: number }>();
+    provinces.forEach((p) => {
+      const r = regionOf(p.province);
+      const cur = m.get(r) || { sold: 0, soldValue: 0, provinces: 0 };
+      cur.sold += p.sold; cur.soldValue += p.soldValue; cur.provinces += 1;
+      m.set(r, cur);
+    });
+    return Array.from(m.entries()).map(([region, v]) => ({ region, ...v })).sort((a, b) => b.soldValue - a.soldValue);
+  }, [provinces]);
+  const regionMax = useMemo(() => Math.max(...regionData.map((r) => r.soldValue), 1), [regionData]);
+
   const KpiCard = ({ title, value, sub, icon: Icon, color, bg }: {
     title: string; value: string; sub?: string; icon: React.ElementType; color: string; bg: string;
   }) => (
@@ -215,6 +240,23 @@ const OwnerGeography = () => {
                   <KpiCard title="จังหวัดที่มีโครงการ" value={totals.provinces.toLocaleString()} sub="ทั่วประเทศ" icon={Building} color={KK.blue} bg={KK.blueLight} />
                   <KpiCard title="จังหวัดที่มียอดขาย" value={totals.withSales.toLocaleString()} sub={`จาก ${totals.provinces} จังหวัด`} icon={TrendingUp} color={KK.green} bg={KK.greenLight} />
                   <KpiCard title="มูลค่าขายเฉลี่ย/จังหวัด" value={fmtCompact(totals.avgPerProvince)} sub="เฉลี่ยต่อจังหวัดที่ขายได้" icon={Banknote} color={KK.amber} bg={KK.amberLight} />
+                </div>
+
+                {/* Region rollup (ประเทศ → ภูมิภาค) — เริ่มจากระดับใหญ่ก่อนเจาะจังหวัด */}
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
+                  <h2 className="text-base font-bold text-gray-900">ยอดขายตามภูมิภาค</h2>
+                  <p className="text-xs text-gray-500 mb-4 mt-0.5">ภาพรวมระดับประเทศ → ภาค (ก่อนเจาะรายจังหวัดด้านล่าง)</p>
+                  <div className="space-y-3">
+                    {regionData.map((r, i) => (
+                      <div key={r.region}>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-gray-700 font-medium">{r.region} <span className="text-gray-400 font-normal">· {r.provinces} จังหวัด</span></span>
+                          <span className="tabular-nums text-gray-500">{r.sold} ยูนิต · <span className="text-gray-700 font-semibold">{fmtCompact(r.soldValue)}</span></span>
+                        </div>
+                        <div className="h-3 rounded-lg bg-gray-100 overflow-hidden"><div className="h-full rounded-lg" style={{ width: `${Math.max((r.soldValue / regionMax) * 100, 2)}%`, background: i === 0 ? KK.red : '#fca5a5' }} /></div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Province bar (horizontal — handles long Thai names) */}

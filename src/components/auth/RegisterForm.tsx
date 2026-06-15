@@ -306,7 +306,7 @@ const RegisterForm = () => {
                     />
                     <span className="ml-2 text-sm text-gray-700">
                       I agree to the{' '}
-                      <a href="#" className="text-chateau hover:text-chateau font-medium">
+                      <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-chateau hover:text-chateau font-medium">
                         Terms of Service
                       </a>
                     </span>
@@ -324,7 +324,7 @@ const RegisterForm = () => {
                     />
                     <span className="ml-2 text-sm text-gray-700">
                       I acknowledge that I have read and understood the{' '}
-                      <a href="#" className="text-chateau hover:text-chateau font-medium">
+                      <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-chateau hover:text-chateau font-medium">
                         Privacy Policy
                       </a>
                     </span>
@@ -376,9 +376,9 @@ const RegisterForm = () => {
         <div className="mt-8 text-center">
           <p className="text-xs text-gray-500">
             By creating an account, you agree to our{' '}
-            <a href="#" className="text-chateau hover:text-chateau">Terms</a>{' '}
+            <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-chateau hover:text-chateau">Terms</a>{' '}
             and{' '}
-            <a href="#" className="text-chateau hover:text-chateau">Privacy Policy</a>
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-chateau hover:text-chateau">Privacy Policy</a>
           </p>
         </div>
       </div>

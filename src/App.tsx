@@ -13,7 +13,11 @@ import OwnerProjects from "./pages/OwnerProjects";
 import OwnerMarket from "./pages/OwnerMarket";
 import OwnerGeography from "./pages/OwnerGeography";
 import OwnerCompanies from "./pages/OwnerCompanies";
-import OwnerAgents from "./pages/OwnerAgents";
+import OwnerCustomers from "./pages/OwnerCustomers";
+import OwnerFunnel from "./pages/OwnerFunnel";
+import OwnerInventory from "./pages/OwnerInventory";
+import OwnerTenantHealth from "./pages/OwnerTenantHealth";
+import OwnerMarketing from "./pages/OwnerMarketing";
 import OwnerAudit from "./pages/OwnerAudit";
 import TenantManagement from "./pages/TenantManagement";
 import PaymentDashboard from "./pages/PaymentDashboard";
@@ -33,6 +37,7 @@ import Analytics from "./pages/Analytics";
 import ApiManagement from "./pages/ApiManagement";
 import Settings from "./pages/Settings";
 import Permissions from "./pages/Permissions";
+import LegalDocument from "./pages/LegalDocument";
 import CustomerLogin from "./pages/customer/CustomerLogin";
 import CustomerLineCallback from "./pages/customer/CustomerLineCallback";
 import CustomerDashboard from "./pages/customer/CustomerDashboard";
@@ -123,6 +128,23 @@ const App = () => (
               <ProtectedRouteSimple onlyGuests={true}>
                 <SimpleLogin />
               </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          {/* Legal documents — public (Terms / Privacy / DPA). Placeholder content for now. */}
+          <Route path="/terms" element={
+            <ErrorBoundary showHome={true} errorMessage="ไม่สามารถโหลดเอกสารได้" context={{ page: 'legal-terms' }}>
+              <LegalDocument doc="terms" />
+            </ErrorBoundary>
+          } />
+          <Route path="/privacy" element={
+            <ErrorBoundary showHome={true} errorMessage="ไม่สามารถโหลดเอกสารได้" context={{ page: 'legal-privacy' }}>
+              <LegalDocument doc="privacy" />
+            </ErrorBoundary>
+          } />
+          <Route path="/dpa" element={
+            <ErrorBoundary showHome={true} errorMessage="ไม่สามารถโหลดเอกสารได้" context={{ page: 'legal-dpa' }}>
+              <LegalDocument doc="dpa" />
             </ErrorBoundary>
           } />
 
@@ -219,6 +241,41 @@ const App = () => (
 
           {/* Owner ANALYTICS — cross-tenant real-estate intelligence (HQ lens).
               See documents/owner-hq-dashboard-plan.md. */}
+          <Route path="/owner-customers" element={
+            <ErrorBoundary showRetry={true} showHome={true} errorMessage="ไม่สามารถโหลดหน้า Customer Intelligence ได้" context={{ page: 'owner-customers' }}>
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerCustomers />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+          <Route path="/owner-funnel" element={
+            <ErrorBoundary showRetry={true} showHome={true} errorMessage="ไม่สามารถโหลดหน้า Lead Funnel ได้" context={{ page: 'owner-funnel' }}>
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerFunnel />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+          <Route path="/owner-inventory" element={
+            <ErrorBoundary showRetry={true} showHome={true} errorMessage="ไม่สามารถโหลดหน้า Inventory ได้" context={{ page: 'owner-inventory' }}>
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerInventory />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+          <Route path="/owner-marketing" element={
+            <ErrorBoundary showRetry={true} showHome={true} errorMessage="ไม่สามารถโหลดหน้า Marketing ได้" context={{ page: 'owner-marketing' }}>
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerMarketing />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+          <Route path="/owner-health" element={
+            <ErrorBoundary showRetry={true} showHome={true} errorMessage="ไม่สามารถโหลดหน้า Tenant Health ได้" context={{ page: 'owner-health' }}>
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerTenantHealth />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
           <Route path="/owner-market" element={
             <ErrorBoundary
               showRetry={true}
@@ -258,18 +315,8 @@ const App = () => (
             </ErrorBoundary>
           } />
 
-          <Route path="/owner-agents" element={
-            <ErrorBoundary
-              showRetry={true}
-              showHome={true}
-              errorMessage="ไม่สามารถโหลดหน้าประสิทธิภาพทีมขายได้"
-              context={{ page: 'owner-agents' }}
-            >
-              <ProtectedRouteSimple requireRole="owner">
-                <OwnerAgents />
-              </ProtectedRouteSimple>
-            </ErrorBoundary>
-          } />
+          {/* Sales Performance ถูกยุบรวมเข้า "อันดับยอดขาย" (/owner-companies) — เก่ารีไดเรกต์ไป */}
+          <Route path="/owner-agents" element={<Navigate to="/owner-companies" replace />} />
 
           <Route path="/owner-audit" element={
             <ErrorBoundary

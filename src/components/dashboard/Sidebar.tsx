@@ -15,6 +15,11 @@ import {
   BarChart3,
   Lock,
   ChevronDown,
+  Contact,
+  Sparkles,
+  Filter,
+  Layers,
+  HeartPulse,
   Building,
   MapPin,
   Wrench,
@@ -59,20 +64,23 @@ const NAV_GROUPS: NavGroup[] = [
 // Owner = SaaS control-plane + real-estate HQ. English UPPERCASE headers match
 // the app's KK-style groups above:
 //   (top, no header) ภาพรวมแพลตฟอร์ม — Executive Dashboard
-//   ANALYTICS        — cross-tenant real-estate intelligence (market, geo, company,
-//                      sales-team performance) = the HQ lens added per the Owner
-//                      redesign. See documents/owner-hq-dashboard-plan.md.
-//   TENANTS          — operate EXISTING customers: manage company, projects, billing
-//   GROWTH           — acquire NEW customers (platform sales pipeline: prospect → tenant)
+//   Contacts (id=intelligence) — the demand side: who buyers/leads are, funnel, campaigns.
+//                      Named "Contacts" (not "Customers") on purpose — HubSpot/Salesforce
+//                      convention: most people in here are leads who haven't bought yet.
+//   Sales (id=analytics)       — cross-tenant real-estate sales results (overview, geo,
+//                      company, sales-team performance, inventory). See owner-hq-dashboard-plan.md.
+//   TENANTS          — full tenant lifecycle in order: prospect (บริษัทที่สนใจสมัคร) →
+//                      active tenant (บริษัทผู้เช่า) → billing → health. The old
+//                      separate GROWTH group was merged in here so it reads as one flow.
 //   SETTINGS         — users, support, audit, platform config
 // Tenant-ops menus (campaigns, triggers, team, permissions, etc.) are intentionally
 // NOT here: those are the Admin's application-plane work, not the platform owner's.
 // NOTE: within-group order follows the master getAllNavItems() order, not hrefs order.
 const OWNER_NAV_GROUPS: NavGroup[] = [
   { id: "top",       label: null,                hrefs: ["/owner"] },
-  { id: "analytics", label: "ANALYTICS", icon: BarChart3, hrefs: ["/owner-market", "/owner-geography", "/owner-companies", "/owner-agents"] },
-  { id: "tenants",   label: "TENANTS",   icon: Building,  hrefs: ["/tenants", "/owner-projects", "/payments"] },
-  { id: "growth",    label: "GROWTH",    icon: Briefcase, hrefs: ["/owner-leads"] },
+  { id: "tenants",   label: "TENANTS",   icon: Building,  hrefs: ["/owner-leads", "/tenants", "/owner-projects", "/payments", "/owner-health"] },
+  { id: "analytics", label: "Sales", icon: TrendingUp, hrefs: ["/owner-market", "/owner-companies", "/owner-inventory", "/owner-geography"] },
+  { id: "intelligence", label: "Contacts", icon: Contact, hrefs: ["/owner-customers", "/owner-funnel", "/owner-marketing"] },
   { id: "settings",  label: "SETTINGS",  icon: Wrench,    hrefs: ["/users", "/owner-support", "/owner-audit", "/settings"] },
 ];
 
@@ -85,22 +93,26 @@ const getAllNavItems = (): NavItem[] => [
   // Owner ANALYTICS group — cross-tenant real-estate intelligence (HQ lens).
   // Data: units→properties→tenants via live Owner RLS; no migration needed.
   // See documents/owner-hq-dashboard-plan.md.
+  { icon: Contact,         label: "Contact Intelligence", href: "/owner-customers", requiredRoles: ["OWNER"] },
+  { icon: Filter,          label: "Lead Funnel & Scoring", href: "/owner-funnel",  requiredRoles: ["OWNER"] },
+  { icon: Megaphone,       label: "Marketing & Campaign", href: "/owner-marketing", requiredRoles: ["OWNER"] },
   { icon: TrendingUp,      label: "Sales Overview",      href: "/owner-market",    requiredRoles: ["OWNER"] },
+  { icon: BarChart3,       label: "อันดับยอดขาย",        href: "/owner-companies", requiredRoles: ["OWNER"] },
+  { icon: Layers,          label: "Inventory & Absorption", href: "/owner-inventory", requiredRoles: ["OWNER"] },
   { icon: MapPin,          label: "Geography",           href: "/owner-geography", requiredRoles: ["OWNER"] },
-  { icon: BarChart3,       label: "Company Performance", href: "/owner-companies", requiredRoles: ["OWNER"] },
-  { icon: Trophy,          label: "Sales Performance",   href: "/owner-agents",    requiredRoles: ["OWNER"] },
   { icon: Trophy,          label: "My Dashboard",        href: "/my-dashboard",  requiredRoles: ["SALES", "AGENT"] },
   // tenant-scoped LEAD analytics (conversion/SLA/won-lost for one company) =
   // Admin's application-plane work, not the platform Owner's. ADMIN-only.
   // Owner items are ordered to drive the sidebar groups (render order = this master
-  // order, filtered per group). TENANTS group → จัดการบริษัท · การชำระเงิน;
-  // SALES group → Leads. Keep this order so billing reads last within TENANTS.
-  { icon: Building2,       label: "Companies",           href: "/tenants",       requiredRoles: ["OWNER"] },
+  // order, filtered per group). TENANTS group reads as the tenant lifecycle:
+  //   prospect (บริษัทที่สนใจสมัคร) → active (บริษัทผู้เช่า) → projects → billing → health.
+  { icon: Briefcase,       label: "บริษัทที่สนใจสมัคร",    href: "/owner-leads",   requiredRoles: ["OWNER"] },
+  { icon: Building2,       label: "บริษัทผู้เช่า",          href: "/tenants",       requiredRoles: ["OWNER"] },
   // Owner gets the cross-tenant, read-only Project Dashboard (control-plane);
   // Admin/Sales/Agent keep the tenant-scoped editable /properties page.
   { icon: Building,        label: "All Projects",        href: "/owner-projects", requiredRoles: ["OWNER"] },
   { icon: CreditCard,      label: "Payments",            href: "/payments",      requiredRoles: ["OWNER"] },
-  { icon: Briefcase,       label: "Leads",               href: "/owner-leads",   requiredRoles: ["OWNER"] },
+  { icon: HeartPulse,      label: "Tenant Health",       href: "/owner-health",  requiredRoles: ["OWNER"] },
   { icon: Building2,       label: "Projects",            href: "/properties",    requiredRoles: ["ADMIN", "SALES", "AGENT"] },
   { icon: FileText,        label: "Leads",              href: "/leads",         requiredRoles: ["ADMIN", "SALES", "AGENT"] },
   // Tenant-ops menus — Admin's application-plane work, NOT the platform Owner's.

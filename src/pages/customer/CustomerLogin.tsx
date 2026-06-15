@@ -171,7 +171,7 @@ const CustomerLogin = () => {
 
           <p className="text-[11px] text-center text-gray-400 mt-6 leading-relaxed">
             การเข้าสู่ระบบหมายถึงคุณยอมรับ<br />
-            <a href="#" className="text-rose-600 hover:underline">เงื่อนไขการใช้งาน</a> และ <a href="#" className="text-rose-600 hover:underline">นโยบายความเป็นส่วนตัว</a>
+            <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-rose-600 hover:underline">เงื่อนไขการใช้งาน</a> และ <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-rose-600 hover:underline">นโยบายความเป็นส่วนตัว</a>
           </p>
         </div>
 

@@ -1374,9 +1374,9 @@ const TenantManagement = () => {
                       <Building2 className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <h1 className="text-2xl font-bold text-gray-900">จัดการบริษัท (Tenants)</h1>
+                      <h1 className="text-2xl font-bold text-gray-900">บริษัทผู้เช่า (Tenants)</h1>
                       <p className="text-sm sm:text-base text-gray-600 mt-1">
-                        จัดการบริษัททั้งหมดในระบบ SaaS
+                        จัดการบริษัทที่เช่าใช้งานระบบทั้งหมด
                       </p>
                     </div>
                   </div>
