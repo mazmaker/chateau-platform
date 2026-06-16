@@ -1113,9 +1113,9 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
         <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-hidden p-0 flex flex-col">
           {/* Hidden Accessibility Elements */}
           <DialogHeader className="sr-only">
-            <DialogTitle>เพิ่ม Lead ใหม่</DialogTitle>
+            <DialogTitle>เพิ่มผู้สนใจใหม่</DialogTitle>
             <DialogDescription>
-              กรอกข้อมูลลูกค้าและโครงการที่สนใจเพื่อสร้าง Lead ใหม่
+              กรอกข้อมูลผู้สนใจและโครงการที่สนใจเพื่อสร้างรายการใหม่
             </DialogDescription>
           </DialogHeader>
 
@@ -1126,8 +1126,8 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
                 <Users className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-gray-900">เพิ่ม Lead ใหม่</h2>
-                <p className="text-xs text-gray-500">กรอกข้อมูลลูกค้าและรายละเอียดเพื่อสร้าง Lead ใหม่</p>
+                <h2 className="text-xl font-bold text-gray-900">เพิ่มผู้สนใจใหม่</h2>
+                <p className="text-xs text-gray-500">กรอกข้อมูลผู้สนใจและรายละเอียดเพื่อสร้างรายการใหม่</p>
               </div>
             </div>
           </div>

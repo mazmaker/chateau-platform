@@ -462,10 +462,10 @@ const MyDashboard = () => {
   // ─── Sales personal analytics ───────────────────────────────
   // Lead Source breakdown — where my leads came from
   const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
-    online_facebook: { label: 'Facebook',  color: C.indigo },
-    online_google:   { label: 'Google',    color: C.amber },
-    online_line:     { label: 'LINE',      color: C.green },
-    agent_referral:  { label: 'นายหน้าแนะนำ',   color: C.redDeep },
+    online_facebook: { label: 'Facebook',  color: '#1877F2' }, // Facebook brand blue
+    online_google:   { label: 'Google',    color: '#F4B400' }, // Google brand yellow
+    online_line:     { label: 'LINE',      color: '#06C755' }, // LINE brand green
+    agent_referral:  { label: 'นายหน้าแนะนำ',   color: C.redDeep },  // chateau rose
     offline:         { label: 'Walk-in',   color: C.charcoal },
   };
   const sourceCounts: Record<string, number> = {};

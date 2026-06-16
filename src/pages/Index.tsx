@@ -155,8 +155,10 @@ const Index = () => {
           return;
         }
 
-        // Lazy cleanup: revert any reservations whose hold has expired before reading inventory
-        try { await (supabase as any).rpc('revert_expired_unit_reservations'); } catch { /* ignore */ }
+        // Lazy cleanup: revert reservations whose hold has expired. Fire-and-forget —
+        // do NOT await, so this DB scan never blocks the initial dashboard render (it was
+        // the main cause of the slow reload when navigating back to this page).
+        void (supabase as any).rpc('revert_expired_unit_reservations').catch(() => { /* ignore */ });
 
         // Bookings: only need cancelled ones from the last 30 days for the
         // "ยกเลิกการจอง" KPI card. Keep query lean — filter at DB.
@@ -311,24 +313,6 @@ const Index = () => {
     };
   });
 
-  // Daily sales for current month — for MTD sparkline (day-by-day)
-  const currentDay = now.getDate();
-  const dailyThisMonth = Array.from({ length: currentDay }, (_, i) => {
-    const day = i + 1;
-    const dayStart = new Date(now.getFullYear(), now.getMonth(), day);
-    const dayEnd = new Date(now.getFullYear(), now.getMonth(), day + 1);
-    const sold = soldUnits.filter((u) => {
-      if (!u.sold_at) return false;
-      const t = new Date(u.sold_at);
-      return t >= dayStart && t < dayEnd;
-    });
-    return {
-      month: String(day),
-      value: sold.reduce((s, u) => s + Number(u.price || 0), 0),
-      count: sold.length,
-    };
-  });
-
   const TYPE_LABEL: Record<string, string> = {
     apartment: 'อพาร์ตเมนต์',
     house: 'บ้าน',
@@ -404,6 +388,20 @@ const Index = () => {
               {/* Row 1 — KPI strip: 4 equal cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                 <CompactKpiCard
+                  title="ยอดขายเดือนนี้"
+                  value={formatTHB(salesMTD)}
+                  icon={Wallet}
+                  accentColor={C.red}
+                  bg={C.redLight}
+                  sub={
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-xs text-gray-500">ขาย <span className="font-semibold text-gray-700 tabular-nums">{salesMTDCount}</span> ยูนิต</span>
+                      {momChange !== null ? <ChangeBadge value={momChange} label="เทียบเดือนก่อน" /> : <span className="text-xs text-gray-400">เดือนแรก</span>}
+                    </div>
+                  }
+                  sparkData={salesByMonth12mo.slice(6)}
+                />
+                <CompactKpiCard
                   title="ยอดขายปีนี้"
                   value={formatTHB(salesYTD)}
                   icon={TrendingUp}
@@ -416,21 +414,6 @@ const Index = () => {
                     </div>
                   }
                   sparkData={salesByMonth12mo}
-                />
-                <CompactKpiCard
-                  title="ยอดขายเดือนนี้"
-                  value={formatTHB(salesMTD)}
-                  icon={Wallet}
-                  accentColor={C.red}
-                  bg={C.redLight}
-                  sub={
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-xs text-gray-500">ขาย <span className="font-semibold text-gray-700 tabular-nums">{salesMTDCount}</span> ยูนิต</span>
-                      {momChange !== null ? <ChangeBadge value={momChange} label="เทียบเดือนก่อน" /> : <span className="text-xs text-gray-400">เดือนแรก</span>}
-                    </div>
-                  }
-                  sparkData={dailyThisMonth}
-                  sparkLabelPrefix="วันที่"
                 />
                 <CompactKpiCard
                   title="มูลค่าการจอง"
@@ -483,11 +466,11 @@ const Index = () => {
                       <p className="text-[10px] text-gray-500 mt-1">ยูนิต / เดือน</p>
                     </div>
                     <div className="p-4 rounded-xl bg-gray-50">
-                      <p className="text-[11px] text-gray-500 mb-1">Days of Inventory</p>
+                      <p className="text-[11px] text-gray-500 mb-1">ระยะเวลาขายหมดสต๊อก</p>
                       <p className="text-2xl font-bold text-gray-900 tabular-nums leading-none">
                         {daysOfInventory !== null ? daysOfInventory.toFixed(0) : '—'}
                       </p>
-                      <p className="text-[10px] text-gray-500 mt-1">เดือน</p>
+                      <p className="text-[10px] text-gray-500 mt-1">เดือน (ตามอัตราขายปัจจุบัน)</p>
                     </div>
                   </div>
 
@@ -499,10 +482,11 @@ const Index = () => {
                         รวม {salesByMonth12mo.reduce((s, m) => s + m.count, 0)} ยูนิต / 12 เดือน
                       </span>
                     </div>
-                    <ResponsiveContainer width="100%" height={90}>
+                    <ResponsiveContainer width="100%" height={112}>
                       <BarChart data={salesByMonth12mo} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                        <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} interval={0} />
                         <Bar dataKey="count" fill={C.red} radius={[3, 3, 0, 0]} />
-                        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: '#fafafa' }} formatter={(v) => [`${v} ยูนิต`, '']} labelFormatter={(l) => `${l}`} />
+                        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: '#fafafa' }} formatter={(v) => [`${v} ยูนิต`, '']} labelFormatter={(l) => `เดือน ${l}`} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -660,6 +644,9 @@ const StatusRow = ({ color, label, count, total }: { color: string; label: strin
 
 // Sparkline — small area chart for trend visualization inside cards
 interface SparklineData { value?: number; count?: number; month?: string }
+// Mini sparkline — trend indicator with tooltip. allowEscapeViewBox + zIndex let
+// the tooltip float ABOVE the card instead of being clipped by its overflow, so
+// it shows in full and doesn't overlap the KPI value below.
 const Sparkline = ({ data, color, height = 60, dataKey = 'value', labelPrefix = 'เดือน' }: { data: SparklineData[]; color: string; height?: number; dataKey?: string; labelPrefix?: string }) => (
   <ResponsiveContainer width="100%" height={height}>
     <AreaChart data={data} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
@@ -679,6 +666,8 @@ const Sparkline = ({ data, color, height = 60, dataKey = 'value', labelPrefix = 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         formatter={(v: any) => [typeof v === 'number' && v > 1000 ? formatTHB(v) : String(v), 'ยอดขาย']}
         cursor={false}
+        allowEscapeViewBox={{ x: false, y: true }}
+        wrapperStyle={{ zIndex: 50 }}
       />
     </AreaChart>
   </ResponsiveContainer>
@@ -693,10 +682,9 @@ interface CompactKpiCardProps {
   bg: string;
   sub?: React.ReactNode;
   sparkData?: SparklineData[];
-  sparkLabelPrefix?: string;
 }
-const CompactKpiCard = ({ title, value, icon: Icon, accentColor, bg, sub, sparkData, sparkLabelPrefix }: CompactKpiCardProps) => (
-  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 relative overflow-hidden">
+const CompactKpiCard = ({ title, value, icon: Icon, accentColor, bg, sub, sparkData }: CompactKpiCardProps) => (
+  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 relative">
     <div className="p-5 pl-6">
       <div className="flex items-start justify-between mb-3">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 pt-1">{title}</p>
@@ -710,7 +698,7 @@ const CompactKpiCard = ({ title, value, icon: Icon, accentColor, bg, sub, sparkD
     </div>
     {sparkData && sparkData.length > 0 && (
       <div className="px-1 pb-1">
-        <Sparkline data={sparkData} color={accentColor} height={32} labelPrefix={sparkLabelPrefix} />
+        <Sparkline data={sparkData} color={accentColor} height={32} />
       </div>
     )}
   </div>

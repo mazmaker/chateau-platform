@@ -19,6 +19,7 @@ import OwnerInventory from "./pages/OwnerInventory";
 import OwnerTenantHealth from "./pages/OwnerTenantHealth";
 import OwnerMarketing from "./pages/OwnerMarketing";
 import OwnerAudit from "./pages/OwnerAudit";
+import OwnerSystemHealth from "./pages/OwnerSystemHealth";
 import TenantManagement from "./pages/TenantManagement";
 import PaymentDashboard from "./pages/PaymentDashboard";
 import PropertyManagement from "./pages/PropertyManagement";
@@ -270,7 +271,7 @@ const App = () => (
             </ErrorBoundary>
           } />
           <Route path="/owner-health" element={
-            <ErrorBoundary showRetry={true} showHome={true} errorMessage="ไม่สามารถโหลดหน้า Tenant Health ได้" context={{ page: 'owner-health' }}>
+            <ErrorBoundary showRetry={true} showHome={true} errorMessage="ไม่สามารถโหลดหน้าภาพรวมผู้เช่าได้" context={{ page: 'owner-health' }}>
               <ProtectedRouteSimple requireRole="owner">
                 <OwnerTenantHealth />
               </ProtectedRouteSimple>
@@ -327,6 +328,19 @@ const App = () => (
             >
               <ProtectedRouteSimple requireRole="owner">
                 <OwnerAudit />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/owner-system" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้าสถานะระบบได้"
+              context={{ page: 'owner-system' }}
+            >
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerSystemHealth />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />

@@ -344,7 +344,7 @@ const UserManagementContent = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
-                  {isAdmin ? 'จัดการทีมงาน' : 'จัดการผู้ใช้'}
+                  {isAdmin ? 'จัดการผู้ใช้งาน' : 'จัดการผู้ใช้'}
                 </h1>
                 <p className="text-gray-600 mt-1">
                   {isAdmin
@@ -368,7 +368,7 @@ const UserManagementContent = () => {
       </Card>
 
       {/* Stats Cards */}
-      <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-4' : 'md:grid-cols-4 lg:grid-cols-7'} gap-4`}>
+      <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-4' : 'md:grid-cols-3 lg:grid-cols-6'} gap-4`}>
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center">
@@ -487,20 +487,6 @@ const UserManagementContent = () => {
                 </div>
               </CardContent>
             </Card>
-
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <User className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm text-gray-600">ลูกค้า</p>
-                    <p className="text-xl font-semibold">{users.filter(u => u.role === 'customer').length}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </>
         )}
       </div>
@@ -551,7 +537,6 @@ const UserManagementContent = () => {
                 )}
                 <SelectItem value="sales">พนักงานขาย</SelectItem>
                 <SelectItem value="agent">นายหน้า</SelectItem>
-                {!isAdmin && <SelectItem value="customer">ลูกค้า</SelectItem>}
               </SelectContent>
             </Select>
 

@@ -8,6 +8,7 @@ import {
   LogOut,
   Crown,
   Shield,
+  Server,
   Briefcase,
   CreditCard,
   FileText,
@@ -78,10 +79,15 @@ const NAV_GROUPS: NavGroup[] = [
 // NOTE: within-group order follows the master getAllNavItems() order, not hrefs order.
 const OWNER_NAV_GROUPS: NavGroup[] = [
   { id: "top",       label: null,                hrefs: ["/owner"] },
-  { id: "tenants",   label: "TENANTS",   icon: Building,  hrefs: ["/owner-leads", "/tenants", "/owner-projects", "/payments", "/owner-health"] },
-  { id: "analytics", label: "Sales", icon: TrendingUp, hrefs: ["/owner-market", "/owner-companies", "/owner-inventory", "/owner-geography"] },
-  { id: "intelligence", label: "Contacts", icon: Contact, hrefs: ["/owner-customers", "/owner-funnel", "/owner-marketing"] },
-  { id: "settings",  label: "SETTINGS",  icon: Wrench,    hrefs: ["/users", "/owner-support", "/owner-audit", "/settings"] },
+  // TENANTS — lands on ภาพรวมผู้เช่า (overview, ยุบ Tenant Health เข้ามา) → prospect →
+  // active tenant → projects → global users (Owner support tool, moved in from SETTINGS).
+  { id: "tenants",   label: "TENANTS",   icon: Building,  hrefs: ["/owner-health", "/owner-leads", "/tenants", "/owner-projects", "/users"] },
+  { id: "analytics", label: "Property Sales", icon: TrendingUp, hrefs: ["/owner-market", "/owner-companies", "/owner-inventory", "/owner-geography"] },
+  { id: "intelligence", label: "ผู้สนใจ", icon: Contact, hrefs: ["/owner-customers", "/owner-funnel", "/owner-marketing"] },
+  // FINANCE — Payments pulled out of TENANTS to its own domain group (P&L of the
+  // Owner). The page already holds Financial Overview (สุขภาพรายได้ tab) + billing automation.
+  { id: "finance",   label: "การเงิน",   icon: CreditCard, hrefs: ["/payments"] },
+  { id: "settings",  label: "SYSTEM & SETTINGS",  icon: Wrench,    hrefs: ["/owner-support", "/owner-audit", "/owner-system", "/settings"] },
 ];
 
 const getAllNavItems = (): NavItem[] => [
@@ -93,8 +99,8 @@ const getAllNavItems = (): NavItem[] => [
   // Owner ANALYTICS group — cross-tenant real-estate intelligence (HQ lens).
   // Data: units→properties→tenants via live Owner RLS; no migration needed.
   // See documents/owner-hq-dashboard-plan.md.
-  { icon: Contact,         label: "Contact Intelligence", href: "/owner-customers", requiredRoles: ["OWNER"] },
-  { icon: Filter,          label: "Lead Funnel & Scoring", href: "/owner-funnel",  requiredRoles: ["OWNER"] },
+  { icon: Contact,         label: "ฐานข้อมูลผู้สนใจ",    href: "/owner-customers", requiredRoles: ["OWNER"] },
+  { icon: Filter,          label: "Funnel & คะแนนผู้สนใจ", href: "/owner-funnel",  requiredRoles: ["OWNER"] },
   { icon: Megaphone,       label: "Marketing & Campaign", href: "/owner-marketing", requiredRoles: ["OWNER"] },
   { icon: TrendingUp,      label: "Sales Overview",      href: "/owner-market",    requiredRoles: ["OWNER"] },
   { icon: BarChart3,       label: "อันดับยอดขาย",        href: "/owner-companies", requiredRoles: ["OWNER"] },
@@ -105,16 +111,19 @@ const getAllNavItems = (): NavItem[] => [
   // Admin's application-plane work, not the platform Owner's. ADMIN-only.
   // Owner items are ordered to drive the sidebar groups (render order = this master
   // order, filtered per group). TENANTS group reads as the tenant lifecycle:
-  //   prospect (บริษัทที่สนใจสมัคร) → active (บริษัทผู้เช่า) → projects → billing → health.
+  //   ภาพรวมผู้เช่า (overview) → prospect (บริษัทที่สนใจสมัคร) → active (บริษัทผู้เช่า) → projects → users.
+  { icon: HeartPulse,      label: "ภาพรวมผู้เช่า",         href: "/owner-health",  requiredRoles: ["OWNER"] },
   { icon: Briefcase,       label: "บริษัทที่สนใจสมัคร",    href: "/owner-leads",   requiredRoles: ["OWNER"] },
   { icon: Building2,       label: "บริษัทผู้เช่า",          href: "/tenants",       requiredRoles: ["OWNER"] },
   // Owner gets the cross-tenant, read-only Project Dashboard (control-plane);
   // Admin/Sales/Agent keep the tenant-scoped editable /properties page.
   { icon: Building,        label: "All Projects",        href: "/owner-projects", requiredRoles: ["OWNER"] },
+  // Global Users (cross-tenant) — Owner support tool; grouped under TENANTS (moved from SETTINGS).
+  { icon: Users,           label: "ผู้ใช้งานทั้งหมด",      href: "/users",         requiredRoles: ["OWNER", "ADMIN"] },
+  // Payments — Owner finance hub (invoices · AR · สุขภาพรายได้ tab · billing automation). FINANCE group.
   { icon: CreditCard,      label: "Payments",            href: "/payments",      requiredRoles: ["OWNER"] },
-  { icon: HeartPulse,      label: "Tenant Health",       href: "/owner-health",  requiredRoles: ["OWNER"] },
   { icon: Building2,       label: "Projects",            href: "/properties",    requiredRoles: ["ADMIN", "SALES", "AGENT"] },
-  { icon: FileText,        label: "Leads",              href: "/leads",         requiredRoles: ["ADMIN", "SALES", "AGENT"] },
+  { icon: FileText,        label: "ผู้สนใจ",             href: "/leads",         requiredRoles: ["ADMIN", "SALES", "AGENT"] },
   // Tenant-ops menus — Admin's application-plane work, NOT the platform Owner's.
   // Deliberately ADMIN-only (cut from Owner) so the Owner menu stays a clean
   // control-plane. Owner can still reach them by URL for support if ever needed.
@@ -125,9 +134,12 @@ const getAllNavItems = (): NavItem[] => [
   { icon: Wand2,           label: "Builder Wizard",     href: "/builder",       requiredRoles: ["ADMIN"] },
   { icon: Zap,             label: "Triggers",           href: "/triggers",      requiredRoles: ["ADMIN"] },
   { icon: BarChart3,       label: "Marketing Analytics",href: "/marketing-analytics", requiredRoles: ["ADMIN"] },
-  { icon: Users,           label: "Users",               href: "/users",         requiredRoles: ["OWNER", "ADMIN"] },
+  // NOTE: /users has a SINGLE master entry in the TENANTS block above (requiredRoles
+  // OWNER+ADMIN). It groups under TENANTS for Owner, "admin" for Admin (via NAV_GROUPS),
+  // and the label is overridden to "User Management" for Admin below. Do not re-add here.
   { icon: MessageSquare,   label: "Support",             href: "/owner-support", requiredRoles: ["OWNER"] },
   { icon: Shield,          label: "Audit Log",           href: "/owner-audit",   requiredRoles: ["OWNER"] },
+  { icon: Server,          label: "สถานะระบบ",           href: "/owner-system",  requiredRoles: ["OWNER"] },
   { icon: Lock,            label: "Permissions",         href: "/permissions",   requiredRoles: ["ADMIN"] },
   { icon: Settings,        label: "Settings",            href: "/settings",      requiredRoles: ["OWNER", "ADMIN", "SALES", "AGENT", "CUSTOMER"] },
   { icon: LogOut,          label: "Log Out",             href: "/logout",        isLogout: true },

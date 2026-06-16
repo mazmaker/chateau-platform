@@ -49,7 +49,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Users,
   Plus,
@@ -1182,9 +1181,9 @@ const LeadManagement = () => {
                         <Users className="w-6 h-6 text-white" />
                       </div>
                       <div>
-                        <h1 className="text-2xl font-bold text-gray-900">ระบบติดตามลูกค้า (Leads)</h1>
+                        <h1 className="text-2xl font-bold text-gray-900">ระบบจัดการผู้สนใจ</h1>
                         <p className="text-gray-600 mt-1">
-                          จัดการลูกค้าและติดตามสถานะการขายอสังหาริมทรัพย์
+                          จัดการผู้สนใจซื้ออสังหาฯ และติดตามสถานะการขาย
                         </p>
                       </div>
                     </div>
@@ -1196,7 +1195,7 @@ const LeadManagement = () => {
                       className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
                     >
                       <Plus className="w-4 h-4 mr-2" />
-                      เพิ่ม Lead ใหม่
+                      เพิ่มผู้สนใจใหม่
                     </Button>
                   </div>
                 </CardContent>
@@ -1212,7 +1211,7 @@ const LeadManagement = () => {
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{totalLeads}</p>
-                  <p className="text-xs text-muted-foreground">Lead ทั้งหมด</p>
+                  <p className="text-xs text-muted-foreground">ผู้สนใจทั้งหมด</p>
                 </div>
               </div>
             </CardContent>
@@ -1225,7 +1224,7 @@ const LeadManagement = () => {
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{newLeads}</p>
-                  <p className="text-xs text-muted-foreground">Lead ใหม่</p>
+                  <p className="text-xs text-muted-foreground">ผู้สนใจใหม่</p>
                 </div>
               </div>
             </CardContent>
@@ -1275,20 +1274,9 @@ const LeadManagement = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="space-y-4">
-              <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)}>
-                <TabsList>
-                  {(userRole === 'owner' || userRole === 'admin') && (
-                    <TabsTrigger value="all">Leads ทั้งหมด</TabsTrigger>
-                  )}
-                  {['admin', 'sales', 'agent'].includes(userRole || '') && (
-                    <TabsTrigger value="my">Leads ของฉัน</TabsTrigger>
-                  )}
-                  {userRole === 'admin' && (
-                    <TabsTrigger value="team">Leads ทีม</TabsTrigger>
-                  )}
-                </TabsList>
-              </Tabs>
-
+              {/* Tab UI removed — every role already sees the right scope by default
+                  (admin → all, sales/agent → their own via RLS). activeTab still drives
+                  the fetch but no longer needs a visible switcher. */}
               {priorityFilter !== 'all' && (
                 <div className="flex items-center justify-between gap-3 px-4 py-3 bg-rose-50 border border-rose-100 rounded-lg">
                   <p className="text-sm text-rose-900">
@@ -1706,9 +1694,9 @@ const LeadManagement = () => {
         <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
           <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-xl">รายละเอียด Lead</DialogTitle>
+              <DialogTitle className="text-xl">รายละเอียดผู้สนใจ</DialogTitle>
               <DialogDescription>
-                ข้อมูลลูกค้าและรายละเอียดที่เกี่ยวข้อง
+                ข้อมูลผู้สนใจและรายละเอียดที่เกี่ยวข้อง
               </DialogDescription>
             </DialogHeader>
             {selectedLead && (() => {

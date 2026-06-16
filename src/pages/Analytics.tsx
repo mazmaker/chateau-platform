@@ -1,12 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { supabase } from '@/lib/supabase';
 import { LEAD_STATUS_LABELS } from '@/lib/leadStatus';
 import { SubscriptionGuard } from '@/hooks/useSubscriptionFeatures';
 import {
-  AreaChart,
-  Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -22,7 +22,6 @@ import {
   AlertTriangle,
   Users,
   Briefcase,
-  DollarSign,
   TrendingUp,
   Eye,
   ChevronRight,
@@ -47,6 +46,12 @@ const tooltipStyle = {
   fontSize: '12px',
   padding: '8px 12px',
 };
+
+// Thai Baht glyph as an icon-compatible component (Lucide has no ฿ icon). Accepts
+// the same className/style props as a Lucide icon so it drops into kpiCards as-is.
+const BahtSign = ({ className, style }: { className?: string; style?: CSSProperties; strokeWidth?: number }) => (
+  <span className={`inline-flex items-center justify-center font-bold leading-none ${className ?? ''}`} style={{ fontSize: '18px', ...style }}>฿</span>
+);
 
 interface LeadRow {
   id: string;
@@ -143,6 +148,18 @@ const SOURCE_LABEL: Record<string, string> = {
   agent_referral: 'นายหน้าแนะนำ',
   // Catch-all for sources that don't fit a primary channel (TikTok, YouTube, brochure variants, etc.)
   other: 'อื่นๆ',
+};
+
+// Per-channel colors — kept identical to the Sales dashboard (MyDashboard.tsx
+// SOURCE_LABELS) so "แหล่งที่มาของลีด" looks the same across roles. Keyed by the
+// Thai label produced by sourceShort(). Falls back to slate for unmapped sources.
+const SOURCE_COLOR: Record<string, string> = {
+  'Facebook':     '#1877F2', // Facebook brand blue
+  'Google':       '#F4B400', // Google brand yellow
+  'LINE':         '#06C755', // LINE brand green
+  'นายหน้าแนะนำ': '#e11d48', // chateau rose (referral — not an app)
+  'Walk-in':      '#475569', // charcoal (offline — not an app)
+  'อื่นๆ':         '#94a3b8', // slate
 };
 
 const sourceShort = (raw: string | null) => {
@@ -273,18 +290,15 @@ const Analytics = () => {
   const newInPeriod = leads.filter((l) => new Date(l.created_at) >= periodStart);
 
   // ─── KPI: Silent leads (>7/14/30 days no contact) ───
-  const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const fourteenDaysAgo = new Date(); fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-  const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  // Silent threshold follows the selected period (7/30/90) instead of a fixed 7 days
+  const silentCutoff = new Date(); silentCutoff.setDate(silentCutoff.getDate() - periodDays);
 
   const isSilent = (l: LeadRow, since: Date) => {
     if (l.status === 'won' || l.status === 'lost') return false;
     const lastTouch = l.last_contact_date ? new Date(l.last_contact_date) : new Date(l.created_at);
     return lastTouch < since;
   };
-  const silent7 = leads.filter((l) => isSilent(l, sevenDaysAgo));
-  const silent14 = leads.filter((l) => isSilent(l, fourteenDaysAgo));
-  const silent30 = leads.filter((l) => isSilent(l, thirtyDaysAgo));
+  const silentInPeriod = leads.filter((l) => isSilent(l, silentCutoff));
 
   // ─── KPI: SLA breach ──
   const twoHoursAgo = new Date(); twoHoursAgo.setHours(twoHoursAgo.getHours() - 2);
@@ -294,9 +308,10 @@ const Analytics = () => {
   });
 
   // ─── KPI: Conversion rate ──
-  const totalClosed = leads.filter((l) => l.status === 'won' || l.status === 'lost').length;
-  const totalWon = leads.filter((l) => l.status === 'won').length;
-  const totalLost = leads.filter((l) => l.status === 'lost').length;
+  // Period-scoped — only leads that entered within the selected window
+  const totalClosed = newInPeriod.filter((l) => l.status === 'won' || l.status === 'lost').length;
+  const totalWon = newInPeriod.filter((l) => l.status === 'won').length;
+  const totalLost = newInPeriod.filter((l) => l.status === 'lost').length;
   const conversionRate = totalClosed > 0 ? (totalWon / totalClosed) * 100 : 0;
   const leadLossRate = totalClosed > 0 ? (totalLost / totalClosed) * 100 : 0;
 
@@ -329,7 +344,7 @@ const Analytics = () => {
   const reachedBeyond: Record<string, number> = {};
   forwardChain.forEach((stage, idx) => {
     const stagesAtOrBeyond = forwardChain.slice(idx);
-    reachedBeyond[stage] = leads.filter((l) => (stagesAtOrBeyond as readonly string[]).includes(l.status || '')).length;
+    reachedBeyond[stage] = newInPeriod.filter((l) => (stagesAtOrBeyond as readonly string[]).includes(l.status || '')).length;
   });
   // Helper for funnel widget: "% of those who reached the previous stage who also reached this stage"
   const stagePassRate = (currentStage: string): number | null => {
@@ -348,7 +363,7 @@ const Analytics = () => {
   // Cross-section counts (kept around for "lost" which is a terminal exit, not in forward chain)
   const funnelCounts: Record<string, number> = {};
   STATUS_ORDER.forEach((s) => { funnelCounts[s] = 0; });
-  leads.forEach((l) => {
+  newInPeriod.forEach((l) => {
     const s = l.status || 'new';
     if (s in funnelCounts) funnelCounts[s]++;
   });
@@ -370,9 +385,10 @@ const Analytics = () => {
   });
   const maxFunnel = Math.max(...funnelData.map((d) => d.count), 1);
 
-  // ─── Source breakdown ──
+  // ─── Source breakdown ── (period-scoped — channels that brought leads in the
+  // selected window, so it changes with the 7/30/90-day toggle)
   const sourceCounts: Record<string, number> = {};
-  leads.forEach((l) => {
+  newInPeriod.forEach((l) => {
     const s = sourceShort(l.source);
     sourceCounts[s] = (sourceCounts[s] || 0) + 1;
   });
@@ -380,29 +396,43 @@ const Analytics = () => {
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value);
 
-  // ─── Trend ──
+  // ─── Trend ── grouped bars. Daily is too noisy over 30/90 days (the boss found
+  // the 30-point overlapping curves hard to read), so we bucket by week for longer
+  // ranges — fewer, taller bars that compare ลีดใหม่/ติดต่อ/ปิด at a glance.
+  const trendBucketDays = periodDays <= 7 ? 1 : 7;
   const trendData = useMemo(() => {
-    const days: { date: string; key: string; new: number; contacted: number; won: number }[] = [];
+    const days: { date: Date; key: string; new: number; contacted: number; won: number }[] = [];
     for (let i = periodDays - 1; i >= 0; i--) {
       const d = new Date(); d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      const label = `${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
-      days.push({ date: label, key, new: 0, contacted: 0, won: 0 });
+      days.push({ date: d, key: d.toISOString().slice(0, 10), new: 0, contacted: 0, won: 0 });
     }
     leads.forEach((l) => {
-      const k = (l.created_at || '').slice(0, 10);
-      const day = days.find((d) => d.key === k);
+      const day = days.find((d) => d.key === (l.created_at || '').slice(0, 10));
       if (day) day.new++;
     });
     activities.forEach((a) => {
-      const k = (a.created_at || '').slice(0, 10);
-      const day = days.find((d) => d.key === k);
+      const day = days.find((d) => d.key === (a.created_at || '').slice(0, 10));
       if (!day) return;
       if (a.activity_type === 'lead_contacted') day.contacted++;
       if (a.activity_type === 'lead_won') day.won++;
     });
-    return days;
-  }, [leads, activities, periodDays]);
+    const fmt = (d: Date) => d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+    if (trendBucketDays === 1) {
+      return days.map((d) => ({ label: fmt(d.date), new: d.new, contacted: d.contacted, won: d.won }));
+    }
+    // Weekly buckets
+    const buckets: { label: string; new: number; contacted: number; won: number }[] = [];
+    for (let i = 0; i < days.length; i += trendBucketDays) {
+      const chunk = days.slice(i, i + trendBucketDays);
+      buckets.push({
+        label: fmt(chunk[0].date),
+        new: chunk.reduce((s, d) => s + d.new, 0),
+        contacted: chunk.reduce((s, d) => s + d.contacted, 0),
+        won: chunk.reduce((s, d) => s + d.won, 0),
+      });
+    }
+    return buckets;
+  }, [leads, activities, periodDays, trendBucketDays]);
 
   // ─── Hot Leads ──
   // Manual flag from Sales is the single source of truth here. Algorithm scores
@@ -434,7 +464,7 @@ const Analytics = () => {
     });
 
   // ─── Silent Leads list ──
-  const silentList = silent7
+  const silentList = silentInPeriod
     .map((l) => {
       const lastTouch = l.last_contact_date ? new Date(l.last_contact_date) : new Date(l.created_at);
       const daysCount = Math.floor((now.getTime() - lastTouch.getTime()) / 86400000);
@@ -515,14 +545,14 @@ const Analytics = () => {
       onClick: undefined as (() => void) | undefined,
     },
     {
-      title: 'ลีดเงียบ > 7 วัน',
-      value: silent7.length.toLocaleString(),
-      sub: `${silent14.length} เงียบ >14 วัน · ${silent30.length} >30 วัน`,
+      title: `ลีดเงียบ > ${periodDays} วัน`,
+      value: silentInPeriod.length.toLocaleString(),
+      sub: `ไม่ได้ติดต่อเกิน ${periodDays} วัน`,
       icon: PhoneOff,
       color: KK.orange,
       bg: KK.orangeLight,
       // Drill into the Silent Leads panel already on this page (scrolls to the named list).
-      onClick: silent7.length > 0
+      onClick: silentInPeriod.length > 0
         ? () => document.getElementById('silent-leads')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         : undefined,
     },
@@ -557,9 +587,9 @@ const Analytics = () => {
       title: 'อัตราปิดดีล',
       value: `${conversionRate.toFixed(1)}%`,
       sub: totalClosed > 0
-        ? `Won ${totalWon} จาก ${totalClosed} ดีลที่จบแล้ว`
+        ? `Won ${totalWon} จาก ${totalClosed} ดีล · ${periodDays} วันล่าสุด`
         : 'ยังไม่มีดีลที่จบในช่วงนี้',
-      icon: DollarSign,
+      icon: BahtSign,
       color: KK.green,
       bg: KK.greenLight,
       onClick: undefined,
@@ -673,7 +703,7 @@ const Analytics = () => {
                 </div>
               </div>
               <p className="text-[11px] text-gray-500 pt-2 border-t border-gray-100">
-                รวม Won + Loss ทั้งหมด <span className="font-semibold text-gray-700 tabular-nums">{totalClosed}</span> ดีล
+                รวม Won + Loss <span className="font-semibold text-gray-700 tabular-nums">{totalClosed}</span> ดีล · {periodDays} วันล่าสุด
               </p>
             </div>
           </div>
@@ -691,7 +721,7 @@ const Analytics = () => {
               <div>
                 <h3 className="text-base font-bold text-gray-900">Lead Funnel</h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  กรวยปิดดีล · ลีดทั้งหมด {leads.length} คน · ตัวเลข = ลีดที่<strong>เคยผ่าน</strong> stage นี้ ('ปิดการขายไม่สำเร็จ' = นับเฉพาะปัจจุบัน)
+                  กรวยปิดดีล · ลีด {newInPeriod.length} คน ({periodDays} วันล่าสุด) · ตัวเลข = ลีดที่<strong>เคยผ่าน</strong> stage นี้ ('ปิดการขายไม่สำเร็จ' = นับเฉพาะปัจจุบัน)
                 </p>
               </div>
             </div>
@@ -743,25 +773,26 @@ const Analytics = () => {
 
           <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6">
             <h3 className="text-base font-bold text-gray-900">แหล่งที่มาของลีด</h3>
-            <p className="text-xs text-gray-500 mt-0.5 mb-5">Lead Sources</p>
+            <p className="text-xs text-gray-500 mt-0.5 mb-5">Lead Sources · {periodDays} วันล่าสุด</p>
             {sourceData.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-8">ยังไม่มีข้อมูล</p>
             ) : (
               <div className="space-y-4">
-                {sourceData.map((s, i) => {
+                {sourceData.map((s) => {
                   const max = Math.max(...sourceData.map((x) => x.value), 1);
                   const widthPct = (s.value / max) * 100;
-                  // Monochromatic — all bars in brand red, opacity fades by rank
-                  const denom = Math.max(sourceData.length - 1, 1);
-                  const opacity = Math.max(0.25, 1 - (i / denom) * 0.75);
+                  const color = SOURCE_COLOR[s.name] || '#94a3b8';
                   return (
                     <div key={s.name}>
-                      <div className="flex justify-between mb-1.5">
-                        <span className="text-xs font-medium text-gray-700">{s.name}</span>
-                        <span className="text-xs font-bold tabular-nums" style={{ color: KK.red }}>{s.value}</span>
+                      <div className="flex justify-between mb-1.5 gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                          <span className="text-xs font-medium text-gray-700 truncate">{s.name}</span>
+                        </div>
+                        <span className="text-xs font-bold tabular-nums shrink-0" style={{ color }}>{s.value}</span>
                       </div>
                       <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${widthPct}%`, backgroundColor: KK.red, opacity }} />
+                        <div className="h-full rounded-full" style={{ width: `${widthPct}%`, backgroundColor: color }} />
                       </div>
                     </div>
                   );
@@ -775,39 +806,25 @@ const Analytics = () => {
         <div className={`bg-white border border-gray-100 rounded-2xl shadow-soft p-6 ${loading ? 'opacity-30 pointer-events-none' : ''}`}>
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h3 className="text-base font-bold text-gray-900">แนวโน้ม Lead รายวัน</h3>
-              <p className="text-xs text-gray-500 mt-0.5">{periodDays} วันล่าสุด · ลีดมาใหม่ vs ติดต่อกลับ vs ปิดดีล</p>
+              <h3 className="text-base font-bold text-gray-900">แนวโน้ม Lead</h3>
+              <p className="text-xs text-gray-500 mt-0.5">{periodDays} วันล่าสุด · {trendBucketDays === 1 ? 'รายวัน' : 'รายสัปดาห์'} · ลีดมาใหม่ vs ติดต่อกลับ vs ปิดดีล</p>
             </div>
           </div>
           <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={trendData} margin={{ top: 10, right: 8, left: -10, bottom: 0 }}>
-              <defs>
-                <linearGradient id="newGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={KK.red} stopOpacity={0.25} />
-                  <stop offset="100%" stopColor={KK.red} stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="contGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={KK.amber} stopOpacity={0.2} />
-                  <stop offset="100%" stopColor={KK.amber} stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="wonGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={KK.green} stopOpacity={0.2} />
-                  <stop offset="100%" stopColor={KK.green} stopOpacity={0} />
-                </linearGradient>
-              </defs>
+            <BarChart data={trendData} margin={{ top: 10, right: 8, left: -10, bottom: 0 }} barCategoryGap="20%">
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} interval={Math.max(0, Math.floor(periodDays / 12))} />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} interval={0} />
               <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Area type="monotone" dataKey="new" name="ลีดใหม่" stroke={KK.red} strokeWidth={2.5} fill="url(#newGrad)" dot={false} />
-              <Area type="monotone" dataKey="contacted" name="ติดต่อกลับ" stroke={KK.amber} strokeWidth={2} fill="url(#contGrad)" dot={false} />
-              <Area type="monotone" dataKey="won" name="ปิดดีล" stroke={KK.green} strokeWidth={2} fill="url(#wonGrad)" dot={false} />
-            </AreaChart>
+              <Tooltip contentStyle={tooltipStyle} cursor={{ fill: '#fafafa' }} />
+              <Bar dataKey="new" name="ลีดใหม่" fill={KK.red} radius={[3, 3, 0, 0]} />
+              <Bar dataKey="contacted" name="ติดต่อกลับ" fill={KK.amber} radius={[3, 3, 0, 0]} />
+              <Bar dataKey="won" name="ปิดดีล" fill={KK.green} radius={[3, 3, 0, 0]} />
+            </BarChart>
           </ResponsiveContainer>
           <div className="flex gap-5 mt-3 pl-2">
-            <div className="flex items-center gap-2"><div className="w-2.5 h-0.5 rounded" style={{ backgroundColor: KK.red }} /><span className="text-xs text-gray-600">ลีดใหม่</span></div>
-            <div className="flex items-center gap-2"><div className="w-2.5 h-0.5 rounded" style={{ backgroundColor: KK.amber }} /><span className="text-xs text-gray-600">ติดต่อกลับ</span></div>
-            <div className="flex items-center gap-2"><div className="w-2.5 h-0.5 rounded" style={{ backgroundColor: KK.green }} /><span className="text-xs text-gray-600">ปิดดีล</span></div>
+            <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: KK.red }} /><span className="text-xs text-gray-600">ลีดใหม่</span></div>
+            <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: KK.amber }} /><span className="text-xs text-gray-600">ติดต่อกลับ</span></div>
+            <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: KK.green }} /><span className="text-xs text-gray-600">ปิดดีล</span></div>
           </div>
         </div>
 

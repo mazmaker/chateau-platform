@@ -373,7 +373,7 @@ export default function SelfPerformanceSection({ userId, tenantId, showName = fa
             Sales Funnel · {metrics.activeLeadCount} leads
           </h3>
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           {FUNNEL_STAGES.map((s, i) => {
             const reached = metrics.stageReached[s.key];
             const top = metrics.stageReached[FUNNEL_STAGES[0].key];
@@ -425,7 +425,7 @@ export default function SelfPerformanceSection({ userId, tenantId, showName = fa
             );
           })}
           {metrics.lostCount > 0 && (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
               <span className="text-xs font-medium text-gray-400 w-28 flex-shrink-0">{LEAD_STATUS_LABELS.lost}</span>
               <div className="flex-1 h-7 rounded-md bg-gray-100 overflow-hidden relative">
                 <div

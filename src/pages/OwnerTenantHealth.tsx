@@ -10,12 +10,14 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { HeartPulse, ShieldCheck, AlertTriangle, Moon, ChevronRight } from 'lucide-react';
+import { HeartPulse, ShieldCheck, AlertTriangle, Moon, ChevronRight, Package } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 
 // ──────────────────────────────────────────────────────────────────────────
-// Tenant Health — Owner customer-success lens: which paying companies are
-// healthy vs going quiet (churn risk). The #1 thing a SaaS owner must see.
+// ภาพรวมผู้เช่า (Tenants Overview) — the landing page for the TENANTS group.
+// One screen to answer "สุขภาพฐานลูกค้า B2B ของเราเป็นยังไง": แพ็กเกจกระจายตัวยังไง
+// (plan mix) · ใครแข็งแรง vs ใครกำลังจะหนี (churn risk / health score) · ใครใกล้
+// หมด Trial. รวม Tenant Health เดิมเข้ามาเป็น overview (1 เมนู = 1 ข้อมูล).
 // UI-first; sample data (wire to tenants + activity_logs recency later).
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -54,6 +56,8 @@ const ROWS: Row[] = [
 ];
 
 const PLAN_TH: Record<string, string> = { professional: 'Professional', starter: 'Starter', enterprise: 'Enterprise', free: 'Free' };
+// Plan colors — Enterprise(brand red) > Professional(navy) > Starter(amber) > Free(gray)
+const PLAN_COLOR: Record<string, string> = { enterprise: KK.red, professional: KK.blue, starter: KK.amber, free: KK.gray };
 
 const OwnerTenantHealth = () => {
   const navigate = useNavigate();
@@ -75,6 +79,12 @@ const OwnerTenantHealth = () => {
     { name: STATUS_META.at_risk.label, value: atRisk, color: KK.amber },
     { name: STATUS_META.dormant.label, value: dormant, color: KK.red },
   ]).filter((d) => d.value > 0);
+
+  // Plan distribution (Free/Starter/Professional/Enterprise) — same companies as the table.
+  const planCounts = ROWS.reduce<Record<string, number>>((acc, r) => { acc[r.plan] = (acc[r.plan] || 0) + 1; return acc; }, {});
+  const planDonut = (['enterprise', 'professional', 'starter', 'free'])
+    .filter((p) => planCounts[p] > 0)
+    .map((p) => ({ name: PLAN_TH[p], value: planCounts[p], color: PLAN_COLOR[p] }));
 
   const filtered = ROWS.filter((r) => statusFilter === 'all' || r.status === statusFilter);
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -107,8 +117,11 @@ const OwnerTenantHealth = () => {
                 <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
                   Tenants
                 </span>
-                <h1 className="text-2xl font-bold text-gray-900">Tenant Health</h1>
-                <p className="text-[15px] text-gray-500 mt-1.5">สุขภาพการใช้งานของบริษัทที่เช่าระบบ · ใครแข็งแรง vs ใครกำลังจะหนี (churn risk) · ข้อมูลช่วง <span className="font-semibold text-gray-700">{periodRangeLabel(period)}</span></p>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-2xl font-bold text-gray-900">ภาพรวมผู้เช่า (Tenants Overview)</h1>
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ color: KK.amber, backgroundColor: KK.amberLight }}>ตัวอย่าง</span>
+                </div>
+                <p className="text-[15px] text-gray-500 mt-1.5">สุขภาพฐานลูกค้า B2B · สัดส่วนแพ็กเกจ · ใครแข็งแรง vs ใครกำลังจะหนี (churn risk) · ข้อมูลช่วง <span className="font-semibold text-gray-700">{periodRangeLabel(period)}</span></p>
               </div>
               <PeriodFilter value={period} onChange={setPeriod} tier="strategic" className="self-start sm:self-auto" />
             </div>
@@ -120,10 +133,46 @@ const OwnerTenantHealth = () => {
               <KpiCard title="เงียบ/ไม่ใช้งาน" value={dormant.toLocaleString()} sub="ต้องรีบเข้าไปดูแล" icon={Moon} color={KK.red} bg={KK.redLight} />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Two donuts: plan mix (รายได้มาจากแพ็กเกจไหน) + health (ใครเสี่ยงหนี) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Plan-mix donut */}
+              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
+                <div className="flex items-center gap-2">
+                  <Package className="w-4 h-4" style={{ color: KK.blue }} />
+                  <h2 className="text-base font-bold text-gray-900">สัดส่วนแพ็กเกจ</h2>
+                </div>
+                <p className="text-xs text-gray-500 mb-2 mt-0.5">Enterprise / Professional / Starter / Free</p>
+                <div className="relative" style={{ height: 200 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={planDonut} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={58} outerRadius={86} paddingAngle={2}>
+                        {planDonut.map((d, i) => <Cell key={i} fill={d.color} />)}
+                      </Pie>
+                      <Tooltip contentStyle={kkTooltipStyle} formatter={((v: any, n: any) => [`${v} บริษัท`, n]) as any} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <div className="text-2xl font-bold text-gray-900 tabular-nums">{ROWS.length}</div>
+                    <div className="text-[11px] text-gray-500">บริษัท</div>
+                  </div>
+                </div>
+                <div className="space-y-1.5 mt-3 pt-3 border-t border-gray-100">
+                  {planDonut.map((d, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: d.color }} />
+                      <span className="text-gray-600 flex-1">{d.name}</span>
+                      <span className="font-semibold text-gray-800 tabular-nums">{d.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Health donut */}
               <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-                <h2 className="text-base font-bold text-gray-900">สัดส่วนสุขภาพบริษัท</h2>
+                <div className="flex items-center gap-2">
+                  <HeartPulse className="w-4 h-4" style={{ color: KK.red }} />
+                  <h2 className="text-base font-bold text-gray-900">สัดส่วนสุขภาพบริษัท</h2>
+                </div>
                 <p className="text-xs text-gray-500 mb-2 mt-0.5">แข็งแรง / เสี่ยง / เงียบ</p>
                 <div className="relative" style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -149,9 +198,11 @@ const OwnerTenantHealth = () => {
                   ))}
                 </div>
               </div>
+            </div>
 
-              {/* At-risk table */}
-              <div className="lg:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
+            {/* Company health table (full width) */}
+            <div className="grid grid-cols-1 gap-6">
+              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                 <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
                   <div>
                     <h2 className="text-base font-bold text-gray-900">รายบริษัท</h2>

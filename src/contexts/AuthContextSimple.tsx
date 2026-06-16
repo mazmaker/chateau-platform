@@ -128,27 +128,30 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
   }
 
   // Fetch user's tenants and roles (now from users table with tenant join)
-  const fetchUserTenants = async (userId: string) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fetchUserTenants = async (userId: string, knownUserRow?: any) => {
     try {
       console.log('[Auth] Fetching tenants for userId:', userId)
 
-      // First get user data with role and tenant_id
+      // Reuse the profile row when the caller already fetched it (fetchUserProfile does
+      // `select *`, which already includes tenant_id/role/is_active). This avoids a
+      // SECOND users-table query for the same row — the main cause of the slow dashboard
+      // reload (8 concurrent users queries fighting for connections, ~1s each).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: userData, error: userError } = await (supabase.from('users') as any)
-        .select(`id, tenant_id, role, is_active`)
-        .eq('id', userId)
-        .eq('is_active', true)
-        .single()
-
-      console.log('[Auth] User data:', userData)
-      console.log('[Auth] User error:', userError)
-
-      if (userError || !userData) {
-        console.error('Error fetching user:', userError)
-        return []
+      let u: any = (knownUserRow && knownUserRow.tenant_id) ? knownUserRow : null
+      if (!u) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: userData, error: userError } = await (supabase.from('users') as any)
+          .select(`id, tenant_id, role, is_active`)
+          .eq('id', userId)
+          .eq('is_active', true)
+          .single()
+        if (userError || !userData) {
+          console.error('Error fetching user:', userError)
+          return []
+        }
+        u = userData
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const u = userData as any
 
       // Then fetch tenant separately using RPC to bypass RLS
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -285,13 +288,14 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
         // Customer Portal users don't have a row in `users` — skip those fetches.
         const skipStaffLookup = isCustomerAuthUser(session.user)
 
-        // Fetch data in parallel for speed
-        const [profile, tenants] = skipStaffLookup
-          ? [null as any, [] as UserTenant[]]
-          : await Promise.all([
-              fetchUserProfile(session.user.id),
-              fetchUserTenants(session.user.id)
-            ])
+        // Fetch profile first, then reuse it for tenants — one users-table query, not two.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let profile: any = null
+        let tenants: UserTenant[] = []
+        if (!skipStaffLookup) {
+          profile = await fetchUserProfile(session.user.id)
+          tenants = await fetchUserTenants(session.user.id, profile)
+        }
 
         if (skipStaffLookup) {
           console.log('[Auth] Customer auth detected — skipping users-table lookup')
@@ -308,11 +312,16 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
 
         setUserTenants(tenants)
 
-        // Set current tenant from localStorage or first one
+        // Set current tenant from localStorage or first one.
+        // CRITICAL: fall back to tenants[0] when the saved tenant id is NOT one of
+        // this user's memberships. Otherwise, after switching accounts on a shared
+        // browser, a leftover current_tenant_id leaves tenantToUse undefined, role
+        // is never overridden, and the stale cached role bleeds into the new user
+        // (e.g. an admin seeing the previous owner's full menu).
         const savedTenantId = localStorage.getItem('current_tenant_id')
-        const tenantToUse = savedTenantId
+        const tenantToUse = (savedTenantId
           ? tenants.find(t => t.tenant_id === savedTenantId)
-          : tenants[0]
+          : null) || tenants[0]
 
         if (tenantToUse) {
           console.log('[Auth] Current tenant:', tenantToUse.tenants?.name, 'Role:', tenantToUse.role)
@@ -360,18 +369,21 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
         setPasswordResetRequired(profile.password_set_at === null)
       }
 
-      const tenants = await fetchUserTenants(user.id)
+      const tenants = await fetchUserTenants(user.id, profile)
       setUserTenants(tenants)
 
       if (tenants.length > 0) {
         const savedTenantId = localStorage.getItem('current_tenant_id')
-        const tenantToUse = savedTenantId
+        // Same fallback as above — never leave tenantToUse undefined for a user who
+        // does have memberships, or the stale role/menu from a previous account sticks.
+        const tenantToUse = (savedTenantId
           ? tenants.find(t => t.tenant_id === savedTenantId)
-          : tenants[0]
+          : null) || tenants[0]
 
         if (tenantToUse) {
           setCurrentTenant(tenantToUse.tenants)
           setUserRole(tenantToUse.role)
+          localStorage.setItem('current_tenant_id', tenantToUse.tenant_id)
 
           // Check if tenant is suspended
           const isSuspended = tenantToUse.tenants?.status === 'suspended'
@@ -560,11 +572,10 @@ export const SimpleAuthProvider = ({ children }: SimpleAuthProviderProps) => {
             return
           }
 
-          // Fetch profile and tenants in background (non-blocking)
-          Promise.all([
-            fetchUserProfile(session.user.id),
-            fetchUserTenants(session.user.id)
-          ]).then(([profile, tenants]) => {
+          // Fetch profile and tenants in background (non-blocking). Sequential so the
+          // profile row is reused for tenants — avoids a duplicate users-table query.
+          fetchUserProfile(session.user.id).then(async (profile) => {
+            const tenants = await fetchUserTenants(session.user.id, profile)
             if (profile) {
               setUserProfile(profile)
             }

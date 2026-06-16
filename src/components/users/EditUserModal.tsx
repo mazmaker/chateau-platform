@@ -203,7 +203,6 @@ const EditUserModal = ({ isOpen, onClose, user, onUpdateSuccess, currentUserRole
                   <SelectItem value={UserRole.ADMIN}>ผู้ดูแลบริษัท (Admin)</SelectItem>
                   <SelectItem value={UserRole.SALES}>พนักงานขาย (Sales)</SelectItem>
                   <SelectItem value={UserRole.AGENT}>นายหน้า (Agent)</SelectItem>
-                  <SelectItem value={UserRole.CUSTOMER}>ลูกค้า (Customer)</SelectItem>
                 </SelectContent>
               </Select>
             )}

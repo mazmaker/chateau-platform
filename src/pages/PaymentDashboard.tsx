@@ -1,12 +1,13 @@
 ﻿// @ts-nocheck — legacy admin-only payment dashboard with extensive type drift.
 // Scheduled for refactor when payment module is rewritten in Phase 2.
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
+import RevenueHealthSection from '@/components/owner/RevenueHealthSection';
 import {
   Card,
   CardContent,
@@ -60,7 +61,8 @@ import {
   Mail,
   Bell,
   Search,
-  Filter
+  Filter,
+  AlertTriangle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { PageTabs } from '@/components/ui/PageTabs';
@@ -150,10 +152,11 @@ interface CalendarEvent {
   type: 'due' | 'overdue' | 'reminder' | 'payment';
   invoice_number?: string;
   invoice_id?: string;
+  tenant_id?: string;
   amount?: number;
   tenant_name?: string;
   tenant_email?: string;
-  invoice_detail?: any; // Full invoice details with tenant info
+  invoice_detail?: any;
 }
 
 interface OverdueData {
@@ -223,7 +226,8 @@ const CollectionTooltip = ({ active, payload, label }: any) => {
 const PaymentDashboard = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'overview');
   const [paymentOverview, setPaymentOverview] = useState<PaymentOverview>({
     totalRevenue: 0,
     totalOutstanding: 0,
@@ -249,6 +253,7 @@ const PaymentDashboard = () => {
 
   // Invoice Creation Modal State
   const [showCreateInvoice, setShowCreateInvoice] = useState(false);
+  const [pendingInvoiceWarning, setPendingInvoiceWarning] = useState<{invoice_number: string, due_date: string, status: string} | null>(null);
   const [tenantList, setTenantList] = useState<{id: string, name: string, subscription_plan: string}[]>([]);
   const [newInvoice, setNewInvoice] = useState({
     tenant_id: '',
@@ -366,7 +371,8 @@ const PaymentDashboard = () => {
     { id: 'payments', label: 'ติดตามการชำระ', icon: CreditCard },
     { id: 'calendar', label: 'ปฎิทินแจ้งเตือน', icon: Calendar },
     { id: 'overdue', label: 'ค้างชำระ', icon: AlertCircle },
-    { id: 'reports', label: 'รายงานการเงิน', icon: Activity }
+    { id: 'reports', label: 'รายงานการเงิน', icon: Activity },
+    { id: 'revenue-health', label: 'สุขภาพรายได้', icon: TrendingUp }
   ];
 
   // Fetch all invoices for payment tracking
@@ -490,37 +496,24 @@ const PaymentDashboard = () => {
       }
 
       // ใช้ข้อมูลจริง
-      invoicesData?.forEach(invoice => {
+      invoicesData?.forEach((invoice: any) => {
         const dueDate = new Date(invoice.due_date);
         const isOverdue = dueDate < now;
+        const tenantName = invoice.tenants?.name || invoice.invoice_number;
 
         events.push({
           id: invoice.id,
-          title: `${invoice.tenants?.name} - ${invoice.invoice_number}`,
+          title: tenantName,
           date: invoice.due_date,
           type: isOverdue ? 'overdue' : 'due',
           invoice_number: invoice.invoice_number,
           invoice_id: invoice.id,
+          tenant_id: invoice.tenant_id,
           amount: invoice.amount,
-          tenant_name: invoice.tenants?.name,
+          tenant_name: tenantName,
           tenant_email: invoice.tenants?.email
         });
 
-        // Add reminder events (7 days before due date)
-        const reminderDate = new Date(dueDate.getTime() - 7 * 24 * 60 * 60 * 1000);
-        if (reminderDate >= now) {
-          events.push({
-            id: `reminder-${invoice.id}`,
-            title: `แจ้งเตือน: ${invoice.tenants?.name}`,
-            date: reminderDate.toISOString(),
-            type: 'reminder',
-            invoice_number: invoice.invoice_number,
-            invoice_id: invoice.id,
-            amount: invoice.amount,
-            tenant_name: invoice.tenants?.name,
-            tenant_email: invoice.tenants?.email
-          });
-        }
       });
 
       // ถ้าเดือนปัจจุบันไม่มี event เลย เพิ่มข้อมูลตัวอย่างให้เห็นภาพ UI
@@ -1040,7 +1033,7 @@ const PaymentDashboard = () => {
   };
 
   // Handle tenant selection change
-  const handleTenantChange = (tenantId: string) => {
+  const handleTenantChange = async (tenantId: string) => {
     const tenant = tenantList.find(t => t.id === tenantId);
     setNewInvoice(prev => ({
       ...prev,
@@ -1056,6 +1049,21 @@ const PaymentDashboard = () => {
         amount: packageData?.monthly || 0,
         description: `Monthly subscription - ${packageData?.label || 'Plan'}`
       }));
+    }
+
+    // Check for existing pending/overdue invoices
+    setPendingInvoiceWarning(null);
+    if (tenantId) {
+      const { data } = await supabase
+        .from('invoices')
+        .select('invoice_number, due_date, status')
+        .eq('tenant_id', tenantId)
+        .in('status', ['pending', 'overdue'])
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (data && data.length > 0) {
+        setPendingInvoiceWarning(data[0]);
+      }
     }
   };
 
@@ -2074,7 +2082,7 @@ const PaymentDashboard = () => {
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
-                <span>ใกล้ครบกำหนด</span>
+                <span>ครบกำหนดชำระ</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-red-500 rounded-full"></div>
@@ -2122,13 +2130,13 @@ const PaymentDashboard = () => {
                                 onClick={() => handleCalendarEventClick(event)}
                                 className={`text-xs px-2 py-1 rounded text-white truncate cursor-pointer hover:opacity-80 transition-opacity ${
                                   event.type === 'paid' ? 'bg-green-500' :
-                                  event.type === 'reminder' || event.type === 'due' ? 'bg-orange-500' :
+                                  event.type === 'due' ? 'bg-orange-500' :
                                   event.type === 'overdue' ? 'bg-red-500' :
                                   'bg-gray-500'
                                 }`}
                                 title={`${event.tenant_name} - ${formatCurrency(event.amount || 0)} (กดเพื่อดูรายละเอียด)`}
                               >
-                                {event.tenant_name?.split(' ')[0] || event.invoice_number}
+                                {event.tenant_name}
                               </div>
                             ))}
                             {dayData.events.length > 3 && (
@@ -2620,12 +2628,17 @@ const PaymentDashboard = () => {
                         ? 'bg-green-50 border-green-200 text-green-800'
                         : 'bg-red-50 border-red-200 text-red-800'
                     }`}>
-                      <div className={`w-2 h-2 rounded-full ${
-                        automationStatus.scheduler_running ? 'bg-green-500' : 'bg-red-500'
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${
+                        automationStatus.scheduler_running ? 'bg-green-500 animate-pulse' : 'bg-red-500'
                       }`}></div>
-                      <span className="font-medium">
-                        {automationStatus.scheduler_running ? 'Auto ON' : 'Auto OFF'}
-                      </span>
+                      <div>
+                        <span className="font-medium">
+                          {automationStatus.scheduler_running ? 'Auto ON' : 'Auto OFF'}
+                        </span>
+                        {automationStatus.scheduler_running && (
+                          <p className="text-xs opacity-60 leading-tight">ตรวจสอบทุกวัน 09:00</p>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex gap-2 w-full sm:w-auto">
@@ -2671,6 +2684,7 @@ const PaymentDashboard = () => {
                     {activeTab === 'calendar' && renderCalendarTab()}
                     {activeTab === 'overdue' && renderOverdueTab()}
                     {activeTab === 'reports' && renderReportsTab()}
+                    {activeTab === 'revenue-health' && <RevenueHealthSection />}
                   </>
                 )}
               </div>
@@ -2906,9 +2920,21 @@ const PaymentDashboard = () => {
                 }`}>
                   <div className="flex items-start justify-between">
                     <div>
-                      <h4 className="text-lg font-semibold text-gray-900 mb-1">
-                        {selectedCalendarEvent.tenant_name}
-                      </h4>
+                      {selectedCalendarEvent.tenant_id ? (
+                        <button
+                          onClick={() => {
+                            setShowCalendarEventModal(false);
+                            navigate(`/tenants/${selectedCalendarEvent.tenant_id}`);
+                          }}
+                          className="text-lg font-semibold text-gray-900 mb-1 hover:text-orange-600 hover:underline text-left transition-colors"
+                        >
+                          {selectedCalendarEvent.tenant_name}
+                        </button>
+                      ) : (
+                        <h4 className="text-lg font-semibold text-gray-900 mb-1">
+                          {selectedCalendarEvent.tenant_name}
+                        </h4>
+                      )}
                       <p className="text-sm text-gray-600 mb-2">
                         {selectedCalendarEvent.type === 'overdue' ? 'เกินกำหนดชำระ' :
                          selectedCalendarEvent.type === 'due' ? 'ครบกำหนดชำระ' :
@@ -2998,6 +3024,17 @@ const PaymentDashboard = () => {
               <Button variant="outline" onClick={() => setShowCalendarEventModal(false)}>
                 ปิด
               </Button>
+              {selectedCalendarEvent?.tenant_id && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowCalendarEventModal(false);
+                    navigate(`/tenants/${selectedCalendarEvent.tenant_id}`);
+                  }}
+                >
+                  ดูข้อมูลบริษัท
+                </Button>
+              )}
               {selectedCalendarEvent?.invoice_detail && (
                 <Button
                   onClick={() => {
@@ -3014,7 +3051,7 @@ const PaymentDashboard = () => {
         </Dialog>
 
         {/* Create Invoice Modal */}
-        <Dialog open={showCreateInvoice} onOpenChange={setShowCreateInvoice}>
+        <Dialog open={showCreateInvoice} onOpenChange={(open) => { setShowCreateInvoice(open); if (!open) setPendingInvoiceWarning(null); }}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -3048,6 +3085,20 @@ const PaymentDashboard = () => {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Warning: existing pending/overdue invoice */}
+              {pendingInvoiceWarning && (
+                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="font-medium text-amber-800">มีใบแจ้งหนี้เปิดอยู่แล้ว</p>
+                    <p className="text-amber-700 text-xs mt-0.5">
+                      {pendingInvoiceWarning.invoice_number} · ครบกำหนด {new Date(pendingInvoiceWarning.due_date).toLocaleDateString('th-TH')}
+                    </p>
+                    <p className="text-amber-600 text-xs mt-1">ถ้าสร้างเพิ่ม บริษัทนี้จะมีบิลค้างสองใบ — ตรวจสอบก่อนดำเนินการต่อ</p>
+                  </div>
+                </div>
+              )}
 
               {/* Package Selection */}
               <div className="space-y-2">
