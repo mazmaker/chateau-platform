@@ -154,8 +154,8 @@ const SalesAgentsSection = () => {
           <Icon className="w-5 h-5" style={{ color }} strokeWidth={2.2} />
         </div>
       </div>
-      <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{value}</p>
-      {sub && <p className="text-[13px] text-gray-400 mt-3.5 truncate">{sub}</p>}
+      <p className="text-2xl font-bold text-gray-900 leading-none tabular-nums tracking-tight">{value}</p>
+      {sub && <p className="text-sm text-gray-400 mt-3.5 truncate">{sub}</p>}
     </div>
   );
 
@@ -271,7 +271,7 @@ const SalesAgentsSection = () => {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-gray-900">{r.name}</span>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">{ROLE_TH[r.role] || r.role}</Badge>
+                          <Badge variant="outline" className="text-xs px-1.5 py-0">{ROLE_TH[r.role] || r.role}</Badge>
                         </div>
                       </TableCell>
                       <TableCell className="text-gray-600">{r.company}</TableCell>
@@ -343,7 +343,7 @@ const SalesAgentsSection = () => {
                       <TableCell className="text-gray-600">{u.project}</TableCell>
                       <TableCell className="text-right tabular-nums font-semibold" style={{ color: KK.red }}>{u.views}</TableCell>
                       <TableCell className="text-right tabular-nums text-gray-500">{u.days} วัน</TableCell>
-                      <TableCell><span className="text-[11px] font-medium px-2 py-0.5 rounded-md" style={{ color: KK.amber, backgroundColor: KK.amberLight }}>{u.hint}</span></TableCell>
+                      <TableCell><span className="text-xs font-medium px-2 py-0.5 rounded-md" style={{ color: KK.amber, backgroundColor: KK.amberLight }}>{u.hint}</span></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

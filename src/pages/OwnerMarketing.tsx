@@ -65,8 +65,8 @@ const OwnerMarketing = () => {
           <Icon className="w-5 h-5" style={{ color }} strokeWidth={2.2} />
         </div>
       </div>
-      <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{value}</p>
-      {sub && <p className="text-[13px] text-gray-400 mt-3.5 truncate">{sub}</p>}
+      <p className="text-2xl font-bold text-gray-900 leading-none tabular-nums tracking-tight">{value}</p>
+      {sub && <p className="text-sm text-gray-400 mt-3.5 truncate">{sub}</p>}
     </div>
   );
 
@@ -83,7 +83,7 @@ const OwnerMarketing = () => {
                   Intelligence
                 </span>
                 <h1 className="text-2xl font-bold text-gray-900">Marketing &amp; Campaign</h1>
-                <p className="text-[15px] text-gray-500 mt-1.5">ภาพรวมแคมเปญข้ามทุกบริษัท · ช่องทางไหน/segment ไหนได้ผลดีสุด · ข้อมูลช่วง <span className="font-semibold text-gray-700">{periodRangeLabel(period)}</span></p>
+                <p className="text-sm text-gray-500 mt-1.5">ภาพรวมแคมเปญข้ามทุกบริษัท · ช่องทางไหน/segment ไหนได้ผลดีสุด · ข้อมูลช่วง <span className="font-semibold text-gray-700">{periodRangeLabel(period)}</span></p>
               </div>
               <PeriodFilter value={period} onChange={setPeriod} tier="operational" className="self-start sm:self-auto" />
             </div>

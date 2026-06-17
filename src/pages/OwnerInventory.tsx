@@ -127,8 +127,8 @@ const OwnerInventory = () => {
           <Icon className="w-5 h-5" style={{ color }} strokeWidth={2.2} />
         </div>
       </div>
-      <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{value}</p>
-      {sub && <p className="text-[13px] text-gray-400 mt-3.5 truncate">{sub}</p>}
+      <p className="text-2xl font-bold text-gray-900 leading-none tabular-nums tracking-tight">{value}</p>
+      {sub && <p className="text-sm text-gray-400 mt-3.5 truncate">{sub}</p>}
     </div>
   );
 
@@ -163,7 +163,7 @@ const OwnerInventory = () => {
                 Analytics
               </span>
               <h1 className="text-2xl font-bold text-gray-900">Inventory &amp; Absorption</h1>
-              <p className="text-[15px] text-gray-500 mt-1.5">สุขภาพสินค้าคงคลังข้ามทุกบริษัท · ขายเร็ว-ช้า · ยูนิตค้างสต็อก</p>
+              <p className="text-sm text-gray-500 mt-1.5">สุขภาพสินค้าคงคลังข้ามทุกบริษัท · ขายเร็ว-ช้า · ยูนิตค้างสต็อก</p>
             </div>
 
             {/* KPIs */}
@@ -191,7 +191,7 @@ const OwnerInventory = () => {
                     </ResponsiveContainer>
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                       <div className="text-2xl font-bold text-gray-900 tabular-nums">{kpis.total}</div>
-                      <div className="text-[11px] text-gray-500">ยูนิต</div>
+                      <div className="text-xs text-gray-500">ยูนิต</div>
                     </div>
                   </div>
                   <div className="space-y-1.5">

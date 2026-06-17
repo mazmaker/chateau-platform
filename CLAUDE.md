@@ -23,6 +23,52 @@ Multi-tenant via `tenant_id` + RLS. Roles: **owner** (platform) / admin / sales 
 - ❌ Don't commit/push or apply migrations without an explicit ask (user batches their own commits).
 - ❌ Don't mix tenant data · don't deploy without review.
 
+## Typography — Standard Scale (ใช้ทุกหน้าทุกเมนู)
+ห้ามใช้ arbitrary size เช่น `text-[13px]`, `text-[15px]`, `text-[26px]` — ใช้เฉพาะ Tailwind standard:
+
+| ใช้กับ | Class | ขนาด |
+|---|---|---|
+| Page title (h1) | `text-2xl font-bold` | 24px |
+| Section title (h2) | `text-base font-bold` | 16px |
+| ข้อความปกติ | `text-sm` | 14px |
+| Meta / helper / badge | `text-xs` | 12px |
+| ตัวเลข KPI ใหญ่ | `text-2xl` หรือ `text-3xl` | 24–30px |
+
+**ข้อยกเว้น:** chart axis label / bar badge ที่ space จำกัดมาก ใช้ `text-[10px]`/`text-[11px]` ได้ (แค่ใน chart components)
+
+## Owner Role — วิเคราะห์มุม SaaS เจ้าของแพลตฟอร์ม
+เมื่อทำงานใน Owner pages ให้วิเคราะห์จากมุมมอง **เจ้าของแพลตฟอร์ม SaaS** ที่ขายระบบบริหารอสังหาฯ ให้ developer (tenant) ไม่ใช่มุมของบริษัทอสังหาเอง:
+- ถามตัวเองก่อนเสมอ: "เจ้าของ SaaS จะใช้ข้อมูลนี้ทำอะไร? มันตอบโจทย์ MRR / churn / retention / upsell ไหม?"
+- ข้อมูล technical (slug, UUID, internal ID) ไม่ควรโชว์ในตารางหลัก — ซ่อนไว้ใน detail/settings
+- KPI ที่มีอยู่แล้วในหน้าอื่นไม่ควรซ้ำ เว้นแต่ granularity ต่างกัน (เช่น MRR รวม vs MRR ต่อ tenant)
+- การ์ดบนหน้า health dashboard ต้องตอบคำถาม "เสี่ยงสูญเงินเท่าไร" ไม่ใช่แค่ "มีกี่บริษัท"
+
+## UI Data Rules
+- ✅ ทุก list/table ต้องมี filter/search — ห้าม dump ข้อมูลแบบ flat ไม่มีตัวกรอง
+- ✅ ทุก field ที่แสดงใน Detail UI ต้องแก้ไขได้ใน Edit form
+- ✅ feature ใหม่ต้องครบ end-to-end: trigger → save → display → action
+- ✅ Period filter ใส่เฉพาะเมื่อข้อมูลเปลี่ยนตาม period จริง — ห้ามใส่ filter ที่ไม่ส่งผลต่อข้อมูล
+- ✅ Badge / status label ให้ใช้สีและ style เดียวกันทุกหน้า (อ้างอิง `OwnerTenantHealth.tsx` HEALTH_META)
+
+## Drill-down Navigation (ทุก Owner page)
+แพลตฟอร์ม → บริษัท → โครงการ → ยูนิต → ลูกค้า (read-only ฝั่ง Owner)
+- ปุ่ม "ดูรายละเอียด →" ต้อง navigate ไป `/route/:id` ที่ถูกต้อง ไม่ใช่แค่ list page
+- Geography: จังหวัด → อำเภอ → โครงการ (expand row)
+
+## เมื่อมีกฎใหม่จากผู้ใช้
+เพิ่มทั้ง 3 ที่พร้อมกัน:
+1. สรุปสั้นใน `CLAUDE.md` (auto-loaded ทุก session)
+2. รายละเอียดครบใน `.claude/rules/` (ดู index ด้านล่าง)
+3. Memory ใน `~/.claude/projects/.../memory/` (ถ้าเกี่ยว preference ผู้ใช้)
+
+## Rules Index (`.claude/rules/`)
+| ไฟล์ | เนื้อหา |
+|---|---|
+| `01-typography.md` | Font size scale + mapping arbitrary→standard |
+| `02-owner-saas-perspective.md` | บทบาท Owner, คำถามที่ต้องถามตัวเองก่อนทำ, metrics |
+| `03-ui-data-standards.md` | Filter/search, badge style, money format, drill-down |
+| `04-workflow-rules.md` | สิ่งห้ามทำโดยไม่ขอ, วิธีเสนองาน, RLS |
+
 ## Targets
 API <200ms (p95) · page load <2s · realtime <500ms · test coverage 80% on critical paths.
 

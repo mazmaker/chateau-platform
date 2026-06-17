@@ -381,9 +381,9 @@ const TenantManagement = () => {
         .from('users')
         .select('tenant_id, role');
 
-      // Get property count per tenant
-      const { data: properties } = await supabase
-        .from('properties')
+      // Get project count per tenant
+      const { data: projects } = await supabase
+        .from('projects')
         .select('tenant_id');
 
       const stats: Record<string, TenantStats> = {};
@@ -406,12 +406,12 @@ const TenantManagement = () => {
         }
       });
 
-      properties?.forEach(property => {
-        if (stats[property.tenant_id]) {
-          stats[property.tenant_id].propertyCount++;
+      projects?.forEach(project => {
+        if (stats[project.tenant_id]) {
+          stats[project.tenant_id].propertyCount++;
         } else {
-          stats[property.tenant_id] = {
-            id: property.tenant_id,
+          stats[project.tenant_id] = {
+            id: project.tenant_id,
             userCount: 0,
             adminCount: 0,
             salesCount: 0,
@@ -910,7 +910,7 @@ const TenantManagement = () => {
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { label: string; className: string }> = {
       active:    { label: 'ใช้งานอยู่', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
-      trial:     { label: 'ทดลองใช้',  className: 'bg-amber-50 text-amber-700 border border-amber-200' },
+      trial:     { label: 'Trial',      className: 'bg-amber-50 text-amber-700 border border-amber-200' },
       suspended: { label: 'ระงับ',     className: 'bg-red-50 text-red-700 border border-red-200' },
       cancelled: { label: 'ยกเลิก',    className: 'bg-gray-100 text-gray-600 border border-gray-300' },
     };
@@ -923,32 +923,27 @@ const TenantManagement = () => {
   };
 
   const getPlanBadge = (plan: string) => {
-    // Find package config for this plan
     const pkg = packageConfig.find(p => p.id === plan);
-
-    const colors: Record<string, string> = {
-      free: 'bg-gray-100 text-gray-700 border border-gray-300',
-      starter: 'bg-blue-100 text-blue-800 border border-blue-300',
-      professional: 'bg-purple-100 text-purple-800 border border-purple-300',
-      enterprise: 'bg-chateau-100 text-chateau-700 border border-chateau-200'
-    };
-
-    const labels: Record<string, string> = {
-      free: 'Free',
-      starter: 'Starter',
-      professional: 'Professional',
-      enterprise: 'Enterprise'
-    };
-
-    const planColor = colors[plan] || 'bg-gray-100 text-gray-700';
-    const planLabel = pkg?.name || labels[plan] || plan;
     const planPrice = pkg?.price || '0';
+
+    const PLAN_COLOR: Record<string, string> = {
+      enterprise:   '#4f46e5',
+      professional: '#1e3a5f',
+      starter:      '#d97706',
+      free:         '#6b7280',
+    };
+    const PLAN_LABEL: Record<string, string> = {
+      enterprise: 'Enterprise', professional: 'Professional', starter: 'Starter', free: 'Free',
+    };
+    const color = PLAN_COLOR[plan] || '#6b7280';
+    const label = PLAN_LABEL[plan] || plan;
 
     return (
       <div className="flex flex-col gap-1">
-        <Badge className={planColor}>
-          {planLabel}
-        </Badge>
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full border text-xs font-semibold w-fit"
+          style={{ color: '#e11d48', borderColor: '#fda4af', background: 'white' }}>
+          {label}
+        </span>
         <span className="text-xs text-gray-500">฿{planPrice}/เดือน</span>
       </div>
     );
@@ -1058,7 +1053,7 @@ const TenantManagement = () => {
                       <p className={`text-sm font-bold tabular-nums ${urgent ? 'text-red-600' : 'text-gray-700'}`}>
                         {d === 0 ? 'วันนี้' : d === 1 ? 'พรุ่งนี้' : `อีก ${d} วัน`}
                       </p>
-                      <p className="text-[11px] text-gray-400">
+                      <p className="text-xs text-gray-400">
                         {t.trial_ends_at && new Date(t.trial_ends_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
                       </p>
                     </div>
@@ -1091,7 +1086,7 @@ const TenantManagement = () => {
               <SelectContent>
                 <SelectItem value="all">ทุกสถานะ</SelectItem>
                 <SelectItem value="active">ใช้งานอยู่</SelectItem>
-                <SelectItem value="trial">ทดลองใช้</SelectItem>
+                <SelectItem value="trial">Trial</SelectItem>
                 <SelectItem value="suspended">ระงับ</SelectItem>
                 <SelectItem value="cancelled">ยกเลิก</SelectItem>
               </SelectContent>
@@ -1152,7 +1147,6 @@ const TenantManagement = () => {
                       <TableCell>
                         <div>
                           <div className="font-medium">{tenant.name}</div>
-                          <div className="text-sm text-muted-foreground">/{tenant.slug}</div>
                         </div>
                       </TableCell>
                       <TableCell>{getStatusBadge(tenant.status)}</TableCell>
@@ -1955,7 +1949,7 @@ const TenantManagement = () => {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="trial">ทดลองใช้</SelectItem>
+                          <SelectItem value="trial">Trial</SelectItem>
                           <SelectItem value="active">ใช้งานอยู่</SelectItem>
                           <SelectItem value="suspended">ระงับ</SelectItem>
                           <SelectItem value="cancelled">ยกเลิก</SelectItem>

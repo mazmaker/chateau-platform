@@ -221,8 +221,8 @@ const OwnerCustomers = () => {
           <Icon className="w-5 h-5" style={{ color }} strokeWidth={2.2} />
         </div>
       </div>
-      <p className="text-[24px] font-bold text-gray-900 leading-none tracking-tight truncate">{value}</p>
-      {sub && <p className="text-[13px] text-gray-400 mt-3.5 truncate">{sub}</p>}
+      <p className="text-2xl font-bold text-gray-900 leading-none tracking-tight truncate">{value}</p>
+      {sub && <p className="text-sm text-gray-400 mt-3.5 truncate">{sub}</p>}
     </div>
   );
 
@@ -302,7 +302,7 @@ const OwnerCustomers = () => {
                 ผู้สนใจ
               </span>
               <h1 className="text-2xl font-bold text-gray-900">ฐานข้อมูลผู้สนใจ</h1>
-              <p className="text-[15px] text-gray-500 mt-1.5">ผู้สนใจซื้ออสังหาฯ ข้ามทุกบริษัท · มีรายชื่อ ≠ ซื้อแล้ว (CDP)</p>
+              <p className="text-sm text-gray-500 mt-1.5">ผู้สนใจซื้ออสังหาฯ ข้ามทุกบริษัท · มีรายชื่อ ≠ ซื้อแล้ว (CDP)</p>
             </div>
 
             {rows.length === 0 ? (
@@ -373,7 +373,7 @@ const OwnerCustomers = () => {
                             <TableCell className="text-gray-400 tabular-nums">{pageStart + i + 1}</TableCell>
                             <TableCell className="font-semibold text-gray-900">
                               {r.name}
-                              {r.won && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded" style={{ color: KK.green, backgroundColor: KK.greenLight }}>ปิดแล้ว</span>}
+                              {r.won && <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ color: KK.green, backgroundColor: KK.greenLight }}>ปิดแล้ว</span>}
                             </TableCell>
                             <TableCell className="text-gray-600">{OCC_TH[r.occupation] || r.occupation}</TableCell>
                             <TableCell className="text-gray-600">{PURPOSE_TH[r.purpose] || r.purpose}</TableCell>

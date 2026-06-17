@@ -188,8 +188,8 @@ const OwnerMarket = () => {
           <Icon className="w-5 h-5" style={{ color }} strokeWidth={2.2} />
         </div>
       </div>
-      <p className="text-[26px] font-bold text-gray-900 leading-none tracking-tight">{value}</p>
-      {sub && <p className="text-[13px] text-gray-400 mt-3.5 truncate">{sub}</p>}
+      <p className="text-2xl font-bold text-gray-900 leading-none tracking-tight">{value}</p>
+      {sub && <p className="text-sm text-gray-400 mt-3.5 truncate">{sub}</p>}
     </div>
   );
 
@@ -226,7 +226,7 @@ const OwnerMarket = () => {
                   Analytics
                 </span>
                 <h1 className="text-2xl font-bold text-gray-900">Sales Overview</h1>
-                <p className="text-[15px] text-gray-500 mt-1.5">วิเคราะห์การขายข้ามทุกบริษัท · ช่วงราคา · ประเภททรัพย์ · แนวโน้ม</p>
+                <p className="text-sm text-gray-500 mt-1.5">วิเคราะห์การขายข้ามทุกบริษัท · ช่วงราคา · ประเภททรัพย์ · แนวโน้ม</p>
               </div>
               {sold.length > 0 && (
                 <select
@@ -293,7 +293,7 @@ const OwnerMarket = () => {
                       </ResponsiveContainer>
                       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                         <div className="text-2xl font-bold text-gray-900 tabular-nums">{view.length}</div>
-                        <div className="text-[11px] text-gray-500">ขายแล้ว</div>
+                        <div className="text-xs text-gray-500">ขายแล้ว</div>
                       </div>
                     </div>
                     <div className="space-y-1.5 mt-3 pt-3 border-t border-gray-100">

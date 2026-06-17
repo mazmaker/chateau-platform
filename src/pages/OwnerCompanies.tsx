@@ -168,8 +168,8 @@ const OwnerCompanies = () => {
           <Icon className="w-5 h-5" style={{ color }} strokeWidth={2.2} />
         </div>
       </div>
-      <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{value}</p>
-      {sub && <p className="text-[13px] text-gray-400 mt-3.5 truncate">{sub}</p>}
+      <p className="text-2xl font-bold text-gray-900 leading-none tabular-nums tracking-tight">{value}</p>
+      {sub && <p className="text-sm text-gray-400 mt-3.5 truncate">{sub}</p>}
     </div>
   );
 
@@ -209,7 +209,7 @@ const OwnerCompanies = () => {
                 Analytics
               </span>
               <h1 className="text-2xl font-bold text-gray-900">อันดับยอดขาย</h1>
-              <p className="text-[15px] text-gray-500 mt-1.5">ดูภาพรวมรายบริษัทก่อน แล้วเจาะลงรายผู้ขาย · ข้ามทั้งแพลตฟอร์ม</p>
+              <p className="text-sm text-gray-500 mt-1.5">ดูภาพรวมรายบริษัทก่อน แล้วเจาะลงรายผู้ขาย · ข้ามทั้งแพลตฟอร์ม</p>
             </div>
 
             {rows.length === 0 ? (
@@ -247,7 +247,7 @@ const OwnerCompanies = () => {
                       </div>
                       <div className="space-y-2">
                         {pieData.map((d, i) => (
-                          <div key={i} className="flex items-center justify-between gap-3 text-sm">
+                          <div key={i} className="flex items-center justify-between gap-3 text-xs">
                             <div className="flex items-center gap-2 min-w-0">
                               <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: d.color }} />
                               <span className="truncate text-gray-700">{d.name}</span>

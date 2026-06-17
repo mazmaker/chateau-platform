@@ -429,7 +429,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
                     const Icon = ENTITY_ICON[entity];
                     return (
                       <div key={entity}>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 pt-3 pb-1.5">{ENTITY_LABEL[entity]} ({items.length})</p>
+                        <p className="text-xs font-bold uppercase tracking-wider text-gray-400 px-4 pt-3 pb-1.5">{ENTITY_LABEL[entity]} ({items.length})</p>
                         {items.map((r) => (
                           <button
                             key={r.id}
@@ -463,7 +463,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
             <Button variant="ghost" size="icon" className="relative text-gray-500 hover:text-gray-700">
               <Bell className="w-5 h-5" />
               {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 min-w-[16px] h-[16px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full border-2 border-white flex items-center justify-center">
+                <span className="absolute top-1 right-1 min-w-[16px] h-[16px] px-1 bg-red-500 text-white text-xs font-bold rounded-full border-2 border-white flex items-center justify-center">
                   {unreadCount}
                 </span>
               )}
@@ -508,7 +508,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
                           {n.title}
                         </p>
                         <p className="text-xs text-gray-500 mt-0.5 line-clamp-2 leading-snug">{n.description}</p>
-                        <p className="text-[11px] text-gray-400 mt-1">{n.time}</p>
+                        <p className="text-xs text-gray-400 mt-1">{n.time}</p>
                       </div>
                     </div>
                   );

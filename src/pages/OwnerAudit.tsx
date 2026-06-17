@@ -275,7 +275,7 @@ const OwnerAudit = () => {
                 Settings
               </span>
               <h1 className="text-2xl font-bold text-gray-900">Audit Log</h1>
-              <p className="text-[15px] text-gray-500 mt-1.5">ประวัติการเปลี่ยนแปลงข้อมูลทั้งแพลตฟอร์ม · เพื่อความปลอดภัยและความโปร่งใส</p>
+              <p className="text-sm text-gray-500 mt-1.5">ประวัติการเปลี่ยนแปลงข้อมูลทั้งแพลตฟอร์ม · เพื่อความปลอดภัยและความโปร่งใส</p>
             </div>
 
             {/* KPI strip */}
@@ -287,8 +287,8 @@ const OwnerAudit = () => {
               ].map((s, i) => (
                 <div key={i} className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                   <p className="text-sm font-medium text-gray-500">{s.label}</p>
-                  <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums tracking-tight mt-2">{s.value.toLocaleString()}</p>
-                  <p className="text-[13px] text-gray-400 mt-2">{s.sub}</p>
+                  <p className="text-2xl font-bold text-gray-900 leading-none tabular-nums tracking-tight mt-2">{s.value.toLocaleString()}</p>
+                  <p className="text-sm text-gray-400 mt-2">{s.sub}</p>
                 </div>
               ))}
             </div>

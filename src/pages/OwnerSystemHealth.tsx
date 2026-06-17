@@ -66,8 +66,8 @@ const OwnerSystemHealth = () => {
           <Icon className="w-5 h-5" style={{ color }} strokeWidth={2.2} />
         </div>
       </div>
-      <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{value}</p>
-      {sub && <p className="text-[13px] text-gray-400 mt-3.5 truncate">{sub}</p>}
+      <p className="text-2xl font-bold text-gray-900 leading-none tabular-nums tracking-tight">{value}</p>
+      {sub && <p className="text-sm text-gray-400 mt-3.5 truncate">{sub}</p>}
     </div>
   );
 
@@ -85,9 +85,9 @@ const OwnerSystemHealth = () => {
                 </span>
                 <div className="flex items-center gap-2">
                   <h1 className="text-2xl font-bold text-gray-900">สถานะระบบ (System Health)</h1>
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ color: KK.amber, backgroundColor: KK.amberLight }}>ตัวอย่าง</span>
+                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={{ color: KK.amber, backgroundColor: KK.amberLight }}>ตัวอย่าง</span>
                 </div>
-                <p className="text-[15px] text-gray-500 mt-1.5">สุขภาพทางเทคนิคของแพลตฟอร์ม — เซิร์ฟเวอร์/ฐานข้อมูล/API · เตือนก่อนระบบล่ม</p>
+                <p className="text-sm text-gray-500 mt-1.5">สุขภาพทางเทคนิคของแพลตฟอร์ม — เซิร์ฟเวอร์/ฐานข้อมูล/API · เตือนก่อนระบบล่ม</p>
               </div>
               <div className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full self-start sm:self-auto" style={{ color: KK.green, backgroundColor: KK.greenLight }}>
                 <CheckCircle2 className="w-4 h-4" /> ระบบทำงานปกติ
@@ -164,7 +164,7 @@ const OwnerSystemHealth = () => {
                       <span className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: it.ok ? KK.green : KK.red }} />
                       <div className="min-w-0">
                         <p className="text-sm text-gray-800 leading-snug">{it.event}</p>
-                        <p className="text-[11px] text-gray-400 mt-0.5">{it.date} · {it.status}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{it.date} · {it.status}</p>
                       </div>
                     </div>
                   ))}

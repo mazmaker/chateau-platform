@@ -120,8 +120,8 @@ const OwnerFunnel = () => {
           <Icon className="w-5 h-5" style={{ color }} strokeWidth={2.2} />
         </div>
       </div>
-      <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{value}</p>
-      {sub && <p className="text-[13px] text-gray-400 mt-3.5 truncate">{sub}</p>}
+      <p className="text-2xl font-bold text-gray-900 leading-none tabular-nums tracking-tight">{value}</p>
+      {sub && <p className="text-sm text-gray-400 mt-3.5 truncate">{sub}</p>}
     </div>
   );
 
@@ -194,7 +194,7 @@ const OwnerFunnel = () => {
                 Intelligence
               </span>
               <h1 className="text-2xl font-bold text-gray-900">Lead Funnel &amp; Scoring</h1>
-              <p className="text-[15px] text-gray-500 mt-1.5">เส้นทางลีดข้ามทุกบริษัท + คะแนนคุณภาพ/การเงิน (สมองของแพลตฟอร์ม)</p>
+              <p className="text-sm text-gray-500 mt-1.5">เส้นทางลีดข้ามทุกบริษัท + คะแนนคุณภาพ/การเงิน (สมองของแพลตฟอร์ม)</p>
             </div>
 
             {/* KPIs */}

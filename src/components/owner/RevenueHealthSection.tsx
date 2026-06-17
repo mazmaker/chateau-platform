@@ -161,10 +161,10 @@ const RevenueHealthSection = () => {
         </div>
       </div>
       <div className="flex items-end gap-2">
-        <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums">{value}</p>
+        <p className="text-2xl font-bold text-gray-900 leading-none tabular-nums">{value}</p>
         {onEdit && <button onClick={onEdit} className="text-gray-400 hover:text-gray-700 mb-0.5"><Pencil className="w-3.5 h-3.5" /></button>}
       </div>
-      {sub && <p className="text-[13px] text-gray-400 mt-2.5">{sub}</p>}
+      {sub && <p className="text-sm text-gray-400 mt-2.5">{sub}</p>}
     </div>
   );
 
@@ -230,9 +230,9 @@ const RevenueHealthSection = () => {
             <div className="space-y-1">
               {d.decliners.map((x, i) => (
                 <div key={i} className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
-                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0" style={{ color: KK.red, backgroundColor: KK.redLight }}>{i + 1}</span>
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ color: KK.red, backgroundColor: KK.redLight }}>{i + 1}</span>
                   <span className="text-sm text-gray-700 flex-1 truncate">{x.name}</span>
-                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-md flex-shrink-0" style={x.type === 'เลิกใช้' ? { color: KK.red, backgroundColor: KK.redLight } : { color: KK.amber, backgroundColor: KK.amberLight }}>{x.type}</span>
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-md flex-shrink-0" style={x.type === 'เลิกใช้' ? { color: KK.red, backgroundColor: KK.redLight } : { color: KK.amber, backgroundColor: KK.amberLight }}>{x.type}</span>
                   <span className="text-sm font-bold tabular-nums w-24 text-right flex-shrink-0" style={{ color: KK.red }}>−{fmtCompact(x.lost)}</span>
                 </div>
               ))}

@@ -90,7 +90,7 @@ const stageBadge = (stage: string) => {
 // TenantManagement & LeadManagement detail views (text-sm muted label, font-medium value).
 const Field = ({ label, value }: { label: string; value: string | number | null | undefined }) => (
   <div>
-    <p className="text-[11px] text-gray-400 uppercase font-medium tracking-wide mb-1">{label}</p>
+    <p className="text-xs text-gray-400 uppercase font-medium tracking-wide mb-1">{label}</p>
     <p className="text-sm font-semibold text-gray-800 break-words">{value === null || value === undefined || value === '' ? '—' : value}</p>
   </div>
 );
@@ -454,8 +454,8 @@ const OwnerLeads = () => {
                       <k.icon className="w-5 h-5" style={{ color: k.color }} strokeWidth={2.2} />
                     </div>
                   </div>
-                  <p className="text-[32px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{k.value}</p>
-                  <p className="text-[13px] text-gray-400 mt-3.5 truncate">{k.sub}</p>
+                  <p className="text-3xl font-bold text-gray-900 leading-none tabular-nums tracking-tight">{k.value}</p>
+                  <p className="text-sm text-gray-400 mt-3.5 truncate">{k.sub}</p>
                 </div>
               ))}
             </div>
@@ -476,7 +476,7 @@ const OwnerLeads = () => {
                       <span className="text-sm font-semibold text-gray-700">{h.label}</span>
                       <span className="text-xl font-bold tabular-nums" style={{ color: h.color }}>{healthCounts[h.key]}</span>
                     </div>
-                    <p className="text-[11px] text-gray-400 mt-0.5">{h.desc}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{h.desc}</p>
                   </button>
                 );
               })}

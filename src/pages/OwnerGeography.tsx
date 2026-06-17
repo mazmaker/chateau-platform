@@ -189,8 +189,8 @@ const OwnerGeography = () => {
           <Icon className="w-5 h-5" style={{ color }} strokeWidth={2.2} />
         </div>
       </div>
-      <p className="text-[24px] font-bold text-gray-900 leading-none tracking-tight truncate">{value}</p>
-      {sub && <p className="text-[13px] text-gray-400 mt-3.5 truncate">{sub}</p>}
+      <p className="text-2xl font-bold text-gray-900 leading-none tracking-tight truncate">{value}</p>
+      {sub && <p className="text-sm text-gray-400 mt-3.5 truncate">{sub}</p>}
     </div>
   );
 
@@ -225,7 +225,7 @@ const OwnerGeography = () => {
                 Analytics
               </span>
               <h1 className="text-2xl font-bold text-gray-900">Geography</h1>
-              <p className="text-[15px] text-gray-500 mt-1.5">จังหวัดไหนขายดีที่สุดข้ามทั้งแพลตฟอร์ม</p>
+              <p className="text-sm text-gray-500 mt-1.5">จังหวัดไหนขายดีที่สุดข้ามทั้งแพลตฟอร์ม</p>
             </div>
 
             {provinces.length === 0 ? (

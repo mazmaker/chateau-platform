@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Card,
   CardContent,
@@ -100,7 +101,8 @@ const InvoiceManagement = () => {
   // Auto overdue detection (จะ setup หลัง fetchInvoices ถูก define)
   const { checkAndUpdateOverdue } = useAutoOverdue();
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchParams] = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get('search') || '');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);

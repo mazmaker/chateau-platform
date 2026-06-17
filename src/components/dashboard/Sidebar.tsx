@@ -350,7 +350,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
                 >
                   {GroupIcon && <GroupIcon size={16} className="flex-shrink-0 sidebar-group-icon" />}
                   <span
-                    className="text-[11px] font-bold uppercase flex-1 text-left truncate sidebar-group-label"
+                    className="text-xs font-bold uppercase flex-1 text-left truncate sidebar-group-label"
                     style={{ letterSpacing: "0.08em" }}
                   >
                     {group.label}
@@ -406,7 +406,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             </div>
             <div className="min-w-0 flex-1">
               <p className="sidebar-user-name text-sm font-semibold truncate leading-tight">{getUserName()}</p>
-              <p className="sidebar-user-role text-[11px] truncate leading-tight mt-0.5">{getRoleLabel(userRole)}</p>
+              <p className="sidebar-user-role text-xs truncate leading-tight mt-0.5">{getRoleLabel(userRole)}</p>
             </div>
             <div className="flex-shrink-0">
               {userRole === "owner" && <Crown size={14} style={{ color: "#e60023" }} />}

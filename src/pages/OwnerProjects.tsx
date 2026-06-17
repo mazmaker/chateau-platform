@@ -277,8 +277,8 @@ const OwnerProjects = () => {
           <Icon className="w-5 h-5" style={{ color }} strokeWidth={2.2} />
         </div>
       </div>
-      <p className="text-[32px] font-bold text-gray-900 leading-none tabular-nums tracking-tight">{value}</p>
-      {sub && <p className="text-[13px] text-gray-400 mt-3.5 truncate">{sub}</p>}
+      <p className="text-3xl font-bold text-gray-900 leading-none tabular-nums tracking-tight">{value}</p>
+      {sub && <p className="text-sm text-gray-400 mt-3.5 truncate">{sub}</p>}
     </div>
   );
 
@@ -316,7 +316,7 @@ const OwnerProjects = () => {
                   จัดการโครงการ
                 </span>
                 <h1 className="text-2xl font-bold text-gray-900">{tenant?.name || 'บริษัท'}</h1>
-                <p className="text-[15px] text-gray-500 mt-1.5">{props.length} โครงการ · {roll.total} ยูนิต · แพ็กเกจ {planBadge(tenant?.subscription_plan || '')}</p>
+                <p className="text-sm text-gray-500 mt-1.5">{props.length} โครงการ · {roll.total} ยูนิต · แพ็กเกจ {planBadge(tenant?.subscription_plan || '')}</p>
               </div>
 
               {/* KPIs — usage + account size (Owner lens), no sales performance */}
@@ -409,7 +409,7 @@ const OwnerProjects = () => {
                 Platform
               </span>
               <h1 className="text-2xl font-bold text-gray-900">จัดการโครงการ</h1>
-              <p className="text-[15px] text-gray-500 mt-1.5">ภาพรวมการใช้งานข้ามทุกบริษัท · เจาะเข้าบริษัท → โครงการ</p>
+              <p className="text-sm text-gray-500 mt-1.5">ภาพรวมการใช้งานข้ามทุกบริษัท · เจาะเข้าบริษัท → โครงการ</p>
             </div>
 
             {/* KPIs — platform usage + scale (Owner lens) */}
