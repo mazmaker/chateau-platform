@@ -4,6 +4,7 @@ import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import { supabase } from '@/lib/supabase';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Filter, Users, Percent, Flame, Banknote } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 
@@ -49,7 +50,7 @@ const STAGE_LABEL: Record<string, string> = {
 // Display funnel = these stages (collapse a couple for readability).
 const FUNNEL_STAGES = ['new', 'contacted', 'qualified', 'viewing_scheduled', 'negotiating', 'won'];
 
-interface LeadRow { status: string | null; financial_score: number | null; potential_score: number | null; estimated_value: number | null; }
+interface LeadRow { tenant_id: string; status: string | null; financial_score: number | null; potential_score: number | null; estimated_value: number | null; }
 
 const scoreBucket = (s: number) => (s >= 70 ? 'สูง' : s >= 40 ? 'กลาง' : 'ต่ำ');
 const BUCKET_COLOR: Record<string, string> = { 'สูง': KK.green, 'กลาง': KK.amber, 'ต่ำ': KK.red };
@@ -60,6 +61,8 @@ const OwnerFunnel = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [leads, setLeads] = useState<LeadRow[]>([]);
+  const [tenantList, setTenantList] = useState<{ id: string; name: string }[]>([]);
+  const [tenantFilter, setTenantFilter] = useState<string>('all');
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
@@ -69,10 +72,11 @@ const OwnerFunnel = () => {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const { data: tenants } = await supabase.from('tenants').select('id').eq('is_platform' as any, false);
+      const { data: tenants } = await supabase.from('tenants').select('id, name').eq('is_platform' as any, false);
       const ids = (tenants || []).map((t: any) => t.id);
+      setTenantList((tenants || []).map((t: any) => ({ id: t.id, name: t.name || t.id })).sort((a, b) => a.name.localeCompare(b.name, 'th')));
       if (ids.length > 0) {
-        const { data } = await supabase.from('leads').select('status, financial_score, potential_score, estimated_value').in('tenant_id', ids);
+        const { data } = await supabase.from('leads').select('tenant_id, status, financial_score, potential_score, estimated_value').in('tenant_id', ids);
         setLeads((data || []) as LeadRow[]);
       }
     } catch (e) {
@@ -84,30 +88,36 @@ const OwnerFunnel = () => {
 
   const idxOf = (s: string | null) => { const i = STAGE_ORDER.indexOf(s || ''); return i < 0 ? 0 : i; };
 
+  // Scope raw leads to the selected company before any aggregate is computed.
+  const scopedLeads = useMemo(
+    () => (tenantFilter === 'all' ? leads : leads.filter((l) => l.tenant_id === tenantFilter)),
+    [leads, tenantFilter],
+  );
+
   const funnel = useMemo(() => {
-    const active = leads.filter((l) => l.status !== 'lost');
+    const active = scopedLeads.filter((l) => l.status !== 'lost');
     return FUNNEL_STAGES.map((stage) => {
       const si = STAGE_ORDER.indexOf(stage);
       const count = active.filter((l) => idxOf(l.status) >= si).length;
       return { stage, label: STAGE_LABEL[stage] || stage, count };
     });
-  }, [leads]);
+  }, [scopedLeads]);
 
   const kpis = useMemo(() => {
-    const total = leads.length;
-    const won = leads.filter((l) => l.status === 'won').length;
-    const hot = leads.filter((l) => (Number(l.potential_score) || 0) >= 70).length;
-    const pipeline = leads.filter((l) => l.status !== 'won' && l.status !== 'lost').reduce((s, l) => s + (Number(l.estimated_value) || 0), 0);
+    const total = scopedLeads.length;
+    const won = scopedLeads.filter((l) => l.status === 'won').length;
+    const hot = scopedLeads.filter((l) => (Number(l.potential_score) || 0) >= 70).length;
+    const pipeline = scopedLeads.filter((l) => l.status !== 'won' && l.status !== 'lost').reduce((s, l) => s + (Number(l.estimated_value) || 0), 0);
     return { total, conversion: total ? Math.round((won / total) * 100) : 0, hot, pipeline };
-  }, [leads]);
+  }, [scopedLeads]);
 
   const scoreDonut = (field: 'financial_score' | 'potential_score') => {
     const m = new Map<string, number>();
-    leads.forEach((l) => { const v = Number(l[field]) || 0; if (v > 0) { const b = scoreBucket(v); m.set(b, (m.get(b) || 0) + 1); } });
+    scopedLeads.forEach((l) => { const v = Number(l[field]) || 0; if (v > 0) { const b = scoreBucket(v); m.set(b, (m.get(b) || 0) + 1); } });
     return ['สูง', 'กลาง', 'ต่ำ'].filter((b) => m.has(b)).map((b) => ({ name: b, value: m.get(b) || 0, color: BUCKET_COLOR[b] }));
   };
-  const financialData = useMemo(() => scoreDonut('financial_score'), [leads]);
-  const qualityData = useMemo(() => scoreDonut('potential_score'), [leads]);
+  const financialData = useMemo(() => scoreDonut('financial_score'), [scopedLeads]);
+  const qualityData = useMemo(() => scoreDonut('potential_score'), [scopedLeads]);
 
   const KpiCard = ({ title, value, sub, icon: Icon, color, bg }: {
     title: string; value: string; sub?: string; icon: React.ElementType; color: string; bg: string;
@@ -189,12 +199,23 @@ const OwnerFunnel = () => {
         <div className="lg:ml-[260px] min-h-screen">
           <Header onMenuClick={() => setSidebarOpen(true)} />
           <main className="p-6 lg:p-8 space-y-7">
-            <div>
-              <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
-                Intelligence
-              </span>
-              <h1 className="text-2xl font-bold text-gray-900">Lead Funnel &amp; Scoring</h1>
-              <p className="text-sm text-gray-500 mt-1.5">เส้นทางลีดข้ามทุกบริษัท + คะแนนคุณภาพ/การเงิน (สมองของแพลตฟอร์ม)</p>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
+                  Intelligence
+                </span>
+                <h1 className="text-2xl font-bold text-gray-900">Lead Funnel &amp; Scoring</h1>
+                <p className="text-sm text-gray-500 mt-1.5">เส้นทางลีดข้ามทุกบริษัท + คะแนนคุณภาพ/การเงิน (สมองของแพลตฟอร์ม)</p>
+              </div>
+              <Select value={tenantFilter} onValueChange={setTenantFilter}>
+                <SelectTrigger className="h-9 w-[200px] text-sm mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">ทุกบริษัท</SelectItem>
+                  {tenantList.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* KPIs */}

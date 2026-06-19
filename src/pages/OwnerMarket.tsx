@@ -4,6 +4,7 @@ import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import { supabase } from '@/lib/supabase';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TrendingUp, Tag, Home, Banknote, BarChart3 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -96,6 +97,8 @@ const OwnerMarket = () => {
   const [units, setUnits] = useState<UnitRow[]>([]);
   const [typeById, setTypeById] = useState<Record<string, string>>({});
   const [month, setMonth] = useState('all');
+  const [tenantList, setTenantList] = useState<{ id: string; name: string }[]>([]);
+  const [tenantFilter, setTenantFilter] = useState<string>('all');
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
@@ -105,8 +108,9 @@ const OwnerMarket = () => {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const { data: tenants } = await supabase.from('tenants').select('id').eq('is_platform' as any, false);
+      const { data: tenants } = await supabase.from('tenants').select('id, name').eq('is_platform' as any, false);
       const ids = (tenants || []).map((t: any) => t.id);
+      setTenantList((tenants || []).map((t: any) => ({ id: t.id, name: t.name || t.id })).sort((a, b) => a.name.localeCompare(b.name, 'th')));
       if (ids.length > 0) {
         const [uRes, pRes] = await Promise.all([
           supabase.from('units').select('tenant_id, project_id, price, status, sold_at, price_per_sqm').in('tenant_id', ids),
@@ -124,7 +128,12 @@ const OwnerMarket = () => {
     }
   };
 
-  const sold = useMemo(() => units.filter((u) => u.status === 'sold'), [units]);
+  // Scope raw units to the selected company before any aggregate is computed.
+  const scopedUnits = useMemo(
+    () => (tenantFilter === 'all' ? units : units.filter((u) => u.tenant_id === tenantFilter)),
+    [units, tenantFilter],
+  );
+  const sold = useMemo(() => scopedUnits.filter((u) => u.status === 'sold'), [scopedUnits]);
 
   // Months that have sales — newest first, for the month filter.
   const monthOptions = useMemo(() => {
@@ -228,18 +237,29 @@ const OwnerMarket = () => {
                 <h1 className="text-2xl font-bold text-gray-900">Sales Overview</h1>
                 <p className="text-sm text-gray-500 mt-1.5">วิเคราะห์การขายข้ามทุกบริษัท · ช่วงราคา · ประเภททรัพย์ · แนวโน้ม</p>
               </div>
-              {sold.length > 0 && (
-                <select
-                  value={month}
-                  onChange={(e) => setMonth(e.target.value)}
-                  className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 mt-1 focus:outline-none focus:ring-2 focus:ring-red-100"
-                >
-                  <option value="all">ทุกเดือน</option>
-                  {monthOptions.map((ym) => (
-                    <option key={ym} value={ym}>{monthLabelTH(ym)}</option>
-                  ))}
-                </select>
-              )}
+              <div className="flex items-center gap-2 flex-wrap mt-1">
+                <Select value={tenantFilter} onValueChange={setTenantFilter}>
+                  <SelectTrigger className="h-9 w-[200px] text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">ทุกบริษัท</SelectItem>
+                    {tenantList.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {sold.length > 0 && (
+                  <select
+                    value={month}
+                    onChange={(e) => setMonth(e.target.value)}
+                    className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-100"
+                  >
+                    <option value="all">ทุกเดือน</option>
+                    {monthOptions.map((ym) => (
+                      <option key={ym} value={ym}>{monthLabelTH(ym)}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
             </div>
 
             {sold.length === 0 ? (

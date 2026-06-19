@@ -55,7 +55,12 @@ import {
   Info,
   Ban,
   Clock,
-  CheckCircle
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -144,9 +149,17 @@ const TenantManagement = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [planFilter, setPlanFilter] = useState<string>('all');
+  // Pagination + sort for the company table (scalable when tenants grow).
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
+  const [sortKey, setSortKey] = useState<'created' | 'name' | 'plan' | 'users' | 'status'>('created');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  // Renewal alert — collapse to 3 by default, expand to show all.
+  const [showAllRenewals, setShowAllRenewals] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState(''); // type-to-confirm กันลบพลาด
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showBillDialog, setShowBillDialog] = useState(false);
   const [showSuspendDialog, setShowSuspendDialog] = useState(false);
@@ -749,6 +762,7 @@ const TenantManagement = () => {
       }
 
       setShowDeleteDialog(false);
+      setDeleteConfirmText('');
       setSelectedTenant(null);
       fetchTenants();
 
@@ -1003,6 +1017,86 @@ const TenantManagement = () => {
     return matchesSearch && matchesStatus && matchesPlan;
   });
 
+  // Reset to page 1 whenever the search/filter narrows the list — otherwise the
+  // user could be stranded on an empty page after a filter change.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, planFilter]);
+
+  // Column sort (click header to toggle asc/desc) — same pattern as OwnerTenantHealth.
+  const toggleSort = (key: typeof sortKey) => {
+    if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+
+  const PLAN_ORDER: Record<string, number> = { free: 0, starter: 1, professional: 2, enterprise: 3 };
+  const STATUS_ORDER: Record<string, number> = { trial: 0, active: 1, suspended: 2, cancelled: 3 };
+  const sortedTenants = [...filteredTenants].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    switch (sortKey) {
+      case 'name':
+        return a.name.localeCompare(b.name, 'th') * dir;
+      case 'plan':
+        return ((PLAN_ORDER[a.subscription_plan] ?? 99) - (PLAN_ORDER[b.subscription_plan] ?? 99)) * dir;
+      case 'users':
+        return ((tenantStats[a.id]?.userCount || 0) - (tenantStats[b.id]?.userCount || 0)) * dir;
+      case 'status':
+        return ((STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99)) * dir;
+      case 'created':
+      default:
+        return (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * dir;
+    }
+  });
+
+  // Paginate the sorted list — shared by desktop table + mobile cards.
+  const totalPages = Math.max(1, Math.ceil(sortedTenants.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * pageSize;
+  const pagedTenants = sortedTenants.slice(pageStart, pageStart + pageSize);
+
+  // Reusable sort-indicator icon for a sortable column header.
+  const sortIcon = (key: typeof sortKey) =>
+    sortKey === key
+      ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)
+      : <ArrowUpDown className="w-3 h-3 text-gray-300" />;
+
+  // Shared pagination footer (desktop table + mobile cards) — same style as OwnerTenantHealth.
+  const renderPaginationFooter = () => {
+    if (loading || sortedTenants.length === 0) return null;
+    return (
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 pt-4 mt-2 border-t border-gray-100">
+        <span className="text-sm text-gray-500">
+          แสดง {pageStart + 1}–{Math.min(pageStart + pageSize, sortedTenants.length)} จาก {sortedTenants.length} บริษัท
+        </span>
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="sm" className="h-8 px-2" disabled={safePage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          {(() => {
+            const pages: number[] = [];
+            const from = Math.max(1, safePage - 2);
+            const to = Math.min(totalPages, from + 4);
+            for (let i = Math.max(1, to - 4); i <= to; i++) pages.push(i);
+            return pages.map(p => (
+              <Button
+                key={p}
+                variant={p === safePage ? 'default' : 'outline'}
+                size="sm"
+                className={`h-8 w-8 p-0 text-xs ${p === safePage ? 'bg-chateau hover:bg-chateau-700 text-white' : ''}`}
+                onClick={() => setCurrentPage(p)}
+              >
+                {p}
+              </Button>
+            ));
+          })()}
+          <Button variant="outline" size="sm" className="h-8 px-2" disabled={safePage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   // Companies whose trial ends within 30 days — surfaced so the owner can follow up
   // before they lapse. Moved here from the Executive Dashboard: tenant lifecycle
   // belongs with company management, not the platform overview.
@@ -1037,7 +1131,7 @@ const TenantManagement = () => {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {upcomingRenewals.slice(0, 6).map((t) => {
+              {(showAllRenewals ? upcomingRenewals : upcomingRenewals.slice(0, 3)).map((t) => {
                 const d = daysUntilEnd(t.trial_ends_at);
                 const urgent = d !== null && d <= 7;
                 return (
@@ -1061,6 +1155,18 @@ const TenantManagement = () => {
                 );
               })}
             </div>
+            {upcomingRenewals.length > 3 && (
+              <div className="mt-3 text-center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-sm text-amber-700 hover:text-amber-800 hover:bg-amber-100"
+                  onClick={() => setShowAllRenewals(v => !v)}
+                >
+                  {showAllRenewals ? 'ย่อ ↑' : `ดูทั้งหมด ${upcomingRenewals.length} →`}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -1097,6 +1203,7 @@ const TenantManagement = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">ทุกแพ็กเกจ</SelectItem>
+                <SelectItem value="free">Free</SelectItem>
                 <SelectItem value="starter">Starter</SelectItem>
                 <SelectItem value="professional">Professional</SelectItem>
                 <SelectItem value="enterprise">Enterprise</SelectItem>
@@ -1112,12 +1219,22 @@ const TenantManagement = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ชื่อบริษัท</TableHead>
-                <TableHead>สถานะ</TableHead>
-                <TableHead>แพ็กเกจ</TableHead>
-                <TableHead className="w-[180px]">ผู้ใช้</TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('name')}>
+                  <span className="inline-flex items-center gap-1">ชื่อบริษัท {sortIcon('name')}</span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('status')}>
+                  <span className="inline-flex items-center gap-1">สถานะ {sortIcon('status')}</span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('plan')}>
+                  <span className="inline-flex items-center gap-1">แพ็กเกจ {sortIcon('plan')}</span>
+                </TableHead>
+                <TableHead className="w-[180px] cursor-pointer select-none" onClick={() => toggleSort('users')}>
+                  <span className="inline-flex items-center gap-1">ผู้ใช้ {sortIcon('users')}</span>
+                </TableHead>
                 <TableHead>โครงการ</TableHead>
-                <TableHead>สร้างเมื่อ</TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('created')}>
+                  <span className="inline-flex items-center gap-1">สร้างเมื่อ {sortIcon('created')}</span>
+                </TableHead>
                 <TableHead className="text-right">ดำเนินการ</TableHead>
               </TableRow>
             </TableHeader>
@@ -1128,7 +1245,7 @@ const TenantManagement = () => {
                     กำลังโหลด...
                   </TableCell>
                 </TableRow>
-              ) : filteredTenants.length === 0 ? (
+              ) : sortedTenants.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     <Building2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
@@ -1136,7 +1253,7 @@ const TenantManagement = () => {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredTenants.map((tenant) => {
+                pagedTenants.map((tenant) => {
                   const stats = tenantStats[tenant.id];
                   return (
                     <TableRow
@@ -1221,6 +1338,9 @@ const TenantManagement = () => {
               )}
             </TableBody>
           </Table>
+          <div className="px-4 pb-4">
+            {renderPaginationFooter()}
+          </div>
         </CardContent>
       </Card>
 
@@ -1233,7 +1353,7 @@ const TenantManagement = () => {
               <span>กำลังโหลด...</span>
             </CardContent>
           </Card>
-        ) : filteredTenants.length === 0 ? (
+        ) : sortedTenants.length === 0 ? (
           <Card>
             <CardContent className="text-center py-8">
               <Building2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
@@ -1241,7 +1361,7 @@ const TenantManagement = () => {
             </CardContent>
           </Card>
         ) : (
-          filteredTenants.map((tenant) => {
+          pagedTenants.map((tenant) => {
             const stats = tenantStats[tenant.id];
             return (
               <Card
@@ -1253,7 +1373,6 @@ const TenantManagement = () => {
                   <div className="flex justify-between items-start mb-3">
                     <div>
                       <h3 className="font-semibold text-lg">{tenant.name}</h3>
-                      <p className="text-sm text-muted-foreground">/{tenant.slug}</p>
                     </div>
                     <div onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
@@ -1342,6 +1461,7 @@ const TenantManagement = () => {
             );
           })
         )}
+        {renderPaginationFooter()}
       </div>
     </div>
   );
@@ -2025,7 +2145,7 @@ const TenantManagement = () => {
             </Dialog>
 
             {/* Delete Dialog */}
-            <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+            <Dialog open={showDeleteDialog} onOpenChange={(open) => { setShowDeleteDialog(open); if (!open) setDeleteConfirmText(''); }}>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>ยืนยันการลบบริษัท</DialogTitle>
@@ -2033,16 +2153,31 @@ const TenantManagement = () => {
                     คุณต้องการลบบริษัท "{selectedTenant?.name}" ใช่หรือไม่?
                     <br /><br />
                     <span className="text-red-600 font-medium">
-                      การกระทำนี้จะลบข้อมูลทั้งหมดของบริษัทนี้รวมถึงผู้ใช้ โครงการ และข้อมูลอื่นๆ
+                      การกระทำนี้จะลบข้อมูลทั้งหมดของบริษัทนี้รวมถึงผู้ใช้ โครงการ ประวัติบิล/การชำระเงิน
                       และไม่สามารถกู้คืนได้
                     </span>
                   </DialogDescription>
                 </DialogHeader>
+                <div className="space-y-2">
+                  <Label className="text-sm text-gray-600">
+                    พิมพ์ชื่อบริษัท <span className="font-semibold text-gray-900">{selectedTenant?.name}</span> เพื่อยืนยัน
+                  </Label>
+                  <Input
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    placeholder={selectedTenant?.name || ''}
+                    autoFocus
+                  />
+                </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+                  <Button variant="outline" onClick={() => { setShowDeleteDialog(false); setDeleteConfirmText(''); }}>
                     ยกเลิก
                   </Button>
-                  <Button variant="destructive" onClick={handleDeleteTenant}>
+                  <Button
+                    variant="destructive"
+                    onClick={handleDeleteTenant}
+                    disabled={deleteConfirmText.trim() !== (selectedTenant?.name || '').trim()}
+                  >
                     ลบบริษัท
                   </Button>
                 </DialogFooter>

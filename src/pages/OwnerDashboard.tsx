@@ -1,30 +1,25 @@
-﻿import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
-import PeriodFilter, { type PeriodKey, DEFAULT_PERIOD, periodToRange, periodRangeLabel } from '@/components/dashboard/PeriodFilter';
 import {
-  Building2,
-  TrendingUp,
   TrendingDown,
   AlertCircle,
   CheckCircle,
-  UserPlus as UserPlusIcon,
-  Building,
   Receipt,
   Trophy,
   CreditCard,
-  Home,
   ChevronRight,
+  RefreshCw,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { committedMRR } from '@/lib/mrr';
+import { computeRevenueHealth } from '@/lib/revenueHealth';
 import {
   AreaChart,
   Area,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -68,23 +63,6 @@ interface RevenueData {
   tenants: number;
 }
 
-// Per-company real-estate rollup (Owner HQ lens) — cross-tenant comparison row.
-interface CompanyRow {
-  id: string;
-  name: string;
-  plan: string;
-  gdv: number;       // total managed property value (all units)
-  sold: number;      // sold unit count
-  total: number;     // total unit count
-  soldValue: number; // value of sold units
-  leads: number;     // total leads
-}
-
-interface TopSalesRep {
-  id: string; name: string; role: string; company: string;
-  won: number; wonValue: number; conversion: number;
-}
-
 // Compact THB — Thai real-estate convention "X ล้าน" / "K" (NOT M/B). Copied from
 // Index.tsx / OwnerProjects.tsx (canonical). Used for large GDV / sales-value figures
 // where the full formatCurrency would be unreadable (e.g. ฿3,820,000,000).
@@ -112,23 +90,14 @@ interface OwnerDashCache {
   revenueData: RevenueData[];
   revenueByPlan: { enterprise: number; professional: number; starter: number };
   arSummary: { overdue: number; overdueCount: number; pending: number; pendingCount: number };
-  salesStats: { gdv: number; soldValue: number; soldUnits: number; soldUnitsThisMonth: number; totalUnits: number; newLeadsThisMonth: number; totalLeads: number };
-  companyRows: CompanyRow[];
-  momDelta: { soldUnits: number | null; leads: number | null; tenants: number | null };
   opsStats: { openTickets: number };
-  gmvTrend: { month: string; gmv: number; units: number }[];
-  topSalesReps: TopSalesRep[];
   activeUsers: { active7d: number; active30d: number; total: number };
   licenseUtil: { avgPct: number; nearLimit: number; notOnboarded: number; totalActive: number; notOnboardedNames: string[]; nearLimitDetails: { name: string; pct: number }[] };
+  revHealth: { nrr: number | null; grr: number | null; revenueChurn: number | null };
   atRiskTenants: Tenant[];
   cancelledTenantNames: string[];
   cancelledLast30DayNames: string[];
   suspendedTenantNames: string[];
-  unitRows: { tenant_id: string; price: number | null; status: string | null; sold_at: string | null }[];
-  leadRows: { tenant_id: string; created_at: string | null; assigned_to: string | null; status: string | null; estimated_value: number | null }[];
-  userRows: { id: string; full_name: string | null; role: string | null; tenant_id: string | null }[];
-  tenantNameMap: Map<string, string>;
-  tenantList: Tenant[];
 }
 let _ownerDashCache: OwnerDashCache | null = null;
 
@@ -165,40 +134,17 @@ const OwnerDashboard = () => {
   // this matches the จัดการแพ็กเกจ editor instead of a hardcoded copy.
   // AR / cash health — money owed but not yet collected (≠ MRR). Sourced from invoices.
   const [arSummary, setArSummary] = useState({ overdue: 0, overdueCount: 0, pending: 0, pendingCount: 0 });
-  // Cross-tenant real-estate rollup (Owner HQ lens) — GDV / sold units / new leads
-  // aggregated across all customer tenants, plus per-company comparison rows.
-  const [salesStats, setSalesStats] = useState({ gdv: 0, soldValue: 0, soldUnits: 0, soldUnitsThisMonth: 0, totalUnits: 0, newLeadsThisMonth: 0, totalLeads: 0 });
-  const [companyRows, setCompanyRows] = useState<CompanyRow[]>([]);
-  // Global period filter — tells the owner what date range the dashboard reflects.
-  // Executive = strategic tier (trend-level: เดือน/ไตรมาส/ปี, no single-day — that lives on
-  // operational pages like Payments/Support).
-  const [period, setPeriod] = useState<PeriodKey>(DEFAULT_PERIOD.strategic);
-  // Month-over-month deltas (real, derived from sold_at / created_at) for KPI ↑↓ arrows.
-  // null = no prior-month data to compare against (so we show no fake delta).
-  const [momDelta, setMomDelta] = useState<{ soldUnits: number | null; leads: number | null; tenants: number | null }>({ soldUnits: null, leads: null, tenants: null });
   // Open support tickets (real) — feeds the exception-first alert strip.
   const [opsStats, setOpsStats] = useState<{ openTickets: number }>({ openTickets: 0 });
-  // GMV monthly trend — units sold per month across the whole platform (from units.sold_at).
-  const [gmvTrend, setGmvTrend] = useState<{ month: string; gmv: number; units: number }[]>([]);
-  // Top 5 salespeople cross-tenant — ranked by won deal value (preview card on dashboard).
-  const [topSalesReps, setTopSalesReps] = useState<TopSalesRep[]>([]);
   // Platform stickiness — active logins via auth.users (SECURITY DEFINER RPC).
   const [activeUsers, setActiveUsers] = useState({ active7d: 0, active30d: 0, total: 0 });
   // License utilization — current users vs plan quota (upsell signal).
   const [licenseUtil, setLicenseUtil] = useState({ avgPct: 0, nearLimit: 0, notOnboarded: 0, totalActive: 0, notOnboardedNames: [] as string[], nearLimitDetails: [] as { name: string; pct: number }[] });
-  // Period-filtered RE stats — recalculated from cached rows when period filter changes.
-  const [rePeriodStats, setREPeriodStats] = useState({ gmv: 0, units: 0, newLeads: 0 });
+  // Revenue retention headline (NRR/GRR/Revenue Churn) — summary only; full view in Payments › สุขภาพรายได้.
+  const [revHealth, setRevHealth] = useState<{ nrr: number | null; grr: number | null; revenueChurn: number | null }>({ nrr: null, grr: null, revenueChurn: null });
   // Incremented after every completed fetch (background or foreground) so the cache-save
   // useEffect fires with fully-settled React state, not stale closure values.
   const [fetchSeq, setFetchSeq] = useState(0);
-
-  // Cached raw rows — populated once on initial fetch, reused by computeREForPeriod.
-  const unitRowsCacheRef = useRef<{ tenant_id: string; price: number | null; status: string | null; sold_at: string | null }[]>([]);
-  const leadRowsCacheRef = useRef<{ tenant_id: string; created_at: string | null; assigned_to: string | null; status: string | null; estimated_value: number | null }[]>([]);
-  const userRowsCacheRef = useRef<{ id: string; full_name: string | null; role: string | null; tenant_id: string | null }[]>([]);
-  const tenantNameMapRef = useRef<Map<string, string>>(new Map());
-  const tenantListRef = useRef<Tenant[]>([]);
-  const isFirstPeriodRender = useRef(true);
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
@@ -206,14 +152,11 @@ const OwnerDashboard = () => {
     if (isFresh && _ownerDashCache) {
       const c = _ownerDashCache;
       setStats(c.stats); setRevenueData(c.revenueData); setRevenueByPlan(c.revenueByPlan);
-      setArSummary(c.arSummary); setSalesStats(c.salesStats); setCompanyRows(c.companyRows);
-      setMomDelta(c.momDelta); setOpsStats(c.opsStats); setGmvTrend(c.gmvTrend);
-      setTopSalesReps(c.topSalesReps); setActiveUsers(c.activeUsers); setLicenseUtil(c.licenseUtil);
+      setArSummary(c.arSummary); setOpsStats(c.opsStats);
+      setActiveUsers(c.activeUsers); setLicenseUtil(c.licenseUtil);
+      if (c.revHealth) setRevHealth(c.revHealth);
       setAtRiskTenants(c.atRiskTenants); setCancelledTenantNames(c.cancelledTenantNames);
       setCancelledLast30DayNames(c.cancelledLast30DayNames); setSuspendedTenantNames(c.suspendedTenantNames);
-      unitRowsCacheRef.current = c.unitRows; leadRowsCacheRef.current = c.leadRows;
-      userRowsCacheRef.current = c.userRows; tenantNameMapRef.current = c.tenantNameMap;
-      tenantListRef.current = c.tenantList;
       setLoading(false);
       fetchDashboardData(true); // refresh silently in background
     } else {
@@ -227,97 +170,11 @@ const OwnerDashboard = () => {
     if (fetchSeq === 0) return; // skip initial render — no fetch has completed yet
     _ownerDashCache = {
       ts: Date.now(),
-      stats, revenueData, revenueByPlan, arSummary, salesStats, companyRows,
-      momDelta, opsStats, gmvTrend, topSalesReps, activeUsers, licenseUtil,
+      stats, revenueData, revenueByPlan, arSummary,
+      opsStats, activeUsers, licenseUtil, revHealth,
       atRiskTenants, cancelledTenantNames, cancelledLast30DayNames, suspendedTenantNames,
-      unitRows: unitRowsCacheRef.current, leadRows: leadRowsCacheRef.current,
-      userRows: userRowsCacheRef.current, tenantNameMap: tenantNameMapRef.current,
-      tenantList: tenantListRef.current,
     };
   }, [fetchSeq]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Re-compute RE section from cached rows when period filter changes (no extra DB query).
-  const computeREForPeriod = (prd: PeriodKey) => {
-    const unitRows = unitRowsCacheRef.current;
-    const leadRows = leadRowsCacheRef.current;
-    const userRows = userRowsCacheRef.current;
-    const tenantNameMap = tenantNameMapRef.current;
-    const tenantList = tenantListRef.current;
-    if (unitRows.length === 0 && leadRows.length === 0) return;
-
-    const { from, to } = periodToRange(prd);
-
-    const soldInPeriod = unitRows.filter((u) => {
-      if (u.status !== 'sold' || !u.sold_at) return false;
-      const d = new Date(u.sold_at);
-      return (!from || d >= from) && d <= to;
-    });
-
-    const leadsInPeriod = leadRows.filter((l) => {
-      if (!l.created_at) return false;
-      const d = new Date(l.created_at);
-      return (!from || d >= from) && d <= to;
-    });
-
-    // GMV + per-company breakdown for the period
-    const soldByTenant = new Map<string, { soldValue: number; sold: number }>();
-    let periodGMV = 0;
-    soldInPeriod.forEach((u) => {
-      const price = Number(u.price) || 0;
-      periodGMV += price;
-      const r = soldByTenant.get(u.tenant_id) || { soldValue: 0, sold: 0 };
-      r.soldValue += price; r.sold += 1;
-      soldByTenant.set(u.tenant_id, r);
-    });
-    setREPeriodStats({ gmv: periodGMV, units: soldInPeriod.length, newLeads: leadsInPeriod.length });
-
-    // Company rows — GDV/total stay cumulative; soldValue/sold reflect period
-    const gdvByTenant = new Map<string, { gdv: number; total: number }>();
-    unitRows.forEach((u) => {
-      const price = Number(u.price) || 0;
-      const r = gdvByTenant.get(u.tenant_id) || { gdv: 0, total: 0 };
-      r.gdv += price; r.total += 1;
-      gdvByTenant.set(u.tenant_id, r);
-    });
-    const leadsAllByTenant = new Map<string, number>();
-    leadRows.forEach((l) => { leadsAllByTenant.set(l.tenant_id, (leadsAllByTenant.get(l.tenant_id) || 0) + 1); });
-
-    const rows: CompanyRow[] = tenantList
-      .map((t) => {
-        const g = gdvByTenant.get(t.id);
-        const d = soldByTenant.get(t.id);
-        return { id: t.id, name: t.name, plan: t.subscription_plan, gdv: g?.gdv || 0, sold: d?.sold || 0, total: g?.total || 0, soldValue: d?.soldValue || 0, leads: leadsAllByTenant.get(t.id) || 0 };
-      })
-      .filter((r) => r.total > 0)
-      .sort((a, b) => b.soldValue - a.soldValue);
-    setCompanyRows(rows);
-
-    // Top sales reps ranked by period performance
-    const perf = new Map<string, { won: number; wonValue: number; assigned: number }>();
-    leadsInPeriod.forEach((l) => {
-      if (!l.assigned_to) return;
-      let r = perf.get(l.assigned_to);
-      if (!r) { r = { won: 0, wonValue: 0, assigned: 0 }; perf.set(l.assigned_to, r); }
-      r.assigned += 1;
-      if (l.status === 'won' || l.status === 'closed') { r.won += 1; r.wonValue += Number(l.estimated_value) || 0; }
-    });
-    const topReps: TopSalesRep[] = userRows
-      .map((u) => {
-        const p = perf.get(u.id);
-        if (!p || p.assigned === 0) return null;
-        return { id: u.id, name: u.full_name || 'ไม่ระบุชื่อ', role: u.role || 'sales', company: tenantNameMap.get(u.tenant_id || '') || '–', won: p.won, wonValue: p.wonValue, conversion: Math.round((p.won / p.assigned) * 100) };
-      })
-      .filter((r): r is TopSalesRep => r !== null)
-      .sort((a, b) => b.wonValue - a.wonValue || b.won - a.won)
-      .slice(0, 5);
-    setTopSalesReps(topReps);
-  };
-
-  // Re-run RE computation when period changes (skip the very first render).
-  useEffect(() => {
-    if (isFirstPeriodRender.current) { isFirstPeriodRender.current = false; return; }
-    computeREForPeriod(period);
-  }, [period]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchDashboardData = async (isBackground = false) => {
     if (!isBackground) setLoading(true);
@@ -340,10 +197,14 @@ const OwnerDashboard = () => {
         const sixMonthsAgo = new Date();
         sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-        const [{ data: paidInvoices }, { data: openInvoices }] = await Promise.all([
+        const [{ data: paidInvoices }, { data: openInvoices }, { data: planRows }] = await Promise.all([
           supabase.from('invoices').select('tenant_id, amount, paid_at, created_at').eq('status', 'paid'),
           (supabase as any).from('invoices').select('amount, status').in('status', ['overdue', 'pending']),
+          supabase.from('plans').select('id, price_monthly'),
         ]);
+        // Plan list prices — fallback for active tenants not yet invoiced (single source).
+        const planPrices: Record<string, number> = {};
+        ((planRows || []) as any[]).forEach((p) => { planPrices[p.id] = Number(p.price_monthly) || 0; });
 
         // MRR = sum of each ACTIVE tenant's CURRENT monthly rate (their most recent paid
         // invoice). This is the recurring revenue base — unlike "paid this calendar month",
@@ -375,29 +236,37 @@ const OwnerDashboard = () => {
           }
         });
 
-        const mrr = Array.from(latestRate.values()).reduce((s, a) => s + a, 0);
+        // MRR = committed run-rate over active tenants: latest billed rate, else plan
+        // list price for active tenants not yet invoiced (so MRR counts all committed
+        // customers). Shared committedMRR util → matches /owner-health exactly.
+        const mrr = tenantList
+          .filter(t => t.status === 'active')
+          .reduce((s, t) => s + committedMRR(latestRate.get(t.id), t.subscription_plan, planPrices), 0);
 
-        // Calculate churn rate — current month (MTD) vs last month for MoM trend
-        const thisMonthStart = new Date();
-        thisMonthStart.setDate(1);
-        thisMonthStart.setHours(0, 0, 0, 0);
-        const lastMonthStart = new Date(thisMonthStart);
-        lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
+        // Calculate churn rate — ROLLING 30 days vs prior 30 days (avoids the MTD
+        // artifact where churn reads ~0% at the very start of each calendar month).
+        const nowMs = Date.now();
+        const last30Start = new Date(nowMs - 30 * 24 * 60 * 60 * 1000);
+        const prev30Start = new Date(nowMs - 60 * 24 * 60 * 60 * 1000);
 
         const total = tenantList.length || 1;
-        const churnedThisMonth = tenantList.filter(t =>
-          t.status === 'cancelled' && (t as any).cancelled_at && new Date((t as any).cancelled_at) >= thisMonthStart
+        const churnedLast30 = tenantList.filter(t =>
+          t.status === 'cancelled' && (t as any).cancelled_at && new Date((t as any).cancelled_at) >= last30Start
         ).length;
-        const churnedLastMonth = tenantList.filter(t => {
+        const churnedPrev30 = tenantList.filter(t => {
           if (t.status !== 'cancelled' || !(t as any).cancelled_at) return false;
           const d = new Date((t as any).cancelled_at);
-          return d >= lastMonthStart && d < thisMonthStart;
+          return d >= prev30Start && d < last30Start;
         }).length;
-        const realChurnRate = Math.round((churnedThisMonth / total) * 100 * 100) / 100;
-        const lastMonthChurnRate = Math.round((churnedLastMonth / total) * 100 * 100) / 100;
+        const realChurnRate = Math.round((churnedLast30 / total) * 100 * 100) / 100;
+        const lastMonthChurnRate = Math.round((churnedPrev30 / total) * 100 * 100) / 100;
 
         // MoM growth of the recurring base: MRR now vs MRR as of the start of this month.
-        const previousMrr = Array.from(prevRate.values()).reduce((s, a) => s + a, 0);
+        // Same committed basis (rate-as-of-month-start, else list price) so growth reflects
+        // real rate changes, not the billed-vs-committed switch.
+        const previousMrr = tenantList
+          .filter(t => t.status === 'active')
+          .reduce((s, t) => s + committedMRR(prevRate.get(t.id), t.subscription_plan, planPrices), 0);
         const realMrrGrowth = previousMrr > 0 ? ((mrr - previousMrr) / previousMrr) * 100 : 0;
 
         const cancelledCount = tenantList.filter(t => t.status === 'cancelled').length;
@@ -416,6 +285,13 @@ const OwnerDashboard = () => {
           mrrGrowth: Math.round(realMrrGrowth * 100) / 100
         });
 
+        // Revenue retention headline — same util as Payments › สุขภาพรายได้ (single source).
+        const rh = computeRevenueHealth(
+          tenantList.map(t => ({ id: t.id, status: t.status, name: t.name })),
+          (paidInvoices || []) as any,
+        );
+        setRevHealth({ nrr: rh.nrr, grr: rh.grr, revenueChurn: rh.revenueChurn });
+
         // At-risk tenants (trial ending soon or suspended)
         const atRisk = tenantList.filter(t => {
           if (t.status === 'suspended') return true;
@@ -430,7 +306,7 @@ const OwnerDashboard = () => {
 
         setAtRiskTenants(atRisk);
         setCancelledTenantNames(tenantList.filter(t => t.status === 'cancelled').map(t => t.name || t.id));
-        setCancelledLast30DayNames(tenantList.filter(t => t.status === 'cancelled' && (t as any).cancelled_at && new Date((t as any).cancelled_at) >= thisMonthStart).map(t => t.name || t.id));
+        setCancelledLast30DayNames(tenantList.filter(t => t.status === 'cancelled' && (t as any).cancelled_at && new Date((t as any).cancelled_at) >= last30Start).map(t => t.name || t.id));
         setSuspendedTenantNames(tenantList.filter(t => t.status === 'suspended').map(t => t.name || t.id));
 
         // Generate real revenue trend data from invoices (last 6 months)
@@ -511,13 +387,13 @@ const OwnerDashboard = () => {
         const planRevenue = {
           enterprise: tenantList
             .filter(t => t.subscription_plan === 'enterprise' && t.status === 'active')
-            .reduce((sum, t) => sum + (latestRate.get(t.id) || 0), 0),
+            .reduce((sum, t) => sum + committedMRR(latestRate.get(t.id), t.subscription_plan, planPrices), 0),
           professional: tenantList
             .filter(t => t.subscription_plan === 'professional' && t.status === 'active')
-            .reduce((sum, t) => sum + (latestRate.get(t.id) || 0), 0),
+            .reduce((sum, t) => sum + committedMRR(latestRate.get(t.id), t.subscription_plan, planPrices), 0),
           starter: tenantList
             .filter(t => t.subscription_plan === 'starter' && t.status === 'active')
-            .reduce((sum, t) => sum + (latestRate.get(t.id) || 0), 0)
+            .reduce((sum, t) => sum + committedMRR(latestRate.get(t.id), t.subscription_plan, planPrices), 0)
         };
         setRevenueByPlan(planRevenue);
 
@@ -557,145 +433,9 @@ const OwnerDashboard = () => {
         setStats(prev => ({ ...prev, totalProjects: projectCount || 0 }));
       }
 
-      // === Cross-tenant real-estate rollup (Owner HQ lens) ===
-      // units & leads carry tenant_id directly; Owner RLS permits cross-tenant read.
+      // === Platform stickiness + license utilization (SaaS health signals) ===
       // Scoped to customer tenants so our own platform tenant can't inflate it.
       if (customerTenantIds.length > 0) {
-        const monthStart = new Date();
-        monthStart.setDate(1);
-        monthStart.setHours(0, 0, 0, 0);
-        // Prior calendar month window [lastMonthStart, monthStart) for real MoM deltas.
-        const lastMonthStart = new Date(monthStart);
-        lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
-
-        const [unitsRes, leadsRes, usersRes] = await Promise.all([
-          supabase.from('units').select('tenant_id, price, status, sold_at').in('tenant_id', customerTenantIds),
-          supabase.from('leads').select('tenant_id, created_at, assigned_to, status, estimated_value').in('tenant_id', customerTenantIds),
-          supabase.from('users').select('id, full_name, role, tenant_id').in('tenant_id', customerTenantIds),
-        ]);
-        const unitRows = (unitsRes.data || []) as { tenant_id: string; price: number | null; status: string | null; sold_at: string | null }[];
-        const leadRows = (leadsRes.data || []) as { tenant_id: string; created_at: string | null; assigned_to: string | null; status: string | null; estimated_value: number | null }[];
-        const userRows = (usersRes.data || []) as { id: string; full_name: string | null; role: string | null; tenant_id: string | null }[];
-
-        let gdv = 0, soldValueAll = 0, soldUnits = 0, soldUnitsThisMonth = 0, newLeadsThisMonth = 0;
-        let soldUnitsLastMonth = 0, newLeadsLastMonth = 0;
-        const agg = new Map<string, { gdv: number; sold: number; total: number; soldValue: number; leads: number }>();
-        const slot = (id: string) => {
-          let r = agg.get(id);
-          if (!r) { r = { gdv: 0, sold: 0, total: 0, soldValue: 0, leads: 0 }; agg.set(id, r); }
-          return r;
-        };
-        unitRows.forEach((u) => {
-          const price = Number(u.price) || 0;
-          gdv += price;
-          const r = slot(u.tenant_id);
-          r.gdv += price; r.total += 1;
-          if (u.status === 'sold') {
-            soldUnits += 1; soldValueAll += price; r.sold += 1; r.soldValue += price;
-            if (u.sold_at) {
-              const sd = new Date(u.sold_at);
-              if (sd >= monthStart) soldUnitsThisMonth += 1;
-              else if (sd >= lastMonthStart) soldUnitsLastMonth += 1;
-            }
-          }
-        });
-        leadRows.forEach((l) => {
-          slot(l.tenant_id).leads += 1;
-          if (l.created_at) {
-            const cd = new Date(l.created_at);
-            if (cd >= monthStart) newLeadsThisMonth += 1;
-            else if (cd >= lastMonthStart) newLeadsLastMonth += 1;
-          }
-        });
-
-        setSalesStats({ gdv, soldValue: soldValueAll, soldUnits, soldUnitsThisMonth, totalUnits: unitRows.length, newLeadsThisMonth, totalLeads: leadRows.length });
-
-        // GMV monthly breakdown — group sold units by sold_at month (last 6 months).
-        const gmvByMonthKey = new Map<string, { gmv: number; units: number }>();
-        unitRows.forEach((u) => {
-          if (u.status === 'sold' && u.sold_at) {
-            const d = new Date(u.sold_at);
-            const key = `${d.getFullYear()}-${d.getMonth()}`;
-            const slot = gmvByMonthKey.get(key) || { gmv: 0, units: 0 };
-            slot.gmv += Number(u.price) || 0;
-            slot.units += 1;
-            gmvByMonthKey.set(key, slot);
-          }
-        });
-        const gmvMonths: { month: string; gmv: number; units: number }[] = [];
-        for (let i = 5; i >= 0; i--) {
-          const d = new Date();
-          d.setMonth(d.getMonth() - i);
-          const key = `${d.getFullYear()}-${d.getMonth()}`;
-          const thaiM = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-          gmvMonths.push({ month: thaiM[d.getMonth()], ...(gmvByMonthKey.get(key) || { gmv: 0, units: 0 }) });
-        }
-        setGmvTrend(gmvMonths);
-
-        // Real MoM deltas — null when there's no prior-month baseline (avoid fake %).
-        const pct = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null);
-        let tenantsThisMonth = 0, tenantsLastMonth = 0;
-        ((tenants || []) as Tenant[]).forEach((t) => {
-          if (!t.created_at) return;
-          const cd = new Date(t.created_at);
-          if (cd >= monthStart) tenantsThisMonth += 1;
-          else if (cd >= lastMonthStart) tenantsLastMonth += 1;
-        });
-        setMomDelta({
-          soldUnits: pct(soldUnitsThisMonth, soldUnitsLastMonth),
-          leads: pct(newLeadsThisMonth, newLeadsLastMonth),
-          tenants: pct(tenantsThisMonth, tenantsLastMonth),
-        });
-
-        const rows: CompanyRow[] = ((tenants || []) as Tenant[])
-          .map((t) => {
-            const r = agg.get(t.id);
-            return { id: t.id, name: t.name, plan: t.subscription_plan, gdv: r?.gdv || 0, sold: r?.sold || 0, total: r?.total || 0, soldValue: r?.soldValue || 0, leads: r?.leads || 0 };
-          })
-          .filter((r) => r.total > 0)
-          .sort((a, b) => b.soldValue - a.soldValue);
-        setCompanyRows(rows);
-
-        // Top salespeople — group leads by assigned_to, rank by won deal value.
-        const tenantNameMap = new Map(((tenants || []) as Tenant[]).map((t) => [t.id, t.name]));
-        const perf = new Map<string, { won: number; wonValue: number; assigned: number }>();
-        leadRows.forEach((l) => {
-          if (!l.assigned_to) return;
-          let r = perf.get(l.assigned_to);
-          if (!r) { r = { won: 0, wonValue: 0, assigned: 0 }; perf.set(l.assigned_to, r); }
-          r.assigned += 1;
-          if (l.status === 'won' || l.status === 'closed') {
-            r.won += 1;
-            r.wonValue += Number(l.estimated_value) || 0;
-          }
-        });
-        const topReps: TopSalesRep[] = userRows
-          .map((u) => {
-            const p = perf.get(u.id);
-            if (!p || p.assigned === 0) return null;
-            return {
-              id: u.id,
-              name: u.full_name || 'ไม่ระบุชื่อ',
-              role: u.role || 'sales',
-              company: tenantNameMap.get(u.tenant_id || '') || '–',
-              won: p.won,
-              wonValue: p.wonValue,
-              conversion: Math.round((p.won / p.assigned) * 100),
-            };
-          })
-          .filter((r): r is TopSalesRep => r !== null)
-          .sort((a, b) => b.wonValue - a.wonValue || b.won - a.won)
-          .slice(0, 5);
-        setTopSalesReps(topReps);
-
-        // Cache raw rows so period-filter changes can recompute without another DB round-trip.
-        unitRowsCacheRef.current = unitRows;
-        leadRowsCacheRef.current = leadRows;
-        userRowsCacheRef.current = userRows;
-        tenantNameMapRef.current = tenantNameMap;
-        tenantListRef.current = (tenants || []) as Tenant[];
-        computeREForPeriod(period);
-
         // Active Logins — via SECURITY DEFINER RPC (reads auth.users.last_sign_in_at safely).
         const { data: loginStats } = await (supabase as any).rpc('owner_active_user_stats', {
           p_tenant_ids: customerTenantIds,
@@ -879,11 +619,7 @@ const OwnerDashboard = () => {
     },
   ];
 
-  const gmvThisMonth = gmvTrend[gmvTrend.length - 1]?.gmv ?? 0;
-  const gmvLastMonth = gmvTrend[gmvTrend.length - 2]?.gmv ?? 0;
-  const momGmvPct = gmvLastMonth > 0 ? Math.round(((gmvThisMonth - gmvLastMonth) / gmvLastMonth) * 100) : null;
-
-  // Compact KPI card — shared by both zone strips (SaaS / RE) so each zone keeps its own metrics.
+  // Compact KPI card — renders the SaaS KPI strip (Zone 1).
   const renderKpiCard = (k: any, i: number) => (
     <div key={i} onClick={() => navigate(k.href)} className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6 cursor-pointer hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200">
       <div className="flex items-start justify-between mb-5">
@@ -933,7 +669,7 @@ const OwnerDashboard = () => {
               {[
                 { label: 'รายได้ค่าเช่า/เดือน (MRR)', value: formatCurrency(stats.monthlyRevenue), trend: mkTrend(stats.mrrGrowth), icon: Receipt, color: KK.red, href: '/payments' },
                 ...saasKpis2.slice(0, 2).map((k) => ({ label: k.title, value: k.value, trend: (k as any).trend, icon: k.icon, color: k.color, href: k.href, sub: k.sub })),
-                { label: 'อัตราเลิกใช้ (Churn) · เดือนนี้', value: `${stats.churnRate}%`, icon: TrendingDown, color: stats.churnRate > 5 ? KK.red : stats.churnRate > 0 ? KK.amber : KK.green, href: '/owner-health', trend: mkTrend(stats.churnRate - stats.churnLastMonth), invertTrend: true },
+                { label: 'อัตราเลิกใช้ (Churn) · 30 วัน', value: `${stats.churnRate}%`, icon: TrendingDown, color: stats.churnRate > 5 ? KK.red : stats.churnRate > 0 ? KK.amber : KK.green, href: '/owner-health', trend: mkTrend(stats.churnRate - stats.churnLastMonth), invertTrend: true },
                 ...saasKpis2.slice(2).map((k) => ({ label: k.title, value: k.value, trend: (k as any).trend, icon: k.icon, color: k.color, href: k.href, sub: k.sub })),
               ].map(renderKpiCard)}
             </div>
@@ -1043,187 +779,98 @@ const OwnerDashboard = () => {
               </div>
             </div>
 
-            {/* ━━━━━━ ZONE 2 · ภาพรวมอสังหาฯ ข้ามทุกบริษัท — มีตัวกรองช่วงเวลา ━━━━━━ */}
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-gray-100 pb-3">
+            {/* Retention summary + action queue — side by side to keep the page compact */}
+            <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-6">
+            {/* Revenue retention summary — headline only; full view in Payments › สุขภาพรายได้ */}
+            <div
+              className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 cursor-pointer hover:shadow-soft-md transition-shadow duration-200 flex flex-col"
+              onClick={() => navigate('/payments?tab=revenue-health')}
+            >
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <Home className="w-4 h-4 flex-shrink-0" style={{ color: KK.red }} />
-                  <span className="text-sm font-semibold text-gray-700">ภาพรวมอสังหาฯ ข้ามทุกบริษัท</span>
-                  <span className="text-xs text-gray-400 hidden sm:inline">· ยอดขาย · ผู้สนใจ · สต็อก</span>
+                  <RefreshCw className="w-4 h-4" style={{ color: KK.green }} />
+                  <h2 className="text-base font-bold text-gray-900">สุขภาพรายได้ (Retention)</h2>
                 </div>
-                <PeriodFilter value={period} onChange={setPeriod} tier="strategic" className="self-start sm:self-auto shrink-0" />
+                <span className="text-xs font-semibold flex items-center gap-1" style={{ color: KK.red }}>
+                  ดูรายละเอียด <ChevronRight className="w-3 h-3" />
+                </span>
               </div>
-
-            {/* RE KPI strip — 3 cards (GMV · ยูนิต · ผู้สนใจ) ตอบสนองตัวกรองด้านบนโดยตรง */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {[
-                { label: `GMV อสังหาฯ (${periodRangeLabel(period)})`, value: fmtCompact(rePeriodStats.gmv), trend: mkTrend(momGmvPct), icon: TrendingUp, color: KK.red, href: '/owner-market' },
-                { label: `ยูนิตขายได้ (${periodRangeLabel(period)})`, value: rePeriodStats.units.toLocaleString(), trend: mkTrend(momDelta.soldUnits), icon: Building, color: KK.blue, href: '/owner-market', sub: `จาก ${salesStats.totalUnits.toLocaleString()} ยูนิตทั้งหมด` },
-                { label: `ผู้สนใจใหม่ (${periodRangeLabel(period)})`, value: rePeriodStats.newLeads.toLocaleString(), trend: mkTrend(momDelta.leads), icon: UserPlusIcon, color: KK.green, href: '/owner-market', sub: `สะสม ${salesStats.totalLeads.toLocaleString()} ราย` },
-              ].map(renderKpiCard)}
+              {/* Retention donut — เก็บไว้ได้ (GRR) vs หายไป (Churn); NRR ตรงกลาง */}
+              <div className="flex-1 flex items-center">
+              {revHealth.nrr == null ? (
+                <p className="text-sm text-gray-400 py-4">ยังไม่มีฐานข้อมูลเทียบเดือนก่อน</p>
+              ) : (() => {
+                const grr = Math.max(0, Math.round(revHealth.grr ?? 0));
+                const churn = Math.max(0, Math.round(revHealth.revenueChurn ?? 0));
+                const nrr = Math.round(revHealth.nrr ?? 0);
+                const bars = [
+                  { label: 'NRR', sub: 'รายได้คงเหลือสุทธิ', v: nrr, color: KK.red, target: '≥100% = โตจากลูกค้าเดิม' },
+                  { label: 'GRR', sub: 'คงเหลือขั้นต่ำ', v: grr, color: KK.red, target: 'รายได้เดิมที่รักษาไว้ได้' },
+                  { label: 'Revenue Churn', sub: 'รายได้ที่หาย', v: churn, color: KK.red, target: 'ยิ่งต่ำยิ่งดี' },
+                ];
+                return (
+                  <div className="w-full space-y-4">
+                    {bars.map((m, i) => (
+                      <div key={i}>
+                        <div className="flex items-baseline justify-between mb-1.5">
+                          <span className="text-sm font-medium text-gray-700">{m.label} <span className="text-xs text-gray-400 font-normal">· {m.sub}</span></span>
+                          <span className="text-lg font-bold tabular-nums leading-none" style={{ color: m.color }}>{m.v}%</span>
+                        </div>
+                        <div className="h-3 rounded-full bg-gray-100 overflow-hidden">
+                          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, m.v)}%`, background: m.color }} />
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">{m.target}</p>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              </div>
             </div>
 
-            {/* GMV Monthly Bar Chart */}
-            {/* GMV chart (ซ้าย) + Priority Queue (ขวา) — side by side */}
-            <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-5 items-stretch">
-
-              {/* Left: GMV BarChart — improved bars + labels */}
-              {gmvTrend.some(d => d.gmv > 0) ? (
-                <div className="bg-white border border-gray-100 rounded-2xl shadow-soft px-5 pt-5 pb-1 flex flex-col">
-                  <div className="flex items-start justify-between mb-3 flex-shrink-0">
-                    <div>
-                      <h2 className="text-base font-bold text-gray-900">GMV รายเดือน</h2>
-                      <p className="text-xs text-gray-500 mt-0.5">ยอดขายรวมทั้งแพลตฟอร์ม · ย้อนหลัง 6 เดือน</p>
-                    </div>
-                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: KK.red, backgroundColor: KK.redLight }}>6 เดือน</span>
-                  </div>
-                  <ResponsiveContainer width="100%" height="100%" minHeight={200}>
-                    <BarChart data={gmvTrend} margin={{ top: 8, right: 8, left: 0, bottom: -8 }} barCategoryGap="18%">
-                      <defs>
-                        <linearGradient id="ownerGmvGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={KK.red} stopOpacity={1} />
-                          <stop offset="100%" stopColor={KK.red} stopOpacity={0.65} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" vertical={false} />
-                      <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: '#d1d5db' }} axisLine={false} tickLine={false} tickFormatter={(v) => fmtCompact(v)} width={58} />
-                      <Tooltip contentStyle={kkTooltipStyle} cursor={{ fill: KK.redLight }} formatter={((v: any) => [fmtCompact(Number(v ?? 0)), 'GMV']) as any} />
-                      <Bar dataKey="gmv" fill="url(#ownerGmvGrad)" radius={[8, 8, 0, 0]} maxBarSize={80} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : <div />}
-
-              {/* Right: Priority Queue */}
-              <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
-                <div className="px-4 py-3 flex items-center gap-2 border-b border-gray-100">
-                  <AlertCircle className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm font-bold text-gray-700">รายการต้องดำเนินการ</span>
-                  {actionItems.filter(a => a.tone === 'red').length > 0 && (
-                    <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: KK.redLight, color: KK.red }}>
-                      {actionItems.filter(a => a.tone === 'red').length} เร่งด่วน
-                    </span>
-                  )}
-                  {actionItems.filter(a => a.tone === 'red').length === 0 && actionItems.filter(a => a.tone === 'amber').length > 0 && (
-                    <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: KK.amberLight, color: KK.amber }}>
-                      {actionItems.filter(a => a.tone === 'amber').length} ต้องติดตาม
-                    </span>
-                  )}
-                  {actionItems.every(a => a.tone === 'green') && (
-                    <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: KK.greenLight, color: KK.green }}>
-                      ทุกอย่างปกติ
-                    </span>
-                  )}
-                </div>
-                <div className="divide-y divide-gray-50">
-                  {actionItems.slice(0, 5).map((item, i) => (
-                    <button key={i} onClick={() => navigate(item.href)}
-                      className="w-full px-4 py-2.5 flex items-center gap-3 bg-white hover:bg-gray-50 transition-colors text-left">
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: item.tone === 'red' ? KK.red : item.tone === 'amber' ? KK.amber : KK.green }} />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm font-semibold text-gray-800 block truncate">{item.title}</span>
-                        <span className="text-xs text-gray-400 truncate block">{item.sub}</span>
-                      </div>
-                      <ChevronRight className="w-3.5 h-3.5 text-gray-300 shrink-0" />
-                    </button>
-                  ))}
-                </div>
-                {actionItems.length > 5 && (
-                  <button onClick={() => navigate('/owner-health')}
-                    className="w-full px-4 py-2.5 flex items-center justify-center gap-1.5 border-t border-gray-100 hover:bg-gray-50 transition-colors group">
-                    <span className="text-xs font-semibold text-gray-500 group-hover:text-gray-700">ดูทั้งหมด {actionItems.length} รายการ</span>
-                    <ChevronRight className="w-3 h-3 text-gray-400 group-hover:text-gray-600" />
-                  </button>
+            {/* Priority Queue — SaaS-core action items (overdue / churn / trial / upsell) */}
+            <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
+              <div className="px-4 py-3 flex items-center gap-2 border-b border-gray-100">
+                <AlertCircle className="w-4 h-4 text-gray-400" />
+                <span className="text-sm font-bold text-gray-700">รายการต้องดำเนินการ</span>
+                {actionItems.filter(a => a.tone === 'red').length > 0 && (
+                  <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: KK.redLight, color: KK.red }}>
+                    {actionItems.filter(a => a.tone === 'red').length} เร่งด่วน
+                  </span>
+                )}
+                {actionItems.filter(a => a.tone === 'red').length === 0 && actionItems.filter(a => a.tone === 'amber').length > 0 && (
+                  <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: KK.amberLight, color: KK.amber }}>
+                    {actionItems.filter(a => a.tone === 'amber').length} ต้องติดตาม
+                  </span>
+                )}
+                {actionItems.every(a => a.tone === 'green') && (
+                  <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: KK.greenLight, color: KK.green }}>
+                    ทุกอย่างปกติ
+                  </span>
                 )}
               </div>
-            </div>
-
-            {/* Zone 2 charts — อันดับผู้ขาย (ซ้าย 60%) | Leaderboard Top 5 บริษัท (ขวา 40%) */}
-            <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-5">
-            <div
-              className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 cursor-pointer hover:shadow-soft-md transition-shadow duration-200"
-              onClick={() => navigate('/owner-companies')}
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h2 className="text-base font-bold text-gray-900">อันดับผู้ขายดีที่สุด</h2>
-                  <p className="text-xs text-gray-500 mt-0.5">Top 5 ข้ามทุกบริษัท · {periodRangeLabel(period)} · คลิกดูทั้งหมด →</p>
-                </div>
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: KK.red, backgroundColor: KK.redLight }}>Top 5</span>
+              <div className="divide-y divide-gray-50">
+                {actionItems.slice(0, 5).map((item, i) => (
+                  <button key={i} onClick={() => navigate(item.href)}
+                    className="w-full px-4 py-2.5 flex items-center gap-3 bg-white hover:bg-gray-50 transition-colors text-left">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: item.tone === 'red' ? KK.red : item.tone === 'amber' ? KK.amber : KK.green }} />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-semibold text-gray-800 block truncate">{item.title}</span>
+                      <span className="text-xs text-gray-400 truncate block">{item.sub}</span>
+                    </div>
+                    <ChevronRight className="w-3.5 h-3.5 text-gray-300 shrink-0" />
+                  </button>
+                ))}
               </div>
-              {topSalesReps.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-10">ยังไม่มีข้อมูลผู้ขาย</p>
-              ) : (() => {
-                const maxVal = Math.max(...topSalesReps.map((r) => r.wonValue), 1);
-                return (
-                  <div className="space-y-3.5">
-                    {topSalesReps.map((rep, i) => (
-                      <div key={rep.id} className="flex items-center gap-3">
-                        <span className="w-5 text-sm font-bold tabular-nums text-gray-300 flex-shrink-0 text-center">{i + 1}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2 mb-1">
-                            <div className="min-w-0">
-                              <span className="text-sm font-semibold text-gray-800 truncate block">{rep.name}</span>
-                              <span className="text-xs text-gray-400 truncate block">{rep.company}</span>
-                            </div>
-                            <div className="text-right flex-shrink-0">
-                              <span className="text-sm font-bold tabular-nums block" style={{ color: KK.red }}>{fmtCompact(rep.wonValue)}</span>
-                              <span className="text-xs text-gray-400">{rep.won} ดีล · {rep.conversion}%</span>
-                            </div>
-                          </div>
-                          <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                            <div className="h-full rounded-full transition-all" style={{ width: `${(rep.wonValue / maxVal) * 100}%`, backgroundColor: KK.red }} />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
+              {actionItems.length > 5 && (
+                <button onClick={() => navigate('/owner-health')}
+                  className="w-full px-4 py-2.5 flex items-center justify-center gap-1.5 border-t border-gray-100 hover:bg-gray-50 transition-colors group">
+                  <span className="text-xs font-semibold text-gray-500 group-hover:text-gray-700">ดูทั้งหมด {actionItems.length} รายการ</span>
+                  <ChevronRight className="w-3 h-3 text-gray-400 group-hover:text-gray-600" />
+                </button>
+              )}
             </div>
-
-            {/* Leaderboard — Top 5 companies, minimalist avatar list */}
-            <div
-              className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 cursor-pointer hover:shadow-soft-md transition-shadow duration-200"
-              onClick={() => navigate('/owner-companies')}
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h2 className="text-base font-bold text-gray-900">อันดับบริษัทขายดี</h2>
-                  <p className="text-xs text-gray-500 mt-0.5">Top 5 · {periodRangeLabel(period)} · คลิกดูทั้งหมด →</p>
-                </div>
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: KK.red, backgroundColor: KK.redLight }}>Top 5</span>
-              </div>
-              {(() => {
-                const top = companyRows.slice(0, 5);
-                if (top.length === 0) return <p className="text-sm text-gray-400 text-center py-10">ยังไม่มีข้อมูลยอดขาย</p>;
-                const maxVal = Math.max(...top.map((c) => c.soldValue), 1);
-                return (
-                  <div className="space-y-3.5">
-                    {top.map((c, i) => (
-                      <div key={c.id} className="flex items-center gap-3">
-                        <span className="w-5 text-sm font-bold tabular-nums text-gray-300 flex-shrink-0 text-center">{i + 1}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2 mb-1">
-                            <span className="text-sm font-semibold text-gray-800 truncate">{c.name}</span>
-                            <div className="text-right flex-shrink-0">
-                              <span className="text-sm font-bold tabular-nums block" style={{ color: KK.red }}>{fmtCompact(c.soldValue)}</span>
-                              <span className="text-xs text-gray-400">{c.sold} ยูนิต</span>
-                            </div>
-                          </div>
-                          <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                            <div className="h-full rounded-full transition-all" style={{ width: `${(c.soldValue / maxVal) * 100}%`, backgroundColor: KK.red }} />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-            </div>
-            </div>{/* end Zone 2 space-y-4 */}
+            </div>{/* end retention + action-queue grid */}
 
           </main>
         </div>

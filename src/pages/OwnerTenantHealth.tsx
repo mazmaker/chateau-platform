@@ -4,13 +4,21 @@ import { supabase } from '@/lib/supabase';
 import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
+import { toast } from 'sonner';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { HeartPulse, ShieldCheck, AlertTriangle, TrendingDown, ChevronRight, Package, ArrowRight, Clock, Search } from 'lucide-react';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { HeartPulse, ShieldCheck, AlertTriangle, TrendingDown, ChevronRight, Package, Clock, Search, MoreHorizontal, Eye, Trash2, ArrowUp, ArrowDown, ArrowUpDown, FileText } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { committedMRR } from '@/lib/mrr';
 
 // ──────────────────────────────────────────────────────────────────────────
 // ภาพรวมผู้เช่า — SaaS owner view: health, MRR per tenant, trial expiry,
@@ -48,35 +56,18 @@ const fmtMRR = (v: number) => {
   return `฿${v.toLocaleString()}`;
 };
 
-// Plan MRR list price — used for "MRR ที่เสี่ยง" (contractual, not cash received)
-const PLAN_MRR: Record<string, number> = {
-  enterprise: 15000, professional: 5900, starter: 2900, free: 0,
-};
-
-const computeHealth = (tenantStatus: string, users: number, projects: number, lastLoginDays: number): number => {
+const computeHealth = (tenantStatus: string, lastLoginDays: number): number => {
   if (tenantStatus === 'cancelled') return 0;
   if (tenantStatus === 'suspended') return 15;
-  let score = 50;
-  // User adoption signal (max +20)
-  if (users >= 10)     score += 20;
-  else if (users >= 5) score += 15;
-  else if (users >= 3) score += 10;
-  else if (users >= 1) score += 5;
-  else                 score -= 10;
-  // Project usage signal (max +15)
-  if (projects >= 5)     score += 15;
-  else if (projects >= 2) score += 10;
-  else if (projects >= 1) score += 5;
-  else                    score -= 10;
-  // Engagement signal: login recency (max +20, min -25) — strongest churn indicator
-  if (lastLoginDays <= 3)       score += 20;
-  else if (lastLoginDays <= 14) score += 10;
-  else if (lastLoginDays <= 30) score += 0;
-  else if (lastLoginDays <= 60) score -= 15;
-  else                          score -= 25;
-  // Trial gets a floor — they're new, not dormant
-  if (tenantStatus === 'trial') score = Math.max(score, 50);
-  return Math.max(5, Math.min(100, score));
+  // วัดจากวันใช้งานล่าสุดอย่างเดียว — นี่คือสัญญาณ churn ที่แม่นที่สุด
+  let score: number;
+  if (lastLoginDays <= 3)       score = 90;
+  else if (lastLoginDays <= 7)  score = 75;
+  else if (lastLoginDays <= 14) score = 65;
+  else if (lastLoginDays <= 30) score = 50;
+  else if (lastLoginDays <= 60) score = 30;
+  else                          score = 15;
+  return score;
 };
 const toHealthStatus = (score: number): HealthStatus =>
   score >= 70 ? 'healthy' : score >= 40 ? 'at_risk' : 'dormant';
@@ -104,6 +95,7 @@ interface TenantRow {
   health: number;
   healthStatus: HealthStatus;
   mrr: number;
+  owner_notes: string | null;
 }
 
 const OwnerTenantHealth = () => {
@@ -118,20 +110,28 @@ const OwnerTenantHealth = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [rows, setRows] = useState<TenantRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sortKey, setSortKey] = useState<'priority' | 'health' | 'lastLogin' | 'mrr'>('priority');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [noteTarget, setNoteTarget] = useState<{ id: string; name: string; notes: string } | null>(null);
+  const [noteBody, setNoteBody] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
 
   if (!isOwner) { navigate('/'); return null; }
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
-
-      const [{ data: tenants }, { data: usersList }, { data: projects }, { data: invoices }] = await Promise.all([
-        supabase.from('tenants').select('id, name, subscription_plan, status, trial_ends_at').eq('is_platform' as any, false).order('created_at', { ascending: false }),
+      const [{ data: tenants }, { data: usersList }, { data: projects }, { data: invoices }, { data: planRows }] = await Promise.all([
+        supabase.from('tenants').select('id, name, subscription_plan, status, trial_ends_at, owner_notes').eq('is_platform' as any, false).order('created_at', { ascending: false }),
         supabase.from('users').select('id, tenant_id, updated_at'),
         supabase.from('projects').select('id, tenant_id'),
-        supabase.from('invoices').select('tenant_id, amount, paid_at, status').eq('status', 'paid'),
+        supabase.from('invoices').select('tenant_id, amount, paid_at, created_at, status').eq('status', 'paid'),
+        supabase.from('plans').select('id, price_monthly'),
       ]);
+
+      // Plan list prices from the `plans` catalog (single source — no hardcode drift).
+      const planPrices: Record<string, number> = {};
+      ((planRows || []) as any[]).forEach((p) => { planPrices[p.id] = Number(p.price_monthly) || 0; });
 
       // Build lookup maps
       const usersByTenant: Record<string, number> = {};
@@ -148,18 +148,24 @@ const OwnerTenantHealth = () => {
         if (p.tenant_id) projectsByTenant[p.tenant_id] = (projectsByTenant[p.tenant_id] || 0) + 1;
       });
 
-      const mrrByTenant: Record<string, number> = {};
+      // Latest paid-invoice rate per tenant (current monthly rate) — same basis as
+      // the Executive Dashboard, so platform MRR matches across both pages.
+      const latestRate: Record<string, number> = {};
+      const latestTime: Record<string, number> = {};
       (invoices || []).forEach((inv: any) => {
         if (!inv.tenant_id) return;
-        const d = new Date(inv.paid_at || '');
-        if (d >= monthStart) mrrByTenant[inv.tenant_id] = (mrrByTenant[inv.tenant_id] || 0) + (inv.amount || 0);
+        const t = new Date(inv.paid_at || inv.created_at || '').getTime();
+        if (!(inv.tenant_id in latestTime) || t > latestTime[inv.tenant_id]) {
+          latestTime[inv.tenant_id] = t;
+          latestRate[inv.tenant_id] = Number(inv.amount) || 0;
+        }
       });
 
       const built: TenantRow[] = (tenants || []).map((t: any) => {
         const users = usersByTenant[t.id] || 0;
         const projs = projectsByTenant[t.id] || 0;
         const lastDays = daysSince(lastActiveByTenant[t.id]);
-        const health = computeHealth(t.status || 'active', users, projs, lastDays >= 999 ? 60 : lastDays);
+        const health = computeHealth(t.status || 'active', lastDays >= 999 ? 999 : lastDays);
         return {
           id: t.id,
           name: t.name || t.id,
@@ -171,7 +177,9 @@ const OwnerTenantHealth = () => {
           lastLoginDays: lastDays >= 999 ? 0 : lastDays,
           health,
           healthStatus: t.status === 'cancelled' ? 'churned' : toHealthStatus(health),
-          mrr: mrrByTenant[t.id] || 0,
+          // MRR counts ACTIVE tenants only (committed run-rate) — same population as /owner.
+          mrr: t.status === 'active' ? committedMRR(latestRate[t.id], t.subscription_plan, planPrices) : 0,
+          owner_notes: t.owner_notes || null,
         };
       }).sort((a, b) => {
         const group = (r: TenantRow) => {
@@ -193,10 +201,10 @@ const OwnerTenantHealth = () => {
   const healthy    = rows.filter(r => r.healthStatus === 'healthy').length;
   const atRisk     = rows.filter(r => r.healthStatus === 'at_risk').length;
   const dormant    = rows.filter(r => r.healthStatus === 'dormant').length;
-  const atRiskMRR  = rows.filter(r => r.healthStatus === 'at_risk').reduce((s, r) => s + (PLAN_MRR[r.plan] || 0), 0);
+  const atRiskMRR  = rows.filter(r => r.healthStatus === 'at_risk').reduce((s, r) => s + r.mrr, 0);
   const atRiskRows = rows.filter(r => r.healthStatus === 'at_risk');
-  // Total MRR = contractual plan price ของทุก active/suspended company (ไม่รวม trial/cancelled)
-  const totalMRR   = rows.filter(r => r.tenantStatus === 'active' || r.tenantStatus === 'suspended').reduce((s, r) => s + (PLAN_MRR[r.plan] || 0), 0);
+  // Total MRR = committed run-rate ของ active tenants (r.mrr เป็น 0 อยู่แล้วสำหรับ trial/suspended/cancelled)
+  const totalMRR   = rows.reduce((s, r) => s + r.mrr, 0);
   const atRiskPct  = totalMRR > 0 ? Math.round((atRiskMRR / totalMRR) * 100) : 0;
   const trialExpiringSoon = rows.filter(r => {
     if (r.tenantStatus !== 'trial') return false;
@@ -230,10 +238,52 @@ const OwnerTenantHealth = () => {
     }
     return true;
   });
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const toggleSort = (key: 'health' | 'lastLogin' | 'mrr') => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+  const sorted = [...filtered].sort((a, b) => {
+    // Default = ลำดับความสำคัญแบบ SaaS owner: เสี่ยง (กู้ได้) บนสุด → ยกเลิกแล้ว (เสียไปแล้ว) ล่างสุด
+    if (sortKey === 'priority') {
+      const group = (r: TenantRow) => {
+        if (r.healthStatus === 'at_risk') return 0; // เสี่ยงเลิกใช้ — เงินยังกู้ได้ ต้องรีบ
+        if (r.healthStatus === 'dormant') return 1; // ไม่ใช้งาน — ใกล้หลุด
+        if (r.healthStatus === 'healthy') return 2; // ใช้งานอยู่ — ปกติ
+        return 3;                                   // ยกเลิกแล้ว — ล่างสุด
+      };
+      const diff = group(a) - group(b);
+      return diff !== 0 ? diff : a.health - b.health; // ในกลุ่มเดียวกัน: คะแนนต่ำ (ใกล้หลุด) ก่อน
+    }
+    const dir = sortDir === 'asc' ? 1 : -1;
+    if (sortKey === 'health') return (a.health - b.health) * dir;
+    if (sortKey === 'mrr') return (a.mrr - b.mrr) * dir;
+    return (a.lastLoginDays - b.lastLoginDays) * dir;
+  });
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const pageStart = (safePage - 1) * pageSize;
-  const paginated = filtered.slice(pageStart, pageStart + pageSize);
+  const paginated = sorted.slice(pageStart, pageStart + pageSize);
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(`ลบบริษัท "${name}" ออกจากระบบ?\n\nการลบจะไม่สามารถกู้คืนได้`)) return;
+    const { error } = await (supabase.from('tenants') as any).delete().eq('id', id);
+    if (error) { toast.error('ลบไม่สำเร็จ', { description: error.message }); return; }
+    setRows(prev => prev.filter(r => r.id !== id));
+    toast.success('ลบบริษัทแล้ว', { description: name });
+  };
+
+  const handleSaveNote = async () => {
+    if (!noteTarget) return;
+    setSavingNote(true);
+    const { error } = await (supabase.from('tenants') as any)
+      .update({ owner_notes: noteBody.trim() || null })
+      .eq('id', noteTarget.id);
+    setSavingNote(false);
+    if (error) { toast.error('บันทึกไม่สำเร็จ', { description: error.message }); return; }
+    setRows(prev => prev.map(r => r.id === noteTarget.id ? { ...r, owner_notes: noteBody.trim() || null } : r));
+    toast.success('บันทึก note แล้ว');
+    setNoteTarget(null);
+  };
 
   const KpiCard = ({ title, value, sub, icon: Icon, color, bg, onClick }: { title: string; value: string; sub?: string; icon: React.ElementType; color: string; bg: string; onClick?: () => void }) => (
     <div onClick={onClick} className={`bg-white border border-gray-100 rounded-2xl p-6 shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 ${onClick ? 'cursor-pointer select-none' : ''}`}>
@@ -300,7 +350,7 @@ const OwnerTenantHealth = () => {
             {/* KPI Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <KpiCard
-                title="MRR รวมเดือนนี้"
+                title="MRR รวม"
                 value={loading ? '—' : fmtMRR(totalMRR)}
                 sub={`Active ${rows.filter(r => r.tenantStatus === 'active').length} · Trial ${rows.filter(r => r.tenantStatus === 'trial').length} · ระงับ ${rows.filter(r => r.tenantStatus === 'suspended').length} · ยกเลิก ${rows.filter(r => r.tenantStatus === 'cancelled').length}`}
                 icon={ShieldCheck} color={KK.green} bg={KK.greenLight}
@@ -418,7 +468,7 @@ const OwnerTenantHealth = () => {
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div>
                     <h2 className="text-base font-bold text-gray-900">รายบริษัท</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">เรียงตามคะแนนสุขภาพ (ต่ำ = เสี่ยงสุด) · สีชิปบอกสัญญาณปัญหา</p>
+                    <p className="text-xs text-gray-500 mt-0.5">เรียงตามความเร่งด่วน: เสี่ยงเลิกใช้ → ไม่ใช้งาน → ใช้งานอยู่ → ยกเลิกแล้ว · กดหัวคอลัมน์เพื่อเรียงเอง</p>
                   </div>
                   {(statusFilter !== 'all' || tenantStatusFilter !== 'all' || planFilter !== 'all' || searchQuery) && (
                     <button
@@ -482,87 +532,141 @@ const OwnerTenantHealth = () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>บริษัท</TableHead>
-                        <TableHead className="text-center">แพ็กเกจ</TableHead>
-                        <TableHead className="text-right">MRR เดือนนี้</TableHead>
-                        <TableHead className="w-[130px]">สุขภาพ</TableHead>
-                        <TableHead className="text-center">สถานะ</TableHead>
-                        <TableHead className="text-center w-[110px]">ดำเนินการ</TableHead>
+                        <TableHead className="text-center w-[150px]">แพ็กเกจ</TableHead>
+                        <TableHead
+                          className="text-right w-[120px] cursor-pointer select-none"
+                          onClick={() => toggleSort('mrr')}
+                        >
+                          <span className="inline-flex items-center justify-end gap-1 w-full">
+                            MRR เดือนนี้
+                            {sortKey === 'mrr'
+                              ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)
+                              : <ArrowUpDown className="w-3 h-3 text-gray-300" />}
+                          </span>
+                        </TableHead>
+                        <TableHead
+                          className="w-[130px] cursor-pointer select-none"
+                          onClick={() => toggleSort('health')}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            สุขภาพ
+                            {sortKey === 'health'
+                              ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)
+                              : <ArrowUpDown className="w-3 h-3 text-gray-300" />}
+                          </span>
+                        </TableHead>
+                        <TableHead
+                          className="w-[130px] cursor-pointer select-none"
+                          onClick={() => toggleSort('lastLogin')}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            ใช้งานล่าสุด
+                            {sortKey === 'lastLogin'
+                              ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)
+                              : <ArrowUpDown className="w-3 h-3 text-gray-300" />}
+                          </span>
+                        </TableHead>
+                        <TableHead className="text-center w-[52px]"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {paginated.map((r) => {
+                      {paginated.map((r, idx) => {
                         const m = HEALTH_META[r.healthStatus];
                         return (
-                          <TableRow key={r.id} className="hover:bg-gray-50">
-                            {/* Company name + health chips */}
+                          <TableRow
+                            key={r.id}
+                            className={`cursor-pointer transition-colors hover:bg-blue-50/30 ${idx % 2 === 1 ? 'bg-gray-50/50' : ''}`}
+                            onClick={() => navigate(`/tenants/${r.id}`)}
+                          >
+                            {/* Company name */}
                             <TableCell>
-                              <div className="font-semibold text-gray-900 flex items-center gap-1.5 flex-wrap">
+                              <div className="font-semibold text-gray-900 flex items-center gap-1.5 flex-wrap leading-snug">
                                 {r.name}
                                 <TrialBadge row={r} />
                               </div>
-                              <HealthChips row={r} />
+                              {/* Trial outcome — แสดงเฉพาะเมื่อ trial หมดแล้ว */}
+                              {r.trial_ends_at && new Date(r.trial_ends_at) < new Date() && r.tenantStatus !== 'trial' && (
+                                <div className="text-xs mt-0.5">
+                                  {r.tenantStatus === 'active'
+                                    ? <span style={{ color: '#16a34a' }}>✓ Convert แล้ว</span>
+                                    : <span style={{ color: '#ef4444' }}>✕ ไม่ต่อสัญญา</span>
+                                  }
+                                </div>
+                              )}
+                              {r.owner_notes && (
+                                <div className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{r.owner_notes}</div>
+                              )}
                             </TableCell>
 
-                            {/* Plan badge */}
+                            {/* Plan badge — neutral blue (ไม่แย่งความสนใจจาก warning สี) */}
                             <TableCell className="text-center">
-                              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border" style={{ color: '#e11d48', borderColor: '#fda4af', background: 'white' }}>
+                              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border"
+                                style={{ color: KK.blue, borderColor: '#bfdbfe', background: KK.blueLight }}>
                                 {PLAN_TH[r.plan] || r.plan}
                               </span>
                             </TableCell>
 
-                            {/* MRR */}
+                            {/* MRR — committed run-rate (active only); other statuses show a status pill */}
                             <TableCell className="text-right tabular-nums">
-                              {r.mrr > 0 ? (
-                                <span className="font-semibold text-sm text-gray-900">{fmtMRR(r.mrr)}</span>
-                              ) : r.tenantStatus === 'trial' ? (
+                              {r.tenantStatus === 'trial' ? (
                                 <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ color: KK.amber, background: KK.amberLight }}>Trial</span>
                               ) : r.tenantStatus === 'cancelled' ? (
                                 <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ color: KK.gray, background: KK.grayLight }}>ยกเลิกแล้ว</span>
+                              ) : r.tenantStatus === 'suspended' ? (
+                                <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ color: '#ea580c', background: '#fff7ed' }}>ระงับ</span>
+                              ) : r.mrr > 0 ? (
+                                <span className="font-semibold text-sm text-gray-900">{fmtMRR(r.mrr)}</span>
                               ) : (
-                                <button
-                                  onClick={() => navigate(`/payments?tab=invoices&search=${encodeURIComponent(r.name)}`)}
-                                  className="text-xs font-medium px-2 py-0.5 rounded-full underline-offset-2 hover:underline cursor-pointer"
-                                  style={{ color: KK.red, background: KK.redLight }}
-                                >ยังไม่จ่าย</button>
+                                <span className="text-xs text-gray-400">฿0</span>
                               )}
                             </TableCell>
 
-                            {/* Health score bar */}
+                            {/* สุขภาพ — badge เท่านั้น */}
                             <TableCell>
-                              <div
-                                className="flex items-center gap-2"
-                                title={`คะแนนสุขภาพ ${r.health}/100\nคำนวณจาก: จำนวนผู้ใช้ + โครงการ + สถานะบัญชี\n≥70 = ใช้งานอยู่ · 40–69 = เสี่ยงเลิกใช้ · <40 = ไม่ใช้งาน`}
+                              <span
+                                className="text-xs font-semibold px-2 py-0.5 rounded-md whitespace-nowrap"
+                                style={{
+                                  color: r.tenantStatus === 'suspended' ? '#ea580c' : m.color,
+                                  backgroundColor: r.tenantStatus === 'suspended' ? '#fff7ed' : m.bg,
+                                }}
                               >
-                                <div className="flex-1 h-2 rounded bg-gray-100 overflow-hidden cursor-help">
-                                  <div className="h-full rounded transition-all" style={{ width: `${r.health}%`, background: m.color }} />
-                                </div>
-                                <span className="text-xs tabular-nums text-gray-500 w-6">{r.health}</span>
-                              </div>
+                                {r.tenantStatus === 'suspended' ? 'ระงับ' : m.label}
+                              </span>
                             </TableCell>
 
-                            {/* Health status badge — ระงับ ใช้ orange แยกจาก red ของ dormant */}
-                            <TableCell className="text-center">
-                              {r.tenantStatus === 'suspended' ? (
-                                <span className="text-xs font-semibold px-2 py-0.5 rounded-md whitespace-nowrap" style={{ color: '#ea580c', backgroundColor: '#fff7ed' }}>
-                                  ระงับ
-                                </span>
-                              ) : (
-                                <span className="text-xs font-semibold px-2 py-0.5 rounded-md whitespace-nowrap" style={{ color: m.color, backgroundColor: m.bg }}>
-                                  {m.label}
-                                </span>
-                              )}
+                            {/* ใช้งานล่าสุด — color-coded */}
+                            <TableCell>
+                              <span className="text-sm tabular-nums" style={{
+                                color: r.lastLoginDays <= 3 ? KK.green : r.lastLoginDays <= 14 ? KK.amber : KK.red,
+                              }}>
+                                {r.lastLoginDays === 0 ? 'วันนี้' : r.lastLoginDays === 1 ? 'เมื่อวาน' : `${r.lastLoginDays} วันก่อน`}
+                              </span>
                             </TableCell>
 
-                            {/* Action button */}
-                            <TableCell className="text-center">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2.5 text-xs font-semibold text-gray-500 hover:text-gray-900 hover:bg-gray-100 gap-1"
-                                onClick={() => navigate(`/tenants/${r.id}`)}
-                              >
-                                ดูรายละเอียด <ArrowRight className="w-3 h-3" />
-                              </Button>
+                            {/* Action — 3-dot dropdown; stopPropagation to avoid row click */}
+                            <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-gray-400 hover:text-gray-700">
+                                    <MoreHorizontal className="w-4 h-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => navigate(`/tenants/${r.id}`)}>
+                                    <Eye className="w-4 h-4 mr-2" />ดูรายละเอียด
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => { setNoteTarget({ id: r.id, name: r.name, notes: r.owner_notes || '' }); setNoteBody(r.owner_notes || ''); }}>
+                                    <FileText className="w-4 h-4 mr-2" />บันทึก note
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => handleDelete(r.id, r.name)}
+                                    className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />ลบบริษัท
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </TableCell>
                           </TableRow>
                         );
@@ -577,9 +681,9 @@ const OwnerTenantHealth = () => {
                 </div>
               )}
 
-              {!loading && filtered.length > 0 && (
+              {!loading && sorted.length > 0 && (
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 pt-4 mt-2 border-t border-gray-100">
-                  <span className="text-sm text-gray-500">แสดง {pageStart + 1}–{Math.min(pageStart + pageSize, filtered.length)} จาก {filtered.length} บริษัท</span>
+                  <span className="text-sm text-gray-500">แสดง {pageStart + 1}–{Math.min(pageStart + pageSize, sorted.length)} จาก {sorted.length} บริษัท</span>
                   <div className="flex items-center gap-1">
                     <Button variant="outline" size="sm" className="h-8 px-2" disabled={safePage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>
                       <ChevronRight className="w-4 h-4 rotate-180" />
@@ -604,6 +708,32 @@ const OwnerTenantHealth = () => {
           </main>
         </div>
       </div>
+
+      {/* Quick note dialog */}
+      <Dialog open={!!noteTarget} onOpenChange={(o) => { if (!o) setNoteTarget(null); }}>
+        <DialogContent className="max-w-md">
+          {noteTarget && (
+            <>
+              <DialogHeader>
+                <DialogTitle>บันทึก note — {noteTarget.name}</DialogTitle>
+              </DialogHeader>
+              <textarea
+                className="w-full border border-gray-200 rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-200"
+                rows={4}
+                placeholder="บันทึกสิ่งที่ต้องติดตาม เช่น ติดต่อ 15 ก.ค. / รอ renewal..."
+                value={noteBody}
+                onChange={(e) => setNoteBody(e.target.value)}
+              />
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setNoteTarget(null)}>ยกเลิก</Button>
+                <Button onClick={handleSaveNote} disabled={savingNote}>
+                  {savingNote ? 'กำลังบันทึก...' : 'บันทึก'}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </OwnerGuard>
   );
 };

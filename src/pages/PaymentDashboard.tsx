@@ -37,7 +37,6 @@ import {
 } from '@/components/ui/dialog';
 import {
   CreditCard,
-  DollarSign,
   AlertCircle,
   TrendingUp,
   Calendar,
@@ -2439,21 +2438,8 @@ const PaymentDashboard = () => {
   const renderOverviewTab = () => (
     <>
       {/* Overview Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-4 sm:mb-6">
-        <Card>
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-chateau to-chateau-600 rounded-xl flex items-center justify-center shadow-xl">
-                <DollarSign className="w-6 h-6 text-white" strokeWidth={2} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{formatCurrency(paymentOverview.totalRevenue)}</p>
-                <p className="text-sm text-muted-foreground">รายได้รวม ({timeRange} วันล่าสุด)</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
+      {/* รายได้รวม KPI ถูกย้ายออก — รายได้/MRR/retention อยู่บน Executive Dashboard แล้ว (กันซ้ำ). แท็บนี้โฟกัส billing-ops. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 lg:gap-6 mb-4 sm:mb-6">
         <Card>
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center gap-3">

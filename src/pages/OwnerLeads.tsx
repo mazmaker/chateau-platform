@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
-import PeriodFilter, { type PeriodKey, DEFAULT_PERIOD } from '@/components/dashboard/PeriodFilter';
 import { supabase } from '@/lib/supabase';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { toast } from 'sonner';
@@ -16,14 +16,14 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
   Building2, Plus, Search, Users, Loader2, TrendingUp, Trophy, Trash2, Briefcase, FileText, Pencil, ChevronRight,
-  MoreHorizontal, Eye, Rocket, CheckCircle2, Flame, Phone,
+  MoreHorizontal, Eye, Rocket, CheckCircle2, Flame, Phone, X, ArrowUpDown, ArrowUp, ArrowDown, ExternalLink,
 } from 'lucide-react';
 
 // Prospective developer company interested in subscribing to Chateau (platform-level).
@@ -50,6 +50,8 @@ interface PLead {
   created_at: string;
   last_contact_date: string | null;
   is_hot: boolean;
+  follow_up_date: string | null;
+  assigned_to: string | null;
 }
 
 // Palette + THB currency formatting — kept identical to OwnerDashboard so the two
@@ -100,7 +102,7 @@ const OPEN_STAGES = ['new','contacted','qualified','demo_scheduled','proposal_se
 // Follow-up health buckets (เฮีย's triage). Counts + per-lead tagging computed
 // in-component; clicking a card filters the list (mutually exclusive with stage).
 const HEALTH_CARDS = [
-  { key: 'new',   label: 'ลีดใหม่',     desc: 'ยังไม่ติดต่อ',        color: KK.blue },
+  { key: 'new',   label: 'ยังไม่ติดต่อ', desc: 'ยังไม่มีการติดต่อเลย', color: KK.blue },
   { key: 'sla',   label: 'เกิน SLA',    desc: 'ไม่ติดต่อใน 2 ชม.',   color: KK.red },
   { key: 'quiet', label: 'เงียบ',       desc: 'เกิน 7 วัน',          color: KK.orange },
   { key: 'hot',   label: 'สำคัญ (Hot)', desc: 'โอกาสปิดสูง',         color: KK.green },
@@ -121,28 +123,50 @@ const PLAN_LABELS: Record<string, string> = {
 // Monthly list price per plan is loaded live from the `plans` catalog inside the
 // component (see planPrices state) — auto-fills estimated MRR when a plan is picked.
 
+const followUpBadge = (date: string | null): React.ReactNode => {
+  if (!date) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(date); d.setHours(0,0,0,0);
+  const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
+  if (diff < 0) return <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">นัด {Math.abs(diff)} วันที่แล้ว</span>;
+  if (diff === 0) return <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 border border-orange-200">นัดวันนี้</span>;
+  if (diff <= 3) return <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200">นัดอีก {diff} วัน</span>;
+  return null;
+};
+
+interface LeadActivity {
+  id: string;
+  lead_id: string;
+  contact_type: string;
+  body: string;
+  contacted_at: string;
+}
+const CONTACT_TYPE_LABELS: Record<string, string> = {
+  note: 'บันทึก', call: 'โทรศัพท์', line: 'LINE', meeting: 'ประชุม',
+};
+
 const emptyForm = {
   company_name: '', current_projects_count: '',
   province: '', contact_name: '', contact_title: '', contact_phone: '', contact_line_id: '',
   contact_email: '', interested_plan: '', seats_needed: '',
   source: 'line', stage: 'new', expected_close_date: '', notes: '',
-  is_hot: false,
+  is_hot: false, follow_up_date: '', assigned_to: '',
 };
 
 const OwnerLeads = () => {
   const { user } = useSimpleAuth();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [period, setPeriod] = useState<PeriodKey>(DEFAULT_PERIOD.operational);
   const [leads, setLeads] = useState<PLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
-  const [stageFilter, setStageFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | stage key | 'health:new|sla|quiet|hot'
   const [sourceFilter, setSourceFilter] = useState('all');
-  // Health-card filter (ลีดใหม่ / SLA / เงียบ / hot). Mutually exclusive with the
-  // stage dropdown so they can't intersect into a confusing empty result.
-  const [healthFilter, setHealthFilter] = useState<string>('');
+  const [planFilter, setPlanFilter] = useState('all');
+  const [sortKey, setSortKey] = useState<'mrr' | 'lastContact' | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
@@ -154,6 +178,11 @@ const OwnerLeads = () => {
   const [lostReason, setLostReason] = useState('');
   const [savingLost, setSavingLost] = useState(false);
   const [planPrices, setPlanPrices] = useState<Record<string, number>>({}); // live from `plans` catalog
+  const [activities, setActivities] = useState<LeadActivity[]>([]);
+  const [activityBody, setActivityBody] = useState('');
+  const [activityType, setActivityType] = useState('call');
+  const [savingActivity, setSavingActivity] = useState(false);
+  const [loadingActivities, setLoadingActivities] = useState(false);
 
   const fetchLeads = async () => {
     setLoading(true);
@@ -179,6 +208,38 @@ const OwnerLeads = () => {
       if (data) setPlanPrices(Object.fromEntries(data.map((p: any) => [p.id, Number(p.price_monthly)])));
     });
   }, []);
+
+  useEffect(() => {
+    if (!detailLead) { setActivities([]); return; }
+    setLoadingActivities(true);
+    (supabase.from('platform_lead_activities') as any)
+      .select('*')
+      .eq('lead_id', detailLead.id)
+      .order('contacted_at', { ascending: false })
+      .then(({ data }: any) => {
+        setActivities((data || []) as LeadActivity[]);
+        setLoadingActivities(false);
+      });
+  }, [detailLead?.id]);
+
+  const handleAddActivity = async () => {
+    if (!activityBody.trim() || !detailLead) return;
+    setSavingActivity(true);
+    const { data, error } = await (supabase.from('platform_lead_activities') as any).insert({
+      lead_id: detailLead.id,
+      contact_type: activityType,
+      body: activityBody.trim(),
+      contacted_at: new Date().toISOString(),
+    }).select().single();
+    setSavingActivity(false);
+    if (error) { toast.error('บันทึกไม่สำเร็จ', { description: error.message }); return; }
+    setActivities(prev => [data as LeadActivity, ...prev]);
+    setActivityBody('');
+    // อัปเดต last_contact_date ของ lead
+    await (supabase.from('platform_leads') as any).update({ last_contact_date: new Date().toISOString() }).eq('id', detailLead.id);
+    setLeads(prev => prev.map(l => l.id === detailLead.id ? { ...l, last_contact_date: new Date().toISOString() } : l));
+    toast.success('บันทึกการติดต่อแล้ว');
+  };
 
   const setF = (k: keyof typeof emptyForm, v: string) => setForm((p) => ({ ...p, [k]: v }));
   const num = (v: string) => (v.trim() === '' ? null : Number(v));
@@ -207,12 +268,14 @@ const OwnerLeads = () => {
       expected_close_date: txt(form.expected_close_date),
       notes: txt(form.notes),
       is_hot: form.is_hot,
+      follow_up_date: txt(form.follow_up_date),
+      assigned_to: form.assigned_to || user?.id || null,
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const q = supabase.from('platform_leads') as any;
     const { error } = editingId
-      ? await q.update(payload).eq('id', editingId)                  // edit: keep original assigned_to
-      : await q.insert({ ...payload, assigned_to: user?.id ?? null });
+      ? await q.update(payload).eq('id', editingId)
+      : await q.insert(payload);
     setSaving(false);
     if (error) {
       toast.error(editingId ? 'แก้ไขไม่สำเร็จ' : 'บันทึก Lead ไม่สำเร็จ', { description: error.message });
@@ -243,6 +306,8 @@ const OwnerLeads = () => {
       expected_close_date: l.expected_close_date || '',
       notes: l.notes || '',
       is_hot: l.is_hot ?? false,
+      follow_up_date: l.follow_up_date || '',
+      assigned_to: l.assigned_to || '',
     });
     setEditingId(l.id);
     setDetailLead(null);
@@ -368,8 +433,25 @@ const OwnerLeads = () => {
     if (open && l.is_hot) tags.push('hot');
     return tags;
   };
+  // Platform user list for assigned_to — only the current owner user (no profiles table in this project)
+  const platformUsers = user?.id ? [{ id: user.id, label: (user as any).email || 'เจ้าของแพลตฟอร์ม' }] : [];
+  const assignedNames: Record<string, string> = user?.id ? { [user.id]: (user as any).email || 'เจ้าของแพลตฟอร์ม' } : {};
+
   const healthCounts: Record<string, number> = { new: 0, sla: 0, quiet: 0, hot: 0 };
   leads.forEach((l) => leadHealth(l).forEach((t) => { healthCounts[t] = (healthCounts[t] || 0) + 1; }));
+
+  const isHealthMode = statusFilter.startsWith('health:');
+  const activeHealthKey = isHealthMode ? statusFilter.replace('health:', '') : '';
+  const activeStage = !isHealthMode ? statusFilter : 'all';
+
+  const hasActiveFilter = search.trim() || statusFilter !== 'all' || sourceFilter !== 'all' || planFilter !== 'all';
+  const clearAllFilters = () => {
+    setSearch('');
+    setStatusFilter('all');
+    setSourceFilter('all');
+    setPlanFilter('all');
+    setCurrentPage(1);
+  };
 
   const filtered = leads.filter((l) => {
     const q = search.trim().toLowerCase();
@@ -378,26 +460,54 @@ const OwnerLeads = () => {
       (l.contact_name || '').toLowerCase().includes(q) ||
       (l.province || '').toLowerCase().includes(q);
     const matchSource = sourceFilter === 'all' || l.source === sourceFilter;
-    // Health filter and stage dropdown are mutually exclusive — when a health card
-    // is active we ignore the stage filter (and the card-click clears the stage).
-    const matchHealth = !healthFilter || leadHealth(l).includes(healthFilter);
-    const matchStage = healthFilter ? true : (stageFilter === 'all' || l.stage === stageFilter);
-    return matchSearch && matchSource && matchHealth && matchStage;
+    const matchPlan = planFilter === 'all' || l.interested_plan === planFilter;
+    const matchHealth = !activeHealthKey || leadHealth(l).includes(activeHealthKey);
+    const matchStage = isHealthMode ? true : (activeStage === 'all' || l.stage === activeStage);
+    return matchSearch && matchSource && matchPlan && matchHealth && matchStage;
   });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const relativeContact = (dateStr: string | null): string => {
+    if (!dateStr) return 'ยังไม่ติดต่อ';
+    const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+    if (diff < 1) return 'ติดต่อวันนี้';
+    if (diff === 1) return 'ติดต่อเมื่อวาน';
+    if (diff < 7) return `ติดต่อ ${diff} วันที่แล้ว`;
+    const weeks = Math.floor(diff / 7);
+    if (weeks < 5) return `ติดต่อ ${weeks} สัปดาห์ที่แล้ว`;
+    return `ติดต่อ ${Math.floor(diff / 30)} เดือนที่แล้ว`;
+  };
+
+  const toggleSort = (key: 'mrr' | 'lastContact') => {
+    if (sortKey === key) setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
+    else { setSortKey(key); setSortDir('desc'); }
+  };
+
+  const sorted = [...filtered].sort((a, b) => {
+    if (!sortKey) return 0;
+    let va = 0, vb = 0;
+    if (sortKey === 'mrr') { va = Number(a.estimated_mrr || 0); vb = Number(b.estimated_mrr || 0); }
+    if (sortKey === 'lastContact') {
+      va = a.last_contact_date ? new Date(a.last_contact_date).getTime() : 0;
+      vb = b.last_contact_date ? new Date(b.last_contact_date).getTime() : 0;
+    }
+    return sortDir === 'desc' ? vb - va : va - vb;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const pageStart = (safePage - 1) * pageSize;
-  const paginated = filtered.slice(pageStart, pageStart + pageSize);
+  const paginated = sorted.slice(pageStart, pageStart + pageSize);
 
   const openLeads = leads.filter((l) => OPEN_STAGES.includes(l.stage));
   const wonLeads = leads.filter((l) => l.stage === 'won');
   const pipelineMrr = openLeads.reduce((s, l) => s + Number(l.estimated_mrr || 0), 0);
+  const closedLeads = leads.filter((l) => l.stage === 'won' || l.stage === 'lost');
+  const winRate = closedLeads.length > 0 ? Math.round((wonLeads.length / closedLeads.length) * 100) : null;
 
   const kpis = [
     { title: 'ผู้สนใจทั้งหมด', value: leads.length.toLocaleString(), sub: 'บริษัท Developer', icon: Users, color: KK.blue, bg: KK.blueLight },
     { title: 'กำลังดำเนินการ', value: openLeads.length.toLocaleString(), sub: 'ยังไม่ปิด', icon: TrendingUp, color: KK.orange, bg: KK.orangeLight },
-    { title: 'ปิดดีลสำเร็จ', value: wonLeads.length.toLocaleString(), sub: 'เป็นบริษัทในระบบแล้ว', icon: Trophy, color: KK.green, bg: KK.greenLight },
+    { title: 'ปิดดีลสำเร็จ', value: wonLeads.length.toLocaleString(), sub: winRate !== null ? `Win Rate ${winRate}%` : 'ยังไม่มีดีลปิด', icon: Trophy, color: KK.green, bg: KK.greenLight },
     { title: 'มูลค่า Pipeline', value: formatCurrency(pipelineMrr), sub: 'MRR คาดการณ์ (ยังไม่ปิด)', icon: Building2, color: KK.red, bg: KK.redLight },
   ];
 
@@ -422,16 +532,13 @@ const OwnerLeads = () => {
                     </p>
                   </div>
                 </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-                  <PeriodFilter value={period} onChange={setPeriod} tier="operational" />
-                  <Button
-                    onClick={() => { setForm({ ...emptyForm }); setEditingId(null); setShowCreate(true); }}
-                    className="bg-gray-900 hover:bg-black text-white shadow-lg w-full sm:w-auto"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    เพิ่ม Leads
-                  </Button>
-                </div>
+                <Button
+                  onClick={() => { setForm({ ...emptyForm, assigned_to: user?.id || '' }); setEditingId(null); setShowCreate(true); }}
+                  className="bg-gray-900 hover:bg-black text-white shadow-lg w-full sm:w-auto"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  เพิ่มผู้สนใจ
+                </Button>
               </div>
             </div>
 
@@ -460,28 +567,6 @@ const OwnerLeads = () => {
               ))}
             </div>
 
-            {/* Health triage — click a card to filter by follow-up status.
-                Mutually exclusive with the stage dropdown (clicking clears stage). */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-              {HEALTH_CARDS.map((h) => {
-                const active = healthFilter === h.key;
-                return (
-                  <button
-                    key={h.key}
-                    onClick={() => { setHealthFilter(active ? '' : h.key); setStageFilter('all'); }}
-                    className={`text-left bg-white border rounded-xl p-4 transition-all duration-150 ${active ? 'shadow-soft-md' : 'border-gray-100 shadow-soft hover:-translate-y-0.5'}`}
-                    style={active ? { borderColor: h.color, boxShadow: `0 0 0 2px ${h.color}33` } : undefined}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-semibold text-gray-700">{h.label}</span>
-                      <span className="text-xl font-bold tabular-nums" style={{ color: h.color }}>{healthCounts[h.key]}</span>
-                    </div>
-                    <p className="text-xs text-gray-400 mt-0.5">{h.desc}</p>
-                  </button>
-                );
-              })}
-            </div>
-
             {/* Filters */}
             <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 mb-4">
               <div className="flex flex-col sm:flex-row gap-3">
@@ -490,24 +575,51 @@ const OwnerLeads = () => {
                   <Input
                     placeholder="ค้นหาบริษัท / ผู้ติดต่อ / จังหวัด"
                     value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+                    onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
                     className="pl-9"
                   />
                 </div>
-                <Select value={stageFilter} onValueChange={(v) => { setStageFilter(v); setHealthFilter(''); }}>
-                  <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="สถานะ" /></SelectTrigger>
+                <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-full sm:w-52"><SelectValue placeholder="สถานะ" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">ทุกสถานะ</SelectItem>
-                    {STAGE_ORDER.map((s) => <SelectItem key={s} value={s}>{STAGE_CONFIG[s].label}</SelectItem>)}
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel>ขั้นตอน Pipeline</SelectLabel>
+                      {STAGE_ORDER.map((s) => (
+                        <SelectItem key={s} value={s}>{STAGE_CONFIG[s].label}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel>ต้องติดตาม</SelectLabel>
+                      {HEALTH_CARDS.map((h) => (
+                        <SelectItem key={`health:${h.key}`} value={`health:${h.key}`}>
+                          {h.label}{healthCounts[h.key] > 0 ? ` (${healthCounts[h.key]})` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
-                <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                  <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="ช่องทาง" /></SelectTrigger>
+                <Select value={planFilter} onValueChange={(v) => { setPlanFilter(v); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="แพ็กเกจ" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">ทุกแพ็กเกจ</SelectItem>
+                    {Object.entries(PLAN_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={sourceFilter} onValueChange={(v) => { setSourceFilter(v); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="ช่องทาง" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">ทุกช่องทาง</SelectItem>
                     {Object.entries(SOURCE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {hasActiveFilter && (
+                  <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-gray-400 hover:text-gray-700 whitespace-nowrap px-3">
+                    <X className="w-3.5 h-3.5 mr-1" />ล้างตัวกรอง
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -519,7 +631,14 @@ const OwnerLeads = () => {
                     <TableHead>บริษัท</TableHead>
                     <TableHead>ผู้ติดต่อ</TableHead>
                     <TableHead>แพ็กเกจ</TableHead>
-                    <TableHead className="text-right">MRR คาดการณ์</TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort('mrr')}>
+                      <span className="inline-flex items-center justify-end gap-1 w-full">
+                        MRR คาดการณ์
+                        {sortKey === 'mrr'
+                          ? (sortDir === 'desc' ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />)
+                          : <ArrowUpDown className="w-3 h-3 text-gray-300" />}
+                      </span>
+                    </TableHead>
                     <TableHead>ช่องทาง</TableHead>
                     <TableHead>สถานะ</TableHead>
                     <TableHead></TableHead>
@@ -542,9 +661,12 @@ const OwnerLeads = () => {
                           <span className="font-medium text-gray-900">{l.company_name}</span>
                         </div>
                         <div className="text-xs text-gray-400">
-                          {[l.province, l.current_projects_count != null ? `${l.current_projects_count} โครงการ` : null]
+                          {[l.province, l.current_projects_count != null ? `${l.current_projects_count} โครงการ` : null, relativeContact(l.last_contact_date)]
                             .filter(Boolean).join(' · ') || '—'}
                         </div>
+                        {followUpBadge(l.follow_up_date) && (
+                          <div className="mt-1">{followUpBadge(l.follow_up_date)}</div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="text-sm text-gray-900">{l.contact_name}</div>
@@ -742,6 +864,10 @@ const OwnerLeads = () => {
                 <Label>วันคาดปิด</Label>
                 <Input type="date" value={form.expected_close_date} onChange={(e) => setF('expected_close_date', e.target.value)} />
               </div>
+              <div>
+                <Label>นัดติดตาม</Label>
+                <Input type="date" value={form.follow_up_date} onChange={(e) => setF('follow_up_date', e.target.value)} />
+              </div>
               <div className="sm:col-span-2">
                 <Label>บันทึก</Label>
                 <Input value={form.notes} onChange={(e) => setF('notes', e.target.value)} placeholder="โน้ตการคุย / ความต้องการพิเศษ" />
@@ -758,6 +884,23 @@ const OwnerLeads = () => {
                   </SelectContent>
                 </Select>
               </div>
+              {platformUsers.length > 0 && (
+                <div>
+                  <Label>ผู้รับผิดชอบ</Label>
+                  <Select
+                    value={form.assigned_to || '__none__'}
+                    onValueChange={(v) => setF('assigned_to', v === '__none__' ? '' : v)}
+                  >
+                    <SelectTrigger><SelectValue placeholder="ไม่ระบุ" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">ไม่ระบุ</SelectItem>
+                      {platformUsers.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>{u.label}{u.id === user?.id ? ' (คุณ)' : ''}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           </div>
 
@@ -797,6 +940,24 @@ const OwnerLeads = () => {
                       </div>
                       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                         {stageBadge(detailLead.stage)}
+                        {detailLead.is_hot && (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md bg-orange-50 text-orange-700 border border-orange-200">
+                            <Flame className="w-3 h-3" /> Hot Lead
+                          </span>
+                        )}
+                        {(() => {
+                          const tags = leadHealth(detailLead).filter(t => t !== 'hot'); // hot shown separately above
+                          return tags.map(tag => {
+                            const h = HEALTH_CARDS.find(h => h.key === tag);
+                            if (!h) return null;
+                            return (
+                              <span key={tag} className="inline-flex items-center text-xs font-semibold px-2 py-1 rounded-md border"
+                                style={{ color: h.color, borderColor: h.color + '40', backgroundColor: h.color + '15' }}>
+                                {h.label}
+                              </span>
+                            );
+                          });
+                        })()}
                         {detailLead.converted_tenant_id && (
                           <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md bg-green-50 text-green-700 border border-green-200">
                             <CheckCircle2 className="w-3 h-3" /> เป็นบริษัทในระบบแล้ว
@@ -834,6 +995,8 @@ const OwnerLeads = () => {
                     <Field label="วันคาดปิด" value={detailLead.expected_close_date} />
                     <Field label="วันที่เพิ่ม" value={detailLead.created_at ? new Date(detailLead.created_at).toLocaleDateString('th-TH') : '—'} />
                     <Field label="ติดต่อล่าสุด" value={detailLead.last_contact_date ? new Date(detailLead.last_contact_date).toLocaleDateString('th-TH') : 'ยังไม่ติดต่อ'} />
+                    <Field label="นัดติดตาม" value={detailLead.follow_up_date ? new Date(detailLead.follow_up_date).toLocaleDateString('th-TH') : '—'} />
+                    <Field label="ผู้รับผิดชอบ" value={detailLead.assigned_to ? (assignedNames[detailLead.assigned_to] || detailLead.assigned_to.slice(0, 12) + '…') : '—'} />
                     {detailLead.stage === 'lost' && (
                       <Field label="เหตุผลที่ไม่สำเร็จ" value={detailLead.lost_reason} />
                     )}
@@ -852,11 +1015,70 @@ const OwnerLeads = () => {
                     <p className="text-sm text-gray-700 whitespace-pre-wrap">{detailLead.notes}</p>
                   </div>
                 )}
+
+                {/* Activity history */}
+                <div className="bg-white border border-gray-100 rounded-xl p-5">
+                  <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-gray-500" /> ประวัติการติดต่อ
+                  </h3>
+                  {/* Add new activity */}
+                  <div className="flex gap-2 mb-4">
+                    <Select value={activityType} onValueChange={setActivityType}>
+                      <SelectTrigger className="w-[120px] h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="call">โทรศัพท์</SelectItem>
+                        <SelectItem value="line">LINE</SelectItem>
+                        <SelectItem value="meeting">ประชุม</SelectItem>
+                        <SelectItem value="note">บันทึก</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      className="h-8 text-sm flex-1"
+                      placeholder="บันทึกการติดต่อ..."
+                      value={activityBody}
+                      onChange={(e) => setActivityBody(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddActivity(); }}}
+                    />
+                    <Button size="sm" className="h-8 px-3" onClick={handleAddActivity} disabled={savingActivity || !activityBody.trim()}>
+                      {savingActivity ? <Loader2 className="w-3 h-3 animate-spin" /> : 'บันทึก'}
+                    </Button>
+                  </div>
+                  {/* Timeline */}
+                  {loadingActivities ? (
+                    <div className="text-xs text-gray-400 py-2">กำลังโหลด...</div>
+                  ) : activities.length === 0 ? (
+                    <div className="text-xs text-gray-400 py-2">ยังไม่มีประวัติการติดต่อ</div>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {activities.map(a => (
+                        <div key={a.id} className="flex gap-3 text-sm">
+                          <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 h-fit whitespace-nowrap">
+                            {CONTACT_TYPE_LABELS[a.contact_type] || a.contact_type}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-gray-800 text-sm">{a.body}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{new Date(a.contacted_at).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <DialogFooter className="mt-3">
                 <Button variant="outline" onClick={() => setDetailLead(null)}>ปิด</Button>
-                {!detailLead.converted_tenant_id && (
+                {detailLead.converted_tenant_id ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => { setDetailLead(null); navigate(`/tenants/${detailLead.converted_tenant_id}`); }}
+                    className="text-green-700 border-green-200 hover:bg-green-50"
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />ดูบริษัทในระบบ
+                  </Button>
+                ) : (
                   <Button onClick={() => setConvertLead(detailLead)} className="bg-green-600 hover:bg-green-700 text-white">
                     เพิ่มเป็นบริษัทในระบบ
                   </Button>

@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MapPin, TrendingUp, Building, Home, Banknote, ChevronRight } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
 
@@ -46,8 +47,8 @@ const fmtCompact = (n: number) => {
   return `${sign}฿${abs.toFixed(0)}`;
 };
 
-interface PropRow { id: string; name: string | null; developer: string | null; address: { province?: string; district?: string } | null; }
-interface UnitRow { project_id: string; price: number | null; status: string | null; }
+interface PropRow { id: string; tenant_id: string; name: string | null; developer: string | null; address: { province?: string; district?: string } | null; }
+interface UnitRow { tenant_id: string; project_id: string; price: number | null; status: string | null; }
 interface ProvinceAgg { province: string; sold: number; soldValue: number; total: number; gdv: number; projects: number; }
 // Drill-down: province → อำเภอ (district) → โครงการ (property) + unit rollup.
 interface ProvinceProperty { id: string; name: string; developer: string | null; district: string; sold: number; total: number; soldValue: number; }
@@ -70,9 +71,12 @@ const OwnerGeography = () => {
   const { isOwner } = usePermissions();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [provinces, setProvinces] = useState<ProvinceAgg[]>([]);
+  // Raw rows kept in state so the tenant filter can re-aggregate without refetching.
+  const [rawProps, setRawProps] = useState<PropRow[]>([]);
+  const [rawUnits, setRawUnits] = useState<UnitRow[]>([]);
+  const [tenantList, setTenantList] = useState<{ id: string; name: string }[]>([]);
+  const [tenantFilter, setTenantFilter] = useState<string>('all');
   // Drill-down: province → อำเภอ → โครงการ (read-only). "เรียก data ขึ้นมาดูได้" + เจาะอำเภอ.
-  const [distByProvince, setDistByProvince] = useState<Record<string, DistrictGroup[]>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
@@ -83,70 +87,16 @@ const OwnerGeography = () => {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const { data: tenants } = await supabase.from('tenants').select('id').eq('is_platform' as any, false);
+      const { data: tenants } = await supabase.from('tenants').select('id, name').eq('is_platform' as any, false);
       const ids = (tenants || []).map((t: any) => t.id);
+      setTenantList((tenants || []).map((t: any) => ({ id: t.id, name: t.name || t.id })).sort((a, b) => a.name.localeCompare(b.name, 'th')));
       if (ids.length > 0) {
         const [pRes, uRes] = await Promise.all([
-          supabase.from('properties').select('id, name, developer, address').in('tenant_id', ids),
-          supabase.from('units').select('project_id, price, status').in('tenant_id', ids),
+          supabase.from('properties').select('id, tenant_id, name, developer, address').in('tenant_id', ids),
+          supabase.from('units').select('tenant_id, project_id, price, status').in('tenant_id', ids),
         ]);
-        const props = (pRes.data || []) as PropRow[];
-        const units = (uRes.data || []) as UnitRow[];
-
-        // property id → province
-        const provById = new Map<string, string>();
-        const projInProvince = new Map<string, Set<string>>();
-        props.forEach((p) => {
-          const prov = p.address?.province || 'ไม่ระบุ';
-          provById.set(p.id, prov);
-          const set = projInProvince.get(prov) || new Set<string>();
-          set.add(p.id);
-          projInProvince.set(prov, set);
-        });
-
-        // Roll units up to BOTH province (summary) and property (drill-down) level.
-        const provAggM = new Map<string, ProvinceAgg>();
-        const propAgg = new Map<string, { sold: number; total: number; soldValue: number }>();
-        const ensureProv = (prov: string) => {
-          let r = provAggM.get(prov);
-          if (!r) { r = { province: prov, sold: 0, soldValue: 0, total: 0, gdv: 0, projects: projInProvince.get(prov)?.size || 0 }; provAggM.set(prov, r); }
-          return r;
-        };
-        const ensureProp = (id: string) => {
-          let r = propAgg.get(id);
-          if (!r) { r = { sold: 0, total: 0, soldValue: 0 }; propAgg.set(id, r); }
-          return r;
-        };
-        units.forEach((u) => {
-          const prov = provById.get(u.project_id) || 'ไม่ระบุ';
-          const r = ensureProv(prov);
-          const pr = ensureProp(u.project_id);
-          const price = Number(u.price) || 0;
-          r.total += 1; r.gdv += price; pr.total += 1;
-          if (u.status === 'sold') { r.sold += 1; r.soldValue += price; pr.sold += 1; pr.soldValue += price; }
-        });
-
-        // Group properties: province → อำเภอ (district) → โครงการ, with a district rollup.
-        const byProv: Record<string, Record<string, DistrictGroup>> = {};
-        props.forEach((p) => {
-          const prov = p.address?.province || 'ไม่ระบุ';
-          const dist = p.address?.district || 'ไม่ระบุอำเภอ';
-          const pr = propAgg.get(p.id) || { sold: 0, total: 0, soldValue: 0 };
-          const distMap = byProv[prov] = byProv[prov] || {};
-          const dg = distMap[dist] = distMap[dist] || { district: dist, sold: 0, total: 0, soldValue: 0, projects: [] };
-          dg.sold += pr.sold; dg.total += pr.total; dg.soldValue += pr.soldValue;
-          dg.projects.push({ id: p.id, name: p.name || 'ไม่มีชื่อ', developer: p.developer, district: dist, sold: pr.sold, total: pr.total, soldValue: pr.soldValue });
-        });
-        const distByProv: Record<string, DistrictGroup[]> = {};
-        Object.entries(byProv).forEach(([prov, distMap]) => {
-          const groups = Object.values(distMap);
-          groups.forEach((g) => g.projects.sort((a, b) => b.soldValue - a.soldValue));
-          groups.sort((a, b) => b.soldValue - a.soldValue);
-          distByProv[prov] = groups;
-        });
-        setDistByProvince(distByProv);
-
-        setProvinces(Array.from(provAggM.values()).sort((a, b) => b.soldValue - a.soldValue));
+        setRawProps((pRes.data || []) as PropRow[]);
+        setRawUnits((uRes.data || []) as UnitRow[]);
       }
     } catch (e) {
       console.error('OwnerGeography fetch error:', e);
@@ -154,6 +104,71 @@ const OwnerGeography = () => {
       setLoading(false);
     }
   };
+
+  // Aggregate province summary + province → อำเภอ → โครงการ drill-down.
+  // Scopes the raw rows to the selected company first, so KPIs / bars / table /
+  // drill-down all reflect the chosen tenant (drill-down runs on the subset).
+  const { provinces, distByProvince } = useMemo(() => {
+    const props = tenantFilter === 'all' ? rawProps : rawProps.filter((p) => p.tenant_id === tenantFilter);
+    const units = tenantFilter === 'all' ? rawUnits : rawUnits.filter((u) => u.tenant_id === tenantFilter);
+
+    // property id → province
+    const provById = new Map<string, string>();
+    const projInProvince = new Map<string, Set<string>>();
+    props.forEach((p) => {
+      const prov = p.address?.province || 'ไม่ระบุ';
+      provById.set(p.id, prov);
+      const set = projInProvince.get(prov) || new Set<string>();
+      set.add(p.id);
+      projInProvince.set(prov, set);
+    });
+
+    // Roll units up to BOTH province (summary) and property (drill-down) level.
+    const provAggM = new Map<string, ProvinceAgg>();
+    const propAgg = new Map<string, { sold: number; total: number; soldValue: number }>();
+    const ensureProv = (prov: string) => {
+      let r = provAggM.get(prov);
+      if (!r) { r = { province: prov, sold: 0, soldValue: 0, total: 0, gdv: 0, projects: projInProvince.get(prov)?.size || 0 }; provAggM.set(prov, r); }
+      return r;
+    };
+    const ensureProp = (id: string) => {
+      let r = propAgg.get(id);
+      if (!r) { r = { sold: 0, total: 0, soldValue: 0 }; propAgg.set(id, r); }
+      return r;
+    };
+    units.forEach((u) => {
+      const prov = provById.get(u.project_id) || 'ไม่ระบุ';
+      const r = ensureProv(prov);
+      const pr = ensureProp(u.project_id);
+      const price = Number(u.price) || 0;
+      r.total += 1; r.gdv += price; pr.total += 1;
+      if (u.status === 'sold') { r.sold += 1; r.soldValue += price; pr.sold += 1; pr.soldValue += price; }
+    });
+
+    // Group properties: province → อำเภอ (district) → โครงการ, with a district rollup.
+    const byProv: Record<string, Record<string, DistrictGroup>> = {};
+    props.forEach((p) => {
+      const prov = p.address?.province || 'ไม่ระบุ';
+      const dist = p.address?.district || 'ไม่ระบุอำเภอ';
+      const pr = propAgg.get(p.id) || { sold: 0, total: 0, soldValue: 0 };
+      const distMap = byProv[prov] = byProv[prov] || {};
+      const dg = distMap[dist] = distMap[dist] || { district: dist, sold: 0, total: 0, soldValue: 0, projects: [] };
+      dg.sold += pr.sold; dg.total += pr.total; dg.soldValue += pr.soldValue;
+      dg.projects.push({ id: p.id, name: p.name || 'ไม่มีชื่อ', developer: p.developer, district: dist, sold: pr.sold, total: pr.total, soldValue: pr.soldValue });
+    });
+    const distByProv: Record<string, DistrictGroup[]> = {};
+    Object.entries(byProv).forEach(([prov, distMap]) => {
+      const groups = Object.values(distMap);
+      groups.forEach((g) => g.projects.sort((a, b) => b.soldValue - a.soldValue));
+      groups.sort((a, b) => b.soldValue - a.soldValue);
+      distByProv[prov] = groups;
+    });
+
+    return {
+      provinces: Array.from(provAggM.values()).sort((a, b) => b.soldValue - a.soldValue),
+      distByProvince: distByProv,
+    };
+  }, [rawProps, rawUnits, tenantFilter]);
 
   const totals = useMemo(() => {
     const soldValue = provinces.reduce((s, r) => s + r.soldValue, 0);
@@ -220,12 +235,23 @@ const OwnerGeography = () => {
         <div className="lg:ml-[260px] min-h-screen">
           <Header onMenuClick={() => setSidebarOpen(true)} />
           <main className="p-6 lg:p-8 space-y-7">
-            <div>
-              <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
-                Analytics
-              </span>
-              <h1 className="text-2xl font-bold text-gray-900">Geography</h1>
-              <p className="text-sm text-gray-500 mt-1.5">จังหวัดไหนขายดีที่สุดข้ามทั้งแพลตฟอร์ม</p>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
+                  Analytics
+                </span>
+                <h1 className="text-2xl font-bold text-gray-900">Geography</h1>
+                <p className="text-sm text-gray-500 mt-1.5">จังหวัดไหนขายดีที่สุดข้ามทั้งแพลตฟอร์ม</p>
+              </div>
+              <Select value={tenantFilter} onValueChange={(v) => { setTenantFilter(v); setExpanded(null); }}>
+                <SelectTrigger className="h-9 w-[200px] text-sm mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">ทุกบริษัท</SelectItem>
+                  {tenantList.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {provinces.length === 0 ? (

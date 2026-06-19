@@ -4,6 +4,7 @@ import {
   ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
 } from 'recharts';
 import { RefreshCw, TrendingUp, TrendingDown, Users, Wallet, Percent, AlertTriangle, Pencil } from 'lucide-react';
+import { computeRevenueHealth, type RevenueHealth } from '@/lib/revenueHealth';
 
 // ──────────────────────────────────────────────────────────────────────────
 // สุขภาพรายได้ SaaS (Revenue Health) — Owner-only tab inside Payments.
@@ -40,18 +41,9 @@ const fmtCompact = (n: number) => {
   return `${sign}฿${Math.round(abs)}`;
 };
 
-interface Derived {
-  priorMRR: number; currentMRR: number;
-  newMRR: number; expansion: number; contraction: number; churnedMRR: number;
-  nrr: number | null; grr: number | null; revenueChurn: number | null;
-  activeCount: number; arpa: number;
-  monthlyLogoChurn: number | null; ltv: number | null;
-  decliners: { name: string; lost: number; type: 'ดาวน์เกรด' | 'เลิกใช้' }[];
-}
-
 const RevenueHealthSection = () => {
   const [loading, setLoading] = useState(true);
-  const [d, setD] = useState<Derived | null>(null);
+  const [d, setD] = useState<RevenueHealth | null>(null);
   const [totalTenants, setTotalTenants] = useState(0);
   const [acqSpend, setAcqSpend] = useState<number | null>(() => {
     const v = typeof window !== 'undefined' ? window.localStorage.getItem('owner_acq_spend') : null;
@@ -65,60 +57,13 @@ const RevenueHealthSection = () => {
     try {
       const { data: tenants } = await supabase.from('tenants').select('id, status, name').eq('is_platform' as any, false);
       const tlist = (tenants || []) as { id: string; status: string; name: string }[];
-      const activeIds = new Set(tlist.filter((t) => t.status === 'active').map((t) => t.id));
-      const nameMap = new Map(tlist.map((t) => [t.id, t.name]));
       setTotalTenants(tlist.length);
 
       const { data: inv } = await supabase.from('invoices').select('tenant_id, amount, paid_at, created_at').eq('status', 'paid');
       const invoices = (inv || []) as { tenant_id: string; amount: number; paid_at: string | null; created_at: string }[];
 
-      const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
-      const t = (x: any) => new Date(x.paid_at || x.created_at).getTime();
-
-      // Per-tenant current MRR (latest paid invoice) and prior MRR (latest before this month).
-      const cur = new Map<string, { time: number; amt: number }>();
-      const prev = new Map<string, { time: number; amt: number }>();
-      invoices.forEach((x) => {
-        const tm = t(x); const amt = Number(x.amount) || 0;
-        const c = cur.get(x.tenant_id);
-        if (!c || tm > c.time) cur.set(x.tenant_id, { time: tm, amt });
-        if (tm < monthStart.getTime()) {
-          const p = prev.get(x.tenant_id);
-          if (!p || tm > p.time) prev.set(x.tenant_id, { time: tm, amt });
-        }
-      });
-
-      const ids = new Set<string>([...cur.keys(), ...prev.keys()]);
-      let priorMRR = 0, currentMRR = 0, newMRR = 0, expansion = 0, contraction = 0, churnedMRR = 0;
-      let priorLogos = 0, churnedLogos = 0;
-      const decliners: { name: string; lost: number; type: 'ดาวน์เกรด' | 'เลิกใช้' }[] = [];
-      ids.forEach((id) => {
-        const c = activeIds.has(id) ? (cur.get(id)?.amt || 0) : 0;   // inactive tenant ⇒ MRR now = 0 (churned)
-        const p = prev.get(id)?.amt || 0;
-        currentMRR += c; priorMRR += p;
-        if (p > 0) priorLogos += 1;
-        if (p > 0 && c > 0) {
-          if (c > p) expansion += c - p;
-          else if (c < p) { contraction += p - c; decliners.push({ name: nameMap.get(id) || '—', lost: p - c, type: 'ดาวน์เกรด' }); }
-        } else if (p > 0 && c === 0) { churnedMRR += p; churnedLogos += 1; decliners.push({ name: nameMap.get(id) || '—', lost: p, type: 'เลิกใช้' }); }
-        else if (p === 0 && c > 0) { newMRR += c; }
-      });
-      decliners.sort((a, b) => b.lost - a.lost);
-
-      const activeCount = activeIds.size;
-      const arpa = activeCount > 0 ? currentMRR / activeCount : 0;
-      const monthlyLogoChurn = priorLogos > 0 ? churnedLogos / priorLogos : null;
-
-      setD({
-        priorMRR, currentMRR, newMRR, expansion, contraction, churnedMRR,
-        nrr: priorMRR > 0 ? ((priorMRR + expansion - contraction - churnedMRR) / priorMRR) * 100 : null,
-        grr: priorMRR > 0 ? ((priorMRR - contraction - churnedMRR) / priorMRR) * 100 : null,
-        revenueChurn: priorMRR > 0 ? ((contraction + churnedMRR) / priorMRR) * 100 : null,
-        activeCount, arpa,
-        monthlyLogoChurn,
-        ltv: monthlyLogoChurn && monthlyLogoChurn > 0 ? arpa / monthlyLogoChurn : null,
-        decliners,
-      });
+      // Single source of truth — same util the Executive Dashboard uses.
+      setD(computeRevenueHealth(tlist, invoices));
     } catch (e) {
       console.error('RevenueHealthSection fetch error:', e);
     } finally {
@@ -189,7 +134,7 @@ const RevenueHealthSection = () => {
         <Kpi title="NRR (รายได้คงเหลือสุทธิ)" value={fmtPct(d?.nrr ?? null)} sub="≥ 100% = โตจากลูกค้าเดิม" color={pctColor(d?.nrr ?? null)} bg={KK.greenLight} icon={RefreshCw} />
         <Kpi title="GRR (คงเหลือขั้นต่ำ)" value={fmtPct(d?.grr ?? null)} sub="ไม่รวมการอัปเกรด" color={pctColor(d?.grr ?? null)} bg={KK.blueLight} icon={TrendingUp} />
         <Kpi title="Revenue Churn" value={fmtPct(d?.revenueChurn ?? null)} sub="รายได้ที่หาย ÷ เดือนก่อน" color={pctColor(d?.revenueChurn ?? null, false)} bg={KK.redLight} icon={TrendingDown} />
-        <Kpi title="MRR ปัจจุบัน" value={fmtCompact(d?.currentMRR ?? 0)} sub={`จาก ${d?.activeCount ?? 0} บริษัทที่ใช้งาน`} color={KK.blue} bg={KK.blueLight} icon={Wallet} />
+        <Kpi title="MRR ที่ออกบิลแล้ว" value={fmtCompact(d?.currentMRR ?? 0)} sub={`เก็บได้จริง · ${d?.activeCount ?? 0} บริษัทที่ใช้งาน`} color={KK.blue} bg={KK.blueLight} icon={Wallet} />
       </div>
 
       {/* MRR movement */}

@@ -29,6 +29,7 @@ import {
   Trophy,
   UserCheck,
   MessageSquare,
+  PieChart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -82,8 +83,8 @@ const OWNER_NAV_GROUPS: NavGroup[] = [
   // TENANTS — lands on ภาพรวมผู้เช่า (overview, ยุบ Tenant Health เข้ามา) → prospect →
   // active tenant → projects → global users (Owner support tool, moved in from SETTINGS).
   { id: "tenants",   label: "TENANTS",   icon: Building,  hrefs: ["/owner-health", "/owner-leads", "/tenants", "/owner-projects", "/users"] },
-  { id: "analytics", label: "Property Sales", icon: TrendingUp, hrefs: ["/owner-market", "/owner-companies", "/owner-inventory", "/owner-geography"] },
-  { id: "intelligence", label: "ผู้สนใจ", icon: Contact, hrefs: ["/owner-customers", "/owner-funnel", "/owner-marketing"] },
+  { id: "analytics", label: "Property Sales", icon: TrendingUp, hrefs: ["/owner-market-overview", "/owner-market", "/owner-companies", "/owner-inventory", "/owner-geography"] },
+  { id: "intelligence", label: "Buyer Intelligence", icon: Contact, hrefs: ["/owner-buyer-overview", "/owner-customers", "/owner-funnel", "/owner-marketing"] },
   // FINANCE — Payments pulled out of TENANTS to its own domain group (P&L of the
   // Owner). The page already holds Financial Overview (สุขภาพรายได้ tab) + billing automation.
   { id: "finance",   label: "การเงิน",   icon: CreditCard, hrefs: ["/payments"] },
@@ -99,9 +100,11 @@ const getAllNavItems = (): NavItem[] => [
   // Owner ANALYTICS group — cross-tenant real-estate intelligence (HQ lens).
   // Data: units→properties→tenants via live Owner RLS; no migration needed.
   // See documents/owner-hq-dashboard-plan.md.
+  { icon: PieChart,        label: "ภาพรวมผู้ซื้อ",        href: "/owner-buyer-overview", requiredRoles: ["OWNER"] },
   { icon: Contact,         label: "ฐานข้อมูลผู้สนใจ",    href: "/owner-customers", requiredRoles: ["OWNER"] },
   { icon: Filter,          label: "Funnel & คะแนนผู้สนใจ", href: "/owner-funnel",  requiredRoles: ["OWNER"] },
   { icon: Megaphone,       label: "Marketing & Campaign", href: "/owner-marketing", requiredRoles: ["OWNER"] },
+  { icon: PieChart,        label: "ภาพรวมตลาด",          href: "/owner-market-overview", requiredRoles: ["OWNER"] },
   { icon: TrendingUp,      label: "Sales Overview",      href: "/owner-market",    requiredRoles: ["OWNER"] },
   { icon: BarChart3,       label: "อันดับยอดขาย",        href: "/owner-companies", requiredRoles: ["OWNER"] },
   { icon: Layers,          label: "Inventory & Absorption", href: "/owner-inventory", requiredRoles: ["OWNER"] },

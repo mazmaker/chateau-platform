@@ -4,6 +4,7 @@ import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import { supabase } from '@/lib/supabase';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Layers, Home, Percent, Timer, Gauge } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
@@ -39,7 +40,7 @@ const AGE_BANDS = [
   { label: '12+ ด.', min: 12, max: 9999 },
 ];
 
-interface UnitRow { project_id: string; status: string | null; price: number | null; created_at: string | null; sold_at: string | null; }
+interface UnitRow { tenant_id: string; project_id: string; status: string | null; price: number | null; created_at: string | null; sold_at: string | null; }
 
 const monthsSince = (ts: string | null) => {
   if (!ts) return 0;
@@ -53,6 +54,8 @@ const OwnerInventory = () => {
   const [loading, setLoading] = useState(true);
   const [units, setUnits] = useState<UnitRow[]>([]);
   const [typeById, setTypeById] = useState<Record<string, string>>({});
+  const [tenantList, setTenantList] = useState<{ id: string; name: string }[]>([]);
+  const [tenantFilter, setTenantFilter] = useState<string>('all');
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
@@ -62,11 +65,12 @@ const OwnerInventory = () => {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const { data: tenants } = await supabase.from('tenants').select('id').eq('is_platform' as any, false);
+      const { data: tenants } = await supabase.from('tenants').select('id, name').eq('is_platform' as any, false);
       const ids = (tenants || []).map((t: any) => t.id);
+      setTenantList((tenants || []).map((t: any) => ({ id: t.id, name: t.name || t.id })).sort((a, b) => a.name.localeCompare(b.name, 'th')));
       if (ids.length > 0) {
         const [uRes, pRes] = await Promise.all([
-          supabase.from('units').select('project_id, status, price, created_at, sold_at').in('tenant_id', ids),
+          supabase.from('units').select('tenant_id, project_id, status, price, created_at, sold_at').in('tenant_id', ids),
           supabase.from('properties').select('id, type').in('tenant_id', ids),
         ]);
         setUnits((uRes.data || []) as UnitRow[]);
@@ -81,31 +85,37 @@ const OwnerInventory = () => {
     }
   };
 
+  // Scope raw units to the selected company before any aggregate is computed.
+  const scopedUnits = useMemo(
+    () => (tenantFilter === 'all' ? units : units.filter((u) => u.tenant_id === tenantFilter)),
+    [units, tenantFilter],
+  );
+
   const kpis = useMemo(() => {
-    const total = units.length;
-    const sold = units.filter((u) => u.status === 'sold').length;
-    const available = units.filter((u) => u.status === 'available').length;
+    const total = scopedUnits.length;
+    const sold = scopedUnits.filter((u) => u.status === 'sold').length;
+    const available = scopedUnits.filter((u) => u.status === 'available').length;
     // absorption = sold in the last 90 days
-    const recent = units.filter((u) => u.status === 'sold' && u.sold_at && monthsSince(u.sold_at) < 3).length;
+    const recent = scopedUnits.filter((u) => u.status === 'sold' && u.sold_at && monthsSince(u.sold_at) < 3).length;
     return { total, sold, available, sellThrough: total ? Math.round((sold / total) * 100) : 0, recent };
-  }, [units]);
+  }, [scopedUnits]);
 
   const statusData = useMemo(() => {
     const m = new Map<string, number>();
-    units.forEach((u) => { const s = u.status || 'available'; m.set(s, (m.get(s) || 0) + 1); });
+    scopedUnits.forEach((u) => { const s = u.status || 'available'; m.set(s, (m.get(s) || 0) + 1); });
     return ['available', 'reserved', 'sold'].filter((s) => m.has(s)).map((s) => ({ name: STATUS_TH[s] || s, value: m.get(s) || 0, color: STATUS_COLOR[s] }));
-  }, [units]);
+  }, [scopedUnits]);
 
   // Aging: available units bucketed by months since created.
   const agingData = useMemo(() => AGE_BANDS.map((b) => ({
     label: b.label,
-    count: units.filter((u) => u.status === 'available' && (() => { const mo = monthsSince(u.created_at); return mo >= b.min && mo < b.max; })()).length,
-  })), [units]);
+    count: scopedUnits.filter((u) => u.status === 'available' && (() => { const mo = monthsSince(u.created_at); return mo >= b.min && mo < b.max; })()).length,
+  })), [scopedUnits]);
 
   // Sell-through by property type.
   const typeData = useMemo(() => {
     const agg = new Map<string, { sold: number; total: number }>();
-    units.forEach((u) => {
+    scopedUnits.forEach((u) => {
       const ty = typeById[u.project_id] || 'other';
       const r = agg.get(ty) || { sold: 0, total: 0 };
       r.total += 1; if (u.status === 'sold') r.sold += 1;
@@ -114,7 +124,7 @@ const OwnerInventory = () => {
     return Array.from(agg.entries())
       .map(([k, v]) => ({ label: TYPE_TH[k] || k, pct: v.total ? Math.round((v.sold / v.total) * 100) : 0, sold: v.sold, total: v.total }))
       .sort((a, b) => b.pct - a.pct);
-  }, [units, typeById]);
+  }, [scopedUnits, typeById]);
 
   const KpiCard = ({ title, value, sub, icon: Icon, color, bg }: {
     title: string; value: string; sub?: string; icon: React.ElementType; color: string; bg: string;
@@ -158,12 +168,23 @@ const OwnerInventory = () => {
         <div className="lg:ml-[260px] min-h-screen">
           <Header onMenuClick={() => setSidebarOpen(true)} />
           <main className="p-6 lg:p-8 space-y-7">
-            <div>
-              <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
-                Analytics
-              </span>
-              <h1 className="text-2xl font-bold text-gray-900">Inventory &amp; Absorption</h1>
-              <p className="text-sm text-gray-500 mt-1.5">สุขภาพสินค้าคงคลังข้ามทุกบริษัท · ขายเร็ว-ช้า · ยูนิตค้างสต็อก</p>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
+                  Analytics
+                </span>
+                <h1 className="text-2xl font-bold text-gray-900">Inventory &amp; Absorption</h1>
+                <p className="text-sm text-gray-500 mt-1.5">สุขภาพสินค้าคงคลังข้ามทุกบริษัท · ขายเร็ว-ช้า · ยูนิตค้างสต็อก</p>
+              </div>
+              <Select value={tenantFilter} onValueChange={setTenantFilter}>
+                <SelectTrigger className="h-9 w-[200px] text-sm mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">ทุกบริษัท</SelectItem>
+                  {tenantList.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* KPIs */}

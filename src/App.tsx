@@ -11,6 +11,8 @@ import OwnerLeads from "./pages/OwnerLeads";
 import OwnerSupport from "./pages/OwnerSupport";
 import OwnerProjects from "./pages/OwnerProjects";
 import OwnerMarket from "./pages/OwnerMarket";
+import OwnerMarketOverview from "./pages/OwnerMarketOverview";
+import OwnerBuyerOverview from "./pages/OwnerBuyerOverview";
 import OwnerGeography from "./pages/OwnerGeography";
 import OwnerCompanies from "./pages/OwnerCompanies";
 import OwnerCustomers from "./pages/OwnerCustomers";
@@ -242,6 +244,13 @@ const App = () => (
 
           {/* Owner ANALYTICS — cross-tenant real-estate intelligence (HQ lens).
               See documents/owner-hq-dashboard-plan.md. */}
+          <Route path="/owner-buyer-overview" element={
+            <ErrorBoundary showRetry={true} showHome={true} errorMessage="ไม่สามารถโหลดหน้าภาพรวมผู้ซื้อได้" context={{ page: 'owner-buyer-overview' }}>
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerBuyerOverview />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
           <Route path="/owner-customers" element={
             <ErrorBoundary showRetry={true} showHome={true} errorMessage="ไม่สามารถโหลดหน้า Customer Intelligence ได้" context={{ page: 'owner-customers' }}>
               <ProtectedRouteSimple requireRole="owner">
@@ -277,11 +286,24 @@ const App = () => (
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />
-          <Route path="/owner-market" element={
+          <Route path="/owner-market-overview" element={
             <ErrorBoundary
               showRetry={true}
               showHome={true}
               errorMessage="ไม่สามารถโหลดหน้าภาพรวมตลาดได้"
+              context={{ page: 'owner-market-overview' }}
+            >
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerMarketOverview />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/owner-market" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้ายอดขายได้"
               context={{ page: 'owner-market' }}
             >
               <ProtectedRouteSimple requireRole="owner">
