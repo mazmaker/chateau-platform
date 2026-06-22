@@ -10,6 +10,7 @@ import OwnerDashboard from "./pages/OwnerDashboard";
 import OwnerLeads from "./pages/OwnerLeads";
 import OwnerSupport from "./pages/OwnerSupport";
 import OwnerProjects from "./pages/OwnerProjects";
+import OwnerUnitDetail from "./pages/OwnerUnitDetail";
 import OwnerMarket from "./pages/OwnerMarket";
 import OwnerMarketOverview from "./pages/OwnerMarketOverview";
 import OwnerBuyerOverview from "./pages/OwnerBuyerOverview";
@@ -213,9 +214,9 @@ const App = () => (
           } />
 
           {/* Owner จัดการโครงการ — cross-tenant, read-only (control-plane).
-              Two drill levels share one component via route params:
-              all companies → one company's projects. Unit-level drill was
-              removed on purpose (Owner doesn't inspect individual units). */}
+              Three drill levels share one component via route params:
+              all companies → one company's projects → one project's units
+              (inventory view only, no customer PII). */}
           <Route path="/owner-projects" element={
             <ErrorBoundary
               showRetry={true}
@@ -238,6 +239,33 @@ const App = () => (
             >
               <ProtectedRouteSimple requireRole="owner">
                 <OwnerProjects />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/owner-projects/:tenantId/:projectId" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดยูนิตของโครงการได้"
+              context={{ page: 'owner-projects-units' }}
+            >
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerProjects />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          {/* L3 — one unit's full read-only spec sheet (inventory view, no PII). */}
+          <Route path="/owner-projects/:tenantId/:projectId/:unitId" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดรายละเอียดยูนิตได้"
+              context={{ page: 'owner-projects-unit-detail' }}
+            >
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerUnitDetail />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />

@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useCallback } from "react";
-import { Search, Plus, User, Shield, ToggleLeft, ToggleRight, Trash2, Edit, UserPlus, Paperclip, Key } from "lucide-react";
+import { Search, Plus, User, Shield, ToggleLeft, ToggleRight, Trash2, Edit, UserPlus, Paperclip, Key, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +51,10 @@ const UserManagementContent = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [deletingUser, setDeletingUser] = useState<UserData | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
+  const [sortKey, setSortKey] = useState<'name' | 'role' | 'status' | 'joined' | 'lastseen'>('joined');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const { currentTenant, userRole, user, authChecked } = useSimpleAuth();
 
   // ADMIN can only see SALES users in their tenant
@@ -58,23 +62,16 @@ const UserManagementContent = () => {
   const isOwner = userRole === 'owner';
 
   useEffect(() => {
-    console.log('🔄 UseEffect triggered:', { authChecked, currentTenantId: currentTenant?.id, isAdmin, isOwner });
-
     // Wait for auth to be fully loaded before fetching data
     if (!authChecked) {
-      console.log('⏳ UseEffect: Auth not checked yet, waiting...');
       return;
     }
 
-    console.log('✅ UseEffect: Auth checked, proceeding with data fetch');
-
     if (isOwner) {
-      console.log('👑 UseEffect: Owner - fetching tenants first, then users');
       fetchTenants().then((tenantsData) => {
         fetchUsers(tenantsData);
       });
     } else {
-      console.log('👔 UseEffect: Non-owner - fetching users directly');
       fetchUsers();
     }
   }, [currentTenant?.id, isAdmin, isOwner, authChecked]);
@@ -83,9 +80,13 @@ const UserManagementContent = () => {
     filterUsers();
   }, [users, searchTerm, roleFilter, statusFilter, tenantFilter]);
 
+  // Reset to first page when filters/search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, roleFilter, statusFilter, tenantFilter]);
+
   const fetchTenants = useCallback(async () => {
     try {
-      console.log('🏢 FetchTenants: Starting...');
       const { data, error } = await supabase
         .from('tenants')
         .select('id, name, is_platform')
@@ -93,7 +94,6 @@ const UserManagementContent = () => {
 
       if (error) throw error;
       setTenants((data as Tenant[]) || []);
-      console.log('✅ FetchTenants: Completed', data);
       return data; // Return data for chaining
     } catch (error) {
       console.error('❌ Error fetching tenants:', error);
@@ -104,11 +104,8 @@ const UserManagementContent = () => {
   const fetchUsers = useCallback(async (tenantsData?: Tenant[]) => {
     // Owner can fetch users without currentTenant, others need it
     if (!isOwner && !currentTenant) {
-      console.log('🚫 FetchUsers: Skipping - not owner and no currentTenant', { isOwner, currentTenant: (currentTenant as any)?.id });
       return;
     }
-
-    console.log('🔄 FetchUsers: Starting...', { isOwner, isAdmin, currentTenant: currentTenant?.id });
 
     try {
       // Fetch from users table
@@ -120,18 +117,14 @@ const UserManagementContent = () => {
       // ADMIN sees SALES + AGENT users in their tenant
       if (isAdmin && currentTenant) {
         query = query.eq('tenant_id', currentTenant.id).in('role', ['sales', 'agent']);
-        console.log('👔 FetchUsers: Admin filter applied for tenant', currentTenant.id);
       }
 
       const { data, error } = await query;
 
       if (error) throw error;
 
-      console.log('✅ FetchUsers: Raw data received', data);
-
       // Use provided tenants data or fallback to state
       const availableTenants = tenantsData || tenants;
-      console.log('📋 FetchUsers: Available tenants', availableTenants);
 
       // For Owner, enrich with tenant names
       let enrichedData = (data as any[]) || [];
@@ -140,11 +133,26 @@ const UserManagementContent = () => {
           ...user,
           tenant_name: availableTenants.find(t => t.id === user.tenant_id)?.name || '-'
         }));
-        console.log('🏢 FetchUsers: Enriched data with tenant names', enrichedData);
+      }
+
+      // Owner-only: enrich with the REAL last-login from auth.users via SECURITY DEFINER RPC.
+      // public.users.last_sign_in_at is stale/seed-only (Supabase Auth never syncs it) —
+      // never trust that column for adoption/churn. RPC is guarded by is_owner().
+      if (isOwner) {
+        const { data: loginRows, error: loginErr } = await (supabase as any).rpc('owner_users_last_sign_in');
+        if (loginErr) {
+          console.error('❌ Error fetching last sign-in:', loginErr);
+        } else if (loginRows) {
+          const loginMap = new Map<string, string | null>();
+          (loginRows as { id: string; last_sign_in_at: string | null }[]).forEach((r) => loginMap.set(r.id, r.last_sign_in_at));
+          enrichedData = enrichedData.map((u: any) => ({
+            ...u,
+            last_sign_in_at: loginMap.get(u.id) ?? null,
+          }));
+        }
       }
 
       setUsers(enrichedData as UserData[]);
-      console.log('🎯 FetchUsers: Users set in state', enrichedData.length, 'users');
     } catch (error) {
       console.error('❌ Error fetching users:', error);
       toast.error('ไม่สามารถโหลดข้อมูลผู้ใช้ได้');
@@ -184,6 +192,44 @@ const UserManagementContent = () => {
 
     setFilteredUsers(filtered);
   };
+
+  // Sort
+  const toggleSort = (key: 'name' | 'role' | 'status' | 'joined' | 'lastseen') => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+  const roleOrder: Record<UserRole, number> = { owner: 0, admin: 1, sales: 2, agent: 3, customer: 4 };
+  const sortedUsers = [...filteredUsers].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    if (sortKey === 'name') {
+      return (a.full_name || a.email).localeCompare(b.full_name || b.email, 'th') * dir;
+    }
+    if (sortKey === 'role') {
+      return (roleOrder[a.role] - roleOrder[b.role]) * dir;
+    }
+    if (sortKey === 'status') {
+      return ((a.is_active ? 1 : 0) - (b.is_active ? 1 : 0)) * dir;
+    }
+    if (sortKey === 'lastseen') {
+      const ta = a.last_sign_in_at ? new Date(a.last_sign_in_at).getTime() : 0;
+      const tb = b.last_sign_in_at ? new Date(b.last_sign_in_at).getTime() : 0;
+      return (ta - tb) * dir;
+    }
+    // joined → created_at
+    return (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * dir;
+  });
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(sortedUsers.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * pageSize;
+  const paginatedUsers = sortedUsers.slice(pageStart, pageStart + pageSize);
+
+  const SortIcon = ({ col }: { col: 'name' | 'role' | 'status' | 'joined' | 'lastseen' }) => (
+    sortKey === col
+      ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)
+      : <ArrowUpDown className="w-3 h-3 text-gray-300" />
+  );
 
   const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
     try {
@@ -287,6 +333,17 @@ const UserManagementContent = () => {
         {c.icon} {c.label}
       </span>
     );
+  };
+
+  // Compact relative "last seen" for the table — churn/adoption signal.
+  const formatLastSeen = (dateString?: string | null) => {
+    if (!dateString) return 'ยังไม่เคย';
+    const date = new Date(dateString);
+    const diffDays = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays <= 0) return 'วันนี้';
+    if (diffDays === 1) return 'เมื่อวาน';
+    if (diffDays <= 30) return `${diffDays} วันที่แล้ว`;
+    return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   const getUserInitials = (fullName?: string, email?: string) => {
@@ -561,18 +618,45 @@ const UserManagementContent = () => {
             <table className="w-full">
               <thead>
                 <tr className="border-b bg-gray-50">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">ผู้ใช้</th>
+                  <th
+                    className="text-left py-3 px-4 font-semibold text-gray-700 cursor-pointer select-none"
+                    onClick={() => toggleSort('name')}
+                  >
+                    <span className="inline-flex items-center gap-1">ผู้ใช้<SortIcon col="name" /></span>
+                  </th>
                   {isOwner && <th className="text-left py-3 px-4 font-semibold text-gray-700">บริษัท</th>}
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">ตำแหน่ง (Role)</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">สถานะ</th>
+                  <th
+                    className="text-left py-3 px-4 font-semibold text-gray-700 cursor-pointer select-none"
+                    onClick={() => toggleSort('role')}
+                  >
+                    <span className="inline-flex items-center gap-1">ตำแหน่ง (Role)<SortIcon col="role" /></span>
+                  </th>
+                  <th
+                    className="text-left py-3 px-4 font-semibold text-gray-700 cursor-pointer select-none"
+                    onClick={() => toggleSort('status')}
+                  >
+                    <span className="inline-flex items-center gap-1">สถานะ<SortIcon col="status" /></span>
+                  </th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">รหัสผ่าน</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">เข้าร่วมเมื่อ</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">เข้าใช้ล่าสุด</th>
+                  {isOwner && (
+                    <th
+                      className="text-left py-3 px-4 font-semibold text-gray-700 cursor-pointer select-none"
+                      onClick={() => toggleSort('lastseen')}
+                    >
+                      <span className="inline-flex items-center gap-1">เข้าใช้ล่าสุด<SortIcon col="lastseen" /></span>
+                    </th>
+                  )}
+                  <th
+                    className="text-left py-3 px-4 font-semibold text-gray-700 cursor-pointer select-none"
+                    onClick={() => toggleSort('joined')}
+                  >
+                    <span className="inline-flex items-center gap-1">เข้าร่วมเมื่อ<SortIcon col="joined" /></span>
+                  </th>
                   <th className="text-center py-3 px-4 font-semibold text-gray-700">จัดการ</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredUsers.map((user) => (
+                {paginatedUsers.map((user) => (
                   <tr key={user.id} className="border-b hover:bg-gray-50">
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
@@ -613,11 +697,19 @@ const UserManagementContent = () => {
                     <td className="py-3 px-4">
                       {getPasswordStatus(user)}
                     </td>
+                    {isOwner && (
+                      <td className="py-3 px-4 text-sm">
+                        {user.last_sign_in_at ? (
+                          <span className="text-gray-600">{formatLastSeen(user.last_sign_in_at)}</span>
+                        ) : (
+                          <span className="inline-flex items-center text-xs font-semibold px-2 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-200">
+                            ยังไม่เคย
+                          </span>
+                        )}
+                      </td>
+                    )}
                     <td className="py-3 px-4 text-sm text-gray-600">
                       {new Date(user.created_at).toLocaleDateString('th-TH')}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">
-                      {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleDateString('th-TH') : '-'}
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-center gap-2">
@@ -694,9 +786,33 @@ const UserManagementContent = () => {
               </tbody>
             </table>
 
-            {filteredUsers.length === 0 && (
+            {sortedUsers.length === 0 && (
               <div className="text-center py-8">
                 <p className="text-gray-500">ไม่พบผู้ใช้ที่ตรงกับเงื่อนไข</p>
+              </div>
+            )}
+
+            {/* Pagination footer */}
+            {sortedUsers.length > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 pt-4 mt-2 border-t border-gray-100">
+                <span className="text-sm text-gray-500">แสดง {pageStart + 1}–{Math.min(pageStart + pageSize, sortedUsers.length)} จาก {sortedUsers.length} คน</span>
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="sm" className="h-8 px-2" disabled={safePage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>
+                    <ChevronRight className="w-4 h-4 rotate-180" />
+                  </Button>
+                  {(() => {
+                    const pages: number[] = [];
+                    const from = Math.max(1, safePage - 2);
+                    const to = Math.min(totalPages, from + 4);
+                    for (let i = Math.max(1, to - 4); i <= to; i++) pages.push(i);
+                    return pages.map(p => (
+                      <Button key={p} variant={p === safePage ? 'default' : 'outline'} size="sm" className={`h-8 w-8 p-0 text-xs ${p === safePage ? 'bg-chateau hover:bg-chateau-700 text-white' : ''}`} onClick={() => setCurrentPage(p)}>{p}</Button>
+                    ));
+                  })()}
+                  <Button variant="outline" size="sm" className="h-8 px-2" disabled={safePage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
             )}
           </div>

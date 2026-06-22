@@ -27,6 +27,14 @@ import {
   TrendingUp,
   Clock,
   ChevronRight,
+  AlertTriangle,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+  BedDouble,
+  Bath,
+  Car,
+  Maximize,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -37,9 +45,9 @@ import { supabase } from '@/lib/supabase';
 // platform" (adoption/activity) and "how big is the account" (GDV) — NOT
 // "how well does the tenant sell" (absorption/sell-through was deliberately
 // cut; that's the tenant Admin's metric).
-// Two drill levels: L0 all companies → L1 one company's projects. Drilling
-// into individual UNITS was removed on purpose — inspecting unit price/specs
-// is application-plane (Admin) work, not the Owner's.
+// Three drill levels: L0 all companies → L1 one company's projects → L2 one
+// project's units (a read-only INVENTORY view — unit specs/price/status only,
+// never customer PII; that's still application-plane Admin data).
 // Cross-tenant reads use the live "Owner can view all" RLS on properties +
 // units; no migration needed.
 // ──────────────────────────────────────────────────────────────────────────
@@ -75,7 +83,9 @@ interface Unit {
   building: string | null;
   bedrooms: number | null;
   bathrooms: number | null;
+  parking_spaces: number | null;
   unit_type: string | null;
+  thumbnail_url: string | null;
   updated_at: string | null;
 }
 
@@ -154,9 +164,19 @@ const planBadge = (plan: string) => {
   return map[plan] || plan;
 };
 
+// Unit status → Thai label + KK color (same palette/convention as Analytics.tsx).
+const UNIT_STATUS: Record<string, { label: string; color: string; bg: string }> = {
+  sold:      { label: 'ขายแล้ว', color: KK.red,   bg: KK.redLight },
+  reserved:  { label: 'จองอยู่',  color: KK.amber, bg: KK.amberLight },
+  available: { label: 'ว่าง',     color: KK.green, bg: KK.greenLight },
+};
+const unitStatusMeta = (s: string | null) => UNIT_STATUS[s || 'available'] || UNIT_STATUS.available;
+// Sort rank so an unknown status doesn't NaN the comparator.
+const statusRank = (s: string | null) => (s === 'sold' ? 2 : s === 'reserved' ? 1 : 0);
+
 const OwnerProjects = () => {
   const navigate = useNavigate();
-  const { tenantId } = useParams();
+  const { tenantId, projectId } = useParams();
   const { user } = useSimpleAuth();
   const { isOwner } = usePermissions();
 
@@ -169,11 +189,33 @@ const OwnerProjects = () => {
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [planLimits, setPlanLimits] = useState<Record<string, number>>({}); // planId → max_properties limit
+  // L0 column sort (reuse OwnerTenantHealth pattern).
+  const [sortKey, setSortKey] = useState<'projects' | 'units' | 'lastActive' | 'name'>('projects');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  // L1 (one company's project grid) has its own pagination, separate from L0.
+  const [projPage, setProjPage] = useState(1);
+  // L2 (one project's unit table) — own search, pagination, and column sort.
+  const [unitSearch, setUnitSearch] = useState('');
+  const [unitPage, setUnitPage] = useState(1);
+  const [unitSortKey, setUnitSortKey] = useState<'unit' | 'area' | 'price' | 'status'>('unit');
+  const [unitSortDir, setUnitSortDir] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
     fetchAll();
   }, [isOwner, navigate]);
+
+  // Reset L0 page when the company search/sort changes.
+  useEffect(() => { setCurrentPage(1); }, [search, sortKey, sortDir]);
+  // Reset L1 project-grid page when switching company or searching inside it.
+  useEffect(() => { setProjPage(1); }, [tenantId, search]);
+  // Reset L2 unit-table page when switching project or searching inside it.
+  useEffect(() => { setUnitPage(1); }, [projectId, unitSearch]);
+
+  const toggleSort = (key: 'projects' | 'units' | 'lastActive' | 'name') => {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortKey(key); setSortDir('desc'); }
+  };
 
   const fetchAll = async () => {
     setLoading(true);
@@ -181,7 +223,7 @@ const OwnerProjects = () => {
       const [tRes, pRes, uRes, planRes] = await Promise.all([
         supabase.from('tenants').select('id, name, status, subscription_plan').eq('is_platform' as any, false),
         supabase.from('properties').select('id, tenant_id, name, developer, base_price, address, thumbnail_url, is_active, updated_at'),
-        supabase.from('units').select('id, tenant_id, project_id, price, status, area_sqm, unit_number, floor_number, building, bedrooms, bathrooms, unit_type, updated_at'),
+        supabase.from('units').select('id, tenant_id, project_id, price, status, area_sqm, unit_number, floor_number, building, bedrooms, bathrooms, parking_spaces, unit_type, thumbnail_url, updated_at'),
         (supabase as any).from('plans').select('id, max_properties'),
       ]);
       setTenants((tRes.data || []) as Tenant[]);
@@ -243,7 +285,9 @@ const OwnerProjects = () => {
     const projectCount = tenantRows.reduce((s, r) => s + r.projectCount, 0);
     const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const active7d = tenantRows.filter((r) => r.roll.lastUpdated >= weekAgo).length;
-    return { roll, projectCount, companyCount: tenantRows.length, active7d };
+    // Onboarding/churn signal — tenants that subscribed but never created a project.
+    const notStarted = tenantRows.filter((r) => r.projectCount === 0).length;
+    return { roll, projectCount, companyCount: tenantRows.length, active7d, notStarted };
   }, [tenantRows]);
 
   if (loading) {
@@ -289,6 +333,202 @@ const OwnerProjects = () => {
     return { text: `${used} / ${limit}`, near: limit > 0 && used / limit >= 0.8 };
   };
 
+  // ════════════════════════════════════ L2 — one project's units ════════════
+  // Inventory view: read-only unit list (specs/price/status only, no PII).
+  if (tenantId && projectId) {
+    const tenant = tenants.find((t) => t.id === tenantId);
+    const project = properties.find((p) => p.id === projectId);
+    const projUnits = units.filter((u) => u.project_id === projectId);
+    const roll = rollUp(projUnits);
+    // Price range across units that actually carry a price.
+    const priced = projUnits.map((u) => Number(u.price) || 0).filter((n) => n > 0);
+    const minPrice = priced.length ? Math.min(...priced) : 0;
+    const maxPrice = priced.length ? Math.max(...priced) : 0;
+
+    const q = unitSearch.trim().toLowerCase();
+    const filteredUnits = projUnits
+      .filter((u) => !q
+        || (u.unit_number || '').toLowerCase().includes(q)
+        || (u.unit_type || '').toLowerCase().includes(q))
+      .sort((a, b) => {
+        const dir = unitSortDir === 'asc' ? 1 : -1;
+        if (unitSortKey === 'area') return ((Number(a.area_sqm) || 0) - (Number(b.area_sqm) || 0)) * dir;
+        if (unitSortKey === 'price') return ((Number(a.price) || 0) - (Number(b.price) || 0)) * dir;
+        if (unitSortKey === 'status') return (statusRank(a.status) - statusRank(b.status)) * dir;
+        // 'unit' — natural-ish sort on unit_number string.
+        return (a.unit_number || '').localeCompare(b.unit_number || '', 'th', { numeric: true }) * dir;
+      });
+
+    // 12 cards / page = exactly 3 rows on the xl 4-column grid.
+    const unitPageSize = 12;
+    const unitTotalPages = Math.max(1, Math.ceil(filteredUnits.length / unitPageSize));
+    const unitSafePage = Math.min(unitPage, unitTotalPages);
+    const unitStart = (unitSafePage - 1) * unitPageSize;
+    const pagedUnits = filteredUnits.slice(unitStart, unitStart + unitPageSize);
+
+    // Sort options for the card-grid "เรียงตาม" dropdown (cards have no
+    // clickable column headers, so sorting moves into a Select control).
+    const UNIT_SORT_OPTIONS: { value: 'unit' | 'price' | 'area' | 'status'; label: string }[] = [
+      { value: 'unit', label: 'เลขยูนิต' },
+      { value: 'price', label: 'ราคา' },
+      { value: 'area', label: 'พื้นที่' },
+      { value: 'status', label: 'สถานะ' },
+    ];
+
+    return (
+      <OwnerGuard>
+        <div className="min-h-screen bg-gray-50">
+          <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+          <div className="lg:ml-[260px] min-h-screen">
+            <Header onMenuClick={() => setSidebarOpen(true)} />
+            <main className="p-6 lg:p-8 space-y-7">
+              {/* Breadcrumb + header */}
+              <div>
+                <nav className="flex items-center gap-1.5 text-sm text-gray-500 mb-3 flex-wrap">
+                  <button onClick={() => navigate('/owner-projects')} className="hover:text-gray-900 transition-colors">ทุกบริษัท</button>
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-300" />
+                  <button onClick={() => navigate(`/owner-projects/${tenantId}`)} className="hover:text-gray-900 transition-colors">{tenant?.name || 'บริษัท'}</button>
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-300" />
+                  <span className="text-gray-900 font-medium">{project?.name || 'โครงการ'}</span>
+                </nav>
+                <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
+                  รายการยูนิต
+                </span>
+                <h1 className="text-2xl font-bold text-gray-900">{project?.name || 'โครงการ'}</h1>
+                <p className="text-sm text-gray-500 mt-1.5 flex items-center gap-2 flex-wrap">
+                  {project?.developer && <span>{project.developer}</span>}
+                  {project?.developer && project?.address?.province && <span className="text-gray-300">·</span>}
+                  {project?.address?.province && (
+                    <span className="inline-flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {project.address.province}</span>
+                  )}
+                </p>
+              </div>
+
+              {/* KPIs — inventory mix + price (Owner inventory lens) */}
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+                <KpiCard title="ยูนิตทั้งหมด" value={roll.total.toLocaleString()} sub="ในโครงการนี้" icon={Home} color={KK.slate} bg={KK.slateLight} />
+                <KpiCard title="ขายแล้ว" value={roll.sold.toLocaleString()} sub={roll.total ? `${Math.round((roll.sold / roll.total) * 100)}% ของยูนิต` : undefined} icon={Building2} color={KK.red} bg={KK.redLight} />
+                <KpiCard title="จองอยู่" value={roll.reserved.toLocaleString()} sub={roll.total ? `${Math.round((roll.reserved / roll.total) * 100)}% ของยูนิต` : undefined} icon={Clock} color={KK.amber} bg={KK.amberLight} />
+                <KpiCard title="ว่าง" value={roll.available.toLocaleString()} sub={roll.total ? `${Math.round((roll.available / roll.total) * 100)}% ของยูนิต` : undefined} icon={Building} color={KK.green} bg={KK.greenLight} />
+                <KpiCard title="ราคาเริ่มต้น" value={priced.length ? fmtCompact(minPrice) : '–'} sub="ยูนิตที่ตั้งราคาแล้ว" icon={TrendingUp} color={KK.blue} bg={KK.blueLight} />
+                <KpiCard title="ราคาสูงสุด" value={priced.length ? fmtCompact(maxPrice) : '–'} sub="ช่วงราคาในโครงการ" icon={TrendingUp} color={KK.slate} bg={KK.slateLight} />
+              </div>
+
+              {/* Units — property-style card grid (read-only inventory) */}
+              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
+                <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+                  <div>
+                    <h2 className="text-base font-bold text-gray-900">ยูนิตในโครงการ</h2>
+                    <p className="text-xs text-gray-500 mt-0.5">ข้อมูลสินค้าคงคลัง · อ่านอย่างเดียว</p>
+                  </div>
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="relative flex-1 sm:w-56">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <Input placeholder="ค้นหาเลขยูนิต / ประเภท" value={unitSearch} onChange={(e) => setUnitSearch(e.target.value)} className="pl-9 h-9" />
+                    </div>
+                    {/* "เรียงตาม" — replaces the old clickable table headers */}
+                    <Select value={unitSortKey} onValueChange={(v) => { setUnitSortKey(v as typeof unitSortKey); setUnitPage(1); }}>
+                      <SelectTrigger className="h-9 w-[130px] text-sm"><SelectValue placeholder="เรียงตาม" /></SelectTrigger>
+                      <SelectContent>
+                        {UNIT_SORT_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>เรียงตาม{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 px-2.5"
+                      title={unitSortDir === 'asc' ? 'น้อยไปมาก' : 'มากไปน้อย'}
+                      onClick={() => { setUnitSortDir((d) => (d === 'asc' ? 'desc' : 'asc')); setUnitPage(1); }}
+                    >
+                      {unitSortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                </div>
+                {filteredUnits.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Home className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                    <p className="text-sm text-gray-500">{projUnits.length === 0 ? 'โครงการนี้ยังไม่มียูนิต' : 'ไม่พบยูนิตที่ค้นหา'}</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {pagedUnits.map((u) => {
+                      const meta = unitStatusMeta(u.status);
+                      return (
+                        <div
+                          key={u.id}
+                          onClick={() => navigate(`/owner-projects/${tenantId}/${projectId}/${u.id}`)}
+                          className="bg-white border border-gray-100 rounded-2xl shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 overflow-hidden cursor-pointer"
+                        >
+                          {/* รูปภาพ + chip เลขยูนิต + สถานะ */}
+                          <div className="relative aspect-[4/3] bg-gray-50">
+                            {u.thumbnail_url ? (
+                              <img src={u.thumbnail_url} alt={u.unit_number || 'unit'} className="w-full h-full object-cover" loading="lazy" />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center text-gray-300">
+                                <Home className="w-8 h-8 mb-1" />
+                                <span className="text-xs text-gray-400">ไม่มีรูป</span>
+                              </div>
+                            )}
+                            {u.unit_number && (
+                              <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-xs font-semibold bg-black/60 text-white backdrop-blur-sm">
+                                {u.unit_number}
+                              </span>
+                            )}
+                            <span className="absolute top-2 right-2">
+                              <Badge style={{ backgroundColor: meta.bg, color: meta.color, border: 'none' }}>{meta.label}</Badge>
+                            </span>
+                          </div>
+                          {/* เนื้อการ์ด */}
+                          <div className="p-4">
+                            <p className="text-xs text-gray-500 truncate">
+                              {[u.unit_type || 'ยูนิต', u.area_sqm != null ? `${Number(u.area_sqm).toLocaleString()} ตร.ม.` : null].filter(Boolean).join(' · ')}
+                            </p>
+                            <p className="text-xl font-bold text-gray-900 mt-1 tabular-nums">{u.price ? fmtCompact(Number(u.price)) : '–'}</p>
+                            <div className="flex items-center gap-x-3 gap-y-1 flex-wrap mt-3 text-xs text-gray-500 tabular-nums">
+                              <span className="inline-flex items-center gap-1"><BedDouble className="w-3.5 h-3.5 text-gray-400" />{u.bedrooms ?? '–'}</span>
+                              <span className="inline-flex items-center gap-1"><Bath className="w-3.5 h-3.5 text-gray-400" />{u.bathrooms ?? '–'}</span>
+                              <span className="inline-flex items-center gap-1"><Car className="w-3.5 h-3.5 text-gray-400" />{u.parking_spaces ?? '–'}</span>
+                              <span className="inline-flex items-center gap-1"><Maximize className="w-3.5 h-3.5 text-gray-400" />{u.area_sqm != null ? Number(u.area_sqm).toLocaleString() : '–'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {filteredUnits.length > 0 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 pt-4 mt-2 border-t border-gray-100">
+                    <span className="text-sm text-gray-500">
+                      แสดง {unitStart + 1}–{Math.min(unitStart + unitPageSize, filteredUnits.length)} จาก {filteredUnits.length} ยูนิต
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" size="sm" className="h-8 px-2" disabled={unitSafePage <= 1} onClick={() => setUnitPage((p) => Math.max(1, p - 1))}>
+                        <ChevronRight className="w-4 h-4 rotate-180" />
+                      </Button>
+                      {(() => {
+                        const pages: number[] = [];
+                        const to = Math.min(unitTotalPages, Math.max(1, unitSafePage - 2) + 4);
+                        for (let i = Math.max(1, to - 4); i <= to; i++) pages.push(i);
+                        return pages.map((p) => (
+                          <Button key={p} variant={p === unitSafePage ? 'default' : 'outline'} size="sm" className={`h-8 w-8 p-0 text-xs ${p === unitSafePage ? 'bg-chateau hover:bg-chateau-700 text-white' : ''}`} onClick={() => setUnitPage(p)}>{p}</Button>
+                        ));
+                      })()}
+                      <Button variant="outline" size="sm" className="h-8 px-2" disabled={unitSafePage >= unitTotalPages} onClick={() => setUnitPage((p) => Math.min(unitTotalPages, p + 1))}>
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </main>
+          </div>
+        </div>
+      </OwnerGuard>
+    );
+  }
+
   // ════════════════════════════════════ L1 — one company ════════════════════
   if (tenantId) {
     const tenant = tenants.find((t) => t.id === tenantId);
@@ -299,6 +539,13 @@ const OwnerProjects = () => {
       .filter((p) => !search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.developer || '').toLowerCase().includes(search.toLowerCase()))
       .map((p) => ({ p, roll: rollUp(unitsByProject.get(p.id) || []) }))
       .sort((a, b) => b.roll.total - a.roll.total);
+
+    // L1 project-grid pagination (12 cards / page).
+    const projPageSize = 12;
+    const projTotalPages = Math.max(1, Math.ceil(filtered.length / projPageSize));
+    const projSafePage = Math.min(projPage, projTotalPages);
+    const projStart = (projSafePage - 1) * projPageSize;
+    const pagedProjects = filtered.slice(projStart, projStart + projPageSize);
 
     return (
       <OwnerGuard>
@@ -346,12 +593,13 @@ const OwnerProjects = () => {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {filtered.map(({ p, roll: pr }) => {
+                    {pagedProjects.map(({ p, roll: pr }) => {
                       const projLast = Math.max(pr.lastUpdated, toEpoch(p.updated_at));
                       return (
                         <div
                           key={p.id}
-                          className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-soft"
+                          onClick={() => navigate(`/owner-projects/${tenantId}/${p.id}`)}
+                          className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-soft cursor-pointer hover:shadow-soft-md hover:-translate-y-0.5 hover:border-gray-200 transition-all duration-200"
                         >
                           <div className="h-32 bg-gray-100 relative overflow-hidden">
                             {p.thumbnail_url ? (
@@ -370,15 +618,42 @@ const OwnerProjects = () => {
                                 {p.address?.province ? <><MapPin className="w-3 h-3 flex-shrink-0" /> {p.address.province}</> : (p.developer || '–')}
                               </p>
                             </div>
-                            <div className="flex items-center pt-1 border-t border-gray-50">
+                            <div className="flex items-center justify-between pt-1 border-t border-gray-50">
                               <span className="text-xs text-gray-400 flex items-center gap-1 pt-2">
                                 <Clock className="w-3 h-3" /> {fmtRelative(projLast)}
+                              </span>
+                              <span className="text-xs font-medium flex items-center gap-0.5 pt-2" style={{ color: KK.red }}>
+                                ดูยูนิต <ArrowUpRight className="w-3 h-3" />
                               </span>
                             </div>
                           </div>
                         </div>
                       );
                     })}
+                  </div>
+                )}
+                {filtered.length > 0 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 pt-4 mt-2 border-t border-gray-100">
+                    <span className="text-sm text-gray-500">
+                      แสดง {projStart + 1}–{Math.min(projStart + projPageSize, filtered.length)} จาก {filtered.length} โครงการ
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" size="sm" className="h-8 px-2" disabled={projSafePage <= 1} onClick={() => setProjPage((p) => Math.max(1, p - 1))}>
+                        <ChevronRight className="w-4 h-4 rotate-180" />
+                      </Button>
+                      {(() => {
+                        const pages: number[] = [];
+                        const from = Math.max(1, projSafePage - 2);
+                        const to = Math.min(projTotalPages, from + 4);
+                        for (let i = Math.max(1, to - 4); i <= to; i++) pages.push(i);
+                        return pages.map((p) => (
+                          <Button key={p} variant={p === projSafePage ? 'default' : 'outline'} size="sm" className={`h-8 w-8 p-0 text-xs ${p === projSafePage ? 'bg-chateau hover:bg-chateau-700 text-white' : ''}`} onClick={() => setProjPage(p)}>{p}</Button>
+                        ));
+                      })()}
+                      <Button variant="outline" size="sm" className="h-8 px-2" disabled={projSafePage >= projTotalPages} onClick={() => setProjPage((p) => Math.min(projTotalPages, p + 1))}>
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -390,7 +665,15 @@ const OwnerProjects = () => {
   }
 
   // ════════════════════════════════════ L0 — all companies ══════════════════
-  const filteredTenants = tenantRows.filter((r) => !search || r.tenant.name.toLowerCase().includes(search.toLowerCase()));
+  const matchedTenants = tenantRows.filter((r) => !search || r.tenant.name.toLowerCase().includes(search.toLowerCase()));
+  // Sort by the active column, then paginate the sorted list.
+  const filteredTenants = [...matchedTenants].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    if (sortKey === 'name') return a.tenant.name.localeCompare(b.tenant.name, 'th') * dir;
+    if (sortKey === 'units') return (a.roll.total - b.roll.total) * dir;
+    if (sortKey === 'lastActive') return (a.roll.lastUpdated - b.roll.lastUpdated) * dir;
+    return (a.projectCount - b.projectCount) * dir; // 'projects'
+  });
   const totalPages = Math.max(1, Math.ceil(filteredTenants.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const pageStart = (safePage - 1) * pageSize;
@@ -412,12 +695,13 @@ const OwnerProjects = () => {
               <p className="text-sm text-gray-500 mt-1.5">ภาพรวมการใช้งานข้ามทุกบริษัท · เจาะเข้าบริษัท → โครงการ</p>
             </div>
 
-            {/* KPIs — platform usage + scale (Owner lens) */}
+            {/* KPIs — platform adoption (Owner lens): how many customers, how much
+                they've built, who hasn't started, who's recently active. */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <KpiCard title="บริษัทที่มีโครงการ" value={platform.companyCount.toLocaleString()} sub={`จาก ${tenants.length} บริษัท`} icon={Building2} color={KK.blue} bg={KK.blueLight} />
+              <KpiCard title="บริษัททั้งหมด" value={platform.companyCount.toLocaleString()} sub="ที่ใช้ระบบอยู่" icon={Building2} color={KK.blue} bg={KK.blueLight} />
               <KpiCard title="โครงการทั้งหมด" value={platform.projectCount.toLocaleString()} sub="ทั่วทั้งแพลตฟอร์ม" icon={Building} color={KK.slate} bg={KK.slateLight} />
-              <KpiCard title="ยูนิตทั้งหมด" value={platform.roll.total.toLocaleString()} sub="ยูนิตที่ลูกค้าสร้างในระบบ" icon={Home} color={KK.green} bg={KK.greenLight} />
-              <KpiCard title="ใช้งานใน 7 วัน" value={String(platform.active7d)} sub={`จาก ${platform.companyCount} บริษัทที่มีข้อมูล · engagement`} icon={Clock} color={KK.red} bg={KK.redLight} />
+              <KpiCard title="ยังไม่เริ่มใช้งาน" value={platform.notStarted.toLocaleString()} sub="0 โครงการ · ควร onboard" icon={AlertTriangle} color={KK.amber} bg={KK.amberLight} />
+              <KpiCard title="อัปเดตข้อมูลใน 7 วัน" value={String(platform.active7d)} sub={`จาก ${platform.companyCount} บริษัท · engagement`} icon={Clock} color={KK.green} bg={KK.greenLight} />
             </div>
 
             {/* Companies table */}
@@ -442,11 +726,39 @@ const OwnerProjects = () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>บริษัท</TableHead>
+                        <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('name')}>
+                          <span className="inline-flex items-center gap-1">
+                            บริษัท
+                            {sortKey === 'name'
+                              ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)
+                              : <ArrowUpDown className="w-3 h-3 text-gray-300" />}
+                          </span>
+                        </TableHead>
                         <TableHead className="text-center">แพ็กเกจ</TableHead>
-                        <TableHead className="text-right">โครงการ (ใช้/ลิมิต)</TableHead>
-                        <TableHead className="text-right">ยูนิต</TableHead>
-                        <TableHead className="text-right">ใช้งานล่าสุด</TableHead>
+                        <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort('projects')}>
+                          <span className="inline-flex items-center justify-end gap-1 w-full">
+                            โครงการ (ใช้/ลิมิต)
+                            {sortKey === 'projects'
+                              ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)
+                              : <ArrowUpDown className="w-3 h-3 text-gray-300" />}
+                          </span>
+                        </TableHead>
+                        <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort('units')}>
+                          <span className="inline-flex items-center justify-end gap-1 w-full">
+                            ยูนิต
+                            {sortKey === 'units'
+                              ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)
+                              : <ArrowUpDown className="w-3 h-3 text-gray-300" />}
+                          </span>
+                        </TableHead>
+                        <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort('lastActive')}>
+                          <span className="inline-flex items-center justify-end gap-1 w-full">
+                            ใช้งานล่าสุด
+                            {sortKey === 'lastActive'
+                              ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)
+                              : <ArrowUpDown className="w-3 h-3 text-gray-300" />}
+                          </span>
+                        </TableHead>
                         <TableHead></TableHead>
                       </TableRow>
                     </TableHeader>
