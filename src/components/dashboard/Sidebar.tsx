@@ -84,7 +84,11 @@ const OWNER_NAV_GROUPS: NavGroup[] = [
   // active tenant → projects → global users (Owner support tool, moved in from SETTINGS).
   { id: "tenants",   label: "TENANTS",   icon: Building,  hrefs: ["/owner-health", "/owner-leads", "/tenants", "/owner-projects", "/users"] },
   { id: "analytics", label: "Property Sales", icon: TrendingUp, hrefs: ["/owner-market-overview", "/owner-market", "/owner-companies", "/owner-inventory", "/owner-geography"] },
-  { id: "intelligence", label: "Buyer Intelligence", icon: Contact, hrefs: ["/owner-buyer-overview", "/owner-customers", "/owner-funnel", "/owner-marketing"] },
+  // Buyer Intelligence trimmed (2026-06-22): /owner-customers + /owner-funnel cut from menu —
+  // aggregate end-customer funnel/CDP = tenant-operational data, low Owner value (per SaaS-owner
+  // lens). The one useful number (deals tenants closed on-platform = product-value/retention proof)
+  // surfaced on ภาพรวมผู้เช่า instead. Routes still exist (URL-reachable) for rollback.
+  { id: "intelligence", label: "Buyer Intelligence", icon: Contact, hrefs: ["/owner-buyer-overview", "/owner-marketing"] },
   // FINANCE — Payments pulled out of TENANTS to its own domain group (P&L of the
   // Owner). The page already holds Financial Overview (สุขภาพรายได้ tab) + billing automation.
   { id: "finance",   label: "การเงิน",   icon: CreditCard, hrefs: ["/payments"] },
@@ -105,7 +109,7 @@ const getAllNavItems = (): NavItem[] => [
   { icon: Filter,          label: "Funnel & คะแนนผู้สนใจ", href: "/owner-funnel",  requiredRoles: ["OWNER"] },
   { icon: Megaphone,       label: "Marketing & Campaign", href: "/owner-marketing", requiredRoles: ["OWNER"] },
   { icon: PieChart,        label: "ภาพรวมตลาด",          href: "/owner-market-overview", requiredRoles: ["OWNER"] },
-  { icon: TrendingUp,      label: "Sales Overview",      href: "/owner-market",    requiredRoles: ["OWNER"] },
+  { icon: TrendingUp,      label: "ราคา & ประเภท",       href: "/owner-market",    requiredRoles: ["OWNER"] },
   { icon: BarChart3,       label: "อันดับยอดขาย",        href: "/owner-companies", requiredRoles: ["OWNER"] },
   { icon: Layers,          label: "Inventory & Absorption", href: "/owner-inventory", requiredRoles: ["OWNER"] },
   { icon: MapPin,          label: "Geography",           href: "/owner-geography", requiredRoles: ["OWNER"] },

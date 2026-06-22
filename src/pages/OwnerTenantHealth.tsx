@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { HeartPulse, ShieldCheck, AlertTriangle, TrendingDown, ChevronRight, Package, Clock, Search, MoreHorizontal, Eye, Trash2, ArrowUp, ArrowDown, ArrowUpDown, FileText } from 'lucide-react';
+import { HeartPulse, ShieldCheck, AlertTriangle, TrendingDown, ChevronRight, Package, Clock, Search, MoreHorizontal, Eye, Trash2, ArrowUp, ArrowDown, ArrowUpDown, FileText, Trophy } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -109,6 +109,7 @@ const OwnerTenantHealth = () => {
   const [pageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [rows, setRows] = useState<TenantRow[]>([]);
+  const [dealStats, setDealStats] = useState<{ wonValue: number; conversion: number }>({ wonValue: 0, conversion: 0 });
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<'priority' | 'health' | 'lastLogin' | 'mrr'>('priority');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -121,12 +122,14 @@ const OwnerTenantHealth = () => {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [{ data: tenants }, { data: usersList }, { data: projects }, { data: invoices }, { data: planRows }] = await Promise.all([
+      const [{ data: tenants }, { data: usersList }, { data: projects }, { data: invoices }, { data: planRows }, { data: leadsList }] = await Promise.all([
         supabase.from('tenants').select('id, name, subscription_plan, status, trial_ends_at, owner_notes').eq('is_platform' as any, false).order('created_at', { ascending: false }),
         supabase.from('users').select('id, tenant_id, updated_at'),
         supabase.from('projects').select('id, tenant_id'),
         supabase.from('invoices').select('tenant_id, amount, paid_at, created_at, status').eq('status', 'paid'),
         supabase.from('plans').select('id, price_monthly'),
+        // Cross-tenant end-customer leads → product-value / retention proof (aggregate, no PII).
+        supabase.from('leads').select('tenant_id, status, estimated_value'),
       ]);
 
       // Plan list prices from the `plans` catalog (single source — no hardcode drift).
@@ -193,6 +196,15 @@ const OwnerTenantHealth = () => {
       });
 
       setRows(built);
+
+      // Product-value / retention proof: deals tenants closed on-platform (won leads) + avg conversion.
+      // Scoped to customer tenants (non-platform). Aggregate only — no per-customer PII.
+      const custIds = new Set((tenants || []).map((t: any) => t.id));
+      const custLeads = (leadsList || []).filter((l: any) => custIds.has(l.tenant_id));
+      const wonLeads = custLeads.filter((l: any) => l.status === 'won');
+      const wonValue = wonLeads.reduce((s: number, l: any) => s + (Number(l.estimated_value) || 0), 0);
+      const conversion = custLeads.length > 0 ? Math.round((wonLeads.length / custLeads.length) * 100) : 0;
+      setDealStats({ wonValue, conversion });
       setLoading(false);
     };
     load();
@@ -348,7 +360,7 @@ const OwnerTenantHealth = () => {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               <KpiCard
                 title="MRR รวม"
                 value={loading ? '—' : fmtMRR(totalMRR)}
@@ -388,6 +400,12 @@ const OwnerTenantHealth = () => {
                   else { setStatusFilter('at_risk'); setTenantStatusFilter('all'); }
                   setCurrentPage(1);
                 }}
+              />
+              <KpiCard
+                title="ดีลที่ลูกค้าปิดบนระบบ"
+                value={loading ? '—' : (dealStats.wonValue > 0 ? fmtMRR(dealStats.wonValue) : '฿0')}
+                sub={`Conversion เฉลี่ย ${dealStats.conversion}% · คุณค่าที่ tenant ได้รับ`}
+                icon={Trophy} color={KK.green} bg={KK.greenLight}
               />
             </div>
 

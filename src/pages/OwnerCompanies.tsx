@@ -52,9 +52,17 @@ const THAI_MONTH = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.�
 // Donut slice palette — distinct hues so each company reads apart at a glance.
 const PIE_COLORS = ['#1e3a5f', '#ef4444', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#475569'];
 
+const STATUS_BADGE: Record<string, { label: string; color: string; bg: string }> = {
+  active:    { label: 'Active',     color: '#16a34a', bg: '#f0fdf4' },
+  trial:     { label: 'Trial',      color: '#d97706', bg: '#fefce8' },
+  suspended: { label: 'ระงับ',     color: '#ef4444', bg: '#fef2f2' },
+  cancelled: { label: 'Cancelled', color: '#94a3b8', bg: '#f8fafc' },
+};
+const getBadge = (s: string) => STATUS_BADGE[s] ?? STATUS_BADGE['active'];
+
 interface UnitRow { tenant_id: string; price: number | null; status: string | null; sold_at: string | null; }
 interface CompanyAgg {
-  id: string; name: string; plan: string;
+  id: string; name: string; plan: string; status: string;
   gdv: number; sold: number; total: number; soldValue: number; leads: number;
   sellThrough: number;
   series: { month: string; count: number }[];
@@ -91,8 +99,8 @@ const OwnerCompanies = () => {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const { data: tenants } = await supabase.from('tenants').select('id, name, subscription_plan').eq('is_platform' as any, false);
-      const tlist = (tenants || []) as { id: string; name: string; subscription_plan: string }[];
+      const { data: tenants } = await supabase.from('tenants').select('id, name, subscription_plan, status').eq('is_platform' as any, false);
+      const tlist = (tenants || []) as { id: string; name: string; subscription_plan: string; status: string }[];
       const ids = tlist.map((t) => t.id);
       if (ids.length > 0) {
         const [uRes, lRes] = await Promise.all([
@@ -118,7 +126,7 @@ const OwnerCompanies = () => {
             if (u.status === 'sold') { sold += 1; soldValue += price; soldDates.push(u.sold_at); }
           });
           return {
-            id: t.id, name: t.name, plan: t.subscription_plan,
+            id: t.id, name: t.name, plan: t.subscription_plan, status: t.status || 'active',
             gdv, sold, total: tUnits.length, soldValue, leads: leadCount.get(t.id) || 0,
             sellThrough: tUnits.length > 0 ? Math.round((sold / tUnits.length) * 100) : 0,
             series: buildSeries(soldDates),
@@ -275,6 +283,7 @@ const OwnerCompanies = () => {
                         <TableRow>
                           <TableHead className="w-10">#</TableHead>
                           <TableHead>บริษัท</TableHead>
+                          <TableHead>สถานะ</TableHead>
                           <TableHead className="text-right">มูลค่าขาย</TableHead>
                           <TableHead className="text-right">ยูนิต (ขาย/ทั้งหมด)</TableHead>
                           <TableHead className="text-right">Sell-through</TableHead>
@@ -288,6 +297,21 @@ const OwnerCompanies = () => {
                           <TableRow key={r.id} className="cursor-pointer hover:bg-gray-50" onClick={() => navigate(`/owner-projects/${r.id}`)}>
                             <TableCell className="text-gray-400 tabular-nums">{pageStart + i + 1}</TableCell>
                             <TableCell className="font-semibold text-gray-900">{r.name}</TableCell>
+                            <TableCell>
+                              {(() => {
+                                const b = getBadge(r.status);
+                                return (
+                                  <span
+                                    className="text-xs font-semibold px-2 py-0.5 rounded-full cursor-pointer whitespace-nowrap"
+                                    style={{ color: b.color, backgroundColor: b.bg }}
+                                    onClick={(e) => { e.stopPropagation(); navigate(`/tenants/${r.id}`); }}
+                                    title="ดูรายละเอียด tenant"
+                                  >
+                                    {b.label}
+                                  </span>
+                                );
+                              })()}
+                            </TableCell>
                             <TableCell className="text-right tabular-nums">{fmtCompact(r.soldValue)}</TableCell>
                             <TableCell className="text-right tabular-nums">{r.sold}/{r.total}</TableCell>
                             <TableCell className="text-right tabular-nums">{r.sellThrough}%</TableCell>

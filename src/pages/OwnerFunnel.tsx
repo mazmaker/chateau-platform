@@ -223,7 +223,7 @@ const OwnerFunnel = () => {
               <KpiCard title="ลีดทั้งหมด" value={kpis.total.toLocaleString()} sub="ข้ามทุกบริษัท" icon={Users} color={KK.blue} bg={KK.blueLight} />
               <KpiCard title="Conversion" value={`${kpis.conversion}%`} sub="ปิดได้ / ทั้งหมด" icon={Percent} color={KK.green} bg={KK.greenLight} />
               <KpiCard title="ลีดคุณภาพสูง" value={kpis.hot.toLocaleString()} sub="Quality score ≥ 70" icon={Flame} color={KK.red} bg={KK.redLight} />
-              <KpiCard title="มูลค่า Pipeline" value={fmtCompact(kpis.pipeline)} sub="ลีดที่ยังเปิดอยู่" icon={Banknote} color={KK.amber} bg={KK.amberLight} />
+              <KpiCard title="มูลค่าดีล (อสังหา)" value={fmtCompact(kpis.pipeline)} sub="ลีดที่ยังเปิดอยู่" icon={Banknote} color={KK.amber} bg={KK.amberLight} />
             </div>
 
             {/* Funnel */}

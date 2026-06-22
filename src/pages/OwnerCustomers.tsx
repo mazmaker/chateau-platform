@@ -314,7 +314,7 @@ const OwnerCustomers = () => {
               <>
                 {/* KPIs */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <KpiCard title="ผู้สนใจทั้งหมด" value={kpis.total.toLocaleString()} sub="ข้ามทุกบริษัท" icon={Users} color={KK.blue} bg={KK.blueLight} />
+                  <KpiCard title="ผู้สนใจซื้อทั้งหมด" value={kpis.total.toLocaleString()} sub="ข้ามทุกบริษัท" icon={Users} color={KK.blue} bg={KK.blueLight} />
                   <KpiCard title="รายได้เฉลี่ย/เดือน" value={fmtCompact(kpis.avgIncome)} sub="ต่อคน" icon={Banknote} color={KK.green} bg={KK.greenLight} />
                   <KpiCard title="มูลค่าดีลเฉลี่ย" value={fmtCompact(kpis.avgDeal)} sub="ประเมินจากลีด" icon={Target} color={KK.red} bg={KK.redLight} />
                   <KpiCard title="วัตถุประสงค์เด่น" value={kpis.topPurpose?.name || '–'} sub={`${kpis.topPurpose?.value || 0} คน`} icon={Briefcase} color={KK.amber} bg={KK.amberLight} />

@@ -27,18 +27,24 @@ export interface RevenueHealth {
 export function computeRevenueHealth(
   tenants: TenantLite[],
   paidInvoices: PaidInvoiceLite[],
+  referenceDate?: Date,
 ): RevenueHealth {
   const activeIds = new Set(tenants.filter((t) => t.status === 'active').map((t) => t.id));
   const nameMap = new Map(tenants.map((t) => [t.id, t.name]));
 
-  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
-  const t = (x: PaidInvoiceLite) => new Date(x.paid_at || x.created_at).getTime();
+  const ref = referenceDate || new Date();
+  const monthStart = new Date(ref.getFullYear(), ref.getMonth(), 1);
+  const monthEnd = new Date(ref.getFullYear(), ref.getMonth() + 1, 0, 23, 59, 59, 999);
+  const now = new Date();
+  const isCurrentMonth = ref.getFullYear() === now.getFullYear() && ref.getMonth() === now.getMonth();
+  const invTime = (x: PaidInvoiceLite) => new Date(x.paid_at || x.created_at).getTime();
 
-  // Per-tenant current MRR (latest paid invoice) and prior MRR (latest before this month).
+  // Per-tenant current MRR (latest paid invoice ≤ monthEnd) and prior MRR (latest before monthStart).
   const cur = new Map<string, { time: number; amt: number }>();
   const prev = new Map<string, { time: number; amt: number }>();
   paidInvoices.forEach((x) => {
-    const tm = t(x); const amt = Number(x.amount) || 0;
+    const tm = invTime(x); const amt = Number(x.amount) || 0;
+    if (tm > monthEnd.getTime()) return; // exclude invoices after selected month
     const c = cur.get(x.tenant_id);
     if (!c || tm > c.time) cur.set(x.tenant_id, { time: tm, amt });
     if (tm < monthStart.getTime()) {
@@ -52,7 +58,11 @@ export function computeRevenueHealth(
   let priorLogos = 0, churnedLogos = 0;
   const decliners: { name: string; lost: number; type: 'ดาวน์เกรด' | 'เลิกใช้' }[] = [];
   ids.forEach((id) => {
-    const c = activeIds.has(id) ? (cur.get(id)?.amt || 0) : 0;   // inactive tenant ⇒ MRR now = 0 (churned)
+    // Current month: respect activeIds (cancelled tenant = churned even if has old invoices).
+    // Historical month: use invoice presence to infer activity at that point in time.
+    const c = isCurrentMonth
+      ? (activeIds.has(id) ? (cur.get(id)?.amt || 0) : 0)
+      : (cur.get(id)?.amt || 0);
     const p = prev.get(id)?.amt || 0;
     currentMRR += c; priorMRR += p;
     if (p > 0) priorLogos += 1;

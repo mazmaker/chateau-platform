@@ -27,7 +27,7 @@ import {
 // Sibling of OwnerMarketOverview: summarises the whole buyer / lead-intelligence
 // menu group across ALL tenants, then drills into each detail page.
 // Read-only / live Owner RLS (no migration). AGGREGATE ONLY — no per-person PII.
-//   • KPI strip (ผู้ซื้อ/ผู้สนใจ · ผู้สนใจใหม่ · Conversion · มูลค่า Pipeline)
+//   • KPI strip (ผู้สนใจซื้อ · ลีดทั้งหมด · Conversion · มูลค่าดีล อสังหา)
 //   • กลุ่มผู้ซื้อ (top occupation + purpose distribution) → /owner-customers
 //   • Funnel สรุป (stage bars + conversion) → /owner-funnel
 //   • การตลาด teaser (campaign / reach summary) → /owner-marketing
@@ -272,10 +272,10 @@ const OwnerBuyerOverview = () => {
             {/* KPI strip — 4 cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: 'ผู้ซื้อ/ผู้สนใจทั้งหมด', value: kpis.totalBuyers.toLocaleString(), icon: Users, color: KK.blue, href: '/owner-customers', sub: 'ข้ามทุกบริษัท (CDP)' },
+                { label: 'ผู้สนใจซื้อทั้งหมด', value: kpis.totalBuyers.toLocaleString(), icon: Users, color: KK.blue, href: '/owner-customers', sub: 'ข้ามทุกบริษัท (CDP)' },
                 { label: 'ผู้สนใจ (ลีดทั้งหมด)', value: kpis.totalLeads.toLocaleString(), icon: UserPlusIcon, color: KK.green, href: '/owner-funnel', sub: 'สะสมทุกขั้นของกรวย' },
                 { label: 'อัตราแปลง (Conversion)', value: `${kpis.conversion}%`, icon: Percent, color: KK.red, href: '/owner-funnel', sub: 'ปิดได้ / ลีดทั้งหมด' },
-                { label: 'มูลค่า Pipeline', value: fmtCompact(kpis.pipeline), icon: Banknote, color: KK.amber, href: '/owner-funnel', sub: 'ลีดที่ยังเปิดอยู่' },
+                { label: 'มูลค่าดีล (อสังหา)', value: fmtCompact(kpis.pipeline), icon: Banknote, color: KK.amber, href: '/owner-funnel', sub: 'ลีดที่ยังเปิดอยู่' },
               ].map(renderKpiCard)}
             </div>
 

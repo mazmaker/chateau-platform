@@ -189,6 +189,7 @@ const OwnerProjects = () => {
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [planLimits, setPlanLimits] = useState<Record<string, number>>({}); // planId → max_properties limit
+  const [salesStaffByTenant, setSalesStaffByTenant] = useState<Record<string, number>>({}); // tenantId → #sales/agent users
   // L0 column sort (reuse OwnerTenantHealth pattern).
   const [sortKey, setSortKey] = useState<'projects' | 'units' | 'lastActive' | 'name'>('projects');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -220,16 +221,20 @@ const OwnerProjects = () => {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const [tRes, pRes, uRes, planRes] = await Promise.all([
+      const [tRes, pRes, uRes, planRes, staffRes] = await Promise.all([
         supabase.from('tenants').select('id, name, status, subscription_plan').eq('is_platform' as any, false),
         supabase.from('properties').select('id, tenant_id, name, developer, base_price, address, thumbnail_url, is_active, updated_at'),
         supabase.from('units').select('id, tenant_id, project_id, price, status, area_sqm, unit_number, floor_number, building, bedrooms, bathrooms, parking_spaces, unit_type, thumbnail_url, updated_at'),
         (supabase as any).from('plans').select('id, max_properties'),
+        supabase.from('users').select('tenant_id, role').in('role', ['sales', 'agent']),
       ]);
       setTenants((tRes.data || []) as Tenant[]);
       setProperties((pRes.data || []) as Property[]);
       setUnits((uRes.data || []) as Unit[]);
       if (planRes.data) setPlanLimits(Object.fromEntries((planRes.data as any[]).map((p) => [p.id, p.max_properties])));
+      const staffCount: Record<string, number> = {};
+      ((staffRes.data || []) as { tenant_id: string }[]).forEach((u) => { staffCount[u.tenant_id] = (staffCount[u.tenant_id] || 0) + 1; });
+      setSalesStaffByTenant(staffCount);
     } catch (e) {
       console.error('OwnerProjects fetch error:', e);
     } finally {
@@ -535,6 +540,33 @@ const OwnerProjects = () => {
     const props = properties.filter((p) => p.tenant_id === tenantId);
     const tUnits = props.flatMap((p) => unitsByProject.get(p.id) || []);
     const roll = rollUp(tUnits);
+
+    // ── "ปัจจัยการขาย" — descriptive profile (NOT proven cause). The factors we can
+    // read from platform data: where, price band, type, unit size, sales-team size,
+    // and how much has actually sold. External drivers (brand, marketing, economy)
+    // are out of system, so this is context to eyeball — not a causal explanation.
+    const provinces = Array.from(new Set(props.map((p) => p.address?.province).filter(Boolean))) as string[];
+    const pricedUnits = tUnits.map((u) => Number(u.price) || 0).filter((n) => n > 0);
+    const minP = pricedUnits.length ? Math.min(...pricedUnits) : 0;
+    const maxP = pricedUnits.length ? Math.max(...pricedUnits) : 0;
+    const areaVals = tUnits.map((u) => Number(u.area_sqm) || 0).filter((n) => n > 0);
+    const avgArea = areaVals.length ? Math.round(areaVals.reduce((s, n) => s + n, 0) / areaVals.length) : 0;
+    const typeCount = new Map<string, number>();
+    tUnits.forEach((u) => { const t = u.unit_type || '–'; typeCount.set(t, (typeCount.get(t) || 0) + 1); });
+    const topTypeRaw = Array.from(typeCount.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || '–';
+    const TYPE_TH: Record<string, string> = { condo: 'คอนโด', single_house: 'บ้านเดี่ยว', twin_house: 'บ้านแฝด', townhome: 'ทาวน์โฮม', house: 'บ้าน' };
+    const topType = TYPE_TH[topTypeRaw] || topTypeRaw;
+    const sellThroughPct = roll.total ? Math.round((roll.sold / roll.total) * 100) : 0;
+    const salesStaff = salesStaffByTenant[tenantId] || 0;
+    const saleFactors = [
+      { label: 'ทำเล', value: provinces.length ? (provinces.length === 1 ? provinces[0] : `${provinces.length} จังหวัด`) : '–', sub: provinces.length > 1 ? provinces.join(' · ') : 'ที่ตั้งโครงการ', icon: MapPin, color: KK.green },
+      { label: 'ช่วงราคา', value: pricedUnits.length ? `${fmtCompact(minP)}–${fmtCompact(maxP)}` : '–', sub: 'ต่ำสุด–สูงสุด', icon: TrendingUp, color: KK.red },
+      { label: 'ประเภทหลัก', value: topType, sub: 'ประเภทยูนิตที่มีมากสุด', icon: Home, color: KK.blue },
+      { label: 'พื้นที่เฉลี่ย', value: avgArea ? `${avgArea.toLocaleString()} ตร.ม.` : '–', sub: 'ขนาดต่อยูนิต', icon: Maximize, color: KK.slate },
+      { label: 'ทีมขาย', value: `${salesStaff} คน`, sub: 'พนักงานขาย/นายหน้าในระบบ', icon: Building2, color: KK.amber },
+      { label: 'Sell-through', value: `${sellThroughPct}%`, sub: `ขายแล้ว ${roll.sold}/${roll.total} ยูนิต`, icon: Building, color: KK.green },
+    ];
+
     const filtered = props
       .filter((p) => !search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.developer || '').toLowerCase().includes(search.toLowerCase()))
       .map((p) => ({ p, roll: rollUp(unitsByProject.get(p.id) || []) }))
@@ -573,6 +605,29 @@ const OwnerProjects = () => {
                 <KpiCard title="โควต้าโครงการ" value={projectQuota(props.length, tenant?.subscription_plan || '').text} sub="โครงการที่ใช้ / ลิมิตแพ็กเกจ" icon={TrendingUp} color={KK.red} bg={KK.redLight} />
                 <KpiCard title="ใช้งานล่าสุด" value={fmtRelative(roll.lastUpdated)} sub="อัปเดตข้อมูลครั้งล่าสุด" icon={Clock} color={KK.green} bg={KK.greenLight} />
               </div>
+
+              {/* ปัจจัยการขาย — descriptive sales-factor profile for this company */}
+              {tUnits.length > 0 && (
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="w-4 h-4 flex-shrink-0" style={{ color: KK.red }} />
+                    <h2 className="text-base font-bold text-gray-900">ปัจจัยการขาย</h2>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-4">โปรไฟล์ประกอบการพิจารณา — ปัจจัยภายในระบบ (ทำเล/ราคา/ประเภท/ทีมขาย) ไม่ใช่ข้อสรุปว่าขายดีเพราะปัจจัยใดปัจจัยหนึ่ง · แบรนด์/การตลาด/เศรษฐกิจ อยู่นอกระบบ</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {saleFactors.map((f) => (
+                      <div key={f.label} className="rounded-xl bg-gray-50 p-3.5">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <f.icon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: f.color }} />
+                          <span className="text-xs font-medium text-gray-500">{f.label}</span>
+                        </div>
+                        <p className="text-base font-bold text-gray-900 tabular-nums leading-tight truncate" title={typeof f.value === 'string' ? f.value : undefined}>{f.value}</p>
+                        <p className="text-xs text-gray-400 mt-0.5 truncate" title={f.sub}>{f.sub}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Projects grid */}
               <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">

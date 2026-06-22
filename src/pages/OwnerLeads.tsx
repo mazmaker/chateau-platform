@@ -505,10 +505,10 @@ const OwnerLeads = () => {
   const winRate = closedLeads.length > 0 ? Math.round((wonLeads.length / closedLeads.length) * 100) : null;
 
   const kpis = [
-    { title: 'ผู้สนใจทั้งหมด', value: leads.length.toLocaleString(), sub: 'บริษัท Developer', icon: Users, color: KK.blue, bg: KK.blueLight },
+    { title: 'บริษัทที่สนใจ', value: leads.length.toLocaleString(), sub: 'บริษัท Developer', icon: Users, color: KK.blue, bg: KK.blueLight },
     { title: 'กำลังดำเนินการ', value: openLeads.length.toLocaleString(), sub: 'ยังไม่ปิด', icon: TrendingUp, color: KK.orange, bg: KK.orangeLight },
     { title: 'ปิดดีลสำเร็จ', value: wonLeads.length.toLocaleString(), sub: winRate !== null ? `Win Rate ${winRate}%` : 'ยังไม่มีดีลปิด', icon: Trophy, color: KK.green, bg: KK.greenLight },
-    { title: 'มูลค่า Pipeline', value: formatCurrency(pipelineMrr), sub: 'MRR คาดการณ์ (ยังไม่ปิด)', icon: Building2, color: KK.red, bg: KK.redLight },
+    { title: 'มูลค่า Pipeline (MRR)', value: formatCurrency(pipelineMrr), sub: 'MRR คาดการณ์ (ยังไม่ปิด)', icon: Building2, color: KK.red, bg: KK.redLight },
   ];
 
   return (

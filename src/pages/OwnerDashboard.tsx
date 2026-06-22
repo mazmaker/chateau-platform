@@ -58,6 +58,7 @@ interface DashboardStats {
 
 interface RevenueData {
   month: string;
+  fullLabel: string;
   revenue: number;
   arr: number;
   tenants: number;
@@ -125,6 +126,14 @@ const OwnerDashboard = () => {
   const [cancelledLast30DayNames, setCancelledLast30DayNames] = useState<string[]>([]);
   const [suspendedTenantNames, setSuspendedTenantNames] = useState<string[]>([]);
   const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
+  const [trendWindow, setTrendWindow] = useState<3 | 6 | 12>(6);
+  const [rawTenants, setRawTenants] = useState<any[]>([]);
+  const [rawPaidInvoices, setRawPaidInvoices] = useState<any[]>([]);
+  const [arr12mAgo, setArr12mAgo] = useState<number>(0);
+  const [retentionMonth, setRetentionMonth] = useState<string>(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
+  });
   const [revenueByPlan, setRevenueByPlan] = useState<{
     enterprise: number;
     professional: number;
@@ -145,6 +154,7 @@ const OwnerDashboard = () => {
   // Incremented after every completed fetch (background or foreground) so the cache-save
   // useEffect fires with fully-settled React state, not stale closure values.
   const [fetchSeq, setFetchSeq] = useState(0);
+  const [showAllActions, setShowAllActions] = useState(false);
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
@@ -196,6 +206,8 @@ const OwnerDashboard = () => {
         // Fetch paid invoices + AR invoices in parallel — one round-trip instead of three.
         const sixMonthsAgo = new Date();
         sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        const twelveMonthsAgo = new Date();
+        twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
 
         const [{ data: paidInvoices }, { data: openInvoices }, { data: planRows }] = await Promise.all([
           supabase.from('invoices').select('tenant_id, amount, paid_at, created_at').eq('status', 'paid'),
@@ -305,6 +317,25 @@ const OwnerDashboard = () => {
         }).slice(0, 5);
 
         setAtRiskTenants(atRisk);
+        setRawTenants(tenantList);
+        setRawPaidInvoices(paidInvoices || []);
+
+        // ARR run-rate for same month last year — proper 12-month YoY baseline
+        const now = new Date();
+        const lyStart = new Date(now.getFullYear() - 1, now.getMonth(), 1);
+        const lyEnd   = new Date(now.getFullYear() - 1, now.getMonth() + 1, 0, 23, 59, 59);
+        const lyRates = new Map<string, number>();
+        const lyTimes = new Map<string, number>();
+        (paidInvoices || []).forEach((inv: any) => {
+          const t = new Date(inv.paid_at || inv.created_at).getTime();
+          if (t > lyEnd.getTime()) return;
+          if (!lyTimes.has(inv.tenant_id) || t > (lyTimes.get(inv.tenant_id) as number)) {
+            lyTimes.set(inv.tenant_id, t);
+            lyRates.set(inv.tenant_id, Number(inv.amount));
+          }
+        });
+        setArr12mAgo(Array.from(lyRates.values()).reduce((s, a) => s + a, 0) * 12);
+
         setCancelledTenantNames(tenantList.filter(t => t.status === 'cancelled').map(t => t.name || t.id));
         setCancelledLast30DayNames(tenantList.filter(t => t.status === 'cancelled' && (t as any).cancelled_at && new Date((t as any).cancelled_at) >= last30Start).map(t => t.name || t.id));
         setSuspendedTenantNames(tenantList.filter(t => t.status === 'suspended').map(t => t.name || t.id));
@@ -315,13 +346,13 @@ const OwnerDashboard = () => {
         const currentYear = new Date().getFullYear();
         const revenueTrend: RevenueData[] = [];
 
-        // historicalInvoices = last-6-months subset of paidInvoices — no extra DB call needed
+        // historicalInvoices = last-12-months subset of paidInvoices — no extra DB call needed
         const historicalInvoices = (paidInvoices || []).filter(inv => {
           const d = new Date(inv.paid_at || inv.created_at);
-          return d >= sixMonthsAgo;
+          return d >= twelveMonthsAgo;
         });
 
-        for (let i = 5; i >= 0; i--) {
+        for (let i = 11; i >= 0; i--) {
           const monthIndex = (currentMonth - i + 12) % 12;
           const year = currentMonth - i < 0 ? currentYear - 1 : currentYear;
           const monthName = months[monthIndex];
@@ -361,6 +392,7 @@ const OwnerDashboard = () => {
 
           revenueTrend.push({
             month: monthName,
+            fullLabel: `${monthName} ${year}`,
             revenue: monthRevenue,
             arr: i === 0 ? mrr * 12 : mrrAtMonth * 12,
             tenants: uniqueTenants
@@ -507,6 +539,10 @@ const OwnerDashboard = () => {
     }).format(amount);
   };
 
+  // All-time trial → paid conversion — computed directly, no period filter needed
+  const trialPool = stats.activeTenants + stats.cancelledTenants;
+  const trialConvPct = trialPool > 0 ? Math.round((stats.activeTenants / trialPool) * 100) : null;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -517,6 +553,27 @@ const OwnerDashboard = () => {
       </div>
     );
   }
+
+  // Retention month selector — last 6 months as pills
+  const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  const retMonthOptions = (() => {
+    const n = new Date();
+    return Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(n.getFullYear(), n.getMonth() - i, 1);
+      return {
+        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        label: thaiMonths[d.getMonth()] + ` ${d.getFullYear()}`,
+      };
+    });
+  })();
+  const [retY, retM] = retentionMonth.split('-').map(Number);
+  const displayRevHealth = rawTenants.length > 0 && rawPaidInvoices.length > 0
+    ? computeRevenueHealth(
+        (rawTenants as any[]).map((t) => ({ id: t.id, status: t.status, name: t.name })),
+        rawPaidInvoices,
+        new Date(retY, retM - 1, 28),
+      )
+    : { nrr: revHealth.nrr, grr: revHealth.grr, revenueChurn: revHealth.revenueChurn };
 
   // Soft luxury palette — matches Executive Dashboard / My Dashboard for consistency
   const KK = {
@@ -549,19 +606,13 @@ const OwnerDashboard = () => {
   // RED — immediate action required
   if (arSummary.overdue > 0)
     actionItems.push({ tone: 'red', title: `Overdue ${fmtCompact(arSummary.overdue)} · ${arSummary.overdueCount} ใบ → เร่งรับเงิน`, sub: 'ใบแจ้งหนี้เกินกำหนดชำระ · รอการชำระ', href: '/payments?tab=invoices' });
-  if (cancelledTenantNames.length > 0)
-    actionItems.push({ tone: 'red', title: `${cancelledTenantNames.length} บริษัทยกเลิกแล้ว`, sub: cancelledTenantNames.slice(0, 3).join(', ') + (cancelledTenantNames.length > 3 ? ` +${cancelledTenantNames.length - 3}` : ''), href: '/owner-health' });
   if (suspendedTenantNames.length > 0)
-    actionItems.push({ tone: 'red', title: `${suspendedTenantNames.length} บริษัทถูกระงับ → ติดตาม`, sub: suspendedTenantNames.slice(0, 3).join(', '), href: '/owner-health' });
-  if (stats.churnRate > 5)
-    actionItems.push({ tone: 'red', title: `อัตราเลิกใช้สูง ${stats.churnRate}% → วิเคราะห์สาเหตุ`, sub: 'เกินเกณฑ์ปกติ 5% · ต้องหาสาเหตุและแก้ไข', href: '/owner-health' });
+    actionItems.push({ tone: 'red', title: `${suspendedTenantNames.length} บริษัทถูกระงับ → ติดต่อก่อนยกเลิก`, sub: suspendedTenantNames.slice(0, 3).join(', '), href: '/owner-health' });
   licenseUtil.nearLimitDetails.forEach(d =>
     actionItems.push({ tone: 'red', title: `${d.name} — โควตาพนักงาน ${d.pct}% → Upsell`, sub: 'โอกาส Expansion Revenue · เสนออัปเกรดแพ็กเกจ', href: '/tenants' })
   );
 
   // AMBER — watch and act soon
-  if (arSummary.pending > 0)
-    actionItems.push({ tone: 'amber', title: `Pending ${fmtCompact(arSummary.pending)} · ${arSummary.pendingCount} ใบ → ติดตาม`, sub: 'ใบแจ้งหนี้รอชำระ · ยังอยู่ในกำหนด', href: '/payments?tab=invoices' });
   licenseUtil.notOnboardedNames.forEach(name =>
     actionItems.push({ tone: 'amber', title: `${name} — ยังไม่มีพนักงานในระบบ`, sub: 'เสี่ยง Churn · ต้องช่วย Onboarding', href: '/tenants' })
   );
@@ -571,18 +622,15 @@ const OwnerDashboard = () => {
   if (trialEndingSoon.length > 0)
     actionItems.push({ tone: 'amber', title: `${trialEndingSoon.length} บริษัท Trial ใกล้หมด → ปิดการขาย`, sub: trialEndingSoon.map(t => t.name || t.id).slice(0, 2).join(', '), href: '/owner-health' });
 
-  // GREEN — positive signals (always show so CEO sees full picture)
+  // Low platform engagement — only surface when it's a problem (an action), not as a standing metric.
   const loginRatio = activeUsers.total > 0 ? activeUsers.active7d / activeUsers.total : 0;
-  const loginTone: 'red' | 'amber' | 'green' = loginRatio >= 0.5 ? 'green' : loginRatio >= 0.2 ? 'amber' : 'red';
-  actionItems.push({ tone: loginTone, title: `Active Logins (7 วัน): ${activeUsers.total > 0 ? `${activeUsers.active7d} / ${activeUsers.total} คน` : '—'}`, sub: `${activeUsers.active30d} คน active ใน 30 วัน · ยิ่งสูง = แพลตฟอร์มขาดไม่ได้`, href: '/owner-health' });
-  if (licenseUtil.nearLimit === 0 && licenseUtil.notOnboarded === 0 && licenseUtil.totalActive > 0)
-    actionItems.push({ tone: 'green', title: 'License Utilization — ทุกบริษัทอยู่ในเกณฑ์', sub: `เฉลี่ย ${licenseUtil.avgPct}% · ยังมี slot ว่าง`, href: '/tenants' });
+  if (activeUsers.total > 0 && loginRatio < 0.5)
+    actionItems.push({ tone: loginRatio < 0.2 ? 'red' : 'amber', title: `การใช้งานต่ำ ${activeUsers.active7d}/${activeUsers.total} คน → กระตุ้นการใช้งาน`, sub: `active 7 วันแค่ ${Math.round(loginRatio * 100)}% · เสี่ยง Churn`, href: '/owner-health' });
 
   // Derived SaaS health metrics — no extra queries, all computed from stats above.
   const arr = stats.monthlyRevenue * 12;
   const arpu = stats.activeTenants > 0 ? Math.round(stats.monthlyRevenue / stats.activeTenants) : 0;
-  const trialPool = stats.activeTenants + stats.cancelledTenants; // ever-started (trial → active OR cancelled)
-  const trialConvPct = trialPool > 0 ? Math.round((stats.activeTenants / trialPool) * 100) : null;
+  const arrYoY = arr12mAgo > 0 ? Math.round((arr - arr12mAgo) / arr12mAgo * 100) : null;
   const saasKpis2 = [
     {
       title: 'ARR (รายได้ต่อปี)',
@@ -590,7 +638,9 @@ const OwnerDashboard = () => {
       icon: CreditCard,
       color: KK.red,
       bg: KK.redLight,
-      sub: `MRR × 12 · YTD รวม ${fmtCompact(stats.annualRunRate)}`,
+      trend: arrYoY !== null ? { value: Math.abs(arrYoY), up: arrYoY >= 0 } : undefined,
+      trendLabel: 'YoY',
+      sub: `YTD รวม ${fmtCompact(stats.annualRunRate)}`,
       spark: revenueData.map((d) => ({ m: d.month, v: d.arr })),
       sparkId: 'arr',
       sparkLabel: 'ARR',
@@ -630,7 +680,7 @@ const OwnerDashboard = () => {
       {k.trend ? (
         <>
           <p className="text-sm mt-3.5 font-semibold" style={{ color: k.invertTrend ? (k.trend.up ? KK.red : KK.green) : (k.trend.up ? KK.green : KK.red) }}>
-            {k.trend.up ? '↗' : '↘'} {k.trend.value}%<span className="font-normal text-gray-400"> MoM</span>
+            {k.trend.up ? '↗' : '↘'} {k.trend.value}%<span className="font-normal text-gray-400"> {k.trendLabel || 'MoM'}</span>
           </p>
           {k.sub && <p className="text-xs text-gray-400 mt-0.5 truncate">{k.sub}</p>}
         </>
@@ -668,10 +718,18 @@ const OwnerDashboard = () => {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               {[
                 { label: 'รายได้ค่าเช่า/เดือน (MRR)', value: formatCurrency(stats.monthlyRevenue), trend: mkTrend(stats.mrrGrowth), icon: Receipt, color: KK.red, href: '/payments' },
-                ...saasKpis2.slice(0, 2).map((k) => ({ label: k.title, value: k.value, trend: (k as any).trend, icon: k.icon, color: k.color, href: k.href, sub: k.sub })),
+                ...saasKpis2.slice(0, 2).map((k) => ({ label: k.title, value: k.value, trend: (k as any).trend, trendLabel: (k as any).trendLabel, icon: k.icon, color: k.color, href: k.href, sub: k.sub })),
                 { label: 'อัตราเลิกใช้ (Churn) · 30 วัน', value: `${stats.churnRate}%`, icon: TrendingDown, color: stats.churnRate > 5 ? KK.red : stats.churnRate > 0 ? KK.amber : KK.green, href: '/owner-health', trend: mkTrend(stats.churnRate - stats.churnLastMonth), invertTrend: true },
-                ...saasKpis2.slice(2).map((k) => ({ label: k.title, value: k.value, trend: (k as any).trend, icon: k.icon, color: k.color, href: k.href, sub: k.sub })),
               ].map(renderKpiCard)}
+              {/* Trial → Paid Conversion — all-time */}
+              {renderKpiCard({
+                label: 'Trial → Paid Conversion',
+                value: trialConvPct !== null ? `${trialConvPct}%` : '—',
+                sub: `สะสมตั้งแต่เปิด · ซื้อ ${stats.activeTenants} · ยกเลิก ${stats.cancelledTenants}`,
+                icon: trialConvPct !== null && trialConvPct >= 60 ? CheckCircle : AlertCircle,
+                color: trialConvPct === null ? KK.gray : trialConvPct >= 60 ? KK.green : trialConvPct >= 40 ? KK.amber : KK.red,
+                href: '/owner-health',
+              }, 99)}
             </div>
 
             {/* ── HERO CHARTS: MRR + Donut ── */}
@@ -685,12 +743,20 @@ const OwnerDashboard = () => {
                 <div className="flex items-start justify-between mb-1">
                   <div>
                     <h2 className="text-base font-bold text-gray-900">แนวโน้มรายได้ (MRR)</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">6 เดือนที่ผ่านมา · รวมทุกแพ็กเกจ · คลิกดูรายละเอียด →</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{trendWindow} เดือนที่ผ่านมา · รวมทุกแพ็กเกจ · คลิกดูรายละเอียด →</p>
                   </div>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: KK.red, backgroundColor: KK.redLight }}>6 เดือน</span>
+                  <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                    {([3, 6, 12] as const).map((w) => (
+                      <button key={w} onClick={() => setTrendWindow(w)}
+                        className="text-xs font-semibold px-2.5 py-1 rounded-full transition-colors"
+                        style={trendWindow === w ? { color: '#fff', backgroundColor: KK.red } : { color: KK.red, backgroundColor: KK.redLight }}>
+                        {w} เดือน
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <ResponsiveContainer width="100%" height={200}>
-                  <AreaChart data={revenueData} margin={{ top: 10, right: 8, left: -10, bottom: 0 }}>
+                  <AreaChart data={revenueData.slice(-trendWindow)} margin={{ top: 10, right: 8, left: -10, bottom: 0 }}>
                     <defs>
                       <linearGradient id="ownerRevGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%"  stopColor={KK.red} stopOpacity={0.35} />
@@ -700,11 +766,9 @@ const OwnerDashboard = () => {
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                     <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: KK.red + '99' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                    <Tooltip contentStyle={kkTooltipStyle} cursor={{ stroke: KK.red, strokeWidth: 1, strokeDasharray: '4 4' }} formatter={((v: any) => [formatCurrency(Number(v ?? 0)), 'MRR']) as any} />
+                    <Tooltip contentStyle={kkTooltipStyle} cursor={{ stroke: KK.red, strokeWidth: 1, strokeDasharray: '4 4' }} labelFormatter={(_, payload) => (payload?.[0]?.payload as any)?.fullLabel || ''} formatter={((v: any) => [formatCurrency(Number(v ?? 0)), 'MRR']) as any} />
                     <Area type="monotone" dataKey="revenue" stroke={KK.red} strokeWidth={2.5} fill="url(#ownerRevGrad)" dot={false} activeDot={{ r: 4, fill: KK.red, stroke: '#fff', strokeWidth: 2 }} animationDuration={1300} animationEasing="ease-in-out" />
-                    {revenueData.length > 0 && (
-                      <ReferenceDot x={revenueData[revenueData.length - 1].month} y={revenueData[revenueData.length - 1].revenue} r={5} fill={KK.red} stroke="#fff" strokeWidth={2} />
-                    )}
+                    {revenueData.length > 0 && (() => { const d = revenueData.slice(-trendWindow); return d.length > 0 ? <ReferenceDot x={d[d.length - 1].month} y={d[d.length - 1].revenue} r={5} fill={KK.red} stroke="#fff" strokeWidth={2} /> : null; })()}
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -752,7 +816,7 @@ const OwnerDashboard = () => {
                         </div>
                         {(revenueByPlan.enterprise + revenueByPlan.professional + revenueByPlan.starter) > 0 && (
                           <div className="mt-3 pt-3 border-t border-gray-100">
-                            <p className="text-xs font-semibold text-gray-400 mb-2">รายได้ตาม Plan</p>
+                            <p className="text-xs font-semibold text-gray-400 mb-2">รายได้ตาม Plan <span className="font-normal">(ต่อเดือน)</span></p>
                             <div className="space-y-2">
                               {[
                                 { plan: 'Enterprise', rev: revenueByPlan.enterprise, color: KK.red },
@@ -782,38 +846,70 @@ const OwnerDashboard = () => {
             {/* Retention summary + action queue — side by side to keep the page compact */}
             <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-6">
             {/* Revenue retention summary — headline only; full view in Payments › สุขภาพรายได้ */}
-            <div
-              className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 cursor-pointer hover:shadow-soft-md transition-shadow duration-200 flex flex-col"
-              onClick={() => navigate('/payments?tab=revenue-health')}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <RefreshCw className="w-4 h-4" style={{ color: KK.green }} />
-                  <h2 className="text-base font-bold text-gray-900">สุขภาพรายได้ (Retention)</h2>
+            <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex flex-col">
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4" style={{ color: KK.green }} />
+                    <h2 className="text-base font-bold text-gray-900">สุขภาพรายได้ (Retention)</h2>
+                  </div>
+                  <button onClick={() => navigate('/payments?tab=revenue-health')} className="text-xs font-semibold flex items-center gap-1 hover:opacity-70 transition-opacity" style={{ color: KK.red }}>
+                    ดูรายละเอียด <ChevronRight className="w-3 h-3" />
+                  </button>
                 </div>
-                <span className="text-xs font-semibold flex items-center gap-1" style={{ color: KK.red }}>
-                  ดูรายละเอียด <ChevronRight className="w-3 h-3" />
-                </span>
+                <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                  <select
+                    value={retentionMonth}
+                    onChange={(e) => { e.stopPropagation(); setRetentionMonth(e.target.value); }}
+                    className="text-xs font-semibold border rounded-lg px-2 py-1 bg-white cursor-pointer focus:outline-none focus:ring-1"
+                    style={{ color: '#111827', borderColor: '#d1d5db' }}
+                  >
+                    {retMonthOptions.map(({ key, label }) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              {/* Retention donut — เก็บไว้ได้ (GRR) vs หายไป (Churn); NRR ตรงกลาง */}
+              {/* Retention bars — GRR / NRR / Revenue Churn for selected month */}
               <div className="flex-1 flex items-center">
-              {revHealth.nrr == null ? (
+              {displayRevHealth.nrr == null ? (
                 <p className="text-sm text-gray-400 py-4">ยังไม่มีฐานข้อมูลเทียบเดือนก่อน</p>
               ) : (() => {
-                const grr = Math.max(0, Math.round(revHealth.grr ?? 0));
-                const churn = Math.max(0, Math.round(revHealth.revenueChurn ?? 0));
-                const nrr = Math.round(revHealth.nrr ?? 0);
+                const grr = Math.max(0, Math.round(displayRevHealth.grr ?? 0));
+                const churn = Math.max(0, Math.round(displayRevHealth.revenueChurn ?? 0));
+                const nrr = Math.round(displayRevHealth.nrr ?? 0);
                 const bars = [
-                  { label: 'NRR', sub: 'รายได้คงเหลือสุทธิ', v: nrr, color: KK.red, target: '≥100% = โตจากลูกค้าเดิม' },
-                  { label: 'GRR', sub: 'คงเหลือขั้นต่ำ', v: grr, color: KK.red, target: 'รายได้เดิมที่รักษาไว้ได้' },
-                  { label: 'Revenue Churn', sub: 'รายได้ที่หาย', v: churn, color: KK.red, target: 'ยิ่งต่ำยิ่งดี' },
+                  {
+                    label: 'อัตราการรักษารายได้', abbr: 'NRR',
+                    v: nrr,
+                    color: nrr >= 100 ? KK.green : nrr >= 80 ? KK.amber : KK.red,
+                    target: nrr >= 100
+                      ? `รายได้จากลูกค้าเดิมเติบโตสุทธิ`
+                      : `รายได้จากลูกค้าเดิมลดลงเหลือ ${nrr}%`,
+                  },
+                  {
+                    label: 'ลูกค้าเดิมยังจ่ายอยู่', abbr: 'GRR',
+                    v: grr,
+                    color: grr >= 90 ? KK.green : grr >= 75 ? KK.amber : KK.red,
+                    target: grr >= 90
+                      ? `ลูกค้าเดิมยังคงใช้งานและชำระเงินครบ`
+                      : `ลูกค้าเดิมที่ยังจ่ายอยู่คิดเป็น ${grr}% ของฐานรายได้`,
+                  },
+                  {
+                    label: 'รายได้ที่หายต่อเดือน', abbr: 'Revenue Churn',
+                    v: churn,
+                    color: churn <= 5 ? KK.green : churn <= 15 ? KK.amber : KK.red,
+                    target: churn <= 5
+                      ? `อัตราสูญเสียรายได้อยู่ในเกณฑ์ปกติ`
+                      : `สูญเสียรายได้ ${churn}% ในเดือนนี้`,
+                  },
                 ];
                 return (
                   <div className="w-full space-y-4">
                     {bars.map((m, i) => (
                       <div key={i}>
                         <div className="flex items-baseline justify-between mb-1.5">
-                          <span className="text-sm font-medium text-gray-700">{m.label} <span className="text-xs text-gray-400 font-normal">· {m.sub}</span></span>
+                          <span className="text-sm font-medium text-gray-700">{m.label} <span className="text-xs text-gray-400 font-normal">· {m.abbr}</span></span>
                           <span className="text-lg font-bold tabular-nums leading-none" style={{ color: m.color }}>{m.v}%</span>
                         </div>
                         <div className="h-3 rounded-full bg-gray-100 overflow-hidden">
@@ -843,14 +939,21 @@ const OwnerDashboard = () => {
                     {actionItems.filter(a => a.tone === 'amber').length} ต้องติดตาม
                   </span>
                 )}
-                {actionItems.every(a => a.tone === 'green') && (
+                {actionItems.length === 0 && (
                   <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: KK.greenLight, color: KK.green }}>
                     ทุกอย่างปกติ
                   </span>
                 )}
               </div>
               <div className="divide-y divide-gray-50">
-                {actionItems.slice(0, 5).map((item, i) => (
+                {actionItems.length === 0 && (
+                  <div className="px-4 py-8 flex flex-col items-center justify-center text-center">
+                    <CheckCircle className="w-8 h-8 mb-2" style={{ color: KK.green }} />
+                    <span className="text-sm font-semibold text-gray-700">ไม่มีรายการที่ต้องดำเนินการ</span>
+                    <span className="text-xs text-gray-400 mt-0.5">ทุกอย่างอยู่ในเกณฑ์ปกติ</span>
+                  </div>
+                )}
+                {(showAllActions ? actionItems : actionItems.slice(0, 5)).map((item, i) => (
                   <button key={i} onClick={() => navigate(item.href)}
                     className="w-full px-4 py-2.5 flex items-center gap-3 bg-white hover:bg-gray-50 transition-colors text-left">
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ background: item.tone === 'red' ? KK.red : item.tone === 'amber' ? KK.amber : KK.green }} />
@@ -863,10 +966,12 @@ const OwnerDashboard = () => {
                 ))}
               </div>
               {actionItems.length > 5 && (
-                <button onClick={() => navigate('/owner-health')}
+                <button onClick={() => setShowAllActions(v => !v)}
                   className="w-full px-4 py-2.5 flex items-center justify-center gap-1.5 border-t border-gray-100 hover:bg-gray-50 transition-colors group">
-                  <span className="text-xs font-semibold text-gray-500 group-hover:text-gray-700">ดูทั้งหมด {actionItems.length} รายการ</span>
-                  <ChevronRight className="w-3 h-3 text-gray-400 group-hover:text-gray-600" />
+                  <span className="text-xs font-semibold text-gray-500 group-hover:text-gray-700">
+                    {showAllActions ? 'ย่อลง' : `ดูทั้งหมด ${actionItems.length} รายการ`}
+                  </span>
+                  <ChevronRight className={`w-3 h-3 text-gray-400 group-hover:text-gray-600 transition-transform ${showAllActions ? 'rotate-90' : ''}`} />
                 </button>
               )}
             </div>
