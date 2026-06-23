@@ -52,6 +52,7 @@ import {
   BarChart3,
   Settings as SettingsIcon,
   Package,
+  Phone,
   Info,
   Ban,
   Clock,
@@ -90,6 +91,7 @@ interface Tenant {
   billing_email?: string;
   billing_phone?: string;
   tax_id?: string;
+  email?: string;
 }
 
 interface TenantStats {
@@ -173,6 +175,25 @@ const TenantManagement = () => {
 
   // Compute selectedTenant based on URL parameter instead of state
   const selectedTenantFromUrl = tenants.find(tenant => tenant.id === tenantId) || null;
+
+  // Open the edit dialog pre-filled from the URL-detail tenant (shared by the แก้ไข button + contact card)
+  const openEditFromUrl = () => {
+    if (!selectedTenantFromUrl) return;
+    setSelectedTenant(selectedTenantFromUrl);
+    setFormData({
+      name: selectedTenantFromUrl.name,
+      slug: selectedTenantFromUrl.slug || '',
+      status: selectedTenantFromUrl.status,
+      subscription_plan: selectedTenantFromUrl.subscription_plan,
+      max_properties: Number(selectedTenantFromUrl.max_properties) || 0,
+      max_users: Number(selectedTenantFromUrl.max_users) || 0,
+      billing_address: selectedTenantFromUrl.billing_address || '',
+      billing_email: selectedTenantFromUrl.billing_email || '',
+      billing_phone: selectedTenantFromUrl.billing_phone || '',
+      tax_id: selectedTenantFromUrl.tax_id || ''
+    });
+    setShowEditDialog(true);
+  };
 
   // Handle invalid tenant ID in URL
   useEffect(() => {
@@ -1595,22 +1616,7 @@ const TenantManagement = () => {
                         </div>
 
                         <div className="flex gap-2 ml-6">
-                          <Button variant="outline" size="sm" onClick={() => {
-                            setSelectedTenant(selectedTenantFromUrl);
-                            setFormData({
-                              name: selectedTenantFromUrl.name,
-                              slug: selectedTenantFromUrl.slug || '',
-                              status: selectedTenantFromUrl.status,
-                              subscription_plan: selectedTenantFromUrl.subscription_plan,
-                              max_properties: Number(selectedTenantFromUrl.max_properties) || 0,
-                              max_users: Number(selectedTenantFromUrl.max_users) || 0,
-                              billing_address: selectedTenantFromUrl.billing_address || '',
-                              billing_email: selectedTenantFromUrl.billing_email || '',
-                              billing_phone: selectedTenantFromUrl.billing_phone || '',
-                              tax_id: selectedTenantFromUrl.tax_id || ''
-                            });
-                            setShowEditDialog(true);
-                          }}>
+                          <Button variant="outline" size="sm" onClick={openEditFromUrl}>
                             <Edit className="w-4 h-4 mr-2" />
                             แก้ไข
                           </Button>
@@ -1712,55 +1718,55 @@ const TenantManagement = () => {
                       </CardContent>
                     </Card>
 
-                    {/* Billing Information */}
-                    {(selectedTenantFromUrl.billing_email || selectedTenantFromUrl.billing_address) ? (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="flex items-center gap-2">
-                            <CreditCard className="w-5 h-5" />
-                            ข้อมูลการเรียกเก็บเงิน
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          {selectedTenantFromUrl.billing_email && (
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium text-muted-foreground">อีเมลสำหรับเรียกเก็บเงิน</p>
-                              <p className="font-medium">{selectedTenantFromUrl.billing_email}</p>
-                            </div>
-                          )}
-                          {selectedTenantFromUrl.billing_address && (
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium text-muted-foreground">ที่อยู่สำหรับเรียกเก็บเงิน</p>
-                              <p className="font-medium">{selectedTenantFromUrl.billing_address}</p>
-                            </div>
-                          )}
-                          {selectedTenantFromUrl.billing_phone && (
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium text-muted-foreground">เบอร์โทร</p>
-                              <p className="font-medium">{selectedTenantFromUrl.billing_phone}</p>
-                            </div>
-                          )}
-                          {selectedTenantFromUrl.tax_id && (
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium text-muted-foreground">เลขประจำตัวผู้เสียภาษี</p>
-                              <p className="font-medium">{selectedTenantFromUrl.tax_id}</p>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ) : (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="flex items-center gap-2">
-                            <Clock className="w-5 h-5" />
-                            กิจกรรมล่าสุด
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <p className="text-sm text-muted-foreground">ไม่มีกิจกรรมบันทึกไว้</p>
-                        </CardContent>
-                      </Card>
-                    )}
+                    {/* Contact Information — always visible (retention follow-up needs phone/email) */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Phone className="w-5 h-5" />
+                          ข้อมูลติดต่อ
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {(() => {
+                          const phone = selectedTenantFromUrl.billing_phone;
+                          const email = selectedTenantFromUrl.email || selectedTenantFromUrl.billing_email;
+                          const address = selectedTenantFromUrl.billing_address;
+                          const taxId = selectedTenantFromUrl.tax_id;
+                          if (!phone && !email && !address && !taxId) {
+                            return (
+                              <p className="text-sm text-muted-foreground">
+                                ยังไม่มีข้อมูลติดต่อ ·{' '}
+                                <button onClick={openEditFromUrl} className="text-chateau font-medium hover:underline">
+                                  กดแก้ไขเพื่อเพิ่ม
+                                </button>
+                              </p>
+                            );
+                          }
+                          return (
+                            <>
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium text-muted-foreground">เบอร์โทร</p>
+                                <p className="font-medium">{phone || '—'}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium text-muted-foreground">อีเมล</p>
+                                <p className="font-medium break-all">{email || '—'}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium text-muted-foreground">ที่อยู่</p>
+                                <p className="font-medium">{address || '—'}</p>
+                              </div>
+                              {taxId && (
+                                <div className="space-y-1">
+                                  <p className="text-sm font-medium text-muted-foreground">เลขประจำตัวผู้เสียภาษี</p>
+                                  <p className="font-medium">{taxId}</p>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </CardContent>
+                    </Card>
                   </div>
 
                   {/* Payment History */}

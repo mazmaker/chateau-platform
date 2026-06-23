@@ -107,7 +107,7 @@ const OwnerSupport = () => {
                     </div>
                     <div>
                       <h1 className="text-2xl font-bold text-gray-900">Support</h1>
-                      <p className="text-sm text-gray-500">ติดตามและจัดการปัญหาที่ลูกค้าแจ้งเข้ามา</p>
+                      <p className="text-sm text-gray-500">ติดตามและจัดการปัญหาที่ผู้เช่าแจ้งเข้ามา</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">

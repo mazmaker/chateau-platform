@@ -108,7 +108,6 @@ const OwnerMarketOverview = () => {
   const { isOwner } = usePermissions();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [leadsModalOpen, setLeadsModalOpen] = useState(false);
   // Global period filter — strategic tier (trend-level, no single-day) — drives the KPI strip.
   const [period, setPeriod] = useState<PeriodKey>(DEFAULT_PERIOD.strategic);
 
@@ -122,6 +121,9 @@ const OwnerMarketOverview = () => {
   const [expandedCompany, setExpandedCompany] = useState<string | null>(null);
   const [expandedProvince, setExpandedProvince] = useState<string | null>(null);
   const [adoptionModalOpen, setAdoptionModalOpen] = useState(false);
+  const [adoptionSearch, setAdoptionSearch] = useState('');
+  const [depthModalOpen, setDepthModalOpen] = useState(false);
+  const [depthSearch, setDepthSearch] = useState('');
   // Customer-segment filter — scope the whole page to a plan / lifecycle status.
   const [segment, setSegment] = useState<'all' | 'active' | 'trial' | 'enterprise' | 'professional' | 'starter'>('all');
 
@@ -297,24 +299,24 @@ const OwnerMarketOverview = () => {
     return { total, sold, reserved, available, sellThrough: total ? Math.round((sold / total) * 100) : 0 };
   }, [scopedUnits]);
 
-  // Leads breakdown by tenant — period-scoped, for the popup modal.
-  const leadsByTenant = useMemo(() => {
-    const { from, to } = periodToRange(period);
-    const inRange = (ts: string | null) => {
-      if (!ts) return false;
-      const d = new Date(ts);
-      return (!from || d >= from) && d <= to;
+  // Depth-of-usage — how many units each customer manages in the platform (= data gravity /
+  // lock-in). Active tenants with little/no inventory loaded = shallow = churn risk.
+  const inventoryDepth = useMemo(() => {
+    const byTenant = new Map<string, number>();
+    scopedUnits.forEach((u) => byTenant.set(u.tenant_id, (byTenant.get(u.tenant_id) || 0) + 1));
+    const ids = new Set<string>(byTenant.keys());
+    tenantStatusById.forEach((s, id) => { if (s === 'active' && inScope(id)) ids.add(id); });
+    const rows = Array.from(ids)
+      .map((id) => ({ id, name: tenantNameById.get(id) || '–', status: tenantStatusById.get(id) || 'active', units: byTenant.get(id) || 0 }))
+      .sort((a, b) => b.units - a.units);
+    // 0 units = paid but hasn't set up yet → onboarding signal (NOT churn — count alone
+    // doesn't measure churn; a small company with few units is fine, see scope notes).
+    return {
+      notOnboarded: rows.filter((r) => r.status === 'active' && r.units === 0),
+      ranked: rows.filter((r) => !(r.status === 'active' && r.units === 0)),
     };
-    const agg = new Map<string, number>();
-    scopedLeads.filter((l) => inRange(l.created_at)).forEach((l) => {
-      agg.set(l.tenant_id, (agg.get(l.tenant_id) || 0) + 1);
-    });
-    const total = Array.from(agg.values()).reduce((s, n) => s + n, 0);
-    const rows = Array.from(agg.entries())
-      .map(([id, count]) => ({ id, name: tenantNameById.get(id) || '–', count, pct: total ? Math.round((count / total) * 100) : 0 }))
-      .sort((a, b) => b.count - a.count);
-    return { total, rows };
-  }, [scopedLeads, tenantNameById, period]);
+  }, [scopedUnits, tenantNameById, tenantStatusById, allowedTenantIds]);
+
 
   // Top provinces by sold value in the selected period (from properties.address->>'province').
   const topProvinces = useMemo<ProvinceRow[]>(() => {
@@ -433,7 +435,7 @@ const OwnerMarketOverview = () => {
               <div>
                 <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-2 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>Analytics</span>
                 <h1 className="text-2xl font-bold text-gray-900">ภาพรวมตลาด</h1>
-                <p className="text-sm text-gray-500 mt-1.5">ลูกค้า (บริษัทอสังหาฯ) ใช้แพลตฟอร์มทำธุรกรรมมากแค่ไหน — ยิ่งขายผ่านเรา ยิ่งขาดเราไม่ได้</p>
+                <p className="text-sm text-gray-500 mt-1.5">บริษัทผู้เช่า (อสังหาฯ) ใช้แพลตฟอร์มทำธุรกรรมมากแค่ไหน — ยิ่งขายผ่านเรา ยิ่งขาดเราไม่ได้</p>
               </div>
               <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
                 <select
@@ -441,9 +443,9 @@ const OwnerMarketOverview = () => {
                   onChange={(e) => setSegment(e.target.value as typeof segment)}
                   className="text-xs font-semibold border rounded-xl px-2.5 py-2 bg-white cursor-pointer focus:outline-none"
                   style={{ color: '#111827', borderColor: '#e5e7eb' }}
-                  title="กรองตามกลุ่มลูกค้า"
+                  title="กรองตามกลุ่มบริษัท"
                 >
-                  <option value="all">ลูกค้าทั้งหมด</option>
+                  <option value="all">บริษัททั้งหมด</option>
                   <option value="active">เฉพาะ Active</option>
                   <option value="trial">เฉพาะ Trial</option>
                   <option value="enterprise">แพ็กเกจ Enterprise</option>
@@ -454,16 +456,18 @@ const OwnerMarketOverview = () => {
               </div>
             </div>
 
-            {/* KPI strip — Owner lens: transaction volume + adoption flowing through the platform */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* KPI strip — Owner-native only: sales value, adoption, inventory depth.
+                (Leads moved out — leads/buyer analytics live in BUYER INTELLIGENCE / ภาพรวมผู้ซื้อ.) */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
-                { label: `มูลค่าธุรกรรมผ่านระบบ (${periodRangeLabel(period)})`, value: fmtCompact(reStats.gmv), trend: mkTrend(gmvDeltaPct), trendLabel: 'เทียบช่วงก่อน', icon: TrendingUp, color: KK.red, href: '/owner-market', sub: 'ยิ่งสูง = ลูกค้ายิ่งฝังระบบเรา' },
-                { label: `บริษัทที่มีธุรกรรม (${periodRangeLabel(period)})`, value: reStats.activeTenants > 0 ? `${reStats.transacting}/${reStats.activeTenants}` : '—', icon: Building, color: KK.blue, onClick: () => setAdoptionModalOpen(true), sub: adoptionBreakdown.dormant.length > 0 ? `⚠️ ${adoptionBreakdown.dormant.length} บริษัทจ่ายเงินแต่ไม่ใช้ · กดดู` : 'ลูกค้า active ที่ขายผ่านระบบจริง' },
-                { label: `ยูนิตขายผ่านระบบ (${periodRangeLabel(period)})`, value: reStats.units.toLocaleString(), icon: Layers, color: KK.purple, href: '/owner-inventory', sub: `จาก ${inventory.total.toLocaleString()} ยูนิตในระบบ` },
-                { label: `ผู้สนใจเข้าระบบ (${periodRangeLabel(period)})`, value: reStats.newLeads.toLocaleString(), icon: UserPlusIcon, color: KK.green, onClick: () => setLeadsModalOpen(true), sub: `สะสม ${scopedLeads.length.toLocaleString()} ราย` },
+                { label: `มูลค่าอสังหาฯ ที่ขายผ่านระบบ (${periodRangeLabel(period)})`, value: fmtCompact(reStats.gmv), trend: mkTrend(gmvDeltaPct), trendLabel: 'เทียบช่วงก่อน', icon: TrendingUp, color: KK.red, href: '/owner-companies' },
+                { label: `บริษัทที่ใช้งาน (${periodRangeLabel(period)})`, value: reStats.activeTenants > 0 ? `${reStats.transacting}/${reStats.activeTenants}` : '—', icon: Building, color: KK.blue, onClick: () => setAdoptionModalOpen(true), sub: adoptionBreakdown.dormant.length > 0 ? `⚠️ ${adoptionBreakdown.dormant.length} บริษัทจ่ายเงินแต่ไม่ใช้ · กดดู` : 'บริษัท active ที่ใช้งานระบบ' },
+                { label: 'ยูนิตในระบบ · ณ ปัจจุบัน', value: inventory.total.toLocaleString(), icon: Layers, color: KK.purple, onClick: () => setDepthModalOpen(true), sub: 'ยูนิตทั้งหมดที่บริษัทจัดการในระบบ · กดดูรายบริษัท' },
               ].map(renderKpiCard)}
             </div>
 
+            {/* Row 1: transaction trend (wide) + inventory snapshot (narrow) */}
+            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
             {/* GMV monthly bar chart (6 months) */}
             <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
               <div className="flex items-start justify-between mb-3">
@@ -498,17 +502,70 @@ const OwnerMarketOverview = () => {
                 <p className="text-sm text-gray-400 text-center py-12">ยังไม่มีข้อมูลยอดขาย</p>
               )}
             </div>
+            {/* Inventory snapshot donut — paired with the trend chart */}
+            <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex flex-col">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 flex-shrink-0" style={{ color: KK.blue }} />
+                  <div>
+                    <h2 className="text-base font-bold text-gray-900">สถานะยูนิตในระบบ</h2>
+                    <p className="text-xs text-gray-500 mt-0.5">ว่าง / จอง / ขายแล้ว · ณ ปัจจุบัน</p>
+                  </div>
+                </div>
+                <button onClick={() => navigate('/owner-inventory')} className="inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap" style={{ color: KK.red }}>
+                  ดูสต๊อก <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {inventory.total === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-10">ยังไม่มีข้อมูลยูนิต</p>
+              ) : (() => {
+                const mix = [
+                  { name: 'ว่าง', value: inventory.available, color: KK.blue },
+                  { name: 'จองแล้ว', value: inventory.reserved, color: KK.amber },
+                  { name: 'ขายแล้ว', value: inventory.sold, color: KK.green },
+                ].filter((s) => s.value > 0);
+                return (
+                  <div className="flex items-center gap-5 flex-1">
+                    <div className="relative flex-shrink-0" style={{ width: 150, height: 150 }}>
+                      <PieChart width={150} height={150}>
+                        <Pie data={mix} cx={72} cy={72} innerRadius={48} outerRadius={68} dataKey="value" strokeWidth={2} stroke="#fff" startAngle={90} endAngle={-270}>
+                          {mix.map((s, i) => <Cell key={i} fill={s.color} />)}
+                        </Pie>
+                      </PieChart>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <div className="text-2xl font-bold tabular-nums leading-none" style={{ color: KK.green }}>{inventory.sellThrough}%</div>
+                        <div className="text-xs text-gray-400 mt-1">Sell-through</div>
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-2.5">
+                      {mix.map((s) => (
+                        <div key={s.name} className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                          <span className="text-sm text-gray-500 flex-1">{s.name}</span>
+                          <span className="text-sm font-bold tabular-nums text-gray-800">{s.value.toLocaleString()}</span>
+                          <span className="text-xs text-gray-400 w-9 text-right">{Math.round((s.value / inventory.total) * 100)}%</span>
+                        </div>
+                      ))}
+                      <div className="pt-2 mt-1 border-t border-gray-100">
+                        <span className="text-xs text-gray-400">จาก {inventory.total.toLocaleString()} ยูนิตทั้งหมด</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+            </div>
 
-            {/* Top 5 companies (left) + Inventory mini-summary (right) */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Row 2: top customers (left) + geography zones (right) — both ranked lists */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
               {/* Top 5 companies — company-level only */}
               <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Trophy className="w-4 h-4 flex-shrink-0" style={{ color: KK.amber }} />
                     <div>
-                      <h2 className="text-base font-bold text-gray-900">ลูกค้าที่สร้างมูลค่าสูงสุด</h2>
-                      <p className="text-xs text-gray-500 mt-0.5">Top 5 · ได้ value จากระบบมากสุด ({periodRangeLabel(period)}) · กดดูปัจจัย</p>
+                      <h2 className="text-base font-bold text-gray-900">บริษัทที่ขายผ่านระบบมากสุด</h2>
+                      <p className="text-xs text-gray-500 mt-0.5">Top 5 · มูลค่าขายผ่านระบบมากสุด ({periodRangeLabel(period)}) · กดดูปัจจัย</p>
                     </div>
                   </div>
                   <button onClick={() => navigate('/owner-companies')} className="inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap" style={{ color: KK.red }}>
@@ -535,6 +592,14 @@ const OwnerMarketOverview = () => {
                                   <div className="flex items-center gap-1.5 min-w-0">
                                     <span className="text-sm font-semibold text-gray-800 truncate group-hover:text-gray-900">{c.name}</span>
                                     {(() => { const b = getBadge(tenantStatusById.get(c.id) || 'active'); return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ color: b.color, backgroundColor: b.bg }}>{b.label}</span>; })()}
+                                    {(() => {
+                                      const plan = tenantPlanById.get(c.id) || '';
+                                      if (!plan) return null;
+                                      const label = plan.charAt(0).toUpperCase() + plan.slice(1);
+                                      return (
+                                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 border whitespace-nowrap" style={{ color: '#e11d48', backgroundColor: '#fff', borderColor: '#fda4af' }}>{label}</span>
+                                      );
+                                    })()}
                                   </div>
                                   <div className="text-right flex-shrink-0">
                                     <span className="text-sm font-bold tabular-nums block" style={{ color: KK.red }}>{fmtCompact(c.soldValue)}</span>
@@ -591,70 +656,13 @@ const OwnerMarketOverview = () => {
                 })()}
               </div>
 
-              {/* Inventory mini-summary */}
-              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Layers className="w-4 h-4 flex-shrink-0" style={{ color: KK.blue }} />
-                    <div>
-                      <h2 className="text-base font-bold text-gray-900">สต๊อกในระบบ</h2>
-                      <p className="text-xs text-gray-500 mt-0.5">ข้อมูลที่ลูกค้าใส่ในระบบ = ความผูกพัน · ณ ปัจจุบัน</p>
-                    </div>
-                  </div>
-                  <button onClick={() => navigate('/owner-inventory')} className="inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap" style={{ color: KK.red }}>
-                    ดูสต๊อก <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                {inventory.total === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-10">ยังไม่มีข้อมูลยูนิต</p>
-                ) : (() => {
-                  const mix = [
-                    { name: 'ว่าง', value: inventory.available, color: KK.blue },
-                    { name: 'จองแล้ว', value: inventory.reserved, color: KK.amber },
-                    { name: 'ขายแล้ว', value: inventory.sold, color: KK.green },
-                  ].filter((s) => s.value > 0);
-                  return (
-                    <div className="flex items-center gap-5">
-                      {/* Donut — status mix; sell-through % in center */}
-                      <div className="relative flex-shrink-0" style={{ width: 150, height: 150 }}>
-                        <PieChart width={150} height={150}>
-                          <Pie data={mix} cx={72} cy={72} innerRadius={48} outerRadius={68} dataKey="value" strokeWidth={2} stroke="#fff" startAngle={90} endAngle={-270}>
-                            {mix.map((s, i) => <Cell key={i} fill={s.color} />)}
-                          </Pie>
-                        </PieChart>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                          <div className="text-2xl font-bold tabular-nums leading-none" style={{ color: KK.green }}>{inventory.sellThrough}%</div>
-                          <div className="text-xs text-gray-400 mt-1">Sell-through</div>
-                        </div>
-                      </div>
-                      {/* Legend */}
-                      <div className="flex-1 min-w-0 space-y-2.5">
-                        {mix.map((s) => (
-                          <div key={s.name} className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
-                            <span className="text-sm text-gray-500 flex-1">{s.name}</span>
-                            <span className="text-sm font-bold tabular-nums text-gray-800">{s.value.toLocaleString()}</span>
-                            <span className="text-xs text-gray-400 w-9 text-right">{Math.round((s.value / inventory.total) * 100)}%</span>
-                          </div>
-                        ))}
-                        <div className="pt-2 mt-1 border-t border-gray-100">
-                          <span className="text-xs text-gray-400">จาก {inventory.total.toLocaleString()} ยูนิตทั้งหมด</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-
-            {/* Top provinces */}
-            {topProvinces.length > 0 && (
+              {/* Geography zones — paired with the leaderboard (both ranked lists) */}
               <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <MapPin className="w-4 h-4 flex-shrink-0" style={{ color: KK.green }} />
                     <div>
-                      <h2 className="text-base font-bold text-gray-900">โซนฐานลูกค้า</h2>
+                      <h2 className="text-base font-bold text-gray-900">ยอดขายตามจังหวัด</h2>
                       <p className="text-xs text-gray-500 mt-0.5">Top 5 จังหวัดที่ธุรกรรมหนาแน่น · เป้าหมายหา developer รายใหม่</p>
                     </div>
                   </div>
@@ -690,7 +698,7 @@ const OwnerMarketOverview = () => {
                             </div>
                             {open && (
                               <div className="mx-2 mb-2 mt-1 rounded-xl bg-gray-50 border border-gray-100 p-3">
-                                <p className="text-xs font-semibold text-gray-500 mb-2">ลูกค้าที่ขายในจังหวัดนี้ ({cos.length})</p>
+                                <p className="text-xs font-semibold text-gray-500 mb-2">บริษัทที่ขายในจังหวัดนี้ ({cos.length})</p>
                                 <div className="space-y-1.5">
                                   {cos.map((c) => (
                                     <button key={c.id} onClick={(e) => { e.stopPropagation(); navigate(`/owner-projects/${c.id}`); }}
@@ -711,85 +719,136 @@ const OwnerMarketOverview = () => {
                   );
                 })()}
               </div>
-            )}
+            </div>
           </main>
         </div>
       </div>
-      {/* Leads breakdown popup */}
-      <Dialog open={leadsModalOpen} onOpenChange={setLeadsModalOpen}>
+      {/* Adoption breakdown — who transacted vs who's paying-but-dormant */}
+      <Dialog open={adoptionModalOpen} onOpenChange={(o) => { setAdoptionModalOpen(o); if (!o) setAdoptionSearch(''); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>ผู้สนใจใหม่ · {periodRangeLabel(period)}</DialogTitle>
+            <DialogTitle>การใช้งานของบริษัท · {periodRangeLabel(period)}</DialogTitle>
           </DialogHeader>
-          <p className="text-xs text-gray-400 -mt-1 mb-4">แยกตามบริษัท · รวม {leadsByTenant.total.toLocaleString()} ราย</p>
-          {leadsByTenant.rows.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-8">ยังไม่มีข้อมูลในช่วงนี้</p>
-          ) : (
-            <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
-              {leadsByTenant.rows.map((r, i) => (
-                <button key={r.id} onClick={() => { setLeadsModalOpen(false); navigate(`/owner-projects/${r.id}`); }}
-                  className="w-full flex items-center gap-3 text-left rounded-lg px-1.5 py-1.5 hover:bg-gray-50 transition-colors group">
-                  <span className="w-5 text-xs font-bold tabular-nums text-gray-300 text-center flex-shrink-0">{i + 1}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className="text-sm font-medium text-gray-800 truncate group-hover:text-gray-900">{r.name}</span>
-                      <div className="flex-shrink-0 text-right">
-                        <span className="text-sm font-bold tabular-nums" style={{ color: KK.green }}>{r.count}</span>
-                        <span className="text-xs text-gray-400 ml-1">ราย</span>
+          <p className="text-xs text-gray-400 -mt-1 mb-3">บริษัท active {reStats.activeTenants} ราย — ใช้งาน {adoptionBreakdown.transacting.length} · ไม่ใช้ {adoptionBreakdown.dormant.length}</p>
+          <input value={adoptionSearch} onChange={(e) => setAdoptionSearch(e.target.value)} placeholder="ค้นหาบริษัท..."
+            className="w-full mb-3 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-300" />
+          <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
+            {(() => {
+              const q = adoptionSearch.trim().toLowerCase();
+              const dm = q ? adoptionBreakdown.dormant.filter((c) => c.name.toLowerCase().includes(q)) : adoptionBreakdown.dormant;
+              const tx = q ? adoptionBreakdown.transacting.filter((c) => c.name.toLowerCase().includes(q)) : adoptionBreakdown.transacting;
+              const txShown = q ? tx : tx.slice(0, 8);
+              if (dm.length === 0 && tx.length === 0) {
+                return <p className="text-sm text-gray-400 text-center py-8">{q ? 'ไม่พบบริษัท' : 'ไม่มีข้อมูล'}</p>;
+              }
+              return (
+                <>
+                  {dm.length > 0 && (
+                    <div>
+                      <p className="text-xs font-bold mb-2" style={{ color: KK.red }}>⚠️ จ่ายเงินแต่ไม่ใช้ — เสี่ยง</p>
+                      <div className="space-y-1">
+                        {dm.map((d) => (
+                          <button key={d.id} onClick={() => { setAdoptionModalOpen(false); navigate(`/tenants/${d.id}`); }}
+                            className="w-full flex items-center gap-2 text-left rounded-lg px-2 py-2 hover:bg-gray-50 transition-colors border border-gray-100">
+                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: KK.red }} />
+                            <span className="text-sm text-gray-800 flex-1 truncate">{d.name}</span>
+                            {d.plan && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ color: KK.red, background: KK.redLight }}>{d.plan}</span>}
+                            <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+                          </button>
+                        ))}
                       </div>
                     </div>
-                    <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${r.pct}%`, backgroundColor: KK.green }} />
+                  )}
+                  {txShown.length > 0 && (
+                    <div>
+                      <p className="text-xs font-bold mb-2" style={{ color: KK.green }}>{q ? 'ผลค้นหา (ใช้งาน)' : '✅ ใช้งานในช่วงนี้'}</p>
+                      <div className="space-y-1">
+                        {txShown.map((t) => (
+                          <button key={t.id} onClick={() => { setAdoptionModalOpen(false); navigate(`/owner-projects/${t.id}`); }}
+                            className="w-full flex items-center gap-2 text-left rounded-lg px-2 py-1.5 hover:bg-gray-50 transition-colors">
+                            <span className="text-sm text-gray-700 flex-1 truncate">{t.name}</span>
+                            <span className="text-xs font-bold tabular-nums" style={{ color: KK.green }}>{fmtCompact(t.value)}</span>
+                            <span className="text-xs text-gray-400">· {t.sold} ยูนิต</span>
+                            <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                      {!q && tx.length > 8 && (
+                        <button onClick={() => { setAdoptionModalOpen(false); navigate('/owner-companies'); }}
+                          className="w-full mt-1.5 flex items-center justify-center gap-1 py-2 text-xs font-semibold rounded-lg hover:bg-gray-50 transition-colors" style={{ color: KK.red }}>
+                          และอีก {tx.length - 8} บริษัท · ดูอันดับเต็ม <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
-                  </div>
-                  <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0 group-hover:text-gray-400" />
-                </button>
-              ))}
-            </div>
-          )}
+                  )}
+                </>
+              );
+            })()}
+          </div>
         </DialogContent>
       </Dialog>
 
-      {/* Adoption breakdown — who transacted vs who's paying-but-dormant */}
-      <Dialog open={adoptionModalOpen} onOpenChange={setAdoptionModalOpen}>
+      {/* Depth-of-usage — how much each customer manages in the platform (lock-in by company) */}
+      <Dialog open={depthModalOpen} onOpenChange={(o) => { setDepthModalOpen(o); if (!o) setDepthSearch(''); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>การใช้งานของลูกค้า · {periodRangeLabel(period)}</DialogTitle>
+            <DialogTitle>ยูนิตในระบบ · รายบริษัท</DialogTitle>
           </DialogHeader>
-          <p className="text-xs text-gray-400 -mt-1 mb-4">ลูกค้า active {reStats.activeTenants} ราย — มีธุรกรรม {adoptionBreakdown.transacting.length} · ไม่มี {adoptionBreakdown.dormant.length}</p>
+          <p className="text-xs text-gray-400 -mt-1 mb-3">เรียงตามปริมาณที่บริษัทจัดการในระบบ · เจ้าที่จ่ายแล้วยังไม่โหลด = ไปช่วย onboard</p>
+          <input value={depthSearch} onChange={(e) => setDepthSearch(e.target.value)} placeholder="ค้นหาบริษัท..."
+            className="w-full mb-3 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-300" />
           <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
-            {adoptionBreakdown.dormant.length > 0 && (
-              <div>
-                <p className="text-xs font-bold mb-2" style={{ color: KK.red }}>⚠️ จ่ายเงินแต่ไม่มีธุรกรรม — เสี่ยง</p>
-                <div className="space-y-1">
-                  {adoptionBreakdown.dormant.map((d) => (
-                    <button key={d.id} onClick={() => { setAdoptionModalOpen(false); navigate(`/owner-projects/${d.id}`); }}
-                      className="w-full flex items-center gap-2 text-left rounded-lg px-2 py-2 hover:bg-gray-50 transition-colors border border-gray-100">
-                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: KK.red }} />
-                      <span className="text-sm text-gray-800 flex-1 truncate">{d.name}</span>
-                      {d.plan && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ color: KK.red, background: KK.redLight }}>{d.plan}</span>}
-                      <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {adoptionBreakdown.transacting.length > 0 && (
-              <div>
-                <p className="text-xs font-bold mb-2" style={{ color: KK.green }}>✅ มีธุรกรรมในช่วงนี้</p>
-                <div className="space-y-1">
-                  {adoptionBreakdown.transacting.map((t) => (
-                    <button key={t.id} onClick={() => { setAdoptionModalOpen(false); navigate(`/owner-projects/${t.id}`); }}
-                      className="w-full flex items-center gap-2 text-left rounded-lg px-2 py-1.5 hover:bg-gray-50 transition-colors">
-                      <span className="text-sm text-gray-700 flex-1 truncate">{t.name}</span>
-                      <span className="text-xs font-bold tabular-nums" style={{ color: KK.green }}>{fmtCompact(t.value)}</span>
-                      <span className="text-xs text-gray-400">· {t.sold} ยูนิต</span>
-                      <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            {(() => {
+              const q = depthSearch.trim().toLowerCase();
+              const no = q ? inventoryDepth.notOnboarded.filter((c) => c.name.toLowerCase().includes(q)) : inventoryDepth.notOnboarded;
+              const rk = q ? inventoryDepth.ranked.filter((c) => c.name.toLowerCase().includes(q)) : inventoryDepth.ranked;
+              const rkShown = q ? rk : rk.slice(0, 8);
+              if (no.length === 0 && rk.length === 0) {
+                return <p className="text-sm text-gray-400 text-center py-8">{q ? 'ไม่พบบริษัท' : 'ไม่มีข้อมูล'}</p>;
+              }
+              return (
+                <>
+                  {no.length > 0 && (
+                    <div>
+                      <p className="text-xs font-bold mb-2" style={{ color: KK.amber }}>จ่ายแล้วแต่ยังไม่โหลด — ต้องช่วย onboard</p>
+                      <div className="space-y-1">
+                        {no.map((c) => (
+                          <button key={c.id} onClick={() => { setDepthModalOpen(false); navigate(`/tenants/${c.id}`); }}
+                            className="w-full flex items-center gap-2 text-left rounded-lg px-2 py-2 hover:bg-gray-50 transition-colors border border-gray-100">
+                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: KK.amber }} />
+                            <span className="text-sm text-gray-800 flex-1 truncate">{c.name}</span>
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ color: KK.amber, background: KK.amberLight }}>ยังไม่โหลด</span>
+                            <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {rkShown.length > 0 && (
+                    <div>
+                      <p className="text-xs font-bold mb-2" style={{ color: KK.purple }}>{q ? 'ผลค้นหา' : 'บัญชีใหญ่สุด (เรียงตามยูนิตในระบบ)'}</p>
+                      <div className="space-y-1">
+                        {rkShown.map((c) => (
+                          <button key={c.id} onClick={() => { setDepthModalOpen(false); navigate(`/tenants/${c.id}`); }}
+                            className="w-full flex items-center gap-2 text-left rounded-lg px-2 py-1.5 hover:bg-gray-50 transition-colors">
+                            <span className="text-sm text-gray-700 flex-1 truncate">{c.name}</span>
+                            <span className="text-sm font-bold tabular-nums" style={{ color: KK.purple }}>{c.units}</span>
+                            <span className="text-xs text-gray-400">ยูนิต</span>
+                            <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                      {!q && rk.length > 8 && (
+                        <button onClick={() => { setDepthModalOpen(false); navigate('/owner-companies'); }}
+                          className="w-full mt-1.5 flex items-center justify-center gap-1 py-2 text-xs font-semibold rounded-lg hover:bg-gray-50 transition-colors" style={{ color: KK.red }}>
+                          และอีก {rk.length - 8} บริษัท · ดูทั้งหมด <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </DialogContent>
       </Dialog>

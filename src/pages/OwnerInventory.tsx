@@ -5,7 +5,8 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import { supabase } from '@/lib/supabase';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Layers, Home, Percent, Timer, Gauge } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Layers, Home, Percent, Timer, Gauge, ChevronRight } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -56,6 +57,7 @@ const OwnerInventory = () => {
   const [typeById, setTypeById] = useState<Record<string, string>>({});
   const [tenantList, setTenantList] = useState<{ id: string; name: string }[]>([]);
   const [tenantFilter, setTenantFilter] = useState<string>('all');
+  const [typeModal, setTypeModal] = useState<string | null>(null); // raw property type key
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
@@ -122,9 +124,24 @@ const OwnerInventory = () => {
       agg.set(ty, r);
     });
     return Array.from(agg.entries())
-      .map(([k, v]) => ({ label: TYPE_TH[k] || k, pct: v.total ? Math.round((v.sold / v.total) * 100) : 0, sold: v.sold, total: v.total }))
+      .map(([k, v]) => ({ key: k, label: TYPE_TH[k] || k, pct: v.total ? Math.round((v.sold / v.total) * 100) : 0, sold: v.sold, total: v.total }))
       .sort((a, b) => b.pct - a.pct);
   }, [scopedUnits, typeById]);
+
+  // Drill: per-company stock for the clicked property type (sold / total / sell-through).
+  const tenantNameById = useMemo(() => new Map(tenantList.map((t) => [t.id, t.name])), [tenantList]);
+  const companiesInType = useMemo(() => {
+    if (!typeModal) return [] as { id: string; name: string; sold: number; total: number; pct: number }[];
+    const m = new Map<string, { sold: number; total: number }>();
+    scopedUnits.forEach((u) => {
+      if ((typeById[u.project_id] || 'other') !== typeModal) return;
+      const r = m.get(u.tenant_id) || { sold: 0, total: 0 };
+      r.total += 1; if (u.status === 'sold') r.sold += 1; m.set(u.tenant_id, r);
+    });
+    return Array.from(m.entries())
+      .map(([id, v]) => ({ id, name: tenantNameById.get(id) || '–', sold: v.sold, total: v.total, pct: v.total ? Math.round((v.sold / v.total) * 100) : 0 }))
+      .sort((a, b) => b.total - a.total);
+  }, [typeModal, scopedUnits, typeById, tenantNameById]);
 
   const KpiCard = ({ title, value, sub, icon: Icon, color, bg }: {
     title: string; value: string; sub?: string; icon: React.ElementType; color: string; bg: string;
@@ -251,19 +268,19 @@ const OwnerInventory = () => {
             {/* Sell-through by type */}
             <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
               <h2 className="text-base font-bold text-gray-900">Sell-through ตามประเภททรัพย์</h2>
-              <p className="text-xs text-gray-500 mb-4 mt-0.5">% ที่ขายได้ในแต่ละประเภท</p>
+              <p className="text-xs text-gray-500 mb-4 mt-0.5">% ที่ขายได้ในแต่ละประเภท · <span style={{ color: KK.red }}>คลิกเพื่อดูบริษัท</span></p>
               <div className="space-y-3">
                 {typeData.map((t) => (
-                  <div key={t.label}>
+                  <button key={t.key} onClick={() => setTypeModal(t.key)} className="w-full text-left rounded-lg -mx-1 px-1 py-1 hover:bg-gray-50 transition-colors group">
                     <div className="flex items-center justify-between text-sm mb-1">
-                      <span className="text-gray-700 font-medium">{t.label}</span>
+                      <span className="text-gray-700 font-medium group-hover:text-gray-900">{t.label}</span>
                       <span className="tabular-nums text-gray-500">{t.sold}/{t.total} <span className="text-gray-400">· {t.pct}%</span></span>
                     </div>
                     <div className="h-6 rounded-lg bg-gray-100 overflow-hidden">
                       <div className="h-full rounded-lg transition-all duration-700"
                         style={{ width: `${Math.max(t.pct, 2)}%`, background: `linear-gradient(90deg, ${KK.green} 0%, #4ade80 100%)` }} />
                     </div>
-                  </div>
+                  </button>
                 ))}
                 {typeData.length === 0 && <p className="text-center text-sm text-gray-400 py-6">ยังไม่มีข้อมูลยูนิต</p>}
               </div>
@@ -271,6 +288,31 @@ const OwnerInventory = () => {
           </main>
         </div>
       </div>
+
+      {/* Drill: per-company stock for the clicked property type */}
+      <Dialog open={!!typeModal} onOpenChange={(o) => !o && setTypeModal(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{typeModal ? (TYPE_TH[typeModal] || typeModal) : ''} · รายบริษัท</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-gray-400 -mt-1 mb-4">Sell-through ของแต่ละบริษัท · เรียงตามจำนวนยูนิต</p>
+          {companiesInType.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">ไม่มีข้อมูล</p>
+          ) : (
+            <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
+              {companiesInType.map((c) => (
+                <button key={c.id} onClick={() => { setTypeModal(null); navigate(`/owner-projects/${c.id}`); }}
+                  className="w-full flex items-center gap-3 text-left rounded-lg px-2 py-2 hover:bg-gray-50 transition-colors">
+                  <span className="text-sm text-gray-800 flex-1 truncate">{c.name}</span>
+                  <span className="text-xs text-gray-400 tabular-nums">{c.sold}/{c.total}</span>
+                  <span className="text-xs font-bold tabular-nums" style={{ color: KK.green }}>{c.pct}%</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </OwnerGuard>
   );
 };

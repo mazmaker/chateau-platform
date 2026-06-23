@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
+import PeriodFilter, { type PeriodKey, DEFAULT_PERIOD, periodToRange, periodRangeLabel } from '@/components/dashboard/PeriodFilter';
 import { supabase } from '@/lib/supabase';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Building2, TrendingUp, Percent, ArrowUpRight, Home, ChevronRight } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Building2, TrendingUp, Percent, ArrowUpRight, Home, ChevronRight, Search } from 'lucide-react';
 import { ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import SalesAgentsSection from '@/components/owner/SalesAgentsSection';
 
@@ -87,9 +89,15 @@ const OwnerCompanies = () => {
   const { isOwner } = usePermissions();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [rows, setRows] = useState<CompanyAgg[]>([]);
+  const [rawUnits, setRawUnits] = useState<UnitRow[]>([]);
+  const [tlist, setTlist] = useState<{ id: string; name: string; subscription_plan: string; status: string }[]>([]);
+  const [leadCountMap, setLeadCountMap] = useState<Map<string, number>>(new Map());
+  const [period, setPeriod] = useState<PeriodKey>(DEFAULT_PERIOD.strategic);
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  useEffect(() => { setCurrentPage(1); }, [period, searchQuery, statusFilter]);
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
@@ -109,31 +117,11 @@ const OwnerCompanies = () => {
         ]);
         const units = (uRes.data || []) as UnitRow[];
         const leads = (lRes.data || []) as { tenant_id: string }[];
-
         const leadCount = new Map<string, number>();
         leads.forEach((l) => leadCount.set(l.tenant_id, (leadCount.get(l.tenant_id) || 0) + 1));
-
-        const byTenant = new Map<string, UnitRow[]>();
-        units.forEach((u) => { const arr = byTenant.get(u.tenant_id) || []; arr.push(u); byTenant.set(u.tenant_id, arr); });
-
-        const agg: CompanyAgg[] = tlist.map((t) => {
-          const tUnits = byTenant.get(t.id) || [];
-          let gdv = 0, sold = 0, soldValue = 0;
-          const soldDates: (string | null)[] = [];
-          tUnits.forEach((u) => {
-            const price = Number(u.price) || 0;
-            gdv += price;
-            if (u.status === 'sold') { sold += 1; soldValue += price; soldDates.push(u.sold_at); }
-          });
-          return {
-            id: t.id, name: t.name, plan: t.subscription_plan, status: t.status || 'active',
-            gdv, sold, total: tUnits.length, soldValue, leads: leadCount.get(t.id) || 0,
-            sellThrough: tUnits.length > 0 ? Math.round((sold / tUnits.length) * 100) : 0,
-            series: buildSeries(soldDates),
-          };
-        }).filter((r) => r.total > 0).sort((a, b) => b.soldValue - a.soldValue);
-
-        setRows(agg);
+        setRawUnits(units);
+        setTlist(tlist);
+        setLeadCountMap(leadCount);
       }
     } catch (e) {
       console.error('OwnerCompanies fetch error:', e);
@@ -141,6 +129,32 @@ const OwnerCompanies = () => {
       setLoading(false);
     }
   };
+
+  // Per-company aggregate — SALES metrics (sold / soldValue / sell-through / series)
+  // scope to the selected period; total/GDV stay all-time (portfolio snapshot).
+  // Ranked by sold value IN the period → "who sold most this window".
+  const rows = useMemo<CompanyAgg[]>(() => {
+    const { from, to } = periodToRange(period);
+    const inRange = (s: string | null) => { if (!s) return false; const t = new Date(s); return (!from || t >= from) && t <= to; };
+    const byTenant = new Map<string, UnitRow[]>();
+    rawUnits.forEach((u) => { const arr = byTenant.get(u.tenant_id) || []; arr.push(u); byTenant.set(u.tenant_id, arr); });
+    return tlist.map((t) => {
+      const tUnits = byTenant.get(t.id) || [];
+      let gdv = 0, sold = 0, soldValue = 0;
+      const soldDates: (string | null)[] = [];
+      tUnits.forEach((u) => {
+        const price = Number(u.price) || 0;
+        gdv += price;
+        if (u.status === 'sold' && inRange(u.sold_at)) { sold += 1; soldValue += price; soldDates.push(u.sold_at); }
+      });
+      return {
+        id: t.id, name: t.name, plan: t.subscription_plan, status: t.status || 'active',
+        gdv, sold, total: tUnits.length, soldValue, leads: leadCountMap.get(t.id) || 0,
+        sellThrough: tUnits.length > 0 ? Math.round((sold / tUnits.length) * 100) : 0,
+        series: buildSeries(soldDates),
+      };
+    }).filter((r) => r.total > 0).sort((a, b) => b.soldValue - a.soldValue);
+  }, [rawUnits, tlist, leadCountMap, period]);
 
   const totals = useMemo(() => {
     const soldValue = rows.reduce((s, r) => s + r.soldValue, 0);
@@ -200,10 +214,15 @@ const OwnerCompanies = () => {
     );
   }
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const q = searchQuery.trim().toLowerCase();
+  const filtered = rows.filter((r) =>
+    (statusFilter === 'all' || r.status === statusFilter) &&
+    (!q || r.name.toLowerCase().includes(q))
+  );
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const pageStart = (safePage - 1) * pageSize;
-  const paginated = rows.slice(pageStart, pageStart + pageSize);
+  const paginated = filtered.slice(pageStart, pageStart + pageSize);
 
   return (
     <OwnerGuard>
@@ -212,14 +231,24 @@ const OwnerCompanies = () => {
         <div className="lg:ml-[260px] min-h-screen">
           <Header onMenuClick={() => setSidebarOpen(true)} />
           <main className="p-6 lg:p-8 space-y-7">
-            <div>
-              <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
-                Analytics
-              </span>
-              <h1 className="text-2xl font-bold text-gray-900">อันดับยอดขาย</h1>
-              <p className="text-sm text-gray-500 mt-1.5">ดูภาพรวมรายบริษัทก่อน แล้วเจาะลงรายผู้ขาย · ข้ามทั้งแพลตฟอร์ม</p>
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+              <div>
+                <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
+                  Analytics
+                </span>
+                <h1 className="text-2xl font-bold text-gray-900">อันดับยอดขาย</h1>
+                <p className="text-sm text-gray-500 mt-1.5">เรียงตามมูลค่าขาย{periodRangeLabel(period)} · ข้ามทั้งแพลตฟอร์ม · sell-through/GDV = สะสม</p>
+              </div>
+              <PeriodFilter value={period} onChange={setPeriod} tier="strategic" className="self-start sm:self-auto shrink-0" />
             </div>
 
+            <Tabs defaultValue="company" className="space-y-7">
+              <TabsList>
+                <TabsTrigger value="company">รายบริษัท</TabsTrigger>
+                <TabsTrigger value="agents">รายผู้ขาย</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="company" className="space-y-7 mt-2 focus-visible:outline-none">
             {rows.length === 0 ? (
               <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-12 text-center">
                 <Building2 className="w-10 h-10 mx-auto mb-2 text-gray-300" />
@@ -229,7 +258,7 @@ const OwnerCompanies = () => {
               <>
                 {/* KPIs */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <KpiCard title="บริษัทที่มีสินค้า" value={totals.companies.toLocaleString()} sub="มียูนิตในระบบ" icon={Building2} color={KK.blue} bg={KK.blueLight} />
+                  <KpiCard title="บริษัทที่มีทรัพย์ในระบบ" value={totals.companies.toLocaleString()} sub="ฐานที่นำมาจัดอันดับ" icon={Building2} color={KK.blue} bg={KK.blueLight} />
                   <KpiCard title="มูลค่าขายเฉลี่ย/บริษัท" value={fmtCompact(totals.companies > 0 ? totals.soldValue / totals.companies : 0)} sub="ต่อบริษัทที่มีสินค้า" icon={TrendingUp} color={KK.green} bg={KK.greenLight} />
                   <KpiCard title="Sell-through เฉลี่ย" value={`${totals.sellThrough}%`} sub="ขายแล้ว / ทั้งหมด" icon={Percent} color={KK.amber} bg={KK.amberLight} />
                   <KpiCard title="ยูนิตขายเฉลี่ย/บริษัท" value={(totals.companies > 0 ? Math.round(totals.sold / totals.companies) : 0).toLocaleString()} sub="ยูนิต/บริษัท" icon={Home} color={KK.red} bg={KK.redLight} />
@@ -273,9 +302,33 @@ const OwnerCompanies = () => {
 
                 {/* Ranking table */}
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-                  <div className="mb-4">
-                    <h2 className="text-base font-bold text-gray-900">อันดับบริษัท</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">เรียงตามมูลค่าขาย · คลิกเพื่อดูรายโครงการ</p>
+                  <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
+                    <div>
+                      <h2 className="text-base font-bold text-gray-900">อันดับบริษัท</h2>
+                      <p className="text-xs text-gray-500 mt-0.5">เรียงตามมูลค่าขาย · คลิกเพื่อดูรายโครงการ</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          placeholder="ค้นหาบริษัท..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="h-9 w-[180px] pl-8 pr-3 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
+                        />
+                      </div>
+                      <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger className="h-9 w-[130px] text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">ทุกสถานะ</SelectItem>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="trial">Trial</SelectItem>
+                          <SelectItem value="suspended">ระงับ</SelectItem>
+                          <SelectItem value="cancelled">Cancelled</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div className="overflow-x-auto">
                     <Table>
@@ -320,13 +373,18 @@ const OwnerCompanies = () => {
                             <TableCell className="text-right"><ArrowUpRight className="w-4 h-4 text-gray-400 inline" /></TableCell>
                           </TableRow>
                         ))}
+                        {paginated.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={9} className="text-center text-sm text-gray-400 py-8">ไม่พบบริษัทที่ตรงเงื่อนไข</TableCell>
+                          </TableRow>
+                        )}
                       </TableBody>
                     </Table>
                   </div>
-                  {rows.length > 0 && (
+                  {filtered.length > 0 && (
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 pt-4 mt-2 border-t border-gray-100">
                       <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <span>แสดง {pageStart + 1}–{Math.min(pageStart + pageSize, rows.length)} จาก {rows.length} บริษัท</span>
+                        <span>แสดง {pageStart + 1}–{Math.min(pageStart + pageSize, filtered.length)} จาก {filtered.length} บริษัท</span>
                         <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
                           <SelectTrigger className="h-8 w-[110px] text-xs"><SelectValue /></SelectTrigger>
                           <SelectContent>
@@ -356,11 +414,14 @@ const OwnerCompanies = () => {
                     </div>
                   )}
                 </div>
-
-                {/* เจาะลึก: อันดับผู้ขายรายคน (ยุบรวมจาก Sales Performance เดิม — ดูรวมก่อน แล้วเจาะ) */}
-                <SalesAgentsSection />
               </>
             )}
+              </TabsContent>
+
+              <TabsContent value="agents" className="mt-2 focus-visible:outline-none">
+                <SalesAgentsSection />
+              </TabsContent>
+            </Tabs>
           </main>
         </div>
       </div>

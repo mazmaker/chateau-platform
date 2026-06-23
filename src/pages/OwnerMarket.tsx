@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
+import PeriodFilter, { type PeriodKey, DEFAULT_PERIOD, periodToRange, periodRangeLabel } from '@/components/dashboard/PeriodFilter';
 import { supabase } from '@/lib/supabase';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { TrendingUp, Tag, Home, Banknote, BarChart3 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { TrendingUp, Tag, Home, Banknote, BarChart3, ChevronRight } from 'lucide-react';
 import {
   ResponsiveContainer,
   BarChart,
@@ -77,8 +79,6 @@ const TIERS = [
 ];
 const DONUT_COLORS = [KK.blue, KK.red, KK.green, KK.amber, KK.slate];
 const THAI_MONTH = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-const ymOf = (ts: string | null) => { if (!ts) return ''; const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
-const monthLabelTH = (ym: string) => { const [y, m] = ym.split('-').map(Number); return `${THAI_MONTH[m - 1]} ${y + 543}`; };
 
 interface UnitRow {
   tenant_id: string;
@@ -96,7 +96,9 @@ const OwnerMarket = () => {
   const [loading, setLoading] = useState(true);
   const [units, setUnits] = useState<UnitRow[]>([]);
   const [typeById, setTypeById] = useState<Record<string, string>>({});
-  const [month, setMonth] = useState('all');
+  const [period, setPeriod] = useState<PeriodKey>(DEFAULT_PERIOD.strategic);
+  const [tierModal, setTierModal] = useState<string | null>(null);
+  const [typeModal, setTypeModal] = useState<string | null>(null);
   const [tenantList, setTenantList] = useState<{ id: string; name: string }[]>([]);
   const [tenantFilter, setTenantFilter] = useState<string>('all');
 
@@ -135,15 +137,11 @@ const OwnerMarket = () => {
   );
   const sold = useMemo(() => scopedUnits.filter((u) => u.status === 'sold'), [scopedUnits]);
 
-  // Months that have sales — newest first, for the month filter.
-  const monthOptions = useMemo(() => {
-    const set = new Set<string>();
-    sold.forEach((u) => { const ym = ymOf(u.sold_at); if (ym) set.add(ym); });
-    return Array.from(set).sort().reverse();
-  }, [sold]);
-
-  // KPI + price-tier + type views respect the month filter; the trend stays full 12-month.
-  const view = useMemo(() => (month === 'all' ? sold : sold.filter((u) => ymOf(u.sold_at) === month)), [sold, month]);
+  // KPI + price-tier + type views respect the period; the 12-month trend stays full (context).
+  const view = useMemo(() => {
+    const { from, to } = periodToRange(period);
+    return sold.filter((u) => { if (!u.sold_at) return false; const t = new Date(u.sold_at); return (!from || t >= from) && t <= to; });
+  }, [sold, period]);
 
   // Sold units bucketed by price tier — bar chart + "best tier" KPI.
   const tierData = useMemo(() => TIERS.map((t) => {
@@ -156,7 +154,7 @@ const OwnerMarket = () => {
     const m = new Map<string, number>();
     view.forEach((u) => { const ty = typeById[u.project_id] || 'unknown'; m.set(ty, (m.get(ty) || 0) + 1); });
     return Array.from(m.entries())
-      .map(([k, v], i) => ({ name: TYPE_TH[k] || k, value: v, color: DONUT_COLORS[i % DONUT_COLORS.length] }))
+      .map(([k, v], i) => ({ key: k, name: TYPE_TH[k] || k, value: v, color: DONUT_COLORS[i % DONUT_COLORS.length] }))
       .sort((a, b) => b.value - a.value);
   }, [view, typeById]);
 
@@ -184,6 +182,31 @@ const OwnerMarket = () => {
     return arr.length ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : 0;
   }, [view]);
   const avgUnitPrice = useMemo(() => (view.length ? Math.round(view.reduce((s, u) => s + (Number(u.price) || 0), 0) / view.length) : 0), [view]);
+
+  // Drill: which companies sold in the clicked price tier (period-scoped).
+  const tenantNameById = useMemo(() => new Map(tenantList.map((t) => [t.id, t.name])), [tenantList]);
+  const companiesInTier = useMemo(() => {
+    if (!tierModal) return [] as { id: string; name: string; count: number; value: number }[];
+    const tier = TIERS.find((t) => t.label === tierModal);
+    if (!tier) return [];
+    const m = new Map<string, { count: number; value: number }>();
+    view.forEach((u) => {
+      const p = Number(u.price) || 0;
+      if (p >= tier.min && p < tier.max) { const r = m.get(u.tenant_id) || { count: 0, value: 0 }; r.count += 1; r.value += p; m.set(u.tenant_id, r); }
+    });
+    return Array.from(m.entries()).map(([id, v]) => ({ id, name: tenantNameById.get(id) || '–', ...v })).sort((a, b) => b.value - a.value);
+  }, [tierModal, view, tenantNameById]);
+
+  // Drill: which companies sold the clicked property type (period-scoped).
+  const companiesInType = useMemo(() => {
+    if (!typeModal) return [] as { id: string; name: string; count: number; value: number }[];
+    const m = new Map<string, { count: number; value: number }>();
+    view.forEach((u) => {
+      const ty = typeById[u.project_id] || 'unknown';
+      if (ty === typeModal) { const r = m.get(u.tenant_id) || { count: 0, value: 0 }; r.count += 1; r.value += Number(u.price) || 0; m.set(u.tenant_id, r); }
+    });
+    return Array.from(m.entries()).map(([id, v]) => ({ id, name: tenantNameById.get(id) || '–', ...v })).sort((a, b) => b.value - a.value);
+  }, [typeModal, view, typeById, tenantNameById]);
 
   // Reusable KPI card — same shape as OwnerProjects/OwnerDashboard.
   const KpiCard = ({ title, value, sub, icon: Icon, color, bg }: {
@@ -234,8 +257,8 @@ const OwnerMarket = () => {
                 <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
                   Analytics
                 </span>
-                <h1 className="text-2xl font-bold text-gray-900">Sales Overview</h1>
-                <p className="text-sm text-gray-500 mt-1.5">วิเคราะห์การขายข้ามทุกบริษัท · ช่วงราคา · ประเภททรัพย์ · แนวโน้ม</p>
+                <h1 className="text-2xl font-bold text-gray-900">ราคา &amp; ประเภท</h1>
+                <p className="text-sm text-gray-500 mt-1.5">การขาย{periodRangeLabel(period)} · ช่วงราคา · ประเภททรัพย์ · แนวโน้ม</p>
               </div>
               <div className="flex items-center gap-2 flex-wrap mt-1">
                 <Select value={tenantFilter} onValueChange={setTenantFilter}>
@@ -247,18 +270,7 @@ const OwnerMarket = () => {
                     ))}
                   </SelectContent>
                 </Select>
-                {sold.length > 0 && (
-                  <select
-                    value={month}
-                    onChange={(e) => setMonth(e.target.value)}
-                    className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-100"
-                  >
-                    <option value="all">ทุกเดือน</option>
-                    {monthOptions.map((ym) => (
-                      <option key={ym} value={ym}>{monthLabelTH(ym)}</option>
-                    ))}
-                  </select>
-                )}
+                <PeriodFilter value={period} onChange={setPeriod} tier="strategic" />
               </div>
             </div>
 
@@ -281,7 +293,7 @@ const OwnerMarket = () => {
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                   <div className="xl:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                     <h2 className="text-base font-bold text-gray-900">ยอดขายตามช่วงราคา</h2>
-                    <p className="text-xs text-gray-500 mb-4 mt-0.5">จำนวนยูนิตที่ขายได้ในแต่ละช่วงราคา</p>
+                    <p className="text-xs text-gray-500 mb-4 mt-0.5">จำนวนยูนิตที่ขายได้ในแต่ละช่วงราคา · <span style={{ color: KK.red }}>คลิกแท่งเพื่อดูบริษัท</span></p>
                     <ResponsiveContainer width="100%" height={280}>
                       <BarChart data={tierData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
@@ -292,7 +304,8 @@ const OwnerMarket = () => {
                           cursor={{ fill: 'rgba(0,0,0,0.03)' }}
                           formatter={((v: any, _n: any, p: any) => [`${v} ยูนิต · ${fmtCompact(p?.payload?.value || 0)}`, 'ขายได้']) as any}
                         />
-                        <Bar dataKey="count" radius={[6, 6, 0, 0]} fill={KK.red} maxBarSize={64} animationDuration={900}>
+                        <Bar dataKey="count" radius={[6, 6, 0, 0]} fill={KK.red} maxBarSize={64} animationDuration={900}
+                          cursor="pointer" onClick={(d: any) => d?.label && setTierModal(d.label)}>
                           {tierData.map((_, i) => <Cell key={i} fill={i === tierData.findIndex((t) => t.label === bestTier?.label) ? KK.red : '#fca5a5'} />)}
                         </Bar>
                       </BarChart>
@@ -301,12 +314,13 @@ const OwnerMarket = () => {
 
                   <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                     <h2 className="text-base font-bold text-gray-900">ยอดขายตามประเภท</h2>
-                    <p className="text-xs text-gray-500 mb-2 mt-0.5">สัดส่วนยูนิตที่ขายได้</p>
+                    <p className="text-xs text-gray-500 mb-2 mt-0.5">สัดส่วนยูนิตที่ขายได้ · <span style={{ color: KK.red }}>คลิกเพื่อดูบริษัท</span></p>
                     <div className="relative" style={{ height: 200 }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                          <Pie data={typeData} cx="50%" cy="50%" innerRadius={58} outerRadius={86} paddingAngle={2} dataKey="value">
-                            {typeData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                          <Pie data={typeData} cx="50%" cy="50%" innerRadius={58} outerRadius={86} paddingAngle={2} dataKey="value"
+                            onClick={(d: any) => { const k = d?.key || d?.payload?.key; if (k) setTypeModal(k); }}>
+                            {typeData.map((entry, i) => <Cell key={i} fill={entry.color} cursor="pointer" />)}
                           </Pie>
                           <Tooltip contentStyle={kkTooltipStyle} formatter={((v: any) => [`${v} ยูนิต`, '']) as any} />
                         </PieChart>
@@ -318,12 +332,13 @@ const OwnerMarket = () => {
                     </div>
                     <div className="space-y-1.5 mt-3 pt-3 border-t border-gray-100">
                       {typeData.map((item, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs">
+                        <button key={i} type="button" onClick={() => setTypeModal(item.key)}
+                          className="flex items-center gap-2 text-xs w-full text-left rounded px-1 py-0.5 hover:bg-gray-50 transition-colors">
                           <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
                           <span className="text-gray-600 flex-1">{item.name}</span>
                           <span className="font-semibold text-gray-800 tabular-nums">{item.value}</span>
                           <span className="text-gray-400 tabular-nums">({Math.round((item.value / (view.length || 1)) * 100)}%)</span>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -354,6 +369,58 @@ const OwnerMarket = () => {
           </main>
         </div>
       </div>
+
+      {/* Drill: companies that sold in the clicked price tier */}
+      <Dialog open={!!tierModal} onOpenChange={(o) => !o && setTierModal(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>บริษัทที่ขายช่วง {tierModal}</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-gray-400 -mt-1 mb-4">{periodRangeLabel(period)} · เรียงตามมูลค่าขาย</p>
+          {companiesInTier.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">ไม่มีข้อมูลในช่วงนี้</p>
+          ) : (
+            <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
+              {companiesInTier.map((c, i) => (
+                <button key={c.id} onClick={() => { setTierModal(null); navigate(`/owner-projects/${c.id}`); }}
+                  className="w-full flex items-center gap-3 text-left rounded-lg px-2 py-2 hover:bg-gray-50 transition-colors">
+                  <span className="w-5 text-xs font-bold tabular-nums text-gray-300 text-center flex-shrink-0">{i + 1}</span>
+                  <span className="text-sm text-gray-800 flex-1 truncate">{c.name}</span>
+                  <span className="text-xs font-bold tabular-nums" style={{ color: KK.red }}>{fmtCompact(c.value)}</span>
+                  <span className="text-xs text-gray-400">· {c.count} ยูนิต</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Drill: companies that sold the clicked property type */}
+      <Dialog open={!!typeModal} onOpenChange={(o) => !o && setTypeModal(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>บริษัทที่ขาย{typeModal ? (TYPE_TH[typeModal] || typeModal) : ''}</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-gray-400 -mt-1 mb-4">{periodRangeLabel(period)} · เรียงตามมูลค่าขาย</p>
+          {companiesInType.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">ไม่มีข้อมูลประเภทนี้</p>
+          ) : (
+            <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
+              {companiesInType.map((c, i) => (
+                <button key={c.id} onClick={() => { setTypeModal(null); navigate(`/owner-projects/${c.id}`); }}
+                  className="w-full flex items-center gap-3 text-left rounded-lg px-2 py-2 hover:bg-gray-50 transition-colors">
+                  <span className="w-5 text-xs font-bold tabular-nums text-gray-300 text-center flex-shrink-0">{i + 1}</span>
+                  <span className="text-sm text-gray-800 flex-1 truncate">{c.name}</span>
+                  <span className="text-xs font-bold tabular-nums" style={{ color: KK.red }}>{fmtCompact(c.value)}</span>
+                  <span className="text-xs text-gray-400">· {c.count} ยูนิต</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </OwnerGuard>
   );
 };

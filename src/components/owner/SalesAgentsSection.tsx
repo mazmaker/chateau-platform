@@ -6,7 +6,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trophy, TrendingUp, Percent, Users, ChevronRight } from 'lucide-react';
+import { Trophy, TrendingUp, Percent, Users, ChevronRight, Search } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -44,13 +44,6 @@ const kkTooltipStyle = {
   boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: '11px', padding: '4px 8px',
 };
 const PIE_COLORS = ['#1e3a5f', '#ef4444', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#475569'];
-// "ดูเยอะ-ปิดต่ำ" — units viewed a lot but not closing (เฮีย: สัญญาณราคา/ทำเล). Sample data.
-const VIEWED_UNSOLD = [
-  { unit: 'B2601', project: 'Blu Diamond', views: 142, days: 95, hint: 'ราคาสูงกว่าตลาดในโซน' },
-  { unit: '19/64', project: 'Baan Thew Talay', views: 118, days: 120, hint: 'ทำเลห่างตัวเมือง' },
-  { unit: 'A1203', project: 'Sasara Hua Hin', views: 96, days: 62, hint: 'วิวถูกตึกบัง' },
-  { unit: '57/12', project: 'Baan Issara', views: 84, days: 88, hint: 'ติดถนนใหญ่ เสียงดัง' },
-];
 
 interface UserRow { id: string; full_name: string | null; role: string | null; tenant_id: string | null; }
 interface LeadRow { assigned_to: string | null; status: string | null; estimated_value: number | null; referred_by_agent_id: string | null; }
@@ -64,8 +57,11 @@ const SalesAgentsSection = () => {
   const [rows, setRows] = useState<PerfRow[]>([]);
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
 
   useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, roleFilter]);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -159,24 +155,19 @@ const SalesAgentsSection = () => {
     </div>
   );
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const q = searchQuery.trim().toLowerCase();
+  const filtered = rows.filter((r) =>
+    (roleFilter === 'all' || r.role === roleFilter) &&
+    (!q || r.name.toLowerCase().includes(q) || r.company.toLowerCase().includes(q))
+  );
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const pageStart = (safePage - 1) * pageSize;
-  const paginated = rows.slice(pageStart, pageStart + pageSize);
-  const top = rows[0];
+  const paginated = filtered.slice(pageStart, pageStart + pageSize);
 
   return (
     <div className="space-y-7">
-      {/* Section divider — drill from company rollup into per-salesperson detail */}
-      <div className="flex items-center gap-3 pt-2">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: KK.amberLight }}>
-          <Trophy className="w-5 h-5" style={{ color: KK.amber }} strokeWidth={2.2} />
-        </div>
-        <div>
-          <h2 className="text-lg font-bold text-gray-900">เจาะลึก: อันดับผู้ขายรายคน</h2>
-          <p className="text-xs text-gray-500">พนักงานขาย/นายหน้าทั้งแพลตฟอร์ม · วัดจาก Lead ที่ดูแลและปิดได้</p>
-        </div>
-      </div>
+      <p className="text-sm text-gray-500">พนักงานขาย/นายหน้าทั้งแพลตฟอร์ม · วัดจาก Lead ที่ดูแลและปิดได้</p>
 
       {loading ? (
         <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-12 text-center">
@@ -232,23 +223,33 @@ const SalesAgentsSection = () => {
             </div>
           )}
 
-          {top && (
-            <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: KK.amberLight }}>
-                <Trophy className="w-6 h-6" style={{ color: KK.amber }} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-gray-500">ผู้ขายเก่งที่สุด</p>
-                <p className="text-base font-bold text-gray-900 truncate">{top.name} <span className="text-gray-400 font-normal">· {top.company}</span></p>
-                <p className="text-sm text-gray-500 tabular-nums">ปิด {top.won} ดีล · {fmtCompact(top.wonValue)} · conversion {top.conversion}%</p>
-              </div>
-            </div>
-          )}
-
           <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-            <div className="mb-4">
-              <h2 className="text-base font-bold text-gray-900">อันดับผู้ขาย</h2>
-              <p className="text-xs text-gray-500 mt-0.5">เรียงตามมูลค่าดีลที่ปิดได้</p>
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">อันดับผู้ขาย</h2>
+                <p className="text-xs text-gray-500 mt-0.5">เรียงตามมูลค่าดีลที่ปิดได้</p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="ค้นหาชื่อ / บริษัท..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-9 w-[200px] pl-8 pr-3 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
+                  />
+                </div>
+                <Select value={roleFilter} onValueChange={setRoleFilter}>
+                  <SelectTrigger className="h-9 w-[140px] text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">ทุกบทบาท</SelectItem>
+                    <SelectItem value="sales">พนักงานขาย</SelectItem>
+                    <SelectItem value="agent">นายหน้า</SelectItem>
+                    <SelectItem value="admin">ผู้ดูแลบริษัท</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <Table>
@@ -282,13 +283,18 @@ const SalesAgentsSection = () => {
                       <TableCell className="text-right tabular-nums text-gray-500">{r.referrals || '–'}</TableCell>
                     </TableRow>
                   ))}
+                  {paginated.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-sm text-gray-400 py-8">ไม่พบผู้ขายที่ตรงเงื่อนไข</TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
-            {rows.length > 0 && (
+            {filtered.length > 0 && (
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 pt-4 mt-2 border-t border-gray-100">
                 <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <span>แสดง {pageStart + 1}–{Math.min(pageStart + pageSize, rows.length)} จาก {rows.length} ราย</span>
+                  <span>แสดง {pageStart + 1}–{Math.min(pageStart + pageSize, filtered.length)} จาก {filtered.length} ราย</span>
                   <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
                     <SelectTrigger className="h-8 w-[110px] text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -317,38 +323,6 @@ const SalesAgentsSection = () => {
                 </div>
               </div>
             )}
-          </div>
-
-          {/* "ดูเยอะ-ปิดต่ำ" — flag ยูนิตมีปัญหา (เฮียสั่ง) */}
-          <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-            <div className="mb-4">
-              <h2 className="text-base font-bold text-gray-900">ยูนิตเปิดดูเยอะ แต่ปิดไม่ได้</h2>
-              <p className="text-xs text-gray-500 mt-0.5">สัญญาณเตือน — คนสนใจดูเยอะแต่ขายไม่ออก (มักเป็นที่ราคา/ทำเล)</p>
-            </div>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ยูนิต</TableHead>
-                    <TableHead>โครงการ</TableHead>
-                    <TableHead className="text-right">ยอดเปิดดู</TableHead>
-                    <TableHead className="text-right">ค้างขาย</TableHead>
-                    <TableHead>ข้อสังเกต</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {VIEWED_UNSOLD.map((u) => (
-                    <TableRow key={u.unit}>
-                      <TableCell className="font-semibold text-gray-900">{u.unit}</TableCell>
-                      <TableCell className="text-gray-600">{u.project}</TableCell>
-                      <TableCell className="text-right tabular-nums font-semibold" style={{ color: KK.red }}>{u.views}</TableCell>
-                      <TableCell className="text-right tabular-nums text-gray-500">{u.days} วัน</TableCell>
-                      <TableCell><span className="text-xs font-medium px-2 py-0.5 rounded-md" style={{ color: KK.amber, backgroundColor: KK.amberLight }}>{u.hint}</span></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
           </div>
         </>
       )}

@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { HeartPulse, ShieldCheck, AlertTriangle, TrendingDown, ChevronRight, Package, Clock, Search, MoreHorizontal, Eye, Trash2, ArrowUp, ArrowDown, ArrowUpDown, FileText, Trophy } from 'lucide-react';
+import { HeartPulse, AlertTriangle, TrendingDown, ChevronRight, Package, Clock, Search, MoreHorizontal, Eye, Trash2, ArrowUp, ArrowDown, ArrowUpDown, FileText } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -109,27 +109,25 @@ const OwnerTenantHealth = () => {
   const [pageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [rows, setRows] = useState<TenantRow[]>([]);
-  const [dealStats, setDealStats] = useState<{ wonValue: number; conversion: number }>({ wonValue: 0, conversion: 0 });
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<'priority' | 'health' | 'lastLogin' | 'mrr'>('priority');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [noteTarget, setNoteTarget] = useState<{ id: string; name: string; notes: string } | null>(null);
   const [noteBody, setNoteBody] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [planModal, setPlanModal] = useState<string | null>(null);
 
   if (!isOwner) { navigate('/'); return null; }
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [{ data: tenants }, { data: usersList }, { data: projects }, { data: invoices }, { data: planRows }, { data: leadsList }] = await Promise.all([
+      const [{ data: tenants }, { data: usersList }, { data: projects }, { data: invoices }, { data: planRows }] = await Promise.all([
         supabase.from('tenants').select('id, name, subscription_plan, status, trial_ends_at, owner_notes').eq('is_platform' as any, false).order('created_at', { ascending: false }),
         supabase.from('users').select('id, tenant_id, updated_at'),
         supabase.from('projects').select('id, tenant_id'),
         supabase.from('invoices').select('tenant_id, amount, paid_at, created_at, status').eq('status', 'paid'),
         supabase.from('plans').select('id, price_monthly'),
-        // Cross-tenant end-customer leads → product-value / retention proof (aggregate, no PII).
-        supabase.from('leads').select('tenant_id, status, estimated_value'),
       ]);
 
       // Plan list prices from the `plans` catalog (single source — no hardcode drift).
@@ -196,15 +194,6 @@ const OwnerTenantHealth = () => {
       });
 
       setRows(built);
-
-      // Product-value / retention proof: deals tenants closed on-platform (won leads) + avg conversion.
-      // Scoped to customer tenants (non-platform). Aggregate only — no per-customer PII.
-      const custIds = new Set((tenants || []).map((t: any) => t.id));
-      const custLeads = (leadsList || []).filter((l: any) => custIds.has(l.tenant_id));
-      const wonLeads = custLeads.filter((l: any) => l.status === 'won');
-      const wonValue = wonLeads.reduce((s: number, l: any) => s + (Number(l.estimated_value) || 0), 0);
-      const conversion = custLeads.length > 0 ? Math.round((wonLeads.length / custLeads.length) * 100) : 0;
-      setDealStats({ wonValue, conversion });
       setLoading(false);
     };
     load();
@@ -225,10 +214,10 @@ const OwnerTenantHealth = () => {
   });
   const churned = rows.filter(r => r.healthStatus === 'churned').length;
   const donut = ([
-    { name: HEALTH_META.healthy.label, value: healthy, color: KK.green },
-    { name: HEALTH_META.at_risk.label, value: atRisk,  color: KK.amber },
-    { name: HEALTH_META.dormant.label, value: dormant, color: KK.red   },
-    { name: HEALTH_META.churned.label, value: churned, color: KK.gray  },
+    { name: HEALTH_META.healthy.label, value: healthy, color: KK.green, status: 'healthy' as HealthStatus },
+    { name: HEALTH_META.at_risk.label, value: atRisk,  color: KK.amber, status: 'at_risk' as HealthStatus },
+    { name: HEALTH_META.dormant.label, value: dormant, color: KK.red,   status: 'dormant' as HealthStatus },
+    { name: HEALTH_META.churned.label, value: churned, color: KK.gray,  status: 'churned' as HealthStatus },
   ]).filter(d => d.value > 0);
 
   const PLAN_KEYS = ['enterprise', 'professional', 'starter', 'free'] as const;
@@ -354,24 +343,17 @@ const OwnerTenantHealth = () => {
                 <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>Tenants</span>
                 <h1 className="text-2xl font-bold text-gray-900">ภาพรวมผู้เช่า (Tenants Overview)</h1>
                 <p className="text-sm text-gray-500 mt-1.5">
-                  สุขภาพฐานลูกค้า B2B · รายได้ที่เสี่ยง · ใครต้องติดตามด่วน · <span className="font-semibold text-gray-700">ข้อมูล ณ วันนี้</span>
+                  สุขภาพฐานผู้เช่า B2B · รายได้ที่เสี่ยง · ใครต้องติดตามด่วน · <span className="font-semibold text-gray-700">ข้อมูล ณ วันนี้</span>
                 </p>
               </div>
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              <KpiCard
-                title="MRR รวม"
-                value={loading ? '—' : fmtMRR(totalMRR)}
-                sub={`Active ${rows.filter(r => r.tenantStatus === 'active').length} · Trial ${rows.filter(r => r.tenantStatus === 'trial').length} · ระงับ ${rows.filter(r => r.tenantStatus === 'suspended').length} · ยกเลิก ${rows.filter(r => r.tenantStatus === 'cancelled').length}`}
-                icon={ShieldCheck} color={KK.green} bg={KK.greenLight}
-                onClick={() => { setStatusFilter('all'); setTenantStatusFilter('all'); setPlanFilter('all'); setSearchQuery(''); setCurrentPage(1); }}
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <KpiCard
                 title="MRR ที่เสี่ยง"
                 value={loading ? '—' : (atRiskMRR > 0 ? fmtMRR(atRiskMRR) : '฿0')}
-                sub={`${atRiskRows.length} บริษัท · ${atRiskPct}% ของ MRR รวม`}
+                sub={`${atRiskRows.length} บริษัท · ${atRiskPct}% ของ ${fmtMRR(totalMRR) === '—' ? '฿0' : fmtMRR(totalMRR)} รวม`}
                 icon={TrendingDown} color={KK.amber} bg={KK.amberLight}
                 onClick={() => {
                   if (statusFilter === 'at_risk' && tenantStatusFilter === 'all') { setStatusFilter('all'); }
@@ -401,12 +383,6 @@ const OwnerTenantHealth = () => {
                   setCurrentPage(1);
                 }}
               />
-              <KpiCard
-                title="ดีลที่ลูกค้าปิดบนระบบ"
-                value={loading ? '—' : (dealStats.wonValue > 0 ? fmtMRR(dealStats.wonValue) : '฿0')}
-                sub={`Conversion เฉลี่ย ${dealStats.conversion}% · คุณค่าที่ tenant ได้รับ`}
-                icon={Trophy} color={KK.green} bg={KK.greenLight}
-              />
             </div>
 
             {/* Two donuts */}
@@ -422,14 +398,19 @@ const OwnerTenantHealth = () => {
                     <div className="text-sm font-bold text-gray-900 tabular-nums">{fmtMRR(totalPaidMRR) === '—' ? '฿0' : fmtMRR(totalPaidMRR)}</div>
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 mb-5">จำนวนบริษัท · ผู้ใช้งาน · MRR รายเดือน</p>
+                <p className="text-xs text-gray-500 mb-5">จำนวนบริษัท · ผู้ใช้งาน · MRR รายเดือน · <span className="text-gray-400">กดเพื่อดูบริษัท</span></p>
                 <div className="flex-1 flex flex-col justify-between">
                   {PLAN_KEYS.map(p => {
                     const s = planStats[p];
                     const barW = maxCompanies > 0 ? Math.round((s.companies / maxCompanies) * 100) : 0;
                     const mrrPct = totalPaidMRR > 0 ? Math.round((s.mrr / totalPaidMRR) * 100) : 0;
                     return (
-                      <div key={p} className="flex items-center gap-3">
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => { if (s.companies > 0) setPlanModal(p); }}
+                        className={`flex items-center gap-3 w-full text-left rounded-lg -mx-1.5 px-1.5 py-1 transition-colors ${s.companies > 0 ? 'hover:bg-gray-50 cursor-pointer' : 'cursor-default'}`}
+                      >
                         <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: PLAN_COLOR[p] }} />
                         <span className="text-sm text-gray-600 w-24 flex-shrink-0">{PLAN_TH[p]}</span>
                         <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
@@ -442,7 +423,7 @@ const OwnerTenantHealth = () => {
                           <div className="text-sm font-semibold text-gray-900 tabular-nums">{s.mrr > 0 ? fmtMRR(s.mrr) : '฿0'}</div>
                           <div className="text-xs text-gray-400">{mrrPct}% ของ MRR</div>
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -453,12 +434,15 @@ const OwnerTenantHealth = () => {
                   <HeartPulse className="w-4 h-4" style={{ color: KK.red }} />
                   <h2 className="text-base font-bold text-gray-900">สัดส่วนสุขภาพบริษัท</h2>
                 </div>
-                <p className="text-xs text-gray-500 mb-2">ใช้งานอยู่ / เสี่ยงเลิกใช้ / ไม่ใช้งาน / ยกเลิกแล้ว</p>
+                <p className="text-xs text-gray-500 mb-2">ใช้งานอยู่ / เสี่ยงเลิกใช้ / ไม่ใช้งาน / ยกเลิกแล้ว · <span className="text-gray-400">กดเพื่อกรองตาราง</span></p>
                 <div className="relative" style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={donut} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={58} outerRadius={86} paddingAngle={2}>
-                        {donut.map((d, i) => <Cell key={i} fill={d.color} />)}
+                      <Pie
+                        data={donut} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={58} outerRadius={86} paddingAngle={2}
+                        onClick={(d: any) => { const st = d?.status || d?.payload?.status; if (st) { setStatusFilter(prev => prev === st ? 'all' : st); setCurrentPage(1); } }}
+                      >
+                        {donut.map((d, i) => <Cell key={i} fill={d.color} cursor="pointer" />)}
                       </Pie>
                       <Tooltip contentStyle={kkTooltipStyle} formatter={((v: any, n: any) => [`${v} บริษัท`, n]) as any} />
                     </PieChart>
@@ -468,13 +452,18 @@ const OwnerTenantHealth = () => {
                     <div className="text-xs text-gray-500">บริษัท</div>
                   </div>
                 </div>
-                <div className="space-y-1.5 mt-3 pt-3 border-t border-gray-100">
+                <div className="space-y-1 mt-3 pt-3 border-t border-gray-100">
                   {donut.map((d, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs">
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => { setStatusFilter(prev => prev === d.status ? 'all' : d.status); setCurrentPage(1); }}
+                      className={`flex items-center gap-2 text-xs w-full text-left rounded px-1.5 py-1 transition-colors hover:bg-gray-50 ${statusFilter === d.status ? 'bg-gray-50 ring-1 ring-gray-200' : ''}`}
+                    >
                       <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: d.color }} />
                       <span className="text-gray-600 flex-1">{d.name}</span>
                       <span className="font-semibold text-gray-800 tabular-nums">{d.value}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -748,6 +737,42 @@ const OwnerTenantHealth = () => {
                   {savingNote ? 'กำลังบันทึก...' : 'บันทึก'}
                 </Button>
               </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Companies in a plan */}
+      <Dialog open={!!planModal} onOpenChange={(o) => { if (!o) setPlanModal(null); }}>
+        <DialogContent className="max-w-lg">
+          {planModal && (
+            <>
+              <DialogHeader>
+                <DialogTitle>บริษัทแพ็กเกจ {PLAN_TH[planModal] || planModal}</DialogTitle>
+              </DialogHeader>
+              <p className="text-xs text-gray-500 -mt-1">เรียงตาม MRR · กดเพื่อดูรายละเอียดบริษัท</p>
+              <div className="max-h-[60vh] overflow-y-auto -mx-1 px-1 divide-y divide-gray-100">
+                {rows.filter(r => r.plan === planModal).sort((a, b) => b.mrr - a.mrr).map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => navigate(`/tenants/${r.id}`)}
+                    className="w-full flex items-center justify-between gap-3 py-2.5 text-left hover:bg-gray-50 rounded-lg px-2 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-900 truncate">{r.name}</div>
+                      <div className="text-xs text-gray-400">{r.users} ผู้ใช้ · {r.projects} โครงการ</div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-md" style={{ color: HEALTH_META[r.healthStatus].color, backgroundColor: HEALTH_META[r.healthStatus].bg }}>{HEALTH_META[r.healthStatus].label}</span>
+                      <span className="text-sm font-semibold text-gray-900 tabular-nums w-16 text-right">{r.mrr > 0 ? fmtMRR(r.mrr) : '฿0'}</span>
+                      <ChevronRight className="w-4 h-4 text-gray-300" />
+                    </div>
+                  </button>
+                ))}
+                {rows.filter(r => r.plan === planModal).length === 0 && (
+                  <div className="text-center text-sm text-gray-400 py-8">ไม่มีบริษัทในแพ็กเกจนี้</div>
+                )}
+              </div>
             </>
           )}
         </DialogContent>

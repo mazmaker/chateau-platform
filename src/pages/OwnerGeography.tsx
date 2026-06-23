@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
+import PeriodFilter, { type PeriodKey, DEFAULT_PERIOD, periodToRange, periodRangeLabel } from '@/components/dashboard/PeriodFilter';
 import { supabase } from '@/lib/supabase';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -48,7 +49,7 @@ const fmtCompact = (n: number) => {
 };
 
 interface PropRow { id: string; tenant_id: string; name: string | null; developer: string | null; address: { province?: string; district?: string } | null; }
-interface UnitRow { tenant_id: string; project_id: string; price: number | null; status: string | null; }
+interface UnitRow { tenant_id: string; project_id: string; price: number | null; status: string | null; sold_at: string | null; }
 interface ProvinceAgg { province: string; sold: number; soldValue: number; total: number; gdv: number; projects: number; }
 // Drill-down: province → อำเภอ (district) → โครงการ (property) + unit rollup.
 interface ProvinceProperty { id: string; name: string; developer: string | null; district: string; sold: number; total: number; soldValue: number; }
@@ -76,8 +77,10 @@ const OwnerGeography = () => {
   const [rawUnits, setRawUnits] = useState<UnitRow[]>([]);
   const [tenantList, setTenantList] = useState<{ id: string; name: string }[]>([]);
   const [tenantFilter, setTenantFilter] = useState<string>('all');
+  const [period, setPeriod] = useState<PeriodKey>(DEFAULT_PERIOD.strategic);
   // Drill-down: province → อำเภอ → โครงการ (read-only). "เรียก data ขึ้นมาดูได้" + เจาะอำเภอ.
   const [expanded, setExpanded] = useState<string | null>(null);
+  useEffect(() => { setExpanded(null); }, [period]);
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
@@ -93,7 +96,7 @@ const OwnerGeography = () => {
       if (ids.length > 0) {
         const [pRes, uRes] = await Promise.all([
           supabase.from('properties').select('id, tenant_id, name, developer, address').in('tenant_id', ids),
-          supabase.from('units').select('tenant_id, project_id, price, status').in('tenant_id', ids),
+          supabase.from('units').select('tenant_id, project_id, price, status, sold_at').in('tenant_id', ids),
         ]);
         setRawProps((pRes.data || []) as PropRow[]);
         setRawUnits((uRes.data || []) as UnitRow[]);
@@ -109,6 +112,8 @@ const OwnerGeography = () => {
   // Scopes the raw rows to the selected company first, so KPIs / bars / table /
   // drill-down all reflect the chosen tenant (drill-down runs on the subset).
   const { provinces, distByProvince } = useMemo(() => {
+    const { from, to } = periodToRange(period);
+    const soldInPeriod = (u: UnitRow) => { if (u.status !== 'sold' || !u.sold_at) return false; const t = new Date(u.sold_at); return (!from || t >= from) && t <= to; };
     const props = tenantFilter === 'all' ? rawProps : rawProps.filter((p) => p.tenant_id === tenantFilter);
     const units = tenantFilter === 'all' ? rawUnits : rawUnits.filter((u) => u.tenant_id === tenantFilter);
 
@@ -142,7 +147,7 @@ const OwnerGeography = () => {
       const pr = ensureProp(u.project_id);
       const price = Number(u.price) || 0;
       r.total += 1; r.gdv += price; pr.total += 1;
-      if (u.status === 'sold') { r.sold += 1; r.soldValue += price; pr.sold += 1; pr.soldValue += price; }
+      if (soldInPeriod(u)) { r.sold += 1; r.soldValue += price; pr.sold += 1; pr.soldValue += price; }
     });
 
     // Group properties: province → อำเภอ (district) → โครงการ, with a district rollup.
@@ -168,7 +173,7 @@ const OwnerGeography = () => {
       provinces: Array.from(provAggM.values()).sort((a, b) => b.soldValue - a.soldValue),
       distByProvince: distByProv,
     };
-  }, [rawProps, rawUnits, tenantFilter]);
+  }, [rawProps, rawUnits, tenantFilter, period]);
 
   const totals = useMemo(() => {
     const soldValue = provinces.reduce((s, r) => s + r.soldValue, 0);
@@ -241,17 +246,20 @@ const OwnerGeography = () => {
                   Analytics
                 </span>
                 <h1 className="text-2xl font-bold text-gray-900">Geography</h1>
-                <p className="text-sm text-gray-500 mt-1.5">จังหวัดไหนขายดีที่สุดข้ามทั้งแพลตฟอร์ม</p>
+                <p className="text-sm text-gray-500 mt-1.5">จังหวัดไหนขายดีที่สุด{periodRangeLabel(period)} · ข้ามทั้งแพลตฟอร์ม</p>
               </div>
-              <Select value={tenantFilter} onValueChange={(v) => { setTenantFilter(v); setExpanded(null); }}>
-                <SelectTrigger className="h-9 w-[200px] text-sm mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">ทุกบริษัท</SelectItem>
-                  {tenantList.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2 flex-wrap mt-1">
+                <Select value={tenantFilter} onValueChange={(v) => { setTenantFilter(v); setExpanded(null); }}>
+                  <SelectTrigger className="h-9 w-[200px] text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">ทุกบริษัท</SelectItem>
+                    {tenantList.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <PeriodFilter value={period} onChange={setPeriod} tier="strategic" />
+              </div>
             </div>
 
             {provinces.length === 0 ? (

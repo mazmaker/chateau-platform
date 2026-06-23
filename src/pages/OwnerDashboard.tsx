@@ -1,11 +1,10 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleAuth } from '@/contexts/AuthContextSimple';
 import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import {
-  TrendingDown,
   AlertCircle,
   CheckCircle,
   Receipt,
@@ -122,6 +121,9 @@ const OwnerDashboard = () => {
     mrrGrowth: 0
   });
   const [atRiskTenants, setAtRiskTenants] = useState<Tenant[]>([]);
+  // Churn card — FLOW metric with its own period switch (raw cancellation times → windowed in churnView memo)
+  const [churnRaw, setChurnRaw] = useState<{ ts: number; name: string }[]>([]);
+  const [churnPeriod, setChurnPeriod] = useState<number>(30);
   const [cancelledTenantNames, setCancelledTenantNames] = useState<string[]>([]);
   const [cancelledLast30DayNames, setCancelledLast30DayNames] = useState<string[]>([]);
   const [suspendedTenantNames, setSuspendedTenantNames] = useState<string[]>([]);
@@ -272,6 +274,11 @@ const OwnerDashboard = () => {
         }).length;
         const realChurnRate = Math.round((churnedLast30 / total) * 100 * 100) / 100;
         const lastMonthChurnRate = Math.round((churnedPrev30 / total) * 100 * 100) / 100;
+
+        // Raw cancellation times → feed the churn card's switchable-period view (memo recomputes per window)
+        setChurnRaw(tenantList
+          .filter(t => t.status === 'cancelled' && (t as any).cancelled_at)
+          .map(t => ({ ts: new Date((t as any).cancelled_at).getTime(), name: t.name || t.id })));
 
         // MoM growth of the recurring base: MRR now vs MRR as of the start of this month.
         // Same committed basis (rate-as-of-month-start, else list price) so growth reflects
@@ -543,6 +550,19 @@ const OwnerDashboard = () => {
   const trialPool = stats.activeTenants + stats.cancelledTenants;
   const trialConvPct = trialPool > 0 ? Math.round((stats.activeTenants / trialPool) * 100) : null;
 
+  // Churn card view — windowed by the card's own period switch; trend vs prior equal-length window.
+  // Declared BEFORE the loading guard so hook order stays stable across renders.
+  const churnView = useMemo(() => {
+    const denom = stats.totalTenants || 1;
+    const cutoff = Date.now() - churnPeriod * 24 * 60 * 60 * 1000;
+    const prevCutoff = Date.now() - 2 * churnPeriod * 24 * 60 * 60 * 1000;
+    const inWindow = churnRaw.filter(c => c.ts >= cutoff);
+    const prevCount = churnRaw.filter(c => c.ts >= prevCutoff && c.ts < cutoff).length;
+    const rate = Math.round((inWindow.length / denom) * 100 * 100) / 100;
+    const prevRate = Math.round((prevCount / denom) * 100 * 100) / 100;
+    return { rate, prevRate, count: inWindow.length, companies: inWindow.map(c => c.name) };
+  }, [churnRaw, churnPeriod, stats.totalTenants]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -598,6 +618,11 @@ const OwnerDashboard = () => {
   // MoM delta -> KPI trend (↑↓ vs last month); undefined when no baseline (no fake %).
   const mkTrend = (d: number | null | undefined) => (d != null ? { value: Math.abs(d), up: d >= 0 } : undefined);
 
+  const CHURN_PERIODS: { d: number; label: string }[] = [
+    { d: 30, label: '30 วัน' }, { d: 90, label: '90 วัน' }, { d: 365, label: '1 ปี' },
+  ];
+  const churnPeriodLabel = CHURN_PERIODS.find(p => p.d === churnPeriod)?.label || `${churnPeriod} วัน`;
+
   // Priority Action Queue — replaces both alert strip + saasHealth2 mini cards.
   // Sorted: red (immediate) → amber (watch) → green (positive signals).
   interface ActionItem { tone: 'red' | 'amber' | 'green'; title: string; sub: string; href: string; }
@@ -617,7 +642,7 @@ const OwnerDashboard = () => {
     actionItems.push({ tone: 'amber', title: `${name} — ยังไม่มีพนักงานในระบบ`, sub: 'เสี่ยง Churn · ต้องช่วย Onboarding', href: '/tenants' })
   );
   if (opsStats.openTickets > 0)
-    actionItems.push({ tone: 'amber', title: `Support ค้าง ${opsStats.openTickets} เคส → แก้ไข`, sub: 'ลูกค้าแจ้งปัญหารอการตอบกลับ', href: '/owner-support' });
+    actionItems.push({ tone: 'amber', title: `Support ค้าง ${opsStats.openTickets} เคส → แก้ไข`, sub: 'ผู้เช่าแจ้งปัญหารอการตอบกลับ', href: '/owner-support' });
   const trialEndingSoon = atRiskTenants.filter(t => t.status === 'trial');
   if (trialEndingSoon.length > 0)
     actionItems.push({ tone: 'amber', title: `${trialEndingSoon.length} บริษัท Trial ใกล้หมด → ปิดการขาย`, sub: trialEndingSoon.map(t => t.name || t.id).slice(0, 2).join(', '), href: '/owner-health' });
@@ -719,8 +744,34 @@ const OwnerDashboard = () => {
               {[
                 { label: 'รายได้ค่าเช่า/เดือน (MRR)', value: formatCurrency(stats.monthlyRevenue), trend: mkTrend(stats.mrrGrowth), icon: Receipt, color: KK.red, href: '/payments' },
                 ...saasKpis2.slice(0, 2).map((k) => ({ label: k.title, value: k.value, trend: (k as any).trend, trendLabel: (k as any).trendLabel, icon: k.icon, color: k.color, href: k.href, sub: k.sub })),
-                { label: 'อัตราเลิกใช้ (Churn) · 30 วัน', value: `${stats.churnRate}%`, icon: TrendingDown, color: stats.churnRate > 5 ? KK.red : stats.churnRate > 0 ? KK.amber : KK.green, href: '/owner-health', trend: mkTrend(stats.churnRate - stats.churnLastMonth), invertTrend: true },
               ].map(renderKpiCard)}
+              {/* Churn — FLOW metric with its OWN period switch (compact dropdown in the corner) */}
+              {(() => {
+                const trend = mkTrend(churnView.rate - churnView.prevRate);
+                return (
+                  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6 hover:shadow-soft-md transition-all duration-200">
+                    <div className="flex items-start justify-between gap-2 mb-5">
+                      <p className="text-sm font-medium text-gray-500 leading-tight pt-1.5 pr-1 flex-1">อัตราเลิกใช้ (Churn)</p>
+                      <select
+                        value={churnPeriod}
+                        onChange={(e) => setChurnPeriod(Number(e.target.value))}
+                        className="flex-shrink-0 text-xs border border-gray-200 rounded-lg pl-2 pr-1 py-1.5 bg-white text-gray-600 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
+                      >
+                        {CHURN_PERIODS.map(p => <option key={p.d} value={p.d}>{p.label}</option>)}
+                      </select>
+                    </div>
+                    <button type="button" onClick={() => navigate('/owner-health')} className="block w-full text-left cursor-pointer">
+                      <p className="text-2xl font-bold text-gray-900 tabular-nums leading-none tracking-tight">{churnView.rate}%</p>
+                      {trend && (
+                        <p className="text-sm mt-3.5 font-semibold" style={{ color: trend.up ? KK.red : KK.green }}>
+                          {trend.up ? '↗' : '↘'} {trend.value}%<span className="font-normal text-gray-400"> เทียบช่วงก่อน</span>
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-400 mt-0.5 truncate">{churnView.count} บริษัทเลิกใช้ใน{churnPeriodLabel}</p>
+                    </button>
+                  </div>
+                );
+              })()}
               {/* Trial → Paid Conversion — all-time */}
               {renderKpiCard({
                 label: 'Trial → Paid Conversion',
@@ -884,16 +935,16 @@ const OwnerDashboard = () => {
                     v: nrr,
                     color: nrr >= 100 ? KK.green : nrr >= 80 ? KK.amber : KK.red,
                     target: nrr >= 100
-                      ? `รายได้จากลูกค้าเดิมเติบโตสุทธิ`
-                      : `รายได้จากลูกค้าเดิมลดลงเหลือ ${nrr}%`,
+                      ? `รายได้จากผู้เช่าเดิมเติบโตสุทธิ`
+                      : `รายได้จากผู้เช่าเดิมลดลงเหลือ ${nrr}%`,
                   },
                   {
-                    label: 'ลูกค้าเดิมยังจ่ายอยู่', abbr: 'GRR',
+                    label: 'ผู้เช่าเดิมยังจ่ายอยู่', abbr: 'GRR',
                     v: grr,
                     color: grr >= 90 ? KK.green : grr >= 75 ? KK.amber : KK.red,
                     target: grr >= 90
-                      ? `ลูกค้าเดิมยังคงใช้งานและชำระเงินครบ`
-                      : `ลูกค้าเดิมที่ยังจ่ายอยู่คิดเป็น ${grr}% ของฐานรายได้`,
+                      ? `ผู้เช่าเดิมยังคงใช้งานและชำระเงินครบ`
+                      : `ผู้เช่าเดิมที่ยังจ่ายอยู่คิดเป็น ${grr}% ของฐานรายได้`,
                   },
                   {
                     label: 'รายได้ที่หายต่อเดือน', abbr: 'Revenue Churn',
