@@ -17,7 +17,6 @@ import OwnerSalesBreakdown from "./pages/OwnerSalesBreakdown";
 import OwnerCompanies from "./pages/OwnerCompanies";
 import OwnerCustomers from "./pages/OwnerCustomers";
 import OwnerFunnel from "./pages/OwnerFunnel";
-import OwnerInventory from "./pages/OwnerInventory";
 import OwnerTenantHealth from "./pages/OwnerTenantHealth";
 import OwnerMarketing from "./pages/OwnerMarketing";
 import OwnerAudit from "./pages/OwnerAudit";
@@ -292,13 +291,8 @@ const App = () => (
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />
-          <Route path="/owner-inventory" element={
-            <ErrorBoundary showRetry={true} showHome={true} errorMessage="ไม่สามารถโหลดหน้า Inventory ได้" context={{ page: 'owner-inventory' }}>
-              <ProtectedRouteSimple requireRole="owner">
-                <OwnerInventory />
-              </ProtectedRouteSimple>
-            </ErrorBoundary>
-          } />
+          {/* Inventory & Absorption ถูกตัดออกจาก Owner console (เป็น tenant-operational ไม่ใช่ SaaS-owner metric) — รีไดเรกต์กันลิงก์เก่าพัง. ไฟล์ OwnerInventory.tsx ยังอยู่ใน git เผื่อ rollback */}
+          <Route path="/owner-inventory" element={<Navigate to="/owner-market-overview" replace />} />
           <Route path="/owner-marketing" element={
             <ErrorBoundary showRetry={true} showHome={true} errorMessage="ไม่สามารถโหลดหน้า Marketing ได้" context={{ page: 'owner-marketing' }}>
               <ProtectedRouteSimple requireRole="owner">

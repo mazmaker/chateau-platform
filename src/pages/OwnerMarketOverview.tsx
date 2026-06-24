@@ -41,7 +41,7 @@ import {
 //   • KPI strip (GMV · ยูนิตขายได้ · ผู้สนใจใหม่) — responds to PeriodFilter.
 //   • GMV รายเดือน (6-month bar) → /owner-market
 //   • Top 5 บริษัทขายดี (company-level only) → /owner-companies
-//   • สรุปสต๊อก (sell-through + status mix) → /owner-inventory
+//   • สรุปสต๊อก (sell-through + status mix) — shown inline (Inventory page removed)
 //   • จังหวัดเด่น (top provinces by sold value) → /owner-geography
 // Data computation mirrors OwnerDashboard Zone 2 (computeREForPeriod).
 // ──────────────────────────────────────────────────────────────────────────
@@ -504,17 +504,12 @@ const OwnerMarketOverview = () => {
             </div>
             {/* Inventory snapshot donut — paired with the trend chart */}
             <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex flex-col">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Layers className="w-4 h-4 flex-shrink-0" style={{ color: KK.blue }} />
-                  <div>
-                    <h2 className="text-base font-bold text-gray-900">สถานะยูนิตในระบบ</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">ว่าง / จอง / ขายแล้ว · ณ ปัจจุบัน</p>
-                  </div>
+              <div className="flex items-center gap-2 mb-4">
+                <Layers className="w-4 h-4 flex-shrink-0" style={{ color: KK.blue }} />
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">สถานะยูนิตในระบบ</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">ว่าง / จอง / ขายแล้ว · ณ ปัจจุบัน</p>
                 </div>
-                <button onClick={() => navigate('/owner-inventory')} className="inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap" style={{ color: KK.red }}>
-                  ดูสต๊อก <ChevronRight className="w-3.5 h-3.5" />
-                </button>
               </div>
               {inventory.total === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-10">ยังไม่มีข้อมูลยูนิต</p>
