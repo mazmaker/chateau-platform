@@ -4,55 +4,30 @@ import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import { supabase } from '@/lib/supabase';
-import {
-  Users,
-  UserPlus as UserPlusIcon,
-  Percent,
-  Banknote,
-  PieChart as PieChartIcon,
-  Filter,
-  Megaphone,
-  ChevronRight,
-} from 'lucide-react';
-import {
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-} from 'recharts';
+import { Users, Flame, Percent, Banknote, Brain, Activity, ChevronRight } from 'lucide-react';
 
 // ──────────────────────────────────────────────────────────────────────────
-// ภาพรวมผู้ซื้อ (Buyer Overview) — Owner group-overview page (overview-first).
-// Sibling of OwnerMarketOverview: summarises the whole buyer / lead-intelligence
-// menu group across ALL tenants, then drills into each detail page.
-// Read-only / live Owner RLS (no migration). AGGREGATE ONLY — no per-person PII.
-//   • KPI strip (ผู้สนใจซื้อ · ลีดทั้งหมด · Conversion · มูลค่าดีล อสังหา)
-//   • กลุ่มผู้ซื้อ (top occupation + purpose distribution) → /owner-customers
-//   • Funnel สรุป (stage bars + conversion) → /owner-funnel
-//   • การตลาด teaser (campaign / reach summary) → /owner-marketing
-// Aggregation mirrors OwnerCustomers / OwnerFunnel / OwnerMarketing.
+// ภาพรวมผู้ซื้อ (Buyer Overview) — Owner-lens LAUNCHPAD for the buyer/CDP group.
+// Scope = ONLY what the detail pages don't already own, so it doesn't duplicate:
+//   • OwnerCustomers (/owner-customers) owns buyer-base demographics (occupation,
+//     purpose, age, income, customer table).
+//   • OwnerFunnel (/owner-funnel) owns the funnel stages + score distribution.
+// This page proves the PRODUCT works: AI score → actual close-rate, and showcases
+// what the CDP auto-builds per lead — then links into the two detail pages.
+// Scoring engine is REAL (src/lib/leadScoring.ts + loanEstimation.ts). Sourced
+// from `leads` (the live CDP), aggregate-only, no PII.
 // ──────────────────────────────────────────────────────────────────────────
 
-// Palette + compact-money — identical tokens to OwnerMarketOverview / OwnerDashboard.
 const KK = {
-  red: '#ef4444', redLight: '#fef2f2', redBorder: '#fecaca',
+  red: '#ef4444', redLight: '#fef2f2',
   blue: '#1e3a5f', blueLight: '#eff6ff',
-  purple: '#475569', purpleLight: '#f1f5f9',
   green: '#16a34a', greenLight: '#f0fdf4',
-  orange: '#d97706', orangeLight: '#fef3c7',
   amber: '#d97706', amberLight: '#fefce8',
-  slate: '#475569', slateLight: '#f1f5f9',
-  gray: '#94a3b8', grayLight: '#fafafa',
+  gray: '#94a3b8',
   border: '#e5e7eb',
 };
-const kkTooltipStyle = {
-  backgroundColor: 'white', border: `1px solid ${KK.border}`, borderRadius: '8px',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: '12px', padding: '8px 12px',
-};
 
-// Compact THB — Thai real-estate convention "X ล้าน" / "K" (NOT M/B). Canonical formatter
-// copied from OwnerMarketOverview / OwnerDashboard / Index.tsx.
+// Compact THB — Thai convention "X ล้าน" / "K" (NOT M/B). Canonical (Index.tsx).
 const fmtCompact = (n: number) => {
   if (!Number.isFinite(n) || n === 0) return '฿0';
   const abs = Math.abs(n);
@@ -68,46 +43,23 @@ const fmtCompact = (n: number) => {
   return `${sign}฿${abs.toFixed(0)}`;
 };
 
-// preference enums → Thai (mirrors OwnerCustomers).
-const OCC_TH: Record<string, string> = {
-  private_company: 'พนักงานบริษัท', government: 'ข้าราชการ', state_enterprise: 'รัฐวิสาหกิจ',
-  business_owner: 'เจ้าของธุรกิจ', freelance: 'อาชีพอิสระ', professional: 'วิชาชีพเฉพาะ',
-  employee: 'พนักงาน', retired: 'เกษียณ', student: 'นักศึกษา', other: 'อื่น ๆ',
-};
-const PURPOSE_TH: Record<string, string> = {
-  investment: 'ลงทุน', residence: 'อยู่อาศัยเอง', rental: 'ปล่อยเช่า',
-  family: 'ซื้อให้ครอบครัว', vacation: 'บ้านพักตากอากาศ', other: 'อื่น ๆ',
-};
-const DONUT_COLORS = [KK.blue, KK.red, KK.green, KK.amber, KK.slate, '#7c3aed', '#0891b2', '#db2777'];
-
-// Funnel stages (mirrors OwnerFunnel — cumulative; 'lost' excluded).
-const STAGE_ORDER = ['new', 'contacted', 'qualified', 'viewing_scheduled', 'negotiating', 'reserved', 'won'];
-const STAGE_LABEL: Record<string, string> = {
-  new: 'ลีดใหม่', contacted: 'ติดต่อแล้ว', qualified: 'ผ่านคุณสมบัติ',
-  viewing_scheduled: 'นัด/ดูโครงการ', negotiating: 'กำลังเจรจา', reserved: 'จองแล้ว', won: 'ปิดการขาย',
-};
-const FUNNEL_STAGES = ['new', 'contacted', 'qualified', 'viewing_scheduled', 'negotiating', 'won'];
-
-// Marketing teaser — sample data (UI-first; mirrors OwnerMarketing's wChannel/wTopCampaign).
-const MK_CHANNEL = [{ name: 'LINE OA', v: 14 }, { name: 'Facebook', v: 9 }, { name: 'Email', v: 6 }, { name: 'SMS', v: 3 }];
-const MK_TOP_CAMPAIGN = [
-  { name: 'โปรบ้านหลังแรก', reach: 12400 },
-  { name: 'ดอกเบี้ยพิเศษ Q2', reach: 9800 },
-  { name: 'Open House หัวหิน', reach: 7200 },
-];
-
-// AGGREGATE-ONLY rows — NO full_name / per-person PII (overview = ภาพรวม).
-interface CustomerRow { tenant_id: string; preferences: any; }
-interface LeadRow { tenant_id: string; status: string | null; estimated_value: number | null; }
-interface TenantRow { id: string; }
+// AGGREGATE-ONLY — read the rich CDP/scoring fields off leads, no full_name / PII.
+interface LeadRow {
+  tenant_id: string;
+  status: string | null;
+  estimated_value: number | null;
+  potential_score: number | null;
+  financing_approved: boolean | null;
+  max_loan_amount: number | null;
+  website_visits: number | null;
+  site_visit_attended: boolean | null;
+}
 
 const OwnerBuyerOverview = () => {
   const navigate = useNavigate();
   const { isOwner } = usePermissions();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-
-  const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [leads, setLeads] = useState<LeadRow[]>([]);
 
   useEffect(() => {
@@ -118,17 +70,14 @@ const OwnerBuyerOverview = () => {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      // Cross-tenant read — Owner RLS permits it. Exclude our own platform tenant.
       const { data: tenants } = await supabase.from('tenants').select('id').eq('is_platform' as any, false);
-      const ids = ((tenants || []) as TenantRow[]).map((t) => t.id);
+      const ids = ((tenants || []) as { id: string }[]).map((t) => t.id);
       if (ids.length > 0) {
-        // AGGREGATE ONLY — select preferences for distribution, NOT full_name (no PII).
-        const [cRes, lRes] = await Promise.all([
-          supabase.from('customers').select('tenant_id, preferences').in('tenant_id', ids),
-          supabase.from('leads').select('tenant_id, status, estimated_value').in('tenant_id', ids),
-        ]);
-        setCustomers((cRes.data || []) as CustomerRow[]);
-        setLeads((lRes.data || []) as LeadRow[]);
+        const { data } = await supabase
+          .from('leads')
+          .select('tenant_id, status, estimated_value, potential_score, financing_approved, max_loan_amount, website_visits, site_visit_attended')
+          .in('tenant_id', ids);
+        setLeads((data || []) as LeadRow[]);
       }
     } catch (e) {
       console.error('OwnerBuyerOverview fetch error:', e);
@@ -137,63 +86,47 @@ const OwnerBuyerOverview = () => {
     }
   };
 
-  // ── KPIs ───────────────────────────────────────────────────────────────
+  // ── KPIs — glance summary (detail lives on Funnel/Customers) ──────────────
   const kpis = useMemo(() => {
-    const totalBuyers = customers.length;
-    const totalLeads = leads.length;
+    const total = leads.length;
+    const tenantsActive = new Set(leads.map((l) => l.tenant_id)).size;
     const won = leads.filter((l) => l.status === 'won').length;
-    const conversion = totalLeads ? Math.round((won / totalLeads) * 100) : 0;
+    const conversion = total ? Math.round((won / total) * 100) : 0;
+    const hot = leads.filter((l) => (l.potential_score ?? -1) >= 70).length;
     const pipeline = leads
       .filter((l) => l.status !== 'won' && l.status !== 'lost')
       .reduce((s, l) => s + (Number(l.estimated_value) || 0), 0);
-    return { totalBuyers, totalLeads, conversion, pipeline };
-  }, [customers, leads]);
+    return { total, tenantsActive, won, conversion, hot, pipeline };
+  }, [leads]);
 
-  // ── Demographic distributions (top occupations + purpose) — aggregate ────
-  const occData = useMemo(() => {
-    const m = new Map<string, number>();
-    customers.forEach((c) => {
-      const occ = (c.preferences || {}).occupation || 'other';
-      m.set(occ, (m.get(occ) || 0) + 1);
-    });
-    return Array.from(m.entries())
-      .map(([k, v], i) => ({ name: OCC_TH[k] || k, value: v, color: DONUT_COLORS[i % DONUT_COLORS.length] }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 6);
-  }, [customers]);
-
-  const purposeData = useMemo(() => {
-    const m = new Map<string, number>();
-    customers.forEach((c) => {
-      const p = (c.preferences || {}).purchase_purpose;
-      if (p && p !== 'other') m.set(p, (m.get(p) || 0) + 1);
-    });
-    return Array.from(m.entries())
-      .map(([k, v], i) => ({ name: PURPOSE_TH[k] || k, value: v, color: DONUT_COLORS[i % DONUT_COLORS.length] }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 6);
-  }, [customers]);
-
-  // ── Funnel summary (cumulative stage counts) — mirrors OwnerFunnel ────────
-  const funnel = useMemo(() => {
-    const idxOf = (s: string | null) => { const i = STAGE_ORDER.indexOf(s || ''); return i < 0 ? 0 : i; };
-    const active = leads.filter((l) => l.status !== 'lost');
-    return FUNNEL_STAGES.map((stage) => {
-      const si = STAGE_ORDER.indexOf(stage);
-      const count = active.filter((l) => idxOf(l.status) >= si).length;
-      return { stage, label: STAGE_LABEL[stage] || stage, count };
+  // ── HERO: AI score band → actual close-rate (proves the engine predicts) ──
+  // This is the page's UNIQUE value — Funnel shows score distribution, not the
+  // score-vs-outcome proof.
+  const bands = useMemo(() => {
+    const scored = leads.filter((l) => l.potential_score != null);
+    const def = [
+      { key: 'hot', label: 'ร้อน', range: 'สกอร์ 70+', color: KK.red, test: (s: number) => s >= 70 },
+      { key: 'warm', label: 'อุ่น', range: 'สกอร์ 40–69', color: KK.amber, test: (s: number) => s >= 40 && s < 70 },
+      { key: 'cold', label: 'เย็น', range: 'สกอร์ < 40', color: KK.gray, test: (s: number) => s < 40 },
+    ];
+    return def.map((b) => {
+      const rows = scored.filter((l) => b.test(Number(l.potential_score)));
+      const won = rows.filter((l) => l.status === 'won').length;
+      return { ...b, leads: rows.length, won, winPct: rows.length ? Math.round((won / rows.length) * 100) : 0 };
     });
   }, [leads]);
 
-  // ── Marketing teaser (sample data) ────────────────────────────────────────
-  const marketing = useMemo(() => {
-    const totalCampaigns = MK_CHANNEL.reduce((s, c) => s + c.v, 0);
-    const totalReach = MK_TOP_CAMPAIGN.reduce((s, c) => s + c.reach, 0);
-    const reachMax = Math.max(...MK_TOP_CAMPAIGN.map((c) => c.reach), 1);
-    return { totalCampaigns, totalReach, reachMax };
-  }, []);
+  // ── CDP depth — what the platform auto-builds per lead ────────────────────
+  const cdp = useMemo(() => {
+    const withLoan = leads.filter((l) => l.max_loan_amount != null && Number(l.max_loan_amount) > 0);
+    const avgMaxLoan = withLoan.length ? withLoan.reduce((s, l) => s + Number(l.max_loan_amount), 0) / withLoan.length : 0;
+    const financingApproved = leads.filter((l) => l.financing_approved).length;
+    const withVisits = leads.filter((l) => l.website_visits != null);
+    const avgVisits = withVisits.length ? withVisits.reduce((s, l) => s + Number(l.website_visits), 0) / withVisits.length : 0;
+    const siteVisits = leads.filter((l) => l.site_visit_attended).length;
+    return { avgMaxLoan, financingApproved, avgVisits, siteVisits };
+  }, [leads]);
 
-  // Compact KPI card — same shape as OwnerMarketOverview.renderKpiCard.
   const renderKpiCard = (k: any, i: number) => (
     <div key={i} onClick={() => navigate(k.href)} className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6 cursor-pointer hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200">
       <div className="flex items-start justify-between mb-5">
@@ -204,35 +137,6 @@ const OwnerBuyerOverview = () => {
       {k.sub ? <p className="text-sm text-gray-400 mt-3.5 leading-snug line-clamp-2">{k.sub}</p> : null}
     </div>
   );
-
-  // Compact donut block — mirrors OwnerCustomers.Donut (legend max 6).
-  const renderDonut = (data: { name: string; value: number; color: string }[]) => {
-    const sum = data.reduce((s, x) => s + x.value, 0) || 1;
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-        <div className="h-[190px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={52} outerRadius={82} paddingAngle={2} stroke="white" strokeWidth={2}>
-                {data.map((d, i) => <Cell key={i} fill={d.color} />)}
-              </Pie>
-              <Tooltip contentStyle={kkTooltipStyle} formatter={((v: any, n: any) => [`${v} คน`, n]) as any} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="space-y-1.5">
-          {data.map((d, i) => (
-            <div key={i} className="flex items-center gap-2 text-xs">
-              <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: d.color }} />
-              <span className="text-gray-600 flex-1 truncate">{d.name}</span>
-              <span className="font-semibold text-gray-800 tabular-nums">{d.value}</span>
-              <span className="text-gray-400 tabular-nums w-9 text-right">{Math.round((d.value / sum) * 100)}%</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
 
   if (loading) {
     return (
@@ -253,7 +157,30 @@ const OwnerBuyerOverview = () => {
     );
   }
 
-  const funnelMax = funnel[0]?.count || 1;
+  const hot = bands.find((b) => b.key === 'hot');
+  const cold = bands.find((b) => b.key === 'cold');
+
+  // CDP capability cards (full-width showcase row).
+  const capabilities = [
+    {
+      icon: Banknote, color: KK.green, bg: KK.greenLight,
+      title: 'ประเมินสินเชื่ออัตโนมัติ',
+      value: `${cdp.financingApproved.toLocaleString()} รายอนุมัติได้`,
+      desc: `วงเงินเฉลี่ย ${fmtCompact(cdp.avgMaxLoan)}/ราย · คำนวณ DTI/LTV ตามเกณฑ์ธนาคารไทย`,
+    },
+    {
+      icon: Activity, color: KK.blue, bg: KK.blueLight,
+      title: 'ติดตามพฤติกรรมผู้ซื้อ',
+      value: `เข้าเว็บเฉลี่ย ${cdp.avgVisits.toFixed(1)} ครั้ง/ราย`,
+      desc: `${cdp.siteVisits.toLocaleString()} รายมาดูโครงการ · เข้าชม·หน้า·โบรชัวร์·นัดชม`,
+    },
+    {
+      icon: Brain, color: KK.red, bg: KK.redLight,
+      title: 'AI score 4 ปัจจัย',
+      value: 'การเงิน · engagement · urgency · fit',
+      desc: 'รวมเป็น potential score + โอกาสปิด · คำนวณสดทุกครั้งที่บันทึกลีด',
+    },
+  ];
 
   return (
     <OwnerGuard>
@@ -266,135 +193,92 @@ const OwnerBuyerOverview = () => {
             <div>
               <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-2 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>Analytics</span>
               <h1 className="text-2xl font-bold text-gray-900">ภาพรวมผู้ซื้อ</h1>
-              <p className="text-sm text-gray-500 mt-1.5">ภาพรวมฐานผู้ซื้อ ช่องทาง และการแปลงผู้สนใจ ข้ามทุกบริษัท — กดดูรายละเอียด</p>
+              <p className="text-sm text-gray-500 mt-1.5">หลักฐานว่า CDP &amp; AI scoring ของแพลตฟอร์มทำงานจริง · จาก {kpis.tenantsActive} บริษัทที่ใช้ระบบ — กดเข้าดู<span className="font-medium text-gray-600">ฐานลูกค้า</span>และ<span className="font-medium text-gray-600">กรวยการขาย</span>เชิงลึก</p>
             </div>
 
-            {/* KPI strip — 4 cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {[
-                { label: 'ผู้สนใจซื้อทั้งหมด', value: kpis.totalBuyers.toLocaleString(), icon: Users, color: KK.blue, href: '/owner-customers', sub: 'ข้ามทุกบริษัท (CDP)' },
-                { label: 'ผู้สนใจ (ลีดทั้งหมด)', value: kpis.totalLeads.toLocaleString(), icon: UserPlusIcon, color: KK.green, href: '/owner-funnel', sub: 'สะสมทุกขั้นของกรวย' },
-                { label: 'อัตราแปลง (Conversion)', value: `${kpis.conversion}%`, icon: Percent, color: KK.red, href: '/owner-funnel', sub: 'ปิดได้ / ลีดทั้งหมด' },
-                { label: 'มูลค่าดีล (อสังหา)', value: fmtCompact(kpis.pipeline), icon: Banknote, color: KK.amber, href: '/owner-funnel', sub: 'ลีดที่ยังเปิดอยู่' },
-              ].map(renderKpiCard)}
-            </div>
-
-            {/* Demographic summary (occupation + purpose donuts) */}
-            <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <PieChartIcon className="w-4 h-4 flex-shrink-0" style={{ color: KK.blue }} />
-                  <div>
-                    <h2 className="text-base font-bold text-gray-900">กลุ่มผู้ซื้อ</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">Top segments · อาชีพและวัตถุประสงค์การซื้อ</p>
-                  </div>
-                </div>
-                <button onClick={() => navigate('/owner-customers')} className="inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap" style={{ color: KK.red }}>
-                  ดูฐานข้อมูลผู้ซื้อ <ChevronRight className="w-3.5 h-3.5" />
-                </button>
+            {leads.length === 0 ? (
+              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-12 text-center">
+                <Users className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                <p className="text-sm text-gray-500">ยังไม่มีข้อมูลลีด</p>
               </div>
-              {customers.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-10">ยังไม่มีข้อมูลผู้ซื้อ</p>
-              ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-1">อาชีพผู้ซื้อ</h3>
-                    {occData.length === 0 ? (
-                      <p className="text-sm text-gray-400 py-12 text-center">ยังไม่มีข้อมูล</p>
-                    ) : renderDonut(occData)}
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-1">วัตถุประสงค์การซื้อ</h3>
-                    {purposeData.length === 0 ? (
-                      <p className="text-sm text-gray-400 py-12 text-center">ยังไม่มีข้อมูล</p>
-                    ) : renderDonut(purposeData)}
-                  </div>
+            ) : (
+              <>
+                {/* KPI strip — glance summary, each drills into the owning detail page */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[
+                    { label: 'ผู้สนใจในระบบ', value: kpis.total.toLocaleString(), icon: Users, color: KK.blue, href: '/owner-customers', sub: `${kpis.tenantsActive} บริษัทที่ใช้ระบบ · ระบบให้สกอร์อัตโนมัติ` },
+                    { label: 'AI คัดเป็นลีดคุณภาพสูง', value: kpis.hot.toLocaleString(), icon: Flame, color: KK.red, href: '/owner-funnel', sub: 'potential score ≥ 70 (กลุ่มร้อน)' },
+                    { label: 'อัตราแปลงรวม (Conversion)', value: `${kpis.conversion}%`, icon: Percent, color: KK.green, href: '/owner-funnel', sub: 'ปิดได้ / ลีดทั้งหมด' },
+                    { label: 'มูลค่าดีลในไปป์ไลน์', value: fmtCompact(kpis.pipeline), icon: Banknote, color: KK.amber, href: '/owner-funnel', sub: 'ลีดที่ยังเปิดอยู่' },
+                  ].map(renderKpiCard)}
                 </div>
-              )}
-            </div>
 
-            {/* Funnel summary (left) + Marketing teaser (right) */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Funnel summary */}
-              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Filter className="w-4 h-4 flex-shrink-0" style={{ color: KK.red }} />
-                    <div>
-                      <h2 className="text-base font-bold text-gray-900">กรวยการขาย (Funnel)</h2>
-                      <p className="text-xs text-gray-500 mt-0.5">จำนวนลีดแต่ละขั้น · % เทียบลีดใหม่</p>
+                {/* HERO — AI score band vs actual close-rate (this page's unique proof) */}
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
+                  <div className="flex items-start justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <Brain className="w-4 h-4 flex-shrink-0" style={{ color: KK.red }} />
+                      <h2 className="text-base font-bold text-gray-900">AI Scoring แม่นแค่ไหน</h2>
                     </div>
+                    <button onClick={() => navigate('/owner-funnel')} className="inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap" style={{ color: KK.red }}>
+                      ดู Funnel &amp; สกอร์ <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                  <button onClick={() => navigate('/owner-funnel')} className="inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap" style={{ color: KK.red }}>
-                    ดู Funnel <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                {leads.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-10">ยังไม่มีข้อมูลลีด</p>
-                ) : (
-                  <div className="space-y-3">
-                    {funnel.map((s, i) => {
-                      const pct = funnelMax ? Math.round((s.count / funnelMax) * 100) : 0;
-                      return (
-                        <div key={s.stage}>
-                          <div className="flex items-center justify-between text-sm mb-1">
-                            <span className="text-gray-700 font-medium">{i + 1}. {s.label}</span>
-                            <span className="tabular-nums text-gray-500">{s.count.toLocaleString()} <span className="text-gray-400">· {pct}%</span></span>
-                          </div>
-                          <div className="h-6 rounded-lg bg-gray-100 overflow-hidden">
-                            <div className="h-full rounded-lg transition-all duration-700"
-                              style={{ width: `${Math.max(pct, 2)}%`, background: `linear-gradient(90deg, ${KK.red} 0%, #f87171 100%)` }} />
+                  <p className="text-xs text-gray-500 mb-4">สกอร์ที่ระบบให้แต่ละลีด เทียบ<span className="font-semibold text-gray-700">อัตราปิดจริง</span> · ยิ่งสกอร์สูง ยิ่งปิดได้ = สมองที่เราขาย</p>
+                  <div className="space-y-4">
+                    {bands.map((b) => (
+                      <div key={b.key}>
+                        <div className="flex items-center justify-between text-sm mb-1.5">
+                          <span className="font-medium text-gray-700">
+                            {b.label} <span className="text-xs text-gray-400">· {b.range} · {b.leads.toLocaleString()} ลีด</span>
+                          </span>
+                          <span className="tabular-nums font-bold" style={{ color: b.color }}>{b.winPct}% <span className="text-xs font-normal text-gray-400">ปิดได้</span></span>
+                        </div>
+                        <div className="h-7 rounded-lg bg-gray-100 overflow-hidden">
+                          <div className="h-full rounded-lg flex items-center justify-end pr-2 transition-all duration-700"
+                            style={{ width: `${Math.max(b.winPct, 4)}%`, background: `linear-gradient(90deg, ${b.color}cc 0%, ${b.color} 100%)` }}>
+                            <span className="text-xs font-semibold text-white tabular-nums">{b.won}/{b.leads}</span>
                           </div>
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
                   </div>
-                )}
-              </div>
+                  {hot && cold && (
+                    <p className="text-xs text-gray-500 mt-4 leading-relaxed">
+                      ลีดที่ระบบบอกว่า <span className="font-semibold" style={{ color: KK.red }}>ร้อน ปิดได้ {hot.winPct}%</span> เทียบ <span className="font-semibold text-gray-600">เย็น {cold.winPct}%</span> — ทีมขายโฟกัสถูกตัว ไม่เสียเวลา = คุณค่าที่ลูกค้าจ่ายค่าระบบ
+                    </p>
+                  )}
+                </div>
 
-              {/* Marketing teaser */}
-              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Megaphone className="w-4 h-4 flex-shrink-0" style={{ color: KK.amber }} />
-                    <div>
-                      <h2 className="text-base font-bold text-gray-900">การตลาด</h2>
-                      <p className="text-xs text-gray-500 mt-0.5">แคมเปญและการเข้าถึง · ทุกบริษัท</p>
-                    </div>
-                  </div>
-                  <button onClick={() => navigate('/owner-marketing')} className="inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap" style={{ color: KK.red }}>
-                    ดู Marketing <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                {/* Summary stats */}
-                <div className="grid grid-cols-2 gap-3 mb-5">
-                  <div className="rounded-xl bg-gray-50 p-3 text-center">
-                    <p className="text-2xl font-bold tabular-nums leading-none" style={{ color: KK.red }}>{marketing.totalCampaigns.toLocaleString()}</p>
-                    <p className="text-xs text-gray-500 mt-1.5">แคมเปญทั้งหมด</p>
-                  </div>
-                  <div className="rounded-xl bg-gray-50 p-3 text-center">
-                    <p className="text-2xl font-bold tabular-nums leading-none" style={{ color: KK.blue }}>{(marketing.totalReach / 1000).toFixed(1)}K</p>
-                    <p className="text-xs text-gray-500 mt-1.5">เข้าถึง (Reach)</p>
-                  </div>
-                </div>
-                {/* Top campaigns by reach */}
-                <p className="text-sm font-semibold text-gray-700 mb-2">แคมเปญเข้าถึงมากสุด</p>
-                <div className="space-y-3">
-                  {MK_TOP_CAMPAIGN.map((c) => (
-                    <div key={c.name}>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-gray-700 font-medium truncate pr-2">{c.name}</span>
-                        <span className="tabular-nums text-gray-500 flex-shrink-0">{c.reach.toLocaleString()} reach</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${Math.max((c.reach / marketing.reachMax) * 100, 3)}%`, background: `linear-gradient(90deg, ${KK.amber} 0%, #fbbf24 100%)` }} />
+                {/* CDP depth — what the platform auto-builds per lead (full-width showcase) */}
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Brain className="w-4 h-4 flex-shrink-0" style={{ color: KK.blue }} />
+                      <div>
+                        <h2 className="text-base font-bold text-gray-900">ความลึกของข้อมูลที่ CDP สร้าง</h2>
+                        <p className="text-xs text-gray-500 mt-0.5">ระบบสร้างให้อัตโนมัติทุกลีด — ของที่ CRM ทั่วไปไม่มี</p>
                       </div>
                     </div>
-                  ))}
+                    <button onClick={() => navigate('/owner-customers')} className="inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap" style={{ color: KK.red }}>
+                      ดูฐานข้อมูลผู้สนใจ <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {capabilities.map((c, i) => (
+                      <div key={i} className="rounded-xl border border-gray-100 p-4">
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ backgroundColor: c.bg }}>
+                          <c.icon className="w-4 h-4" style={{ color: c.color }} />
+                        </div>
+                        <p className="text-sm font-semibold text-gray-800">{c.title}</p>
+                        <p className="text-sm text-gray-700 mt-1.5 font-medium">{c.value}</p>
+                        <p className="text-xs text-gray-400 mt-1 leading-relaxed">{c.desc}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <p className="text-xs text-gray-400 mt-4">ข้อมูลตัวอย่างเพื่อสาธิต · เชื่อมต่อแคมเปญจริงภายหลัง</p>
-              </div>
-            </div>
+              </>
+            )}
           </main>
         </div>
       </div>

@@ -5,7 +5,8 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import { supabase } from '@/lib/supabase';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Filter, Users, Percent, Flame, Banknote } from 'lucide-react';
+import TenantCombobox from '@/components/owner/TenantCombobox';
+import { Filter, Users, Percent, Flame, Banknote, ArrowLeft } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -201,21 +202,16 @@ const OwnerFunnel = () => {
           <main className="p-6 lg:p-8 space-y-7">
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div>
+                <button onClick={() => navigate('/owner-buyer-overview')} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition-colors mb-3">
+                  <ArrowLeft className="w-4 h-4" /> กลับ ภาพรวมผู้ซื้อ
+                </button>
                 <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
                   Intelligence
                 </span>
                 <h1 className="text-2xl font-bold text-gray-900">Lead Funnel &amp; Scoring</h1>
                 <p className="text-sm text-gray-500 mt-1.5">เส้นทางลีดข้ามทุกบริษัท + คะแนนคุณภาพ/การเงิน (สมองของแพลตฟอร์ม)</p>
               </div>
-              <Select value={tenantFilter} onValueChange={setTenantFilter}>
-                <SelectTrigger className="h-9 w-[200px] text-sm mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">ทุกบริษัท</SelectItem>
-                  {tenantList.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <TenantCombobox value={tenantFilter} onChange={setTenantFilter} options={tenantList} className="w-[200px] mt-1" />
             </div>
 
             {/* KPIs */}

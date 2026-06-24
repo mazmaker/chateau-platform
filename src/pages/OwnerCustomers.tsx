@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Users, Banknote, Target, Briefcase, Contact, ChevronRight } from 'lucide-react';
+import { Users, Banknote, Target, Briefcase, Contact, ChevronRight, ArrowLeft } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -298,6 +298,9 @@ const OwnerCustomers = () => {
           <Header onMenuClick={() => setSidebarOpen(true)} />
           <main className="p-6 lg:p-8 space-y-7">
             <div>
+              <button onClick={() => navigate('/owner-buyer-overview')} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition-colors mb-3">
+                <ArrowLeft className="w-4 h-4" /> กลับ ภาพรวมผู้ซื้อ
+              </button>
               <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
                 ผู้สนใจ
               </span>
