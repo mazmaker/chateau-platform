@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Trophy, TrendingUp, Percent, Users, ChevronRight, Search } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { type PeriodKey, periodToRange, periodRangeLabel } from '@/components/dashboard/PeriodFilter';
 
 // ──────────────────────────────────────────────────────────────────────────
 // อันดับผู้ขาย (เจาะรายคน) — extracted from the old standalone "Sales Performance"
@@ -46,22 +47,24 @@ const kkTooltipStyle = {
 const PIE_COLORS = ['#1e3a5f', '#ef4444', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#475569'];
 
 interface UserRow { id: string; full_name: string | null; role: string | null; tenant_id: string | null; }
-interface LeadRow { assigned_to: string | null; status: string | null; estimated_value: number | null; referred_by_agent_id: string | null; }
+interface LeadRow { assigned_to: string | null; status: string | null; estimated_value: number | null; referred_by_agent_id: string | null; updated_at: string | null; }
 interface PerfRow {
   id: string; name: string; role: string; company: string;
   assigned: number; won: number; wonValue: number; referrals: number; conversion: number;
 }
 
-const SalesAgentsSection = () => {
+const SalesAgentsSection = ({ period }: { period: PeriodKey }) => {
   const [loading, setLoading] = useState(true);
-  const [rows, setRows] = useState<PerfRow[]>([]);
+  const [rawUsers, setRawUsers] = useState<UserRow[]>([]);
+  const [rawLeads, setRawLeads] = useState<LeadRow[]>([]);
+  const [tenantNameMap, setTenantNameMap] = useState<Map<string, string>>(new Map());
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
 
   useEffect(() => { fetchAll(); }, []);
-  useEffect(() => { setCurrentPage(1); }, [searchQuery, roleFilter]);
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, roleFilter, period]);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -69,47 +72,14 @@ const SalesAgentsSection = () => {
       const { data: tenants } = await supabase.from('tenants').select('id, name').eq('is_platform' as any, false);
       const tlist = (tenants || []) as { id: string; name: string }[];
       const ids = tlist.map((t) => t.id);
-      const tenantName = new Map(tlist.map((t) => [t.id, t.name]));
+      setTenantNameMap(new Map(tlist.map((t) => [t.id, t.name])));
       if (ids.length > 0) {
         const [uRes, lRes] = await Promise.all([
           supabase.from('users').select('id, full_name, role, tenant_id').in('tenant_id', ids),
-          supabase.from('leads').select('assigned_to, status, estimated_value, referred_by_agent_id').in('tenant_id', ids),
+          supabase.from('leads').select('assigned_to, status, estimated_value, referred_by_agent_id, updated_at').in('tenant_id', ids),
         ]);
-        const users = (uRes.data || []) as UserRow[];
-        const leads = (lRes.data || []) as LeadRow[];
-
-        const perf = new Map<string, { assigned: number; won: number; wonValue: number; referrals: number }>();
-        const ensure = (id: string) => {
-          let r = perf.get(id);
-          if (!r) { r = { assigned: 0, won: 0, wonValue: 0, referrals: 0 }; perf.set(id, r); }
-          return r;
-        };
-        leads.forEach((l) => {
-          if (l.assigned_to) {
-            const r = ensure(l.assigned_to);
-            r.assigned += 1;
-            if (l.status === 'won') { r.won += 1; r.wonValue += Number(l.estimated_value) || 0; }
-          }
-          if (l.referred_by_agent_id) ensure(l.referred_by_agent_id).referrals += 1;
-        });
-
-        const out: PerfRow[] = users
-          .map((u) => {
-            const p = perf.get(u.id);
-            if (!p) return null;
-            return {
-              id: u.id,
-              name: u.full_name || 'ไม่ระบุชื่อ',
-              role: u.role || 'unknown',
-              company: tenantName.get(u.tenant_id || '') || '–',
-              assigned: p.assigned, won: p.won, wonValue: p.wonValue, referrals: p.referrals,
-              conversion: p.assigned > 0 ? Math.round((p.won / p.assigned) * 100) : 0,
-            } as PerfRow;
-          })
-          .filter((r): r is PerfRow => r !== null && (r.assigned > 0 || r.referrals > 0))
-          .sort((a, b) => b.wonValue - a.wonValue || b.won - a.won);
-
-        setRows(out);
+        setRawUsers((uRes.data || []) as UserRow[]);
+        setRawLeads((lRes.data || []) as LeadRow[]);
       }
     } catch (e) {
       console.error('SalesAgentsSection fetch error:', e);
@@ -117,6 +87,44 @@ const SalesAgentsSection = () => {
       setLoading(false);
     }
   };
+
+  // Per-salesperson rollup — scoped to the selected period via lead activity date (updated_at).
+  // No won_at column → updated_at ≈ the won/last-touch date (same proxy as the deal card).
+  const rows = useMemo<PerfRow[]>(() => {
+    const { from, to } = periodToRange(period);
+    const inPeriod = (s: string | null) => { if (!s) return false; const t = new Date(s); return (!from || t >= from) && t <= to; };
+    const perf = new Map<string, { assigned: number; won: number; wonValue: number; referrals: number }>();
+    const ensure = (id: string) => {
+      let r = perf.get(id);
+      if (!r) { r = { assigned: 0, won: 0, wonValue: 0, referrals: 0 }; perf.set(id, r); }
+      return r;
+    };
+    rawLeads.forEach((l) => {
+      if (!inPeriod(l.updated_at)) return;
+      if (l.assigned_to) {
+        const r = ensure(l.assigned_to);
+        r.assigned += 1;
+        if (l.status === 'won') { r.won += 1; r.wonValue += Number(l.estimated_value) || 0; }
+      }
+      if (l.referred_by_agent_id) ensure(l.referred_by_agent_id).referrals += 1;
+    });
+    return rawUsers
+      .map((u) => {
+        const p = perf.get(u.id);
+        if (!p) return null;
+        return {
+          id: u.id,
+          name: u.full_name || 'ไม่ระบุชื่อ',
+          role: u.role || 'unknown',
+          company: tenantNameMap.get(u.tenant_id || '') || '–',
+          assigned: p.assigned, won: p.won, wonValue: p.wonValue, referrals: p.referrals,
+          conversion: p.assigned > 0 ? Math.round((p.won / p.assigned) * 100) : 0,
+        } as PerfRow;
+      })
+      // ทีมขาย = พนักงานขาย (sales) + นายหน้า (agent) เท่านั้น — admin/owner ไม่ใช่ทีมขาย
+      .filter((r): r is PerfRow => r !== null && (r.role === 'sales' || r.role === 'agent') && (r.assigned > 0 || r.referrals > 0))
+      .sort((a, b) => b.wonValue - a.wonValue || b.won - a.won);
+  }, [rawLeads, rawUsers, tenantNameMap, period]);
 
   const totals = useMemo(() => {
     const won = rows.reduce((s, r) => s + r.won, 0);
@@ -167,12 +175,12 @@ const SalesAgentsSection = () => {
 
   return (
     <div className="space-y-7">
-      <p className="text-sm text-gray-500">พนักงานขาย/นายหน้าทั้งแพลตฟอร์ม · วัดจาก Lead ที่ดูแลและปิดได้</p>
+      <p className="text-sm text-gray-500">พนักงานขาย/นายหน้าทั้งแพลตฟอร์ม · วัดจาก Lead ที่ดูแลและปิดได้ · {periodRangeLabel(period)}</p>
 
       {loading ? (
         <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-12 text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-3" />
-          <p className="text-sm text-gray-500">กำลังโหลดอันดับผู้ขาย...</p>
+          <p className="text-sm text-gray-500">กำลังโหลดอันดับทีมขาย...</p>
         </div>
       ) : rows.length === 0 ? (
         <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-12 text-center">
@@ -182,7 +190,7 @@ const SalesAgentsSection = () => {
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <KpiCard title="ผู้ขายทั้งหมด" value={totals.people.toLocaleString()} sub="มี Lead ดูแล" icon={Users} color={KK.blue} bg={KK.blueLight} />
+            <KpiCard title="ทีมขายทั้งหมด" value={totals.people.toLocaleString()} sub="มี Lead ดูแล" icon={Users} color={KK.blue} bg={KK.blueLight} />
             <KpiCard title="ดีลปิดรวม (won)" value={totals.won.toLocaleString()} sub="ทั้งแพลตฟอร์ม" icon={Trophy} color={KK.green} bg={KK.greenLight} />
             <KpiCard title="มูลค่าดีล (ประเมิน)" value={fmtCompact(totals.wonValue)} sub="ประเมินจาก Lead" icon={TrendingUp} color={KK.red} bg={KK.redLight} />
             <KpiCard title="Conversion เฉลี่ย" value={`${totals.conversion}%`} sub="ปิดได้ / ดูแลทั้งหมด" icon={Percent} color={KK.amber} bg={KK.amberLight} />
@@ -191,8 +199,8 @@ const SalesAgentsSection = () => {
           {pieData.length > 0 && (
             <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
               <div className="mb-4">
-                <h2 className="text-base font-bold text-gray-900">สัดส่วนมูลค่าดีลที่ปิดได้ตามผู้ขาย</h2>
-                <p className="text-xs text-gray-500 mt-0.5">ก้อนใหญ่สุด = ผู้ขายที่ปิดดีลได้มูลค่ามากสุด · ชี้ที่กราฟเพื่อดูมูลค่า</p>
+                <h2 className="text-base font-bold text-gray-900">สัดส่วนมูลค่าดีลที่ปิดได้ตามทีมขาย</h2>
+                <p className="text-xs text-gray-500 mt-0.5">ก้อนใหญ่สุด = คนในทีมขายที่ปิดดีลได้มูลค่ามากสุด · ชี้ที่กราฟเพื่อดูมูลค่า</p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
                 <div className="h-[260px]">
@@ -226,7 +234,7 @@ const SalesAgentsSection = () => {
           <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
               <div>
-                <h2 className="text-base font-bold text-gray-900">อันดับผู้ขาย</h2>
+                <h2 className="text-base font-bold text-gray-900">อันดับทีมขาย</h2>
                 <p className="text-xs text-gray-500 mt-0.5">เรียงตามมูลค่าดีลที่ปิดได้</p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -246,7 +254,6 @@ const SalesAgentsSection = () => {
                     <SelectItem value="all">ทุกบทบาท</SelectItem>
                     <SelectItem value="sales">พนักงานขาย</SelectItem>
                     <SelectItem value="agent">นายหน้า</SelectItem>
-                    <SelectItem value="admin">ผู้ดูแลบริษัท</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -256,7 +263,7 @@ const SalesAgentsSection = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10">#</TableHead>
-                    <TableHead>ผู้ขาย</TableHead>
+                    <TableHead>รายชื่อ</TableHead>
                     <TableHead>บริษัท</TableHead>
                     <TableHead className="text-right">Lead ดูแล</TableHead>
                     <TableHead className="text-right">ปิดได้</TableHead>
@@ -285,7 +292,7 @@ const SalesAgentsSection = () => {
                   ))}
                   {paginated.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-sm text-gray-400 py-8">ไม่พบผู้ขายที่ตรงเงื่อนไข</TableCell>
+                      <TableCell colSpan={8} className="text-center text-sm text-gray-400 py-8">ไม่พบรายชื่อที่ตรงเงื่อนไข</TableCell>
                     </TableRow>
                   )}
                 </TableBody>

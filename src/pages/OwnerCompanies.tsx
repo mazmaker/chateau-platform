@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Building2, TrendingUp, Percent, ArrowUpRight, Home, ChevronRight, Search } from 'lucide-react';
+import { Building2, TrendingUp, Percent, ArrowUpRight, ChevronRight, Search } from 'lucide-react';
 import { ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import SalesAgentsSection from '@/components/owner/SalesAgentsSection';
 
@@ -237,7 +237,7 @@ const OwnerCompanies = () => {
                   Analytics
                 </span>
                 <h1 className="text-2xl font-bold text-gray-900">อันดับยอดขาย</h1>
-                <p className="text-sm text-gray-500 mt-1.5">เรียงตามมูลค่าขาย{periodRangeLabel(period)} · ข้ามทั้งแพลตฟอร์ม · sell-through/GDV = สะสม</p>
+                <p className="text-sm text-gray-500 mt-1.5">เรียงตามมูลค่าขาย{periodRangeLabel(period)} · ข้ามทั้งแพลตฟอร์ม · Sell-through/GDV = สะสม</p>
               </div>
               <PeriodFilter value={period} onChange={setPeriod} tier="strategic" className="self-start sm:self-auto shrink-0" />
             </div>
@@ -245,7 +245,7 @@ const OwnerCompanies = () => {
             <Tabs defaultValue="company" className="space-y-7">
               <TabsList>
                 <TabsTrigger value="company">รายบริษัท</TabsTrigger>
-                <TabsTrigger value="agents">รายผู้ขาย</TabsTrigger>
+                <TabsTrigger value="agents">ทีมขาย</TabsTrigger>
               </TabsList>
 
               <TabsContent value="company" className="space-y-7 mt-2 focus-visible:outline-none">
@@ -257,11 +257,10 @@ const OwnerCompanies = () => {
             ) : (
               <>
                 {/* KPIs */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <KpiCard title="บริษัทที่มีทรัพย์ในระบบ" value={totals.companies.toLocaleString()} sub="ฐานที่นำมาจัดอันดับ" icon={Building2} color={KK.blue} bg={KK.blueLight} />
-                  <KpiCard title="มูลค่าขายเฉลี่ย/บริษัท" value={fmtCompact(totals.companies > 0 ? totals.soldValue / totals.companies : 0)} sub="ต่อบริษัทที่มีสินค้า" icon={TrendingUp} color={KK.green} bg={KK.greenLight} />
-                  <KpiCard title="Sell-through เฉลี่ย" value={`${totals.sellThrough}%`} sub="ขายแล้ว / ทั้งหมด" icon={Percent} color={KK.amber} bg={KK.amberLight} />
-                  <KpiCard title="ยูนิตขายเฉลี่ย/บริษัท" value={(totals.companies > 0 ? Math.round(totals.sold / totals.companies) : 0).toLocaleString()} sub="ยูนิต/บริษัท" icon={Home} color={KK.red} bg={KK.redLight} />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <KpiCard title="บริษัทในอันดับ" value={totals.companies.toLocaleString()} sub="มียูนิตในระบบ" icon={Building2} color={KK.blue} bg={KK.blueLight} />
+                  <KpiCard title="มูลค่าขายเฉลี่ย/บริษัท" value={fmtCompact(totals.companies > 0 ? totals.soldValue / totals.companies : 0)} sub="ต่อบริษัทที่มียูนิต" icon={TrendingUp} color={KK.green} bg={KK.greenLight} />
+                  <KpiCard title="Sell-through รวม" value={`${totals.sellThrough}%`} sub="ขายแล้ว / ทั้งหมด" icon={Percent} color={KK.amber} bg={KK.amberLight} />
                 </div>
 
                 {/* Overview donut: share of sold value by company (เฮีย: ภาพรวมต้องเป็นวงกลม เห็นก้อนใหญ่สุด) */}
@@ -358,7 +357,7 @@ const OwnerCompanies = () => {
                                     className="text-xs font-semibold px-2 py-0.5 rounded-full cursor-pointer whitespace-nowrap"
                                     style={{ color: b.color, backgroundColor: b.bg }}
                                     onClick={(e) => { e.stopPropagation(); navigate(`/tenants/${r.id}`); }}
-                                    title="ดูรายละเอียด tenant"
+                                    title="ดูรายละเอียดบริษัท"
                                   >
                                     {b.label}
                                   </span>
@@ -419,7 +418,7 @@ const OwnerCompanies = () => {
               </TabsContent>
 
               <TabsContent value="agents" className="mt-2 focus-visible:outline-none">
-                <SalesAgentsSection />
+                <SalesAgentsSection period={period} />
               </TabsContent>
             </Tabs>
           </main>
