@@ -6,8 +6,9 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trophy, TrendingUp, Percent, Users, ChevronRight, Search } from 'lucide-react';
+import { Trophy, TrendingUp, Percent, Users, ChevronRight, Search, Phone, Mail, Building2, Calendar, Clock, Tag } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { type PeriodKey, periodToRange, periodRangeLabel } from '@/components/dashboard/PeriodFilter';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -40,17 +41,50 @@ const fmtCompact = (n: number) => {
   return `${sign}฿${abs.toFixed(0)}`;
 };
 const ROLE_TH: Record<string, string> = { sales: 'พนักงานขาย', agent: 'นายหน้า', admin: 'ผู้ดูแลบริษัท', owner: 'แพลตฟอร์ม' };
+// Thai mobile 10-digit → 0XX-XXX-XXXX
+const fmtPhone = (p: string | null): string | null => {
+  if (!p) return null;
+  const d = p.replace(/\D/g, '');
+  return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}` : p;
+};
+const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) : '–');
 const kkTooltipStyle = {
   backgroundColor: 'white', border: `1px solid ${KK.border}`, borderRadius: '8px',
   boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: '11px', padding: '4px 8px',
 };
 const PIE_COLORS = ['#1e3a5f', '#ef4444', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#475569'];
 
-interface UserRow { id: string; full_name: string | null; role: string | null; tenant_id: string | null; }
-interface LeadRow { assigned_to: string | null; status: string | null; estimated_value: number | null; referred_by_agent_id: string | null; updated_at: string | null; }
+// Labelled contact/meta row for the detail panel.
+const InfoItem = ({ icon: Icon, label, value, muted }: { icon: React.ElementType; label: string; value: string; muted?: boolean }) => (
+  <div className="flex items-start gap-2.5 min-w-0">
+    <Icon className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+    <div className="min-w-0">
+      <p className="text-xs text-gray-400 leading-tight">{label}</p>
+      <p className={`text-sm truncate mt-0.5 ${muted ? 'text-gray-400' : 'text-gray-800 font-medium'}`}>{value}</p>
+    </div>
+  </div>
+);
+
+// KPI cell for the detail panel performance strip (no background tint — sits in a divided card).
+const StatBox = ({ value, label, color }: { value: string; label: string; color?: string }) => (
+  <div className="py-3 px-2 text-center">
+    <div className="text-base font-bold tabular-nums leading-tight" style={{ color: color || '#111827' }}>{value}</div>
+    <div className="text-xs text-gray-500 mt-1">{label}</div>
+  </div>
+);
+
+interface UserRow {
+  id: string; full_name: string | null; role: string | null; tenant_id: string | null;
+  email: string | null; phone: string | null; is_active: boolean | null;
+  last_sign_in_at: string | null; created_at: string | null; referral_code: string | null;
+}
+interface LeadRow { assigned_to: string | null; status: string | null; estimated_value: number | null; referred_by_agent_id: string | null; updated_at: string | null; property_id: string | null; }
+interface Deal { project: string; value: number; date: string | null; }
 interface PerfRow {
   id: string; name: string; role: string; company: string;
   assigned: number; won: number; wonValue: number; referrals: number; conversion: number;
+  email: string | null; phone: string | null; isActive: boolean | null;
+  lastLogin: string | null; joined: string | null; referralCode: string | null;
 }
 
 const SalesAgentsSection = ({ period }: { period: PeriodKey }) => {
@@ -58,6 +92,8 @@ const SalesAgentsSection = ({ period }: { period: PeriodKey }) => {
   const [rawUsers, setRawUsers] = useState<UserRow[]>([]);
   const [rawLeads, setRawLeads] = useState<LeadRow[]>([]);
   const [tenantNameMap, setTenantNameMap] = useState<Map<string, string>>(new Map());
+  const [propMap, setPropMap] = useState<Map<string, string>>(new Map());
+  const [selected, setSelected] = useState<PerfRow | null>(null);
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
@@ -74,12 +110,14 @@ const SalesAgentsSection = ({ period }: { period: PeriodKey }) => {
       const ids = tlist.map((t) => t.id);
       setTenantNameMap(new Map(tlist.map((t) => [t.id, t.name])));
       if (ids.length > 0) {
-        const [uRes, lRes] = await Promise.all([
-          supabase.from('users').select('id, full_name, role, tenant_id').in('tenant_id', ids),
-          supabase.from('leads').select('assigned_to, status, estimated_value, referred_by_agent_id, updated_at').in('tenant_id', ids),
+        const [uRes, lRes, pRes] = await Promise.all([
+          supabase.from('users').select('id, full_name, role, tenant_id, email, phone, is_active, last_sign_in_at, created_at, referral_code').in('tenant_id', ids),
+          supabase.from('leads').select('assigned_to, status, estimated_value, referred_by_agent_id, updated_at, property_id').in('tenant_id', ids),
+          supabase.from('properties').select('id, name').in('tenant_id', ids),
         ]);
         setRawUsers((uRes.data || []) as UserRow[]);
         setRawLeads((lRes.data || []) as LeadRow[]);
+        setPropMap(new Map(((pRes.data || []) as { id: string; name: string }[]).map((p) => [p.id, p.name])));
       }
     } catch (e) {
       console.error('SalesAgentsSection fetch error:', e);
@@ -119,12 +157,30 @@ const SalesAgentsSection = ({ period }: { period: PeriodKey }) => {
           company: tenantNameMap.get(u.tenant_id || '') || '–',
           assigned: p.assigned, won: p.won, wonValue: p.wonValue, referrals: p.referrals,
           conversion: p.assigned > 0 ? Math.round((p.won / p.assigned) * 100) : 0,
+          email: u.email, phone: u.phone, isActive: u.is_active,
+          lastLogin: u.last_sign_in_at, joined: u.created_at, referralCode: u.referral_code,
         } as PerfRow;
       })
       // ทีมขาย = พนักงานขาย (sales) + นายหน้า (agent) เท่านั้น — admin/owner ไม่ใช่ทีมขาย
       .filter((r): r is PerfRow => r !== null && (r.role === 'sales' || r.role === 'agent') && (r.assigned > 0 || r.referrals > 0))
       .sort((a, b) => b.wonValue - a.wonValue || b.won - a.won);
   }, [rawLeads, rawUsers, tenantNameMap, period]);
+
+  // Won-deal breakdown per person (in-period) — the source behind each row's "มูลค่าดีล",
+  // so the detail panel can answer "เงินก้อนนี้มาจากดีลไหนบ้าง" (project + value only, no customer PII).
+  const dealsByPerson = useMemo<Map<string, Deal[]>>(() => {
+    const { from, to } = periodToRange(period);
+    const inPeriod = (s: string | null) => { if (!s) return false; const t = new Date(s); return (!from || t >= from) && t <= to; };
+    const m = new Map<string, Deal[]>();
+    rawLeads.forEach((l) => {
+      if (l.status !== 'won' || !l.assigned_to || !inPeriod(l.updated_at)) return;
+      const arr = m.get(l.assigned_to) || [];
+      arr.push({ project: propMap.get(l.property_id || '') || 'ไม่ระบุโครงการ', value: Number(l.estimated_value) || 0, date: l.updated_at });
+      m.set(l.assigned_to, arr);
+    });
+    m.forEach((arr) => arr.sort((a, b) => b.value - a.value));
+    return m;
+  }, [rawLeads, propMap, period]);
 
   const totals = useMemo(() => {
     const won = rows.reduce((s, r) => s + r.won, 0);
@@ -274,12 +330,13 @@ const SalesAgentsSection = ({ period }: { period: PeriodKey }) => {
                 </TableHeader>
                 <TableBody>
                   {paginated.map((r, i) => (
-                    <TableRow key={r.id}>
+                    <TableRow key={r.id} className="cursor-pointer hover:bg-gray-50 group" onClick={() => setSelected(r)}>
                       <TableCell className="text-gray-400 tabular-nums">{pageStart + i + 1}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-gray-900">{r.name}</span>
                           <Badge variant="outline" className="text-xs px-1.5 py-0">{ROLE_TH[r.role] || r.role}</Badge>
+                          <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-chateau transition-colors flex-shrink-0" />
                         </div>
                       </TableCell>
                       <TableCell className="text-gray-600">{r.company}</TableCell>
@@ -333,6 +390,99 @@ const SalesAgentsSection = ({ period }: { period: PeriodKey }) => {
           </div>
         </>
       )}
+
+      {/* Salesperson detail — contact + activity + performance + deal sources (no customer PII) */}
+      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+        <DialogContent className="max-w-lg max-h-[88vh] overflow-y-auto p-0 gap-0">
+          {selected && (() => {
+            const deals = dealsByPerson.get(selected.id) || [];
+            const maxDeal = Math.max(...deals.map((d) => d.value), 1);
+            const initial = (selected.name.trim()[0] || '?').toUpperCase();
+            const accent = selected.role === 'agent' ? KK.blue : KK.red;
+            return (
+              <>
+                {/* Header band — avatar + identity */}
+                <div className="px-6 pt-6 pb-5 border-b border-gray-100">
+                  <div className="flex items-start gap-4">
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold text-white flex-shrink-0 shadow-soft"
+                      style={{ background: `linear-gradient(135deg, ${accent} 0%, ${accent}cc 100%)` }}>
+                      {initial}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <DialogTitle className="text-lg font-bold text-gray-900 leading-tight">{selected.name}</DialogTitle>
+                        <Badge variant="outline" className="text-xs px-1.5 py-0">{ROLE_TH[selected.role] || selected.role}</Badge>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1.5 text-gray-500">
+                        <Building2 className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span className="text-sm truncate">{selected.company}</span>
+                      </div>
+                      <span className={`inline-flex items-center gap-1.5 mt-2.5 text-xs px-2 py-0.5 rounded-full font-medium ${selected.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: selected.isActive ? KK.green : KK.gray }} />
+                        {selected.isActive ? 'ใช้งานอยู่' : 'ปิดใช้งาน'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="px-6 py-5 space-y-5">
+                  {/* ติดต่อ / meta — labelled 2-col grid */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
+                    <InfoItem icon={Mail} label="อีเมล" value={selected.email || '–'} />
+                    <InfoItem icon={Phone} label="เบอร์โทร" value={fmtPhone(selected.phone) || 'ยังไม่ได้กรอก'} muted={!selected.phone} />
+                    {selected.referralCode && <InfoItem icon={Tag} label="โค้ดแนะนำ" value={selected.referralCode} />}
+                    <InfoItem icon={Clock} label="เข้าใช้งานล่าสุด" value={fmtDate(selected.lastLogin)} muted={!selected.lastLogin} />
+                    <InfoItem icon={Calendar} label="เข้าร่วมเมื่อ" value={fmtDate(selected.joined)} />
+                  </div>
+
+                  {/* ผลงานช่วงที่เลือก — tinted stat boxes */}
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2.5">ผลงาน · {periodRangeLabel(period)}</p>
+                    <div className="grid grid-cols-4 rounded-xl border border-gray-100 divide-x divide-gray-100">
+                      <StatBox value={selected.assigned.toLocaleString()} label="Lead ดูแล" />
+                      <StatBox value={selected.won.toLocaleString()} label="ปิดได้" color={KK.green} />
+                      <StatBox value={`${selected.conversion}%`} label="Conversion" />
+                      <StatBox value={fmtCompact(selected.wonValue)} label="มูลค่าดีล" color={KK.red} />
+                    </div>
+                  </div>
+
+                  {/* ที่มาของมูลค่า — ranked deals with relative bars */}
+                  <div>
+                    <div className="flex items-baseline justify-between mb-1">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">ดีลที่ปิดได้ · ที่มาของมูลค่า</p>
+                      <span className="text-xs text-gray-400 tabular-nums">{deals.length} ดีล</span>
+                    </div>
+                    <p className="text-xs text-gray-400 mb-3">{fmtCompact(selected.wonValue)} แยกตามโครงการ · ไม่แสดงข้อมูลลูกค้า (PDPA)</p>
+                    {deals.length === 0 ? (
+                      <p className="text-sm text-gray-400 py-4 text-center bg-gray-50 rounded-xl">ไม่มีดีลปิดในช่วงนี้</p>
+                    ) : (
+                      <div className="space-y-2.5 max-h-[240px] overflow-y-auto pr-1 -mr-1">
+                        {deals.map((d, idx) => (
+                          <div key={idx} className="flex items-center gap-3">
+                            <span className="w-5 text-xs font-bold tabular-nums text-gray-300 text-center flex-shrink-0">{idx + 1}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-sm text-gray-700 truncate">{d.project}</span>
+                                <span className="text-sm font-semibold text-gray-900 tabular-nums flex-shrink-0">{fmtCompact(d.value)}</span>
+                              </div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden flex-1">
+                                  <div className="h-full rounded-full" style={{ width: `${Math.max((d.value / maxDeal) * 100, 3)}%`, background: idx === 0 ? KK.red : '#fca5a5' }} />
+                                </div>
+                                <span className="text-xs text-gray-400 flex-shrink-0 tabular-nums">{fmtDate(d.date)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
