@@ -12,6 +12,7 @@ import {
   Eye,
   Flame,
   PhoneOff,
+  Search,
   Send,
   Target,
   TrendingUp,
@@ -21,12 +22,12 @@ import {
 import {
   AreaChart,
   Area,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
   CartesianGrid,
 } from "recharts";
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 import { supabase } from "@/lib/supabase";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
 import { LEAD_STATUS_LABELS } from "@/lib/leadStatus";
@@ -125,10 +126,29 @@ interface ReferralLead {
   sales_person?: { full_name: string | null } | null;
 }
 
+// Compact inline name search for the action-queue cards (Hot / Silent / Referrals).
+// Module-level so it keeps focus across parent re-renders (no remount on keystroke).
+function MiniSearch({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <div className="relative mb-3">
+      <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="h-9 w-full pl-8 pr-3 text-sm rounded-lg border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 placeholder:text-gray-400"
+      />
+    </div>
+  );
+}
+
 const MyDashboard = () => {
   const navigate = useNavigate();
   const { user, userProfile, currentTenant, userRole } = useSimpleAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hotQuery, setHotQuery] = useState('');
+  const [silentQuery, setSilentQuery] = useState('');
+  const [referralQuery, setReferralQuery] = useState('');
   const [myLeads, setMyLeads] = useState<LeadRow[]>([]);
   const [allLeads, setAllLeads] = useState<{ assigned_to: string | null; status: string | null; estimated_value: number | null; updated_at: string }[]>([]);
   const [myLockedUnits, setMyLockedUnits] = useState<UnitLockedRow[]>([]);
@@ -439,6 +459,22 @@ const MyDashboard = () => {
       const tb = new Date(b.last_contact_date || b.created_at).getTime();
       return tb - ta;
     });
+
+  // Inline name search for the action queues — keeps priority order, just hides non-matches.
+  const hq = hotQuery.trim().toLowerCase();
+  const hotLeadsFiltered = hq
+    ? hotLeadsList.filter((l) => (l.customers?.full_name || '').toLowerCase().includes(hq))
+    : hotLeadsList;
+  const sq = silentQuery.trim().toLowerCase();
+  const silentLeadsFiltered = sq
+    ? silentLeadsList.filter((l) => (l.customers?.full_name || '').toLowerCase().includes(sq))
+    : silentLeadsList;
+  const rq = referralQuery.trim().toLowerCase();
+  const referralsFiltered = rq
+    ? myReferrals.filter((r) =>
+        (r.customers?.full_name || '').toLowerCase().includes(rq) ||
+        (r.sales_person?.full_name || '').toLowerCase().includes(rq))
+    : myReferrals;
 
   // Reservations expiring in the next 7 days
   const expiringSoon = myLockedUnits.filter((u) => {
@@ -867,8 +903,15 @@ const MyDashboard = () => {
                       {hotLeadsList.length === 0 ? (
                         <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ไม่มีลีดร้อนตอนนี้</div>
                       ) : (
+                        <>
+                        {hotLeadsList.length > 6 && (
+                          <MiniSearch value={hotQuery} onChange={setHotQuery} placeholder="ค้นหาชื่อลูกค้า..." />
+                        )}
+                        {hotLeadsFiltered.length === 0 ? (
+                          <div className="h-[120px] flex items-center justify-center text-sm text-gray-400">ไม่พบชื่อที่ค้นหา</div>
+                        ) : (
                         <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-                          {hotLeadsList.map((l) => {
+                          {hotLeadsFiltered.map((l) => {
                             const badge = stageBadge(l.status);
                             const isManualHot = l.priority === 'high';
                             const isAiHot = !isManualHot && (l.potential_score ?? 0) >= ML_HOT_THRESHOLD;
@@ -926,6 +969,8 @@ const MyDashboard = () => {
                             );
                           })}
                         </div>
+                        )}
+                        </>
                       )}
                     </div>
 
@@ -944,8 +989,15 @@ const MyDashboard = () => {
                       {silentLeadsList.length === 0 ? (
                         <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">ไม่มีลีดเงียบ — ติดตามครบทุกคน</div>
                       ) : (
+                        <>
+                        {silentLeadsList.length > 6 && (
+                          <MiniSearch value={silentQuery} onChange={setSilentQuery} placeholder="ค้นหาชื่อลูกค้า..." />
+                        )}
+                        {silentLeadsFiltered.length === 0 ? (
+                          <div className="h-[120px] flex items-center justify-center text-sm text-gray-400">ไม่พบชื่อที่ค้นหา</div>
+                        ) : (
                         <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-                          {silentLeadsList.map((l) => {
+                          {silentLeadsFiltered.map((l) => {
                             const sev = l.daysCount >= 30 ? C.red : l.daysCount >= 14 ? C.amber : '#d97706';
                             const badge = stageBadge(l.status);
                             return (
@@ -976,6 +1028,8 @@ const MyDashboard = () => {
                             );
                           })}
                         </div>
+                        )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -996,6 +1050,13 @@ const MyDashboard = () => {
                       ยังไม่มี referral — ส่งต่อ Lead ที่หน้า Leads ผ่านปุ่ม "ส่งต่อ Sales"
                     </div>
                   ) : (
+                    <>
+                    {myReferrals.length > 6 && (
+                      <MiniSearch value={referralQuery} onChange={setReferralQuery} placeholder="ค้นหาชื่อลูกค้า / Sales..." />
+                    )}
+                    {referralsFiltered.length === 0 ? (
+                      <div className="h-[120px] flex items-center justify-center text-sm text-gray-400">ไม่พบชื่อที่ค้นหา</div>
+                    ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
@@ -1008,7 +1069,7 @@ const MyDashboard = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {myReferrals.map((r) => {
+                          {referralsFiltered.map((r) => {
                             const badge = stageBadge(r.status);
                             return (
                               <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/leads/${r.id}`)}>
@@ -1029,6 +1090,8 @@ const MyDashboard = () => {
                         </tbody>
                       </table>
                     </div>
+                    )}
+                    </>
                   )}
                 </div>
               ) : (
@@ -1171,7 +1234,7 @@ const MyDashboard = () => {
                             >
                               <span className="text-xs font-medium text-gray-700 min-w-[80px]">ยูนิต {u.unit_number}</span>
                               <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                                <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: C.indigo }} />
+                                <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: C.red }} />
                               </div>
                               <span className="text-xs tabular-nums text-gray-600 min-w-[40px] text-right">{u.views}</span>
                             </button>

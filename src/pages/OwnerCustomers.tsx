@@ -11,7 +11,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Users, Banknote, Target, Briefcase, Contact, ChevronRight, ArrowLeft } from 'lucide-react';
-import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Customer Intelligence (CDP) — Owner cross-tenant buyer intelligence.
@@ -83,7 +84,7 @@ interface CustomerRow {
 interface LeadLite { customer_id: string | null; status: string | null; estimated_value: number | null; financial_score: number | null; }
 interface Enriched {
   id: string; name: string; occupation: string; purpose: string;
-  age: number; income: number; debt: number; estValue: number; financial: number; won: boolean;
+  age: number; income: number; debt: number; estValue: number; wonValue: number; financial: number; won: boolean;
 }
 
 const OwnerCustomers = () => {
@@ -95,6 +96,7 @@ const OwnerCustomers = () => {
   const [search, setSearch] = useState('');
   const [occ, setOcc] = useState('all');
   const [purpose, setPurpose] = useState('all');
+  const [occMode, setOccMode] = useState<'count' | 'value'>('count');
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -116,14 +118,16 @@ const OwnerCustomers = () => {
         const customers = (cRes.data || []) as CustomerRow[];
         const leads = (lRes.data || []) as LeadLite[];
 
-        // Per-customer rollup from leads: biggest estimated deal + won flag + financial score.
-        const byCust = new Map<string, { estValue: number; financial: number; won: boolean }>();
+        // Per-customer rollup from leads: biggest estimated deal + won flag + financial score
+        // + total value of WON deals only (for the "ซื้อจริง" occupation view — closed value,
+        // not the largest estimate among any lead).
+        const byCust = new Map<string, { estValue: number; wonValue: number; financial: number; won: boolean }>();
         leads.forEach((l) => {
           if (!l.customer_id) return;
-          const r = byCust.get(l.customer_id) || { estValue: 0, financial: 0, won: false };
+          const r = byCust.get(l.customer_id) || { estValue: 0, wonValue: 0, financial: 0, won: false };
           r.estValue = Math.max(r.estValue, Number(l.estimated_value) || 0);
           r.financial = Math.max(r.financial, Number(l.financial_score) || 0);
-          if (l.status === 'won') r.won = true;
+          if (l.status === 'won') { r.won = true; r.wonValue += Number(l.estimated_value) || 0; }
           byCust.set(l.customer_id, r);
         });
 
@@ -139,6 +143,7 @@ const OwnerCustomers = () => {
             income: Number(p.monthly_income) || 0,
             debt: Number(p.monthly_debt) || 0,
             estValue: lead?.estValue || 0,
+            wonValue: lead?.wonValue || 0,
             financial: lead?.financial || 0,
             won: lead?.won || false,
           };
@@ -161,13 +166,33 @@ const OwnerCustomers = () => {
       .sort((a, b) => b.value - a.value);
   }, [rows]);
 
+  // Stable color per occupation (by headcount desc) so a given occupation keeps the
+  // SAME donut color when toggling จำนวน↔มูลค่าซื้อ (the two datasets have different sets).
+  const occColorMap = useMemo(() => {
+    const counts = new Map<string, number>();
+    rows.forEach((r) => counts.set(r.occupation, (counts.get(r.occupation) || 0) + 1));
+    const keys = Array.from(counts.keys()).sort((a, b) => (counts.get(b) || 0) - (counts.get(a) || 0));
+    const map: Record<string, string> = {};
+    keys.forEach((k, i) => { map[k] = DONUT_COLORS[i % DONUT_COLORS.length]; });
+    return map;
+  }, [rows]);
+
   const occData = useMemo(() => {
     const m = new Map<string, number>();
     rows.forEach((r) => m.set(r.occupation, (m.get(r.occupation) || 0) + 1));
     return Array.from(m.entries())
-      .map(([k, v], i) => ({ name: OCC_TH[k] || k, value: v, color: DONUT_COLORS[i % DONUT_COLORS.length] }))
+      .map(([k, v]) => ({ name: OCC_TH[k] || k, value: v, color: occColorMap[k] || DONUT_COLORS[0] }))
       .sort((a, b) => b.value - a.value);
-  }, [rows]);
+  }, [rows, occColorMap]);
+
+  // "อาชีพไหนซื้อเยอะ" — by actual WON-deal value (sum of closed deals), not headcount (เฮีย's ask).
+  const occValueData = useMemo(() => {
+    const m = new Map<string, number>();
+    rows.forEach((r) => { if (r.wonValue > 0) m.set(r.occupation, (m.get(r.occupation) || 0) + r.wonValue); });
+    return Array.from(m.entries())
+      .map(([k, v]) => ({ name: OCC_TH[k] || k, value: v, color: occColorMap[k] || DONUT_COLORS[0] }))
+      .sort((a, b) => b.value - a.value);
+  }, [rows, occColorMap]);
 
   const ageData = useMemo(() => AGE_BANDS.map((b) => ({
     label: b.label, count: rows.filter((r) => r.age >= b.min && r.age < b.max).length,
@@ -226,34 +251,50 @@ const OwnerCustomers = () => {
     </div>
   );
 
-  const Donut = ({ title, sub, data }: { title: string; sub: string; data: { name: string; value: number; color: string }[] }) => (
-    <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-      <h2 className="text-base font-bold text-gray-900">{title}</h2>
-      <p className="text-xs text-gray-500 mb-2 mt-0.5">{sub}</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-        <div className="h-[200px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={54} outerRadius={84} paddingAngle={2} stroke="white" strokeWidth={2}>
-                {data.map((d, i) => <Cell key={i} fill={d.color} />)}
-              </Pie>
-              <Tooltip contentStyle={kkTooltipStyle} formatter={((v: any, n: any) => [`${v} คน`, n]) as any} />
-            </PieChart>
-          </ResponsiveContainer>
+  const Donut = ({ title, sub, data, headerRight, fmt }: {
+    title: string; sub: string; data: { name: string; value: number; color: string }[];
+    headerRight?: React.ReactNode; fmt?: (v: number) => string;
+  }) => {
+    const format = fmt || ((v: number) => `${v} คน`);
+    const sum = data.reduce((s, x) => s + x.value, 0) || 1;
+    return (
+      <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">{title}</h2>
+            <p className="text-xs text-gray-500 mb-2 mt-0.5">{sub}</p>
+          </div>
+          {headerRight}
         </div>
-        <div className="space-y-1.5">
-          {data.slice(0, 6).map((d, i) => (
-            <div key={i} className="flex items-center gap-2 text-xs">
-              <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: d.color }} />
-              <span className="text-gray-600 flex-1 truncate">{d.name}</span>
-              <span className="font-semibold text-gray-800 tabular-nums">{d.value}</span>
-              <span className="text-gray-400 tabular-nums w-9 text-right">{Math.round((d.value / (data.reduce((s, x) => s + x.value, 0) || 1)) * 100)}%</span>
-            </div>
-          ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+          <div className="h-[200px]">
+            {data.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-sm text-gray-400">ยังไม่มีข้อมูล</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={54} outerRadius={84} paddingAngle={2} stroke="white" strokeWidth={2}>
+                    {data.map((d, i) => <Cell key={i} fill={d.color} />)}
+                  </Pie>
+                  <Tooltip contentStyle={kkTooltipStyle} formatter={((v: any, n: any) => [format(Number(v)), n]) as any} />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            {data.slice(0, 6).map((d, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: d.color }} />
+                <span className="text-gray-600 flex-1 truncate">{d.name}</span>
+                <span className="font-semibold text-gray-800 tabular-nums">{format(d.value)}</span>
+                <span className="text-gray-400 tabular-nums w-9 text-right">{Math.round((d.value / sum) * 100)}%</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const BarBlock = ({ title, sub, data }: { title: string; sub: string; data: { label: string; count: number }[] }) => (
     <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
@@ -326,7 +367,18 @@ const OwnerCustomers = () => {
                 {/* Donuts: purpose + occupation */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <Donut title="วัตถุประสงค์การซื้อ" sub="เฉพาะผู้ที่ระบุ · ลงทุน vs อยู่อาศัย" data={purposeData} />
-                  <Donut title="อาชีพผู้ซื้อ" sub="สัดส่วนตามกลุ่มอาชีพ" data={occData} />
+                  <Donut
+                    title="อาชีพผู้ซื้อ"
+                    sub={occMode === 'value' ? 'อาชีพไหน "ซื้อจริง" เยอะสุด · มูลค่าดีลที่ปิดได้' : 'สัดส่วนตามกลุ่มอาชีพ (จำนวนคน)'}
+                    data={occMode === 'value' ? occValueData : occData}
+                    fmt={occMode === 'value' ? fmtCompact : undefined}
+                    headerRight={
+                      <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs flex-shrink-0 self-start">
+                        <button onClick={() => setOccMode('count')} className={`px-2.5 py-1 transition-colors ${occMode === 'count' ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>จำนวน</button>
+                        <button onClick={() => setOccMode('value')} className={`px-2.5 py-1 transition-colors ${occMode === 'value' ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>มูลค่าซื้อ</button>
+                      </div>
+                    }
+                  />
                 </div>
 
                 {/* Bars: age + income */}

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import UserCombobox from "@/components/leads/UserCombobox";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -1385,22 +1386,15 @@ const AddLeadModal = ({ isOpen, onClose, onLeadCreated, initialPropertyId, initi
                           <span className="text-xs text-gray-400 ml-auto">(อัตโนมัติ)</span>
                         </div>
                       ) : (
-                        <Select
+                        <UserCombobox
                           value={formData.assigned_to}
-                          onValueChange={(value) => setFormData(prev => ({ ...prev, assigned_to: value }))}
+                          onChange={(value) => setFormData(prev => ({ ...prev, assigned_to: value }))}
+                          options={salesPeople.map((p) => ({ id: p.id, name: p.full_name || p.email, sub: p.full_name ? p.email : undefined }))}
                           disabled={loading}
-                        >
-                          <SelectTrigger className="mt-1.5 max-w-md">
-                            <SelectValue placeholder="เลือกพนักงานขาย" />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-60">
-                            {salesPeople.map((person) => (
-                              <SelectItem key={person.id} value={person.id}>
-                                {person.full_name || person.email}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          placeholder="เลือกพนักงานขาย"
+                          searchPlaceholder="ค้นหาชื่อพนักงานขาย..."
+                          className="mt-1.5 max-w-md"
+                        />
                       )}
                     </div>
                   </div>

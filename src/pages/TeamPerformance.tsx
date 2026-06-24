@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Trophy, Users, AlertTriangle, Award, ArrowUpDown, Loader2, CheckCircle,
+  Trophy, Users, AlertTriangle, Award, ArrowUpDown, Loader2, CheckCircle, Search, ChevronRight,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -88,6 +88,8 @@ export default function TeamPerformance() {
   const [atRiskOnly, setAtRiskOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('wonValue');
   const [sortDesc, setSortDesc] = useState(true);
+  const [nameQuery, setNameQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
 
   // "At risk" rule kept identical to the KPI definition below so the count on the
   // card and the rows the table highlights are always consistent.
@@ -190,6 +192,20 @@ export default function TeamPerformance() {
     return { topPerformer: topByValue, teamWonTotal, totalDeals, teamConvRate, totalLeads, atRisk };
   }, [filteredSortedRows]);
 
+  // Name search (find a specific person) + pagination — keeps the sort order intact.
+  const nq = nameQuery.trim().toLowerCase();
+  const searchedRows = nq
+    ? filteredSortedRows.filter((r) => r.name.toLowerCase().includes(nq))
+    : filteredSortedRows;
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(searchedRows.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * pageSize;
+  const paginated = searchedRows.slice(pageStart, pageStart + pageSize);
+
+  // Reset to first page whenever the filter / search / sort changes.
+  useEffect(() => { setCurrentPage(1); }, [nameQuery, roleFilter, atRiskOnly, sortKey, sortDesc]);
+
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDesc(!sortDesc);
@@ -287,6 +303,16 @@ export default function TeamPerformance() {
                   {atRiskOnly && <span className="text-red-400 ml-0.5">✕</span>}
                 </button>
               )}
+              <div className="relative sm:ml-auto">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="ค้นหาชื่อพนักงาน..."
+                  value={nameQuery}
+                  onChange={(e) => setNameQuery(e.target.value)}
+                  className="h-9 w-[200px] pl-8 pr-3 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
+                />
+              </div>
             </div>
 
             {/* Team table */}
@@ -296,12 +322,13 @@ export default function TeamPerformance() {
                   <div className="flex items-center justify-center h-64">
                     <Loader2 className="w-8 h-8 animate-spin text-gray-300" />
                   </div>
-                ) : filteredSortedRows.length === 0 ? (
+                ) : searchedRows.length === 0 ? (
                   <div className="text-center py-16 text-sm text-gray-400">
                     <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                    ไม่มีพนักงานในตัวกรองนี้
+                    {nameQuery.trim() ? 'ไม่พบชื่อที่ค้นหา' : 'ไม่มีพนักงานในตัวกรองนี้'}
                   </div>
                 ) : (
+                  <>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
@@ -318,7 +345,7 @@ export default function TeamPerformance() {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredSortedRows.map((r, i) => (
+                        {paginated.map((r, i) => (
                           <tr
                             key={r.userId}
                             onClick={() => navigate(`/team/${r.userId}/performance`)}
@@ -326,12 +353,12 @@ export default function TeamPerformance() {
                             title="คลิกเพื่อดูผลงานละเอียด"
                           >
                             <td className="py-3 px-3">
-                              {sortKey === 'wonValue' && sortDesc && i === 0 ? (
+                              {sortKey === 'wonValue' && sortDesc && (pageStart + i) === 0 ? (
                                 <span className="inline-flex items-center justify-center w-7 h-7 rounded-full text-sm bg-amber-100 text-amber-700">
                                   #1
                                 </span>
                               ) : (
-                                <span className="text-gray-500 font-semibold tabular-nums">#{i + 1}</span>
+                                <span className="text-gray-500 font-semibold tabular-nums">#{pageStart + i + 1}</span>
                               )}
                             </td>
                             <td className="py-3 px-3">
@@ -376,6 +403,28 @@ export default function TeamPerformance() {
                       </tbody>
                     </table>
                   </div>
+                  {searchedRows.length > pageSize && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 pb-4 pt-3 border-t border-gray-100">
+                      <span className="text-sm text-gray-500">แสดง {pageStart + 1}–{Math.min(pageStart + pageSize, searchedRows.length)} จาก {searchedRows.length} คน</span>
+                      <div className="flex items-center gap-1">
+                        <Button variant="outline" size="sm" className="h-8 px-2" disabled={safePage <= 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>
+                          <ChevronRight className="w-4 h-4 rotate-180" />
+                        </Button>
+                        {(() => {
+                          const pages: number[] = [];
+                          const to = Math.min(totalPages, Math.max(1, safePage - 2) + 4);
+                          for (let p = Math.max(1, to - 4); p <= to; p++) pages.push(p);
+                          return pages.map((p) => (
+                            <Button key={p} variant={p === safePage ? 'default' : 'outline'} size="sm" className={`h-8 w-8 p-0 text-xs ${p === safePage ? 'bg-chateau hover:bg-chateau-700 text-white' : ''}`} onClick={() => setCurrentPage(p)}>{p}</Button>
+                          ));
+                        })()}
+                        <Button variant="outline" size="sm" className="h-8 px-2" disabled={safePage >= totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  </>
                 )}
               </CardContent>
             </Card>

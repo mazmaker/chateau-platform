@@ -7,7 +7,8 @@ import { supabase } from '@/lib/supabase';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import TenantCombobox from '@/components/owner/TenantCombobox';
 import { Filter, Users, Percent, Flame, Banknote, ArrowLeft } from 'lucide-react';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Lead Funnel & Scoring — Owner cross-tenant lead engine + the dual-score brain.

@@ -23,12 +23,12 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   PieChart,
   Pie,
   Cell,
   ReferenceDot,
 } from 'recharts';
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 
 interface Tenant {
   id: string;

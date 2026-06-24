@@ -11,8 +11,8 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
 } from 'recharts';
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 import {
   UserPlus,
   PhoneOff,

@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import TenantCombobox from '@/components/owner/TenantCombobox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Layers, Home, Percent, Timer, Gauge, ChevronRight } from 'lucide-react';
-import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Inventory & Absorption — Owner cross-tenant supply health (real-estate KPI).

@@ -86,7 +86,6 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer,
   LineChart,
   Line,
   Cell,
@@ -95,6 +94,7 @@ import {
   PieChart,
   Pie,
 } from 'recharts';
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 
 // Types
 interface Campaign {

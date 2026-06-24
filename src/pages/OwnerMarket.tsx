@@ -9,7 +9,6 @@ import TenantCombobox from '@/components/owner/TenantCombobox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { TrendingUp, Tag, Home, BarChart3, ChevronRight } from 'lucide-react';
 import {
-  ResponsiveContainer,
   BarChart,
   Bar,
   PieChart,
@@ -22,6 +21,7 @@ import {
   CartesianGrid,
   Tooltip,
 } from 'recharts';
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 
 // ──────────────────────────────────────────────────────────────────────────
 // ภาพรวมตลาด — Owner cross-tenant market intelligence (HQ lens).

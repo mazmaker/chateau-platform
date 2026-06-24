@@ -6,11 +6,11 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 import {
   AlertTriangle,
   Briefcase,

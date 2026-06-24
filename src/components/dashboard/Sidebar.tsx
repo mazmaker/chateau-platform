@@ -18,7 +18,6 @@ import {
   ChevronDown,
   Contact,
   Sparkles,
-  Filter,
   HeartPulse,
   Building,
   MapPin,
@@ -105,7 +104,6 @@ const getAllNavItems = (): NavItem[] => [
   // See documents/owner-hq-dashboard-plan.md.
   { icon: PieChart,        label: "ภาพรวมผู้ซื้อ",        href: "/owner-buyer-overview", requiredRoles: ["OWNER"] },
   { icon: Contact,         label: "ฐานข้อมูลผู้สนใจ",    href: "/owner-customers", requiredRoles: ["OWNER"] },
-  { icon: Filter,          label: "Funnel & คะแนนผู้สนใจ", href: "/owner-funnel",  requiredRoles: ["OWNER"] },
   { icon: Megaphone,       label: "Marketing & Campaign", href: "/owner-marketing", requiredRoles: ["OWNER"] },
   { icon: PieChart,        label: "ภาพรวมตลาด",          href: "/owner-market-overview", requiredRoles: ["OWNER"] },
   { icon: TrendingUp,      label: "สัดส่วนยอดขาย",     href: "/owner-sales-breakdown", requiredRoles: ["OWNER"] },

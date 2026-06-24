@@ -74,7 +74,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  ResponsiveContainer,
   LineChart,
   Line,
   XAxis,
@@ -87,6 +86,7 @@ import {
   AreaChart,
   Area
 } from 'recharts';
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 
 interface PaymentOverview {
   totalRevenue: number;
@@ -226,7 +226,12 @@ const PaymentDashboard = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'overview');
+  // 'reports' (รายงานการเงิน) was merged into 'overview' (ภาพรวมการเงิน) on 2026-06-24
+  // — they were two overlapping billing summaries. Redirect old ?tab=reports deep links.
+  const [activeTab, setActiveTab] = useState(() => {
+    const t = searchParams.get('tab') || 'overview';
+    return t === 'reports' ? 'overview' : t;
+  });
   const [paymentOverview, setPaymentOverview] = useState<PaymentOverview>({
     totalRevenue: 0,
     totalOutstanding: 0,
@@ -370,7 +375,6 @@ const PaymentDashboard = () => {
     { id: 'payments', label: 'ติดตามการชำระ', icon: CreditCard },
     { id: 'calendar', label: 'ปฎิทินแจ้งเตือน', icon: Calendar },
     { id: 'overdue', label: 'ค้างชำระ', icon: AlertCircle },
-    { id: 'reports', label: 'รายงานการเงิน', icon: Activity },
     { id: 'revenue-health', label: 'สุขภาพรายได้', icon: TrendingUp }
   ];
 
@@ -2379,12 +2383,6 @@ const PaymentDashboard = () => {
             <div className="space-y-4">
               <h4 className="font-semibold">สถิติสรุป</h4>
               <div className="space-y-3">
-                <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                  <p className="font-medium text-green-800">อัตราการชำระสำเร็จ</p>
-                  <p className="text-2xl font-bold text-green-900">
-                    {((allPayments.filter(p => p.payment_status === 'completed').length / (allPayments.filter(p => p.payment_status !== 'cancelled').length || 1)) * 100).toFixed(1)}%
-                  </p>
-                </div>
                 <div className="p-3 bg-white shadow-sm rounded-lg border border-gray-200">
                   <p className="font-medium text-gray-700">ค่าเฉลี่ยต่อใบแจ้งหนี้</p>
                   <p className="text-2xl font-bold text-blue-900">
@@ -2438,7 +2436,8 @@ const PaymentDashboard = () => {
   const renderOverviewTab = () => (
     <>
       {/* Overview Stats */}
-      {/* รายได้รวม KPI ถูกย้ายออก — รายได้/MRR/retention อยู่บน Executive Dashboard แล้ว (กันซ้ำ). แท็บนี้โฟกัส billing-ops. */}
+      {/* รายได้/MRR อยู่บน Executive Dashboard (กันซ้ำ); ตัวเลข "ค้างชำระรายบริษัท" มีบ้านเดียวที่แท็บ "ค้างชำระ"
+          (กันเลขขัดกันจากคนละ query). ที่นี่ = ภาพรวม billing-ops: AR คงค้าง · ใบแจ้งหนี้รวม · อัตราเก็บเงิน. */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 lg:gap-6 mb-4 sm:mb-6">
         <Card>
           <CardContent className="p-4 sm:p-6">
@@ -2448,7 +2447,7 @@ const PaymentDashboard = () => {
               </div>
               <div>
                 <p className="text-2xl font-bold">{formatCurrency(paymentOverview.totalOutstanding)}</p>
-                <p className="text-sm text-muted-foreground">ยอดค้างชำระ</p>
+                <p className="text-sm text-muted-foreground">ยอดค้างรับทั้งหมด (AR)</p>
               </div>
             </div>
           </CardContent>
@@ -2472,11 +2471,11 @@ const PaymentDashboard = () => {
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-gradient-to-br from-chateau to-chateau-600 rounded-xl flex items-center justify-center shadow-xl">
-                <Users className="w-6 h-6 text-white" strokeWidth={2} />
+                <CheckCircle className="w-6 h-6 text-white" strokeWidth={2} />
               </div>
               <div>
-                <p className="text-2xl font-bold">{paymentOverview.tenantsWithOverdue}</p>
-                <p className="text-sm text-muted-foreground">บริษัทค้างชำระ</p>
+                <p className="text-2xl font-bold">{((allPayments.filter(p => p.payment_status === 'completed').length / (allPayments.filter(p => p.payment_status !== 'cancelled').length || 1)) * 100).toFixed(1)}%</p>
+                <p className="text-sm text-muted-foreground">อัตราเก็บเงินสำเร็จ</p>
               </div>
             </div>
           </CardContent>
@@ -2664,12 +2663,16 @@ const PaymentDashboard = () => {
                   </div>
                 ) : (
                   <>
-                    {activeTab === 'overview' && renderOverviewTab()}
+                    {activeTab === 'overview' && (
+                      <div className="space-y-4 sm:space-y-6">
+                        {renderOverviewTab()}
+                        {renderReportsTab()}
+                      </div>
+                    )}
                     {activeTab === 'invoices' && <InvoiceManagement />}
                     {activeTab === 'payments' && renderPaymentTrackingTab()}
                     {activeTab === 'calendar' && renderCalendarTab()}
                     {activeTab === 'overdue' && renderOverdueTab()}
-                    {activeTab === 'reports' && renderReportsTab()}
                     {activeTab === 'revenue-health' && <RevenueHealthSection />}
                   </>
                 )}

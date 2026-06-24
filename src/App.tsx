@@ -16,7 +16,6 @@ import OwnerBuyerOverview from "./pages/OwnerBuyerOverview";
 import OwnerSalesBreakdown from "./pages/OwnerSalesBreakdown";
 import OwnerCompanies from "./pages/OwnerCompanies";
 import OwnerCustomers from "./pages/OwnerCustomers";
-import OwnerFunnel from "./pages/OwnerFunnel";
 import OwnerTenantHealth from "./pages/OwnerTenantHealth";
 import OwnerMarketing from "./pages/OwnerMarketing";
 import OwnerAudit from "./pages/OwnerAudit";
@@ -284,13 +283,8 @@ const App = () => (
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />
-          <Route path="/owner-funnel" element={
-            <ErrorBoundary showRetry={true} showHome={true} errorMessage="ไม่สามารถโหลดหน้า Lead Funnel ได้" context={{ page: 'owner-funnel' }}>
-              <ProtectedRouteSimple requireRole="owner">
-                <OwnerFunnel />
-              </ProtectedRouteSimple>
-            </ErrorBoundary>
-          } />
+          {/* Funnel & คะแนนผู้สนใจ ถูกตัดออกจาก Owner console (KPI ซ้ำ ภาพรวมผู้ซื้อ + กรวยเป็น tenant-operational ไม่ใช่ SaaS-owner metric) — รีไดเรกต์กันลิงก์เก่าพัง. ไฟล์ OwnerFunnel.tsx ยังอยู่ใน git เผื่อ rollback */}
+          <Route path="/owner-funnel" element={<Navigate to="/owner-buyer-overview" replace />} />
           {/* Inventory & Absorption ถูกตัดออกจาก Owner console (เป็น tenant-operational ไม่ใช่ SaaS-owner metric) — รีไดเรกต์กันลิงก์เก่าพัง. ไฟล์ OwnerInventory.tsx ยังอยู่ใน git เผื่อ rollback */}
           <Route path="/owner-inventory" element={<Navigate to="/owner-market-overview" replace />} />
           <Route path="/owner-marketing" element={

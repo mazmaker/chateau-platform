@@ -12,7 +12,8 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Building2, TrendingUp, Percent, ArrowUpRight, ChevronRight, Search } from 'lucide-react';
-import { ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from 'recharts';
+import { Tooltip, PieChart, Pie, Cell } from 'recharts';
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 import SalesAgentsSection from '@/components/owner/SalesAgentsSection';
 
 // ──────────────────────────────────────────────────────────────────────────

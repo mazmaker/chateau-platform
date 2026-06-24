@@ -11,11 +11,11 @@ import {
   Cell,
   Pie,
   PieChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/charts/SmoothResponsiveContainer";
 import {
   ArrowDown,
   ArrowUp,
@@ -158,7 +158,10 @@ const Index = () => {
         // Lazy cleanup: revert reservations whose hold has expired. Fire-and-forget —
         // do NOT await, so this DB scan never blocks the initial dashboard render (it was
         // the main cause of the slow reload when navigating back to this page).
-        void (supabase as any).rpc('revert_expired_unit_reservations').catch(() => { /* ignore */ });
+        // Wrap in Promise.resolve: supabase.rpc() returns a thenable (not a real Promise),
+        // so calling .catch() on it directly throws "catch is not a function" — which used to
+        // crash load() before the units fetch ran, leaving the whole dashboard empty.
+        void Promise.resolve((supabase as any).rpc('revert_expired_unit_reservations')).catch(() => { /* ignore */ });
 
         // Bookings: only need cancelled ones from the last 30 days for the
         // "ยกเลิกการจอง" KPI card. Keep query lean — filter at DB.
@@ -485,7 +488,7 @@ const Index = () => {
                     <ResponsiveContainer width="100%" height={112}>
                       <BarChart data={salesByMonth12mo} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
                         <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} interval={0} />
-                        <Bar dataKey="count" fill={C.red} radius={[3, 3, 0, 0]} />
+                        <Bar dataKey="count" fill={C.red} radius={[3, 3, 0, 0]} animationDuration={900} animationBegin={150} animationEasing="ease-out" />
                         <Tooltip contentStyle={tooltipStyle} cursor={{ fill: '#fafafa' }} formatter={(v) => [`${v} ยูนิต`, '']} labelFormatter={(l) => `เดือน ${l}`} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -509,7 +512,7 @@ const Index = () => {
                       <div className="relative">
                         <ResponsiveContainer width="100%" height={180}>
                           <PieChart>
-                            <Pie data={donutData} cx="50%" cy="50%" innerRadius={52} outerRadius={76} paddingAngle={3} dataKey="value">
+                            <Pie data={donutData} cx="50%" cy="50%" innerRadius={52} outerRadius={76} paddingAngle={3} dataKey="value" animationDuration={950} animationBegin={200} animationEasing="ease-out">
                               {donutData.map((d, i) => <Cell key={i} fill={d.color} stroke="white" strokeWidth={2} />)}
                             </Pie>
                             <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v} ยูนิต`, '']} />
@@ -551,7 +554,7 @@ const Index = () => {
                           <XAxis type="number" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatTHB(Number(v))} />
                           <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#374151' }} axisLine={false} tickLine={false} width={120} />
                           <Tooltip contentStyle={tooltipStyle} formatter={(v) => [formatTHB(Number(v)), 'ยอดขาย']} />
-                          <Bar dataKey="value" fill={C.red} radius={[0, 6, 6, 0]} />
+                          <Bar dataKey="value" fill={C.red} radius={[0, 6, 6, 0]} animationDuration={1000} animationBegin={200} animationEasing="ease-out" />
                         </BarChart>
                       </ResponsiveContainer>
                       {allRevenue12mo > 0 && (
@@ -657,6 +660,9 @@ const Sparkline = ({ data, color, height = 60, dataKey = 'value', labelPrefix = 
         strokeWidth={2}
         fill={color}
         fillOpacity={0.12}
+        animationDuration={1100}
+        animationBegin={150}
+        animationEasing="ease-out"
       />
       <Tooltip
         contentStyle={tooltipStyle}

@@ -8,12 +8,13 @@ import { Users, Flame, Percent, Banknote, Brain, Activity, ChevronRight } from '
 
 // ──────────────────────────────────────────────────────────────────────────
 // ภาพรวมผู้ซื้อ (Buyer Overview) — Owner-lens LAUNCHPAD for the buyer/CDP group.
-// Scope = ONLY what the detail pages don't already own, so it doesn't duplicate:
+// Scope = ONLY what the detail page doesn't already own, so it doesn't duplicate:
 //   • OwnerCustomers (/owner-customers) owns buyer-base demographics (occupation,
 //     purpose, age, income, customer table).
-//   • OwnerFunnel (/owner-funnel) owns the funnel stages + score distribution.
+// (OwnerFunnel removed 2026-06-24 — its KPIs duplicated this page and its funnel was
+//  tenant-operational; the score→close-rate PROOF lives here, stronger than a donut.)
 // This page proves the PRODUCT works: AI score → actual close-rate, and showcases
-// what the CDP auto-builds per lead — then links into the two detail pages.
+// what the CDP auto-builds per lead — then links into the buyer database.
 // Scoring engine is REAL (src/lib/leadScoring.ts + loanEstimation.ts). Sourced
 // from `leads` (the live CDP), aggregate-only, no PII.
 // ──────────────────────────────────────────────────────────────────────────
@@ -86,7 +87,7 @@ const OwnerBuyerOverview = () => {
     }
   };
 
-  // ── KPIs — glance summary (detail lives on Funnel/Customers) ──────────────
+  // ── KPIs — glance summary (detail lives on ฐานข้อมูลผู้สนใจ /owner-customers) ──
   const kpis = useMemo(() => {
     const total = leads.length;
     const tenantsActive = new Set(leads.map((l) => l.tenant_id)).size;
@@ -100,8 +101,8 @@ const OwnerBuyerOverview = () => {
   }, [leads]);
 
   // ── HERO: AI score band → actual close-rate (proves the engine predicts) ──
-  // This is the page's UNIQUE value — Funnel shows score distribution, not the
-  // score-vs-outcome proof.
+  // This page's UNIQUE value — score band vs actual close-rate (the score-vs-outcome
+  // proof, not just a score distribution).
   const bands = useMemo(() => {
     const scored = leads.filter((l) => l.potential_score != null);
     const def = [
@@ -127,16 +128,24 @@ const OwnerBuyerOverview = () => {
     return { avgMaxLoan, financingApproved, avgVisits, siteVisits };
   }, [leads]);
 
-  const renderKpiCard = (k: any, i: number) => (
-    <div key={i} onClick={() => navigate(k.href)} className="bg-white border border-gray-100 rounded-2xl shadow-soft p-6 cursor-pointer hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200">
-      <div className="flex items-start justify-between mb-5">
-        <p className="text-sm font-medium text-gray-500 leading-tight pt-1.5 pr-1 flex-1">{k.label}</p>
-        <k.icon className="w-5 h-5 flex-shrink-0" style={{ color: k.color }} strokeWidth={2} />
+  const renderKpiCard = (k: any, i: number) => {
+    const clickable = Boolean(k.href);
+    return (
+      <div
+        key={i}
+        onClick={clickable ? () => navigate(k.href) : undefined}
+        role={clickable ? 'button' : undefined}
+        className={`bg-white border border-gray-100 rounded-2xl shadow-soft p-6 transition-all duration-200 ${clickable ? 'cursor-pointer hover:shadow-soft-md hover:-translate-y-0.5' : ''}`}
+      >
+        <div className="flex items-start justify-between mb-5">
+          <p className="text-sm font-medium text-gray-500 leading-tight pt-1.5 pr-1 flex-1">{k.label}</p>
+          <k.icon className="w-5 h-5 flex-shrink-0" style={{ color: k.color }} strokeWidth={2} />
+        </div>
+        <p className="text-2xl font-bold text-gray-900 tabular-nums leading-none tracking-tight">{k.value}</p>
+        {k.sub ? <p className="text-sm text-gray-400 mt-3.5 leading-snug line-clamp-2">{k.sub}</p> : null}
       </div>
-      <p className="text-2xl font-bold text-gray-900 tabular-nums leading-none tracking-tight">{k.value}</p>
-      {k.sub ? <p className="text-sm text-gray-400 mt-3.5 leading-snug line-clamp-2">{k.sub}</p> : null}
-    </div>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -193,7 +202,7 @@ const OwnerBuyerOverview = () => {
             <div>
               <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-2 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>Analytics</span>
               <h1 className="text-2xl font-bold text-gray-900">ภาพรวมผู้ซื้อ</h1>
-              <p className="text-sm text-gray-500 mt-1.5">หลักฐานว่า CDP &amp; AI scoring ของแพลตฟอร์มทำงานจริง · จาก {kpis.tenantsActive} บริษัทที่ใช้ระบบ — กดเข้าดู<span className="font-medium text-gray-600">ฐานลูกค้า</span>และ<span className="font-medium text-gray-600">กรวยการขาย</span>เชิงลึก</p>
+              <p className="text-sm text-gray-500 mt-1.5">หลักฐานว่า CDP &amp; AI scoring ของแพลตฟอร์มทำงานจริง · จาก {kpis.tenantsActive} บริษัทที่ใช้ระบบ — กดเข้าดู<span className="font-medium text-gray-600">ฐานข้อมูลผู้สนใจ</span>เชิงลึก</p>
             </div>
 
             {leads.length === 0 ? (
@@ -207,22 +216,17 @@ const OwnerBuyerOverview = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {[
                     { label: 'ผู้สนใจในระบบ', value: kpis.total.toLocaleString(), icon: Users, color: KK.blue, href: '/owner-customers', sub: `${kpis.tenantsActive} บริษัทที่ใช้ระบบ · ระบบให้สกอร์อัตโนมัติ` },
-                    { label: 'AI คัดเป็นลีดคุณภาพสูง', value: kpis.hot.toLocaleString(), icon: Flame, color: KK.red, href: '/owner-funnel', sub: 'potential score ≥ 70 (กลุ่มร้อน)' },
-                    { label: 'อัตราแปลงรวม (Conversion)', value: `${kpis.conversion}%`, icon: Percent, color: KK.green, href: '/owner-funnel', sub: 'ปิดได้ / ลีดทั้งหมด' },
-                    { label: 'มูลค่าดีลในไปป์ไลน์', value: fmtCompact(kpis.pipeline), icon: Banknote, color: KK.amber, href: '/owner-funnel', sub: 'ลีดที่ยังเปิดอยู่' },
+                    { label: 'AI คัดเป็นลีดคุณภาพสูง', value: kpis.hot.toLocaleString(), icon: Flame, color: KK.red, sub: 'potential score ≥ 70 (กลุ่มร้อน)' },
+                    { label: 'อัตราแปลงรวม (Conversion)', value: `${kpis.conversion}%`, icon: Percent, color: KK.green, sub: 'ปิดได้ / ลีดทั้งหมด' },
+                    { label: 'มูลค่าดีลในไปป์ไลน์', value: fmtCompact(kpis.pipeline), icon: Banknote, color: KK.amber, sub: 'ลีดที่ยังเปิดอยู่' },
                   ].map(renderKpiCard)}
                 </div>
 
                 {/* HERO — AI score band vs actual close-rate (this page's unique proof) */}
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-                  <div className="flex items-start justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <Brain className="w-4 h-4 flex-shrink-0" style={{ color: KK.red }} />
-                      <h2 className="text-base font-bold text-gray-900">AI Scoring แม่นแค่ไหน</h2>
-                    </div>
-                    <button onClick={() => navigate('/owner-funnel')} className="inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap" style={{ color: KK.red }}>
-                      ดู Funnel &amp; สกอร์ <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Brain className="w-4 h-4 flex-shrink-0" style={{ color: KK.red }} />
+                    <h2 className="text-base font-bold text-gray-900">AI Scoring แม่นแค่ไหน</h2>
                   </div>
                   <p className="text-xs text-gray-500 mb-4">สกอร์ที่ระบบให้แต่ละลีด เทียบ<span className="font-semibold text-gray-700">อัตราปิดจริง</span> · ยิ่งสกอร์สูง ยิ่งปิดได้ = สมองที่เราขาย</p>
                   <div className="space-y-4">

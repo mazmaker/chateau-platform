@@ -5,8 +5,9 @@ import Header from "@/components/dashboard/Header";
 import { AdminGuard } from "@/components/auth/PermissionGuard";
 import { supabase } from "@/lib/supabase";
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
 } from "recharts";
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 import {
   ArrowLeft, Send, Eye, MousePointerClick, TrendingUp, Calendar, Clock,
   Edit, Copy, Trash2, Loader2, AlertCircle, Users,

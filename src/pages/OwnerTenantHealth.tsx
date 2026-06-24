@@ -17,7 +17,8 @@ import { HeartPulse, AlertTriangle, TrendingDown, ChevronRight, Package, Clock, 
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 import { committedMRR } from '@/lib/mrr';
 
 // ──────────────────────────────────────────────────────────────────────────

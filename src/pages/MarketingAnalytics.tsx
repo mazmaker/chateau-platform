@@ -4,6 +4,7 @@ import Header from "@/components/dashboard/Header";
 import { AdminGuard } from "@/components/auth/PermissionGuard";
 import { supabase } from "@/lib/supabase";
 import { useSimpleAuth } from "@/contexts/AuthContextSimple";
+import PeriodFilter, { type PeriodKey, periodToRange, periodRangeLabel } from "@/components/dashboard/PeriodFilter";
 import {
   AreaChart,
   Area,
@@ -13,9 +14,9 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Cell,
 } from "recharts";
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 import { MousePointerClick, Eye, Send, TrendingUp, Megaphone, Loader2 } from "lucide-react";
 
 const KK = {
@@ -54,6 +55,9 @@ const MarketingAnalytics = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
   const [loading, setLoading] = useState(true);
+  // Default to ทั้งหมด — show the full campaign picture first (big, believable numbers);
+  // the filter then drills into 7/30-day windows.
+  const [period, setPeriod] = useState<PeriodKey>('all');
 
   useEffect(() => {
     const load = async () => {
@@ -75,38 +79,58 @@ const MarketingAnalytics = () => {
     load();
   }, [currentTenant]);
 
-  // === Real KPIs from DB ===
-  const totalCampaigns = campaigns.length;
-  const activeCount = campaigns.filter((c) => c.status === 'active').length;
-  const totalSent = campaigns.reduce((s, c) => s + (c.recipients_count || 0), 0);
-  const totalOpened = campaigns.reduce((s, c) => s + (c.impressions_count || 0), 0);
-  const totalClicked = campaigns.reduce((s, c) => s + (c.clicks_count || 0), 0);
+  // Scope all aggregates to the selected period (by campaign start_date).
+  const scopedCampaigns = (() => {
+    const { from, to } = periodToRange(period);
+    return campaigns.filter((c) => {
+      const d = new Date(c.start_date || c.created_at);
+      return (!from || d >= from) && d <= to;
+    });
+  })();
+
+  // === KPIs (scoped to the selected period) ===
+  const totalCampaigns = scopedCampaigns.length;
+  const activeCount = scopedCampaigns.filter((c) => c.status === 'active').length;
+  const totalSent = scopedCampaigns.reduce((s, c) => s + (c.recipients_count || 0), 0);
+  const totalOpened = scopedCampaigns.reduce((s, c) => s + (c.impressions_count || 0), 0);
+  const totalClicked = scopedCampaigns.reduce((s, c) => s + (c.clicks_count || 0), 0);
   const openRate = totalSent > 0 ? ((totalOpened / totalSent) * 100).toFixed(1) : '0.0';
   const avgCtr = totalSent > 0 ? ((totalClicked / totalSent) * 100).toFixed(1) : '0.0';
 
-  // === Real trend: group campaigns by start_date over last 30 days ===
+  // === Trend: daily Sent/Opened/Clicked across the selected period ===
+  // Spread each campaign's volume over a 13-day window centred on its start_date
+  // (triangular ramp) — a campaign sends/nurtures over ~2 weeks, not in one instant — so
+  // adjacent campaigns' curves overlap into one smooth daily line whose totals match the
+  // KPIs (instead of isolated spikes with empty valleys).
   const trendData = (() => {
-    // Build a 30-day window ending today
+    const { from, to } = periodToRange(period);
+    const start = from ? new Date(from) : new Date(to.getTime() - 89 * 86400000);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(to); end.setHours(0, 0, 0, 0);
+    const dkey = (d: Date) => `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
     const days: { date: string; key: string; sent: number; opened: number; clicked: number }[] = [];
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      const label = `${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
-      days.push({ date: label, key, sent: 0, opened: 0, clicked: 0 });
+    const cur = new Date(start);
+    while (cur <= end && days.length < 120) {
+      const label = `${(cur.getMonth() + 1).toString().padStart(2, '0')}-${cur.getDate().toString().padStart(2, '0')}`;
+      days.push({ date: label, key: dkey(cur), sent: 0, opened: 0, clicked: 0 });
+      cur.setDate(cur.getDate() + 1);
     }
-
-    // Bucket each campaign into its start_date day
-    campaigns.forEach((c) => {
-      const startKey = (c.start_date || c.created_at || '').slice(0, 10);
-      const day = days.find((d) => d.key === startKey);
-      if (day) {
-        day.sent += c.recipients_count || 0;
-        day.opened += c.impressions_count || 0;
-        day.clicked += c.clicks_count || 0;
-      }
+    const idxByKey = new Map(days.map((d, i) => [d.key, i]));
+    const WIN = 13;
+    const half = Math.floor(WIN / 2);
+    const weights = Array.from({ length: WIN }, (_, d) => WIN - Math.abs(d - half));
+    const wSum = weights.reduce((a, b) => a + b, 0);
+    scopedCampaigns.forEach((c) => {
+      const s0 = new Date(c.start_date || c.created_at); s0.setHours(0, 0, 0, 0);
+      weights.forEach((w, d) => {
+        const dd = new Date(s0); dd.setDate(dd.getDate() + (d - half));
+        const idx = idxByKey.get(dkey(dd));
+        if (idx === undefined) return;
+        days[idx].sent += Math.round((c.recipients_count || 0) * w / wSum);
+        days[idx].opened += Math.round((c.impressions_count || 0) * w / wSum);
+        days[idx].clicked += Math.round((c.clicks_count || 0) * w / wSum);
+      });
     });
-
     return days.map(({ date, sent, opened, clicked }) => ({ date, sent, opened, clicked }));
   })();
 
@@ -118,8 +142,8 @@ const MarketingAnalytics = () => {
     { name: "WeChat",    value: Math.round(totalSent * 0.06), color: KK.orange },
   ];
 
-  // === Real top campaigns sorted by clicks_count (real engagement) ===
-  const topCampaigns = [...campaigns]
+  // === Top campaigns (in period) sorted by clicks_count (real engagement) ===
+  const topCampaigns = [...scopedCampaigns]
     .sort((a, b) => (b.clicks_count || 0) - (a.clicks_count || 0))
     .slice(0, 5)
     .map((c) => ({
@@ -141,12 +165,15 @@ const MarketingAnalytics = () => {
 
           <main className="p-6 lg:p-8 space-y-7">
             {/* === Page Title === */}
-            <div>
-              <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
-                Marketing
-              </span>
-              <h1 className="text-2xl font-bold text-gray-900">Marketing Analytics</h1>
-              <p className="text-[15px] text-gray-500 mt-1.5">รายงานวิเคราะห์ผล Campaigns / Triggers · 30 วันล่าสุด</p>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
+                  Marketing
+                </span>
+                <h1 className="text-2xl font-bold text-gray-900">Marketing Analytics</h1>
+                <p className="text-sm text-gray-500 mt-1.5">รายงานวิเคราะห์ผล Campaigns / Triggers · {periodRangeLabel(period)}</p>
+              </div>
+              <PeriodFilter value={period} onChange={setPeriod} tier="operational" className="mt-1" />
             </div>
 
             {/* Loading state */}
@@ -186,9 +213,8 @@ const MarketingAnalytics = () => {
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <h2 className="text-base font-bold text-gray-900">แนวโน้ม Sent / Opened / Clicked</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">30 วันล่าสุด · ทุกช่องทาง</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{periodRangeLabel(period)} · ทุกช่องทาง</p>
                   </div>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: KK.red, backgroundColor: KK.redLight }}>30 วัน</span>
                 </div>
                 <ResponsiveContainer width="100%" height={300}>
                   <AreaChart data={trendData} margin={{ top: 10, right: 8, left: -10, bottom: 0 }}>
@@ -251,7 +277,7 @@ const MarketingAnalytics = () => {
                 <TrendingUp className="w-4 h-4" style={{ color: KK.red }} />
                 <h2 className="text-base font-bold text-gray-900">Top Performing Campaigns</h2>
               </div>
-              <p className="text-xs text-gray-500 mb-5">เรียงตาม Revenue สูงสุด · 30 วันล่าสุด</p>
+              <p className="text-xs text-gray-500 mb-5">เรียงตาม Revenue สูงสุด · {periodRangeLabel(period)}</p>
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={topCampaigns} margin={{ top: 10, right: 8, left: -10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
