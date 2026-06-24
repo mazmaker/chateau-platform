@@ -11,10 +11,9 @@ import OwnerLeads from "./pages/OwnerLeads";
 import OwnerSupport from "./pages/OwnerSupport";
 import OwnerProjects from "./pages/OwnerProjects";
 import OwnerUnitDetail from "./pages/OwnerUnitDetail";
-import OwnerMarket from "./pages/OwnerMarket";
 import OwnerMarketOverview from "./pages/OwnerMarketOverview";
 import OwnerBuyerOverview from "./pages/OwnerBuyerOverview";
-import OwnerGeography from "./pages/OwnerGeography";
+import OwnerSalesBreakdown from "./pages/OwnerSalesBreakdown";
 import OwnerCompanies from "./pages/OwnerCompanies";
 import OwnerCustomers from "./pages/OwnerCustomers";
 import OwnerFunnel from "./pages/OwnerFunnel";
@@ -327,31 +326,22 @@ const App = () => (
             </ErrorBoundary>
           } />
 
-          <Route path="/owner-market" element={
+          <Route path="/owner-sales-breakdown" element={
             <ErrorBoundary
               showRetry={true}
               showHome={true}
-              errorMessage="ไม่สามารถโหลดหน้ายอดขายได้"
-              context={{ page: 'owner-market' }}
+              errorMessage="ไม่สามารถโหลดหน้าสัดส่วนยอดขายได้"
+              context={{ page: 'owner-sales-breakdown' }}
             >
               <ProtectedRouteSimple requireRole="owner">
-                <OwnerMarket />
+                <OwnerSalesBreakdown />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />
 
-          <Route path="/owner-geography" element={
-            <ErrorBoundary
-              showRetry={true}
-              showHome={true}
-              errorMessage="ไม่สามารถโหลดหน้าทำเลและจังหวัดได้"
-              context={{ page: 'owner-geography' }}
-            >
-              <ProtectedRouteSimple requireRole="owner">
-                <OwnerGeography />
-              </ProtectedRouteSimple>
-            </ErrorBoundary>
-          } />
+          {/* Merged into สัดส่วนยอดขาย — keep old links working */}
+          <Route path="/owner-market" element={<Navigate to="/owner-sales-breakdown" replace />} />
+          <Route path="/owner-geography" element={<Navigate to="/owner-sales-breakdown" replace />} />
 
           <Route path="/owner-companies" element={
             <ErrorBoundary

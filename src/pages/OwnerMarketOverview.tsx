@@ -478,7 +478,7 @@ const OwnerMarketOverview = () => {
                     <p className="text-xs text-gray-500 mt-0.5">แพลตฟอร์มถูกใช้งานเพิ่มขึ้นไหม · ย้อนหลัง 6 เดือน</p>
                   </div>
                 </div>
-                <button onClick={() => navigate('/owner-market')} className="inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap" style={{ color: KK.red }}>
+                <button onClick={() => navigate('/owner-sales-breakdown')} className="inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap" style={{ color: KK.red }}>
                   ดูยอดขาย <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -666,7 +666,7 @@ const OwnerMarketOverview = () => {
                       <p className="text-xs text-gray-500 mt-0.5">Top 5 จังหวัดที่ธุรกรรมหนาแน่น · เป้าหมายหา developer รายใหม่</p>
                     </div>
                   </div>
-                  <button onClick={() => navigate('/owner-geography')} className="inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap" style={{ color: KK.red }}>
+                  <button onClick={() => navigate('/owner-sales-breakdown?tab=geo')} className="inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap" style={{ color: KK.red }}>
                     ดูภูมิศาสตร์ <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>

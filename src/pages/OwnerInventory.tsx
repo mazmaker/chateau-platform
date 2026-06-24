@@ -41,6 +41,21 @@ const AGE_BANDS = [
   { label: '12+ ด.', min: 12, max: 9999 },
 ];
 
+// Compact Thai money — "X ล้าน" / "฿XK" (never M/B), same basis as sibling pages.
+const fmtCompact = (n: number) => {
+  if (!Number.isFinite(n) || n === 0) return '฿0';
+  const abs = Math.abs(n); const sign = n < 0 ? '-' : '';
+  if (abs >= 1_000_000) {
+    const m = abs / 1_000_000;
+    if (m >= 1000) return `${sign}฿${Math.round(m).toLocaleString('en-US')} ล้าน`;
+    if (m >= 100) return `${sign}฿${Math.round(m)} ล้าน`;
+    if (m >= 10) return `${sign}฿${m.toFixed(1)} ล้าน`;
+    return `${sign}฿${m.toFixed(2)} ล้าน`;
+  }
+  if (abs >= 1_000) return `${sign}฿${(abs / 1_000).toFixed(0)}K`;
+  return `${sign}฿${abs.toFixed(0)}`;
+};
+
 interface UnitRow { tenant_id: string; project_id: string; status: string | null; price: number | null; created_at: string | null; sold_at: string | null; }
 
 const monthsSince = (ts: string | null) => {
@@ -58,6 +73,8 @@ const OwnerInventory = () => {
   const [tenantList, setTenantList] = useState<{ id: string; name: string }[]>([]);
   const [tenantFilter, setTenantFilter] = useState<string>('all');
   const [typeModal, setTypeModal] = useState<string | null>(null); // raw property type key
+  const [bandModal, setBandModal] = useState<string | null>(null); // aging band label
+  const [statusModal, setStatusModal] = useState<string | null>(null); // raw status key
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
@@ -97,15 +114,16 @@ const OwnerInventory = () => {
     const total = scopedUnits.length;
     const sold = scopedUnits.filter((u) => u.status === 'sold').length;
     const available = scopedUnits.filter((u) => u.status === 'available').length;
-    // absorption = sold in the last 90 days
+    // absorption = sold in the last 90 days → monthly pace → months to clear remaining stock
     const recent = scopedUnits.filter((u) => u.status === 'sold' && u.sold_at && monthsSince(u.sold_at) < 3).length;
-    return { total, sold, available, sellThrough: total ? Math.round((sold / total) * 100) : 0, recent };
+    const monthsToClear = recent > 0 ? Math.round((available / (recent / 3)) * 10) / 10 : null;
+    return { total, sold, available, sellThrough: total ? Math.round((sold / total) * 100) : 0, recent, monthsToClear };
   }, [scopedUnits]);
 
   const statusData = useMemo(() => {
     const m = new Map<string, number>();
     scopedUnits.forEach((u) => { const s = u.status || 'available'; m.set(s, (m.get(s) || 0) + 1); });
-    return ['available', 'reserved', 'sold'].filter((s) => m.has(s)).map((s) => ({ name: STATUS_TH[s] || s, value: m.get(s) || 0, color: STATUS_COLOR[s] }));
+    return ['available', 'reserved', 'sold'].filter((s) => m.has(s)).map((s) => ({ status: s, name: STATUS_TH[s] || s, value: m.get(s) || 0, color: STATUS_COLOR[s] }));
   }, [scopedUnits]);
 
   // Aging: available units bucketed by months since created.
@@ -142,6 +160,35 @@ const OwnerInventory = () => {
       .map(([id, v]) => ({ id, name: tenantNameById.get(id) || '–', sold: v.sold, total: v.total, pct: v.total ? Math.round((v.sold / v.total) * 100) : 0 }))
       .sort((a, b) => b.total - a.total);
   }, [typeModal, scopedUnits, typeById, tenantNameById]);
+
+  // Drill: which companies hold the stale stock in the clicked aging band (count + ฿ tied up).
+  const companiesInBand = useMemo(() => {
+    if (!bandModal) return [] as { id: string; name: string; count: number; value: number }[];
+    const band = AGE_BANDS.find((b) => b.label === bandModal);
+    if (!band) return [];
+    const m = new Map<string, { count: number; value: number }>();
+    scopedUnits.forEach((u) => {
+      if (u.status !== 'available') return;
+      const mo = monthsSince(u.created_at);
+      if (mo >= band.min && mo < band.max) {
+        const r = m.get(u.tenant_id) || { count: 0, value: 0 };
+        r.count += 1; r.value += Number(u.price) || 0; m.set(u.tenant_id, r);
+      }
+    });
+    return Array.from(m.entries()).map(([id, v]) => ({ id, name: tenantNameById.get(id) || '–', ...v })).sort((a, b) => b.count - a.count);
+  }, [bandModal, scopedUnits, tenantNameById]);
+
+  // Drill: which companies hold units of the clicked status (ว่าง / จอง / ขายแล้ว).
+  const companiesInStatus = useMemo(() => {
+    if (!statusModal) return [] as { id: string; name: string; count: number; value: number }[];
+    const m = new Map<string, { count: number; value: number }>();
+    scopedUnits.forEach((u) => {
+      if ((u.status || 'available') !== statusModal) return;
+      const r = m.get(u.tenant_id) || { count: 0, value: 0 };
+      r.count += 1; r.value += Number(u.price) || 0; m.set(u.tenant_id, r);
+    });
+    return Array.from(m.entries()).map(([id, v]) => ({ id, name: tenantNameById.get(id) || '–', ...v })).sort((a, b) => b.count - a.count);
+  }, [statusModal, scopedUnits, tenantNameById]);
 
   const KpiCard = ({ title, value, sub, icon: Icon, color, bg }: {
     title: string; value: string; sub?: string; icon: React.ElementType; color: string; bg: string;
@@ -191,7 +238,7 @@ const OwnerInventory = () => {
                   Analytics
                 </span>
                 <h1 className="text-2xl font-bold text-gray-900">Inventory &amp; Absorption</h1>
-                <p className="text-sm text-gray-500 mt-1.5">สุขภาพสินค้าคงคลังข้ามทุกบริษัท · ขายเร็ว-ช้า · ยูนิตค้างสต็อก</p>
+                <p className="text-sm text-gray-500 mt-1.5">สุขภาพสต็อกข้ามทุกบริษัท · ขายเร็ว-ช้า · ยูนิตค้างสต็อก</p>
               </div>
               <Select value={tenantFilter} onValueChange={setTenantFilter}>
                 <SelectTrigger className="h-9 w-[200px] text-sm mt-1"><SelectValue /></SelectTrigger>
@@ -209,20 +256,21 @@ const OwnerInventory = () => {
               <KpiCard title="ยูนิตทั้งหมด" value={kpis.total.toLocaleString()} sub="ข้ามทุกบริษัท" icon={Layers} color={KK.blue} bg={KK.blueLight} />
               <KpiCard title="Sell-through" value={`${kpis.sellThrough}%`} sub={`ขายแล้ว ${kpis.sold} ยูนิต`} icon={Percent} color={KK.green} bg={KK.greenLight} />
               <KpiCard title="ยูนิตว่าง" value={kpis.available.toLocaleString()} sub="พร้อมขาย" icon={Home} color={KK.amber} bg={KK.amberLight} />
-              <KpiCard title="Absorption (90 วัน)" value={kpis.recent.toLocaleString()} sub="ขายได้ใน 3 เดือนล่าสุด" icon={Gauge} color={KK.red} bg={KK.redLight} />
+              <KpiCard title="ขายหมดในกี่เดือน" value={kpis.monthsToClear !== null ? `${kpis.monthsToClear} เดือน` : '—'} sub={kpis.monthsToClear !== null ? `อิงขายได้ ${kpis.recent} ยูนิต/90 วัน` : 'ยังไม่มีขายใน 90 วัน'} icon={Gauge} color={KK.red} bg={KK.redLight} />
             </div>
 
             {/* Status donut + Aging bar */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                 <h2 className="text-base font-bold text-gray-900">สถานะยูนิต</h2>
-                <p className="text-xs text-gray-500 mb-2 mt-0.5">สัดส่วน ว่าง / จอง / ขายแล้ว</p>
+                <p className="text-xs text-gray-500 mb-2 mt-0.5">สัดส่วน ว่าง / จอง / ขายแล้ว · <span style={{ color: KK.red }}>กดเพื่อดูบริษัท</span></p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
                   <div className="relative h-[200px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={56} outerRadius={86} paddingAngle={2} stroke="white" strokeWidth={2}>
-                          {statusData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                        <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={56} outerRadius={86} paddingAngle={2} stroke="white" strokeWidth={2}
+                          onClick={(d: any) => { const k = d?.status || d?.payload?.status; if (k) setStatusModal(k); }}>
+                          {statusData.map((d, i) => <Cell key={i} fill={d.color} cursor="pointer" />)}
                         </Pie>
                         <Tooltip contentStyle={kkTooltipStyle} formatter={((v: any, n: any) => [`${v} ยูนิต`, n]) as any} />
                       </PieChart>
@@ -232,14 +280,15 @@ const OwnerInventory = () => {
                       <div className="text-xs text-gray-500">ยูนิต</div>
                     </div>
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     {statusData.map((d, i) => (
-                      <div key={i} className="flex items-center gap-2 text-sm">
+                      <button key={i} type="button" onClick={() => setStatusModal(d.status)}
+                        className="flex items-center gap-2 text-sm w-full text-left rounded px-1.5 py-1 hover:bg-gray-50 transition-colors">
                         <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: d.color }} />
                         <span className="text-gray-600 flex-1">{d.name}</span>
                         <span className="font-semibold text-gray-800 tabular-nums">{d.value}</span>
                         <span className="text-gray-400 tabular-nums w-9 text-right">{kpis.total ? Math.round((d.value / kpis.total) * 100) : 0}%</span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -250,15 +299,16 @@ const OwnerInventory = () => {
                   <Timer className="w-4 h-4 text-gray-400" />
                   <h2 className="text-base font-bold text-gray-900">ยูนิตค้างสต็อก (Aging)</h2>
                 </div>
-                <p className="text-xs text-gray-500 mb-4 mt-0.5">ยูนิตที่ยังว่าง · ระยะเวลาตั้งแต่เปิดขาย</p>
+                <p className="text-xs text-gray-500 mb-4 mt-0.5">ยูนิตที่ยังว่าง · ระยะเวลาตั้งแต่เปิดขาย · <span style={{ color: KK.red }}>คลิกแท่งเพื่อดูบริษัท</span></p>
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={agingData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                     <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
                     <Tooltip contentStyle={kkTooltipStyle} cursor={{ fill: 'rgba(0,0,0,0.03)' }} formatter={((v: any) => [`${v} ยูนิต`, 'ค้าง']) as any} />
-                    <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={56} animationDuration={800}>
-                      {agingData.map((_, i) => <Cell key={i} fill={i >= 2 ? KK.red : '#fca5a5'} />)}
+                    <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={56} animationDuration={800}
+                      cursor="pointer" onClick={(d: any) => d?.label && setBandModal(d.label)}>
+                      {agingData.map((_, i) => <Cell key={i} fill={i >= 2 ? KK.red : '#fca5a5'} cursor="pointer" />)}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -267,8 +317,8 @@ const OwnerInventory = () => {
 
             {/* Sell-through by type */}
             <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-              <h2 className="text-base font-bold text-gray-900">Sell-through ตามประเภททรัพย์</h2>
-              <p className="text-xs text-gray-500 mb-4 mt-0.5">% ที่ขายได้ในแต่ละประเภท · <span style={{ color: KK.red }}>คลิกเพื่อดูบริษัท</span></p>
+              <h2 className="text-base font-bold text-gray-900">อัตราระบายตามประเภท</h2>
+              <p className="text-xs text-gray-500 mb-4 mt-0.5">ประเภทไหนขายออกเร็วสุด · % ที่ระบายแล้ว (sell-through) · <span style={{ color: KK.red }}>คลิกเพื่อดูบริษัท</span></p>
               <div className="space-y-3">
                 {typeData.map((t) => (
                   <button key={t.key} onClick={() => setTypeModal(t.key)} className="w-full text-left rounded-lg -mx-1 px-1 py-1 hover:bg-gray-50 transition-colors group">
@@ -306,6 +356,56 @@ const OwnerInventory = () => {
                   <span className="text-sm text-gray-800 flex-1 truncate">{c.name}</span>
                   <span className="text-xs text-gray-400 tabular-nums">{c.sold}/{c.total}</span>
                   <span className="text-xs font-bold tabular-nums" style={{ color: KK.green }}>{c.pct}%</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Drill: companies holding the stale stock in the clicked aging band */}
+      <Dialog open={!!bandModal} onOpenChange={(o) => !o && setBandModal(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>ยูนิตค้าง {bandModal} · รายบริษัท</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-gray-400 -mt-1 mb-4">ยูนิตว่างที่ค้างในช่วงอายุนี้ · มูลค่าที่จมอยู่ · เรียงตามจำนวน</p>
+          {companiesInBand.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">ไม่มียูนิตค้างในช่วงนี้</p>
+          ) : (
+            <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
+              {companiesInBand.map((c) => (
+                <button key={c.id} onClick={() => { setBandModal(null); navigate(`/owner-projects/${c.id}`); }}
+                  className="w-full flex items-center gap-3 text-left rounded-lg px-2 py-2 hover:bg-gray-50 transition-colors">
+                  <span className="text-sm text-gray-800 flex-1 truncate">{c.name}</span>
+                  <span className="text-xs text-gray-400 tabular-nums">{c.count} ยูนิต</span>
+                  <span className="text-xs font-bold tabular-nums" style={{ color: KK.red }}>{fmtCompact(c.value)}</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Drill: companies by the clicked unit status */}
+      <Dialog open={!!statusModal} onOpenChange={(o) => !o && setStatusModal(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{statusModal ? (STATUS_TH[statusModal] || statusModal) : ''} · รายบริษัท</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-gray-400 -mt-1 mb-4">จำนวนยูนิต · มูลค่ารวม · เรียงตามจำนวน</p>
+          {companiesInStatus.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">ไม่มีข้อมูล</p>
+          ) : (
+            <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
+              {companiesInStatus.map((c) => (
+                <button key={c.id} onClick={() => { setStatusModal(null); navigate(`/owner-projects/${c.id}`); }}
+                  className="w-full flex items-center gap-3 text-left rounded-lg px-2 py-2 hover:bg-gray-50 transition-colors">
+                  <span className="text-sm text-gray-800 flex-1 truncate">{c.name}</span>
+                  <span className="text-xs text-gray-400 tabular-nums">{c.count} ยูนิต</span>
+                  <span className="text-xs font-bold tabular-nums" style={{ color: STATUS_COLOR[statusModal || 'available'] }}>{fmtCompact(c.value)}</span>
                   <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
                 </button>
               ))}

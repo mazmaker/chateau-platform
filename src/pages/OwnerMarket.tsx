@@ -1,13 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
-import Sidebar from '@/components/dashboard/Sidebar';
-import Header from '@/components/dashboard/Header';
+import { usePermissions } from '@/components/auth/PermissionGuard';
 import PeriodFilter, { type PeriodKey, DEFAULT_PERIOD, periodToRange, periodRangeLabel } from '@/components/dashboard/PeriodFilter';
+import { PageShell } from '@/components/owner/EmbeddablePage';
 import { supabase } from '@/lib/supabase';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { TrendingUp, Tag, Home, Banknote, BarChart3, ChevronRight } from 'lucide-react';
+import { TrendingUp, Tag, Home, BarChart3, ChevronRight } from 'lucide-react';
 import {
   ResponsiveContainer,
   BarChart,
@@ -89,7 +88,7 @@ interface UnitRow {
   price_per_sqm: number | null;
 }
 
-const OwnerMarket = () => {
+const OwnerMarket = ({ embedded = false }: { embedded?: boolean }) => {
   const navigate = useNavigate();
   const { isOwner } = usePermissions();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -99,6 +98,7 @@ const OwnerMarket = () => {
   const [period, setPeriod] = useState<PeriodKey>(DEFAULT_PERIOD.strategic);
   const [tierModal, setTierModal] = useState<string | null>(null);
   const [typeModal, setTypeModal] = useState<string | null>(null);
+  const [monthModal, setMonthModal] = useState<{ ym: string; label: string } | null>(null);
   const [tenantList, setTenantList] = useState<{ id: string; name: string }[]>([]);
   const [tenantFilter, setTenantFilter] = useState<string>('all');
 
@@ -161,7 +161,7 @@ const OwnerMarket = () => {
   // Sold units per month — last 12 months trend.
   const trendData = useMemo(() => {
     const base = new Date(); base.setDate(1); base.setHours(0, 0, 0, 0);
-    const out: { month: string; count: number }[] = [];
+    const out: { month: string; count: number; ym: string }[] = [];
     for (let i = 11; i >= 0; i--) {
       const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
       const next = new Date(base.getFullYear(), base.getMonth() - i + 1, 1);
@@ -170,17 +170,13 @@ const OwnerMarket = () => {
         const t = new Date(u.sold_at);
         return t >= d && t < next;
       }).length;
-      out.push({ month: THAI_MONTH[d.getMonth()], count });
+      out.push({ month: THAI_MONTH[d.getMonth()], count, ym: `${d.getFullYear()}-${d.getMonth()}` });
     }
     return out;
   }, [sold]);
 
   const bestTier = useMemo(() => tierData.reduce((a, b) => (b.count > a.count ? b : a), tierData[0]), [tierData]);
   const bestType = typeData[0];
-  const avgPpsqm = useMemo(() => {
-    const arr = view.map((u) => Number(u.price_per_sqm) || 0).filter((v) => v > 0);
-    return arr.length ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : 0;
-  }, [view]);
   const avgUnitPrice = useMemo(() => (view.length ? Math.round(view.reduce((s, u) => s + (Number(u.price) || 0), 0) / view.length) : 0), [view]);
 
   // Drill: which companies sold in the clicked price tier (period-scoped).
@@ -208,6 +204,20 @@ const OwnerMarket = () => {
     return Array.from(m.entries()).map(([id, v]) => ({ id, name: tenantNameById.get(id) || '–', ...v })).sort((a, b) => b.value - a.value);
   }, [typeModal, view, typeById, tenantNameById]);
 
+  // Drill: which companies sold in the clicked month of the 12-month trend (uses all sold, not period).
+  const companiesInMonth = useMemo(() => {
+    if (!monthModal) return [] as { id: string; name: string; count: number; value: number }[];
+    const m = new Map<string, { count: number; value: number }>();
+    sold.forEach((u) => {
+      if (!u.sold_at) return;
+      const t = new Date(u.sold_at);
+      if (`${t.getFullYear()}-${t.getMonth()}` !== monthModal.ym) return;
+      const r = m.get(u.tenant_id) || { count: 0, value: 0 };
+      r.count += 1; r.value += Number(u.price) || 0; m.set(u.tenant_id, r);
+    });
+    return Array.from(m.entries()).map(([id, v]) => ({ id, name: tenantNameById.get(id) || '–', ...v })).sort((a, b) => b.value - a.value);
+  }, [monthModal, sold, tenantNameById]);
+
   // Reusable KPI card — same shape as OwnerProjects/OwnerDashboard.
   const KpiCard = ({ title, value, sub, icon: Icon, color, bg }: {
     title: string; value: string; sub?: string; icon: React.ElementType; color: string; bg: string;
@@ -227,32 +237,22 @@ const OwnerMarket = () => {
 
   if (loading) {
     return (
-      <OwnerGuard>
-        <div className="min-h-screen bg-gray-50">
-          <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-          <div className="lg:ml-[260px] min-h-screen">
-            <Header onMenuClick={() => setSidebarOpen(true)} />
-            <div className="flex items-center justify-center min-h-[400px]">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
-                <p className="text-muted-foreground">กำลังโหลดข้อมูล...</p>
-              </div>
-            </div>
+      <PageShell embedded={embedded} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+        <div className="flex items-center justify-center min-h-[300px]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+            <p className="text-muted-foreground">กำลังโหลดข้อมูล...</p>
           </div>
         </div>
-      </OwnerGuard>
+      </PageShell>
     );
   }
 
   return (
-    <OwnerGuard>
-      <div className="min-h-screen bg-gray-50">
-        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <div className="lg:ml-[260px] min-h-screen">
-          <Header onMenuClick={() => setSidebarOpen(true)} />
-          <main className="p-6 lg:p-8 space-y-7">
+    <PageShell embedded={embedded} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
             {/* Title */}
-            <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className={`flex items-start gap-4 flex-wrap ${embedded ? 'justify-end' : 'justify-between'}`}>
+              {!embedded && (
               <div>
                 <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
                   Analytics
@@ -260,6 +260,7 @@ const OwnerMarket = () => {
                 <h1 className="text-2xl font-bold text-gray-900">ราคา &amp; ประเภท</h1>
                 <p className="text-sm text-gray-500 mt-1.5">การขาย{periodRangeLabel(period)} · ช่วงราคา · ประเภททรัพย์ · แนวโน้ม</p>
               </div>
+              )}
               <div className="flex items-center gap-2 flex-wrap mt-1">
                 <Select value={tenantFilter} onValueChange={setTenantFilter}>
                   <SelectTrigger className="h-9 w-[200px] text-sm"><SelectValue /></SelectTrigger>
@@ -282,11 +283,10 @@ const OwnerMarket = () => {
             ) : (
               <>
                 {/* KPIs */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <KpiCard title="ราคาเฉลี่ยต่อยูนิต" value={fmtCompact(avgUnitPrice)} sub="เฉลี่ยต่อยูนิตที่ขายได้" icon={TrendingUp} color={KK.green} bg={KK.greenLight} />
                   <KpiCard title="ช่วงราคาขายดีสุด" value={bestTier?.label || '–'} sub={`${bestTier?.count || 0} ยูนิต`} icon={Tag} color={KK.red} bg={KK.redLight} />
                   <KpiCard title="ประเภทขายดีสุด" value={bestType?.name || '–'} sub={`${bestType?.value || 0} ยูนิต`} icon={Home} color={KK.blue} bg={KK.blueLight} />
-                  <KpiCard title="ราคาเฉลี่ย/ตร.ม." value={fmtCompact(avgPpsqm)} sub="ของยูนิตที่ขายแล้ว" icon={Banknote} color={KK.amber} bg={KK.amberLight} />
                 </div>
 
                 {/* Price tiers (bar) + Type (donut) */}
@@ -347,9 +347,11 @@ const OwnerMarket = () => {
                 {/* Monthly sold trend */}
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                   <h2 className="text-base font-bold text-gray-900">แนวโน้มยอดขาย</h2>
-                  <p className="text-xs text-gray-500 mb-4 mt-0.5">จำนวนยูนิตที่ขายได้ · 12 เดือนล่าสุด</p>
+                  <p className="text-xs text-gray-500 mb-4 mt-0.5">จำนวนยูนิตที่ขายได้ · 12 เดือนล่าสุด · <span style={{ color: KK.red }}>คลิกเดือนเพื่อดูบริษัท</span></p>
                   <ResponsiveContainer width="100%" height={240}>
-                    <AreaChart data={trendData} margin={{ top: 10, right: 8, left: -16, bottom: 0 }}>
+                    <AreaChart data={trendData} margin={{ top: 10, right: 8, left: -16, bottom: 0 }} style={{ cursor: 'pointer' }}
+                      onClick={(e: any) => { const d = trendData.find((x) => x.month === e?.activeLabel) || e?.activePayload?.[0]?.payload; if (d?.ym) setMonthModal({ ym: d.ym, label: d.month }); }}>
+
                       <defs>
                         <linearGradient id="marketTrendGrad" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor={KK.red} stopOpacity={0.3} />
@@ -366,9 +368,6 @@ const OwnerMarket = () => {
                 </div>
               </>
             )}
-          </main>
-        </div>
-      </div>
 
       {/* Drill: companies that sold in the clicked price tier */}
       <Dialog open={!!tierModal} onOpenChange={(o) => !o && setTierModal(null)}>
@@ -421,7 +420,33 @@ const OwnerMarket = () => {
           )}
         </DialogContent>
       </Dialog>
-    </OwnerGuard>
+
+      {/* Drill: companies that sold in the clicked month of the trend */}
+      <Dialog open={!!monthModal} onOpenChange={(o) => !o && setMonthModal(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>ยอดขายเดือน {monthModal?.label} · รายบริษัท</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-gray-400 -mt-1 mb-4">ยูนิตที่ขายได้ในเดือนนั้น · เรียงตามมูลค่า</p>
+          {companiesInMonth.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">ไม่มียอดขายในเดือนนี้</p>
+          ) : (
+            <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
+              {companiesInMonth.map((c, i) => (
+                <button key={c.id} onClick={() => { setMonthModal(null); navigate(`/owner-projects/${c.id}`); }}
+                  className="w-full flex items-center gap-3 text-left rounded-lg px-2 py-2 hover:bg-gray-50 transition-colors">
+                  <span className="w-5 text-xs font-bold tabular-nums text-gray-300 text-center flex-shrink-0">{i + 1}</span>
+                  <span className="text-sm text-gray-800 flex-1 truncate">{c.name}</span>
+                  <span className="text-xs font-bold tabular-nums" style={{ color: KK.red }}>{fmtCompact(c.value)}</span>
+                  <span className="text-xs text-gray-400">· {c.count} ยูนิต</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </PageShell>
   );
 };
 

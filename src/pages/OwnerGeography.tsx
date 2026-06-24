@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
-import Sidebar from '@/components/dashboard/Sidebar';
-import Header from '@/components/dashboard/Header';
+import { usePermissions } from '@/components/auth/PermissionGuard';
 import PeriodFilter, { type PeriodKey, DEFAULT_PERIOD, periodToRange, periodRangeLabel } from '@/components/dashboard/PeriodFilter';
+import { PageShell } from '@/components/owner/EmbeddablePage';
 import { supabase } from '@/lib/supabase';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -67,7 +66,7 @@ const REGION_OF: Record<string, string> = {
 };
 const regionOf = (p: string) => REGION_OF[p] || 'อื่น ๆ';
 
-const OwnerGeography = () => {
+const OwnerGeography = ({ embedded = false }: { embedded?: boolean }) => {
   const navigate = useNavigate();
   const { isOwner } = usePermissions();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -216,31 +215,21 @@ const OwnerGeography = () => {
 
   if (loading) {
     return (
-      <OwnerGuard>
-        <div className="min-h-screen bg-gray-50">
-          <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-          <div className="lg:ml-[260px] min-h-screen">
-            <Header onMenuClick={() => setSidebarOpen(true)} />
-            <div className="flex items-center justify-center min-h-[400px]">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
-                <p className="text-muted-foreground">กำลังโหลดข้อมูล...</p>
-              </div>
-            </div>
+      <PageShell embedded={embedded} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+        <div className="flex items-center justify-center min-h-[300px]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+            <p className="text-muted-foreground">กำลังโหลดข้อมูล...</p>
           </div>
         </div>
-      </OwnerGuard>
+      </PageShell>
     );
   }
 
   return (
-    <OwnerGuard>
-      <div className="min-h-screen bg-gray-50">
-        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <div className="lg:ml-[260px] min-h-screen">
-          <Header onMenuClick={() => setSidebarOpen(true)} />
-          <main className="p-6 lg:p-8 space-y-7">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
+    <PageShell embedded={embedded} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+            <div className={`flex items-start gap-4 flex-wrap ${embedded ? 'justify-end' : 'justify-between'}`}>
+              {!embedded && (
               <div>
                 <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-3 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>
                   Analytics
@@ -248,6 +237,7 @@ const OwnerGeography = () => {
                 <h1 className="text-2xl font-bold text-gray-900">Geography</h1>
                 <p className="text-sm text-gray-500 mt-1.5">จังหวัดไหนขายดีที่สุด{periodRangeLabel(period)} · ข้ามทั้งแพลตฟอร์ม</p>
               </div>
+              )}
               <div className="flex items-center gap-2 flex-wrap mt-1">
                 <Select value={tenantFilter} onValueChange={(v) => { setTenantFilter(v); setExpanded(null); }}>
                   <SelectTrigger className="h-9 w-[200px] text-sm"><SelectValue /></SelectTrigger>
@@ -396,10 +386,7 @@ const OwnerGeography = () => {
                 </div>
               </>
             )}
-          </main>
-        </div>
-      </div>
-    </OwnerGuard>
+    </PageShell>
   );
 };
 
