@@ -122,10 +122,11 @@ const OwnerMarketing = () => {
               </div>
 
               {/* Top campaigns by reach */}
-              <div className="lg:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
+              <div className="lg:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex flex-col">
                 <h2 className="text-base font-bold text-gray-900">แคมเปญที่เข้าถึงมากสุด</h2>
                 <p className="text-xs text-gray-500 mb-4 mt-0.5">Reach · จำนวนลีดที่ได้</p>
-                <div className="space-y-3">
+                {/* Rows spread to fill the card height so it matches the taller donut+legend card beside it. */}
+                <div className="flex-1 flex flex-col justify-between gap-3">
                   {wTopCampaign.map((c) => (
                     <div key={c.name}>
                       <div className="flex justify-between text-sm mb-1">

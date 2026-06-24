@@ -5,6 +5,7 @@ import PeriodFilter, { type PeriodKey, DEFAULT_PERIOD, periodToRange, periodRang
 import { PageShell } from '@/components/owner/EmbeddablePage';
 import { supabase } from '@/lib/supabase';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import TenantCombobox from '@/components/owner/TenantCombobox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { TrendingUp, Tag, Home, BarChart3, ChevronRight } from 'lucide-react';
 import {
@@ -88,19 +89,24 @@ interface UnitRow {
   price_per_sqm: number | null;
 }
 
-const OwnerMarket = ({ embedded = false }: { embedded?: boolean }) => {
+const OwnerMarket = ({ embedded = false, period: periodProp, tenantFilter: tenantFilterProp }: { embedded?: boolean; period?: PeriodKey; tenantFilter?: string }) => {
   const navigate = useNavigate();
   const { isOwner } = usePermissions();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [units, setUnits] = useState<UnitRow[]>([]);
   const [typeById, setTypeById] = useState<Record<string, string>>({});
-  const [period, setPeriod] = useState<PeriodKey>(DEFAULT_PERIOD.strategic);
+  const [periodState, setPeriodState] = useState<PeriodKey>(DEFAULT_PERIOD.strategic);
   const [tierModal, setTierModal] = useState<string | null>(null);
   const [typeModal, setTypeModal] = useState<string | null>(null);
   const [monthModal, setMonthModal] = useState<{ ym: string; label: string } | null>(null);
   const [tenantList, setTenantList] = useState<{ id: string; name: string }[]>([]);
-  const [tenantFilter, setTenantFilter] = useState<string>('all');
+  const [tenantFilterState, setTenantFilterState] = useState<string>('all');
+  // Embedded in the สัดส่วนยอดขาย hub, the parent owns the filter bar and passes
+  // these down; standalone, fall back to local state.
+  const controlled = periodProp !== undefined;
+  const period = periodProp ?? periodState;
+  const tenantFilter = tenantFilterProp ?? tenantFilterState;
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
@@ -251,6 +257,7 @@ const OwnerMarket = ({ embedded = false }: { embedded?: boolean }) => {
   return (
     <PageShell embedded={embedded} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
             {/* Title */}
+            {!controlled && (
             <div className={`flex items-start gap-4 flex-wrap ${embedded ? 'justify-end' : 'justify-between'}`}>
               {!embedded && (
               <div>
@@ -262,18 +269,11 @@ const OwnerMarket = ({ embedded = false }: { embedded?: boolean }) => {
               </div>
               )}
               <div className="flex items-center gap-2 flex-wrap mt-1">
-                <Select value={tenantFilter} onValueChange={setTenantFilter}>
-                  <SelectTrigger className="h-9 w-[200px] text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">ทุกบริษัท</SelectItem>
-                    {tenantList.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <PeriodFilter value={period} onChange={setPeriod} tier="strategic" />
+                <TenantCombobox value={tenantFilter} onChange={setTenantFilterState} options={tenantList} className="w-[200px]" />
+                <PeriodFilter value={period} onChange={setPeriodState} tier="strategic" />
               </div>
             </div>
+            )}
 
             {sold.length === 0 ? (
               <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-12 text-center">
@@ -291,25 +291,29 @@ const OwnerMarket = ({ embedded = false }: { embedded?: boolean }) => {
 
                 {/* Price tiers (bar) + Type (donut) */}
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                  <div className="xl:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
+                  <div className="xl:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex flex-col">
                     <h2 className="text-base font-bold text-gray-900">ยอดขายตามช่วงราคา</h2>
                     <p className="text-xs text-gray-500 mb-4 mt-0.5">จำนวนยูนิตที่ขายได้ในแต่ละช่วงราคา · <span style={{ color: KK.red }}>คลิกแท่งเพื่อดูบริษัท</span></p>
-                    <ResponsiveContainer width="100%" height={280}>
-                      <BarChart data={tierData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                        <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                        <Tooltip
-                          contentStyle={kkTooltipStyle}
-                          cursor={{ fill: 'rgba(0,0,0,0.03)' }}
-                          formatter={((v: any, _n: any, p: any) => [`${v} ยูนิต · ${fmtCompact(p?.payload?.value || 0)}`, 'ขายได้']) as any}
-                        />
-                        <Bar dataKey="count" radius={[6, 6, 0, 0]} fill={KK.red} maxBarSize={64} animationDuration={900}
-                          cursor="pointer" onClick={(d: any) => d?.label && setTierModal(d.label)}>
-                          {tierData.map((_, i) => <Cell key={i} fill={i === tierData.findIndex((t) => t.label === bestTier?.label) ? KK.red : '#fca5a5'} />)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+                    {/* Chart fills the card height so it matches the (taller, legend-bearing) donut card
+                        beside it instead of leaving dead space below a fixed-height chart. */}
+                    <div className="flex-1 min-h-[240px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={tierData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                          <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                          <Tooltip
+                            contentStyle={kkTooltipStyle}
+                            cursor={{ fill: 'rgba(0,0,0,0.03)' }}
+                            formatter={((v: any, _n: any, p: any) => [`${v} ยูนิต · ${fmtCompact(p?.payload?.value || 0)}`, 'ขายได้']) as any}
+                          />
+                          <Bar dataKey="count" radius={[6, 6, 0, 0]} fill={KK.red} maxBarSize={64} animationDuration={900}
+                            cursor="pointer" onClick={(d: any) => d?.label && setTierModal(d.label)}>
+                            {tierData.map((_, i) => <Cell key={i} fill={i === tierData.findIndex((t) => t.label === bestTier?.label) ? KK.red : '#fca5a5'} />)}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
 
                   <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">

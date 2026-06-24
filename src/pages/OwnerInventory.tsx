@@ -5,6 +5,7 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import { supabase } from '@/lib/supabase';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import TenantCombobox from '@/components/owner/TenantCombobox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Layers, Home, Percent, Timer, Gauge, ChevronRight } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
@@ -240,15 +241,7 @@ const OwnerInventory = () => {
                 <h1 className="text-2xl font-bold text-gray-900">Inventory &amp; Absorption</h1>
                 <p className="text-sm text-gray-500 mt-1.5">สุขภาพสต็อกข้ามทุกบริษัท · ขายเร็ว-ช้า · ยูนิตค้างสต็อก</p>
               </div>
-              <Select value={tenantFilter} onValueChange={setTenantFilter}>
-                <SelectTrigger className="h-9 w-[200px] text-sm mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">ทุกบริษัท</SelectItem>
-                  {tenantList.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <TenantCombobox value={tenantFilter} onChange={setTenantFilter} options={tenantList} className="w-[200px] mt-1" />
             </div>
 
             {/* KPIs */}
@@ -294,24 +287,27 @@ const OwnerInventory = () => {
                 </div>
               </div>
 
-              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
+              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex flex-col">
                 <div className="flex items-center gap-2">
                   <Timer className="w-4 h-4 text-gray-400" />
                   <h2 className="text-base font-bold text-gray-900">ยูนิตค้างสต็อก (Aging)</h2>
                 </div>
                 <p className="text-xs text-gray-500 mb-4 mt-0.5">ยูนิตที่ยังว่าง · ระยะเวลาตั้งแต่เปิดขาย · <span style={{ color: KK.red }}>คลิกแท่งเพื่อดูบริษัท</span></p>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={agingData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                    <Tooltip contentStyle={kkTooltipStyle} cursor={{ fill: 'rgba(0,0,0,0.03)' }} formatter={((v: any) => [`${v} ยูนิต`, 'ค้าง']) as any} />
-                    <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={56} animationDuration={800}
-                      cursor="pointer" onClick={(d: any) => d?.label && setBandModal(d.label)}>
-                      {agingData.map((_, i) => <Cell key={i} fill={i >= 2 ? KK.red : '#fca5a5'} cursor="pointer" />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                {/* Chart fills the card so it matches the (taller, legend-bearing) status-donut card. */}
+                <div className="flex-1 min-h-[200px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={agingData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                      <Tooltip contentStyle={kkTooltipStyle} cursor={{ fill: 'rgba(0,0,0,0.03)' }} formatter={((v: any) => [`${v} ยูนิต`, 'ค้าง']) as any} />
+                      <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={56} animationDuration={800}
+                        cursor="pointer" onClick={(d: any) => d?.label && setBandModal(d.label)}>
+                        {agingData.map((_, i) => <Cell key={i} fill={i >= 2 ? KK.red : '#fca5a5'} cursor="pointer" />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
 

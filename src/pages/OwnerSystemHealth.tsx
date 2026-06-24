@@ -131,12 +131,14 @@ const OwnerSystemHealth = () => {
 
             {/* Latency trend + incidents */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              <div className="xl:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
+              <div className="xl:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex flex-col">
                 <div className="mb-4">
                   <h2 className="text-base font-bold text-gray-900">เวลาตอบสนอง API (24 ชม.)</h2>
                   <p className="text-xs text-gray-500 mt-0.5">มิลลิวินาที (ms) · ยิ่งต่ำยิ่งดี</p>
                 </div>
-                <ResponsiveContainer width="100%" height={240}>
+                {/* Chart fills the card so it matches the (taller) incidents list beside it. */}
+                <div className="flex-1 min-h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={LATENCY} margin={{ top: 10, right: 8, left: -12, bottom: 0 }}>
                     <defs>
                       <linearGradient id="latGrad" x1="0" y1="0" x2="0" y2="1">
@@ -151,6 +153,7 @@ const OwnerSystemHealth = () => {
                     <Area type="monotone" dataKey="ms" stroke={KK.blue} strokeWidth={2.5} fill="url(#latGrad)" dot={false} />
                   </AreaChart>
                 </ResponsiveContainer>
+                </div>
               </div>
 
               <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">

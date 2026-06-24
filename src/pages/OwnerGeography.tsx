@@ -8,7 +8,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { MapPin, TrendingUp, ChevronRight } from 'lucide-react';
+import TenantCombobox from '@/components/owner/TenantCombobox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { MapPin, TrendingUp, ChevronRight, Target } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -51,7 +53,7 @@ interface PropRow { id: string; tenant_id: string; name: string | null; develope
 interface UnitRow { tenant_id: string; project_id: string; price: number | null; status: string | null; sold_at: string | null; }
 interface ProvinceAgg { province: string; sold: number; soldValue: number; total: number; gdv: number; projects: number; }
 // Drill-down: province → อำเภอ (district) → โครงการ (property) + unit rollup.
-interface ProvinceProperty { id: string; name: string; developer: string | null; district: string; sold: number; total: number; soldValue: number; }
+interface ProvinceProperty { id: string; tenant_id: string; name: string; developer: string | null; district: string; sold: number; total: number; soldValue: number; }
 interface DistrictGroup { district: string; sold: number; total: number; soldValue: number; projects: ProvinceProperty[]; }
 
 // Province → region (ภาค) for the macro rollup (เฮีย: เริ่มระดับประเทศ → ภูมิภาค).
@@ -66,7 +68,7 @@ const REGION_OF: Record<string, string> = {
 };
 const regionOf = (p: string) => REGION_OF[p] || 'อื่น ๆ';
 
-const OwnerGeography = ({ embedded = false }: { embedded?: boolean }) => {
+const OwnerGeography = ({ embedded = false, period: periodProp, tenantFilter: tenantFilterProp }: { embedded?: boolean; period?: PeriodKey; tenantFilter?: string }) => {
   const navigate = useNavigate();
   const { isOwner } = usePermissions();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -75,11 +77,19 @@ const OwnerGeography = ({ embedded = false }: { embedded?: boolean }) => {
   const [rawProps, setRawProps] = useState<PropRow[]>([]);
   const [rawUnits, setRawUnits] = useState<UnitRow[]>([]);
   const [tenantList, setTenantList] = useState<{ id: string; name: string }[]>([]);
-  const [tenantFilter, setTenantFilter] = useState<string>('all');
-  const [period, setPeriod] = useState<PeriodKey>(DEFAULT_PERIOD.strategic);
+  const [tenantFilterState, setTenantFilterState] = useState<string>('all');
+  const [periodState, setPeriodState] = useState<PeriodKey>(DEFAULT_PERIOD.strategic);
+  // Embedded in the สัดส่วนยอดขาย hub, the parent owns the filter bar and passes
+  // these down; standalone, fall back to local state.
+  const controlled = periodProp !== undefined;
+  const period = periodProp ?? periodState;
+  const tenantFilter = tenantFilterProp ?? tenantFilterState;
   // Drill-down: province → อำเภอ → โครงการ (read-only). "เรียก data ขึ้นมาดูได้" + เจาะอำเภอ.
   const [expanded, setExpanded] = useState<string | null>(null);
-  useEffect(() => { setExpanded(null); }, [period]);
+  const [deadModal, setDeadModal] = useState(false); // จังหวัดมีโครงการแต่ยังไม่ขาย
+  const [regionModal, setRegionModal] = useState<string | null>(null); // เจาะจังหวัดในภาค
+  const [provOpen, setProvOpen] = useState<string | null>(null); // จังหวัดที่กางดูโครงการในโมดัล
+  useEffect(() => { setExpanded(null); }, [period, tenantFilter]);
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
@@ -158,7 +168,7 @@ const OwnerGeography = ({ embedded = false }: { embedded?: boolean }) => {
       const distMap = byProv[prov] = byProv[prov] || {};
       const dg = distMap[dist] = distMap[dist] || { district: dist, sold: 0, total: 0, soldValue: 0, projects: [] };
       dg.sold += pr.sold; dg.total += pr.total; dg.soldValue += pr.soldValue;
-      dg.projects.push({ id: p.id, name: p.name || 'ไม่มีชื่อ', developer: p.developer, district: dist, sold: pr.sold, total: pr.total, soldValue: pr.soldValue });
+      dg.projects.push({ id: p.id, tenant_id: p.tenant_id, name: p.name || 'ไม่มีชื่อ', developer: p.developer, district: dist, sold: pr.sold, total: pr.total, soldValue: pr.soldValue });
     });
     const distByProv: Record<string, DistrictGroup[]> = {};
     Object.entries(byProv).forEach(([prov, distMap]) => {
@@ -197,10 +207,18 @@ const OwnerGeography = ({ embedded = false }: { embedded?: boolean }) => {
   }, [provinces]);
   const regionMax = useMemo(() => Math.max(...regionData.map((r) => r.soldValue), 1), [regionData]);
 
-  const KpiCard = ({ title, value, sub, icon: Icon, color, bg }: {
-    title: string; value: string; sub?: string; icon: React.ElementType; color: string; bg: string;
+  // Drill: provinces that have projects/units but ZERO sales in the period (stuck markets).
+  const deadProvinces = useMemo(() => provinces.filter((p) => p.sold === 0).sort((a, b) => b.gdv - a.gdv), [provinces]);
+  // Drill: provinces inside the clicked region.
+  const provincesInRegion = useMemo(
+    () => (regionModal ? provinces.filter((p) => regionOf(p.province) === regionModal).sort((a, b) => b.soldValue - a.soldValue) : []),
+    [regionModal, provinces],
+  );
+
+  const KpiCard = ({ title, value, sub, icon: Icon, color, bg, onClick }: {
+    title: string; value: string; sub?: string; icon: React.ElementType; color: string; bg: string; onClick?: () => void;
   }) => (
-    <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200">
+    <div onClick={onClick} className={`bg-white border border-gray-100 rounded-2xl p-6 shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200 ${onClick ? 'cursor-pointer select-none' : ''}`}>
       <div className="flex items-start justify-between mb-5">
         <p className="text-sm font-medium text-gray-500 leading-tight pt-1.5">{title}</p>
         <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -228,6 +246,7 @@ const OwnerGeography = ({ embedded = false }: { embedded?: boolean }) => {
 
   return (
     <PageShell embedded={embedded} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+            {!controlled && (
             <div className={`flex items-start gap-4 flex-wrap ${embedded ? 'justify-end' : 'justify-between'}`}>
               {!embedded && (
               <div>
@@ -239,18 +258,11 @@ const OwnerGeography = ({ embedded = false }: { embedded?: boolean }) => {
               </div>
               )}
               <div className="flex items-center gap-2 flex-wrap mt-1">
-                <Select value={tenantFilter} onValueChange={(v) => { setTenantFilter(v); setExpanded(null); }}>
-                  <SelectTrigger className="h-9 w-[200px] text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">ทุกบริษัท</SelectItem>
-                    {tenantList.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <PeriodFilter value={period} onChange={setPeriod} tier="strategic" />
+                <TenantCombobox value={tenantFilter} onChange={setTenantFilterState} options={tenantList} className="w-[200px]" />
+                <PeriodFilter value={period} onChange={setPeriodState} tier="strategic" />
               </div>
             </div>
+            )}
 
             {provinces.length === 0 ? (
               <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-12 text-center">
@@ -259,58 +271,70 @@ const OwnerGeography = ({ embedded = false }: { embedded?: boolean }) => {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <KpiCard title="จังหวัดขายดีสุด" value={totals.top?.province || '–'} sub={`${totals.top?.sold || 0} ยูนิต · ${fmtCompact(totals.top?.soldValue || 0)}`} icon={MapPin} color={KK.red} bg={KK.redLight} />
-                  <KpiCard title="จังหวัดที่ขายได้" value={`${totals.withSales}/${totals.provinces}`} sub={totals.provinces - totals.withSales > 0 ? `${totals.provinces - totals.withSales} จังหวัดมีโครงการแต่ยังไม่ขาย` : 'ขายได้ครบทุกจังหวัด'} icon={TrendingUp} color={KK.green} bg={KK.greenLight} />
+                  <KpiCard title="ยอดขายรวม" value={fmtCompact(totals.soldValue)} sub={`${totals.sold} ยูนิต · ${totals.withSales} จังหวัด`} icon={TrendingUp} color={KK.blue} bg={KK.blueLight} />
+                  <KpiCard title="จังหวัดที่ขายได้" value={`${totals.withSales}/${totals.provinces}`} sub={totals.provinces - totals.withSales > 0 ? `${totals.provinces - totals.withSales} จังหวัดมีโครงการแต่ยังไม่ขาย · กดดู` : 'ขายได้ครบทุกจังหวัด'} icon={Target} color={KK.green} bg={KK.greenLight} onClick={deadProvinces.length > 0 ? () => setDeadModal(true) : undefined} />
                 </div>
 
-                {/* Region rollup (ประเทศ → ภูมิภาค) — เริ่มจากระดับใหญ่ก่อนเจาะจังหวัด */}
-                <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-                  <h2 className="text-base font-bold text-gray-900">ยอดขายตามภูมิภาค</h2>
-                  <p className="text-xs text-gray-500 mb-4 mt-0.5">ภาพรวมระดับประเทศ → ภาค (ก่อนเจาะรายจังหวัดด้านล่าง)</p>
-                  <div className="space-y-3">
-                    {regionData.map((r, i) => (
-                      <div key={r.region}>
-                        <div className="flex justify-between text-sm mb-1">
-                          <span className="text-gray-700 font-medium">{r.region} <span className="text-gray-400 font-normal">· {r.provinces} จังหวัด</span></span>
-                          <span className="tabular-nums text-gray-500">{r.sold} ยูนิต · <span className="text-gray-700 font-semibold">{fmtCompact(r.soldValue)}</span></span>
-                        </div>
-                        <div className="h-3 rounded-lg bg-gray-100 overflow-hidden"><div className="h-full rounded-lg" style={{ width: `${Math.max((r.soldValue / regionMax) * 100, 2)}%`, background: i === 0 ? KK.red : '#fca5a5' }} /></div>
+                {/* Province bars (รายจังหวัด) + region rollup (สรุปภาค) side-by-side — mirrors ราคา/ประเภท tab.
+                    Both cards stretch to equal height (grid default) and fill internally so neither
+                    leaves dead space below it: the province chart fills its card height (h=100%) and the
+                    region rows spread (justify-between). Region has a fixed 6 ภาค so it used to be taller
+                    than a few-province chart, leaving a gap under the chart — filling removes that. */}
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                  {/* Province bar (horizontal — handles long Thai names) */}
+                  <div className="xl:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex flex-col">
+                    <h2 className="text-base font-bold text-gray-900">ยอดขายตามจังหวัด</h2>
+                    <p className="text-xs text-gray-500 mb-4 mt-0.5">มูลค่าขายในแต่ละจังหวัด · เรียงมาก→น้อย</p>
+                    {barData.length === 0 ? (
+                      <p className="flex-1 grid place-items-center text-sm text-gray-400 min-h-[220px]">ยังไม่มียอดขายรายจังหวัด</p>
+                    ) : (
+                      <div className="flex-1 min-h-[220px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={barData} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                            <XAxis type="number" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => (v >= 1_000_000 ? `${Math.round(v / 1_000_000)} ล้าน` : v >= 1_000 ? `${Math.round(v / 1_000)}K` : `${v}`)} />
+                            <YAxis type="category" dataKey="province" width={108} tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
+                            <Tooltip
+                              contentStyle={kkTooltipStyle}
+                              cursor={{ fill: 'rgba(0,0,0,0.03)' }}
+                              formatter={((_v: any, _n: any, p: any) => [`${fmtCompact(p?.payload?.soldValue || 0)} · ${p?.payload?.sold || 0} ยูนิต`, 'ขายได้']) as any}
+                            />
+                            <Bar dataKey="soldValue" radius={[0, 6, 6, 0]} maxBarSize={28} animationDuration={900}>
+                              {barData.map((_, i) => <Cell key={i} fill={i === 0 ? KK.red : '#fca5a5'} />)}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
                       </div>
-                    ))}
+                    )}
                   </div>
-                </div>
 
-                {/* Province bar (horizontal — handles long Thai names) */}
-                <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-                  <h2 className="text-base font-bold text-gray-900">ยอดขายตามจังหวัด</h2>
-                  <p className="text-xs text-gray-500 mb-4 mt-0.5">จำนวนยูนิตที่ขายได้ในแต่ละจังหวัด</p>
-                  {barData.length === 0 ? (
-                    <p className="text-sm text-gray-400 py-8 text-center">ยังไม่มียอดขายรายจังหวัด</p>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={Math.max(220, barData.length * 46)}>
-                      <BarChart data={barData} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-                        <XAxis type="number" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                        <YAxis type="category" dataKey="province" width={108} tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
-                        <Tooltip
-                          contentStyle={kkTooltipStyle}
-                          cursor={{ fill: 'rgba(0,0,0,0.03)' }}
-                          formatter={((v: any, _n: any, p: any) => [`${v} ยูนิต · ${fmtCompact(p?.payload?.soldValue || 0)}`, 'ขายได้']) as any}
-                        />
-                        <Bar dataKey="sold" radius={[0, 6, 6, 0]} maxBarSize={28} animationDuration={900}>
-                          {barData.map((_, i) => <Cell key={i} fill={i === 0 ? KK.red : '#fca5a5'} />)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
+                  {/* Region rollup (ประเทศ → ภูมิภาค) — compact side panel */}
+                  <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex flex-col">
+                    <h2 className="text-base font-bold text-gray-900">สรุปตามภูมิภาค</h2>
+                    <p className="text-xs text-gray-500 mb-4 mt-0.5">ภาพรวมระดับภาค · <span style={{ color: KK.red }}>กดดูจังหวัดในภาค</span></p>
+                    <div className="flex-1 flex flex-col justify-between gap-3">
+                      {regionData.map((r, i) => (
+                        <button key={r.region} type="button" onClick={() => setRegionModal(r.region)}
+                          className="w-full text-left rounded-lg -mx-1.5 px-1.5 py-1 hover:bg-gray-50 transition-colors">
+                          <div className="flex justify-between items-baseline gap-2 mb-1">
+                            <span className="text-sm font-medium text-gray-700 truncate">{r.region}</span>
+                            <span className="text-sm tabular-nums font-semibold text-gray-800 flex-shrink-0">{fmtCompact(r.soldValue)}</span>
+                          </div>
+                          <div className="h-2 rounded-lg bg-gray-100 overflow-hidden"><div className="h-full rounded-lg" style={{ width: `${Math.max((r.soldValue / regionMax) * 100, 2)}%`, background: i === 0 ? KK.red : '#fca5a5' }} /></div>
+                          <p className="text-xs text-gray-400 mt-1">{r.provinces} จังหวัด · {r.sold} ยูนิต</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Province table */}
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                   <div className="mb-4">
                     <h2 className="text-base font-bold text-gray-900">รายละเอียดตามจังหวัด</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">เรียงตามมูลค่าขาย · คลิกจังหวัดเพื่อดูอำเภอและโครงการในจังหวัดนั้น</p>
+                    <p className="text-xs text-gray-500 mt-0.5">เรียงตามมูลค่าขาย · คลิกจังหวัด → อำเภอ → โครงการ · <span style={{ color: KK.red }}>กดโครงการเพื่อดูรายละเอียด</span></p>
                   </div>
                   <div className="overflow-x-auto">
                     <Table>
@@ -357,7 +381,8 @@ const OwnerGeography = ({ embedded = false }: { embedded?: boolean }) => {
                                     <TableCell></TableCell>
                                   </TableRow>
                                   {g.projects.map((p) => (
-                                    <TableRow key={p.id} className="bg-gray-50/40">
+                                    <TableRow key={p.id} className="bg-gray-50/40 cursor-pointer hover:bg-gray-100"
+                                      onClick={() => navigate(`/owner-projects/${p.tenant_id}/${p.id}`)}>
                                       <TableCell className="pl-16">
                                         <span className="text-sm text-gray-600">{p.name}</span>
                                         {p.developer && <span className="text-xs text-gray-400 ml-2">· {p.developer}</span>}
@@ -365,7 +390,7 @@ const OwnerGeography = ({ embedded = false }: { embedded?: boolean }) => {
                                       <TableCell></TableCell>
                                       <TableCell className="text-right tabular-nums text-gray-500">{p.sold}/{p.total}</TableCell>
                                       <TableCell className="text-right tabular-nums text-gray-500">{fmtCompact(p.soldValue)}</TableCell>
-                                      <TableCell></TableCell>
+                                      <TableCell className="text-right"><ChevronRight className="w-3.5 h-3.5 text-gray-300 inline" /></TableCell>
                                     </TableRow>
                                   ))}
                                 </Fragment>
@@ -384,6 +409,96 @@ const OwnerGeography = ({ embedded = false }: { embedded?: boolean }) => {
                 </div>
               </>
             )}
+
+      {/* Drill: provinces with projects but ZERO sales in the period */}
+      <Dialog open={deadModal} onOpenChange={(o) => { setDeadModal(o); if (!o) setProvOpen(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>จังหวัดที่มีโครงการแต่ยังไม่ขาย</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-gray-400 -mt-1 mb-4">มีโครงการในระบบแต่ยอดขาย = 0 ในช่วงนี้ · มูลค่าที่ยังขายไม่ออก (GDV) · กดจังหวัดเพื่อดูโครงการ</p>
+          {deadProvinces.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">ขายได้ครบทุกจังหวัด</p>
+          ) : (
+            <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
+              {deadProvinces.map((p) => {
+                const open = provOpen === p.province;
+                const projs = (distByProvince[p.province] || []).flatMap((g) => g.projects);
+                return (
+                  <div key={p.province}>
+                    <button onClick={() => setProvOpen(open ? null : p.province)}
+                      className="w-full flex items-center gap-2 text-left rounded-lg px-2 py-2 hover:bg-gray-50 transition-colors">
+                      <ChevronRight className={`w-3.5 h-3.5 text-gray-300 flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                      <span className="text-sm text-gray-800 flex-1 truncate">{p.province}</span>
+                      <span className="text-xs text-gray-400 tabular-nums">{p.projects} โครงการ · {p.total} ยูนิต</span>
+                      <span className="text-xs font-bold tabular-nums" style={{ color: KK.amber }}>{fmtCompact(p.gdv)}</span>
+                    </button>
+                    {open && (
+                      <div className="ml-6 mb-1 space-y-0.5 border-l-2 border-gray-100 pl-2">
+                        {projs.length === 0 ? (
+                          <p className="text-xs text-gray-400 py-1 px-2">ไม่มีโครงการ</p>
+                        ) : projs.map((pr) => (
+                          <button key={pr.id} onClick={() => { setDeadModal(false); navigate(`/owner-projects/${pr.tenant_id}/${pr.id}`); }}
+                            className="w-full flex items-center gap-2 text-left rounded px-2 py-1.5 hover:bg-gray-50 transition-colors">
+                            <span className="text-xs text-gray-700 flex-1 truncate">{pr.name}{pr.developer ? ` · ${pr.developer}` : ''}</span>
+                            <span className="text-[11px] text-gray-400 tabular-nums flex-shrink-0">{pr.total} ยูนิต</span>
+                            <ChevronRight className="w-3 h-3 text-gray-300 flex-shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Drill: provinces inside the clicked region */}
+      <Dialog open={!!regionModal} onOpenChange={(o) => { if (!o) { setRegionModal(null); setProvOpen(null); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>จังหวัดในภาค {regionModal}</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-gray-400 -mt-1 mb-4">เรียงตามมูลค่าขาย · กดจังหวัดเพื่อดูโครงการ</p>
+          {provincesInRegion.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">ไม่มีจังหวัดในภาคนี้</p>
+          ) : (
+            <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
+              {provincesInRegion.map((p) => {
+                const open = provOpen === p.province;
+                const projs = (distByProvince[p.province] || []).flatMap((g) => g.projects);
+                return (
+                  <div key={p.province}>
+                    <button onClick={() => setProvOpen(open ? null : p.province)}
+                      className="w-full flex items-center gap-2 text-left rounded-lg px-2 py-2 hover:bg-gray-50 transition-colors">
+                      <ChevronRight className={`w-3.5 h-3.5 text-gray-300 flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                      <span className="text-sm text-gray-800 flex-1 truncate">{p.province}</span>
+                      <span className="text-xs text-gray-400 tabular-nums">{p.sold}/{p.total} ยูนิต</span>
+                      <span className="text-xs font-bold tabular-nums" style={{ color: KK.red }}>{fmtCompact(p.soldValue)}</span>
+                    </button>
+                    {open && (
+                      <div className="ml-6 mb-1 space-y-0.5 border-l-2 border-gray-100 pl-2">
+                        {projs.length === 0 ? (
+                          <p className="text-xs text-gray-400 py-1 px-2">ไม่มีโครงการ</p>
+                        ) : projs.map((pr) => (
+                          <button key={pr.id} onClick={() => { setRegionModal(null); navigate(`/owner-projects/${pr.tenant_id}/${pr.id}`); }}
+                            className="w-full flex items-center gap-2 text-left rounded px-2 py-1.5 hover:bg-gray-50 transition-colors">
+                            <span className="text-xs text-gray-700 flex-1 truncate">{pr.name}{pr.developer ? ` · ${pr.developer}` : ''}</span>
+                            <span className="text-[11px] text-gray-400 tabular-nums flex-shrink-0">{pr.sold}/{pr.total} ยูนิต</span>
+                            <ChevronRight className="w-3 h-3 text-gray-300 flex-shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 };
