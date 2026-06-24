@@ -5,9 +5,9 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  ResponsiveContainer,
   Cell,
 } from "recharts";
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 import { supabase } from '@/lib/supabase';
 
 interface RevenueData {

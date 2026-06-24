@@ -4,9 +4,9 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  ResponsiveContainer,
   Cell,
 } from "recharts";
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 
 const data = [
   { name: "Online", value: 45000, color: "hsl(276, 42%, 53%)" },

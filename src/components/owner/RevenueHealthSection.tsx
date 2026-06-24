@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-  ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
+  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
 } from 'recharts';
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 import { RefreshCw, TrendingUp, TrendingDown, Users, Wallet, Percent, AlertTriangle, Pencil } from 'lucide-react';
 import { computeRevenueHealth, type RevenueHealth } from '@/lib/revenueHealth';
 

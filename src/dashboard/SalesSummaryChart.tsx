@@ -5,9 +5,9 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Legend,
 } from "recharts";
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 
 const data = [
   { month: "Jan", totalSales: 4000, totalOrder: 2400 },

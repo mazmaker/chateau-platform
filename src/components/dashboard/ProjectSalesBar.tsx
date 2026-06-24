@@ -1,4 +1,5 @@
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Cell } from "recharts";
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 
 const data = [
   { name: "BAAN ISSARA", percent: 35, value: 65000000, color: "hsl(276, 42%, 53%)" },

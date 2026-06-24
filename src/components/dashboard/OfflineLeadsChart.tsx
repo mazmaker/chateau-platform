@@ -5,9 +5,9 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   LabelList,
 } from "recharts";
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 
 const data = [
   { name: "ป้ายหมู่บ้าน", value: 80 },

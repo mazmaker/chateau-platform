@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Area, AreaChart } from 'recharts';
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 import { TrendingUp, TrendingDown, DollarSign, Home, Users, Target } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';

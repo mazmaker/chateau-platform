@@ -1,4 +1,5 @@
-import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell } from "recharts";
+import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 
 const data = [
   { name: "ขายแล้ว", value: 56, color: "hsl(276, 42%, 53%)" },
