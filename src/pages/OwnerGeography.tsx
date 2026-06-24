@@ -8,7 +8,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { MapPin, TrendingUp, Building, Home, Banknote, ChevronRight } from 'lucide-react';
+import { MapPin, TrendingUp, ChevronRight } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -178,7 +178,7 @@ const OwnerGeography = ({ embedded = false }: { embedded?: boolean }) => {
     const soldValue = provinces.reduce((s, r) => s + r.soldValue, 0);
     const sold = provinces.reduce((s, r) => s + r.sold, 0);
     const withSales = provinces.filter((p) => p.sold > 0).length;
-    return { provinces: provinces.length, soldValue, sold, withSales, avgPerProvince: withSales > 0 ? soldValue / withSales : 0, top: provinces[0] };
+    return { provinces: provinces.length, soldValue, sold, withSales, top: provinces[0] };
   }, [provinces]);
 
   // Bars: provinces that actually have sold units, by sold count (descending).
@@ -259,11 +259,9 @@ const OwnerGeography = ({ embedded = false }: { embedded?: boolean }) => {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <KpiCard title="จังหวัดขายดีสุด" value={totals.top?.province || '–'} sub={`${totals.top?.sold || 0} ยูนิต · ${fmtCompact(totals.top?.soldValue || 0)}`} icon={MapPin} color={KK.red} bg={KK.redLight} />
-                  <KpiCard title="จังหวัดที่มีโครงการ" value={totals.provinces.toLocaleString()} sub="ทั่วประเทศ" icon={Building} color={KK.blue} bg={KK.blueLight} />
-                  <KpiCard title="จังหวัดที่มียอดขาย" value={totals.withSales.toLocaleString()} sub={`จาก ${totals.provinces} จังหวัด`} icon={TrendingUp} color={KK.green} bg={KK.greenLight} />
-                  <KpiCard title="มูลค่าขายเฉลี่ย/จังหวัด" value={fmtCompact(totals.avgPerProvince)} sub="เฉลี่ยต่อจังหวัดที่ขายได้" icon={Banknote} color={KK.amber} bg={KK.amberLight} />
+                  <KpiCard title="จังหวัดที่ขายได้" value={`${totals.withSales}/${totals.provinces}`} sub={totals.provinces - totals.withSales > 0 ? `${totals.provinces - totals.withSales} จังหวัดมีโครงการแต่ยังไม่ขาย` : 'ขายได้ครบทุกจังหวัด'} icon={TrendingUp} color={KK.green} bg={KK.greenLight} />
                 </div>
 
                 {/* Region rollup (ประเทศ → ภูมิภาค) — เริ่มจากระดับใหญ่ก่อนเจาะจังหวัด */}
