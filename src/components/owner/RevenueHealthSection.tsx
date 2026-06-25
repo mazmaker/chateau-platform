@@ -4,7 +4,7 @@ import {
   BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
 } from 'recharts';
 import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
-import { RefreshCw, TrendingUp, TrendingDown, Users, Wallet, Percent, AlertTriangle, Pencil } from 'lucide-react';
+import { RefreshCw, TrendingUp, TrendingDown, Users, Wallet, Percent, Pencil } from 'lucide-react';
 import { computeRevenueHealth, type RevenueHealth } from '@/lib/revenueHealth';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -44,6 +44,7 @@ const fmtCompact = (n: number) => {
 
 const RevenueHealthSection = () => {
   const [loading, setLoading] = useState(true);
+  const [barsReady, setBarsReady] = useState(false);
   const [d, setD] = useState<RevenueHealth | null>(null);
   const [totalTenants, setTotalTenants] = useState(0);
   const [acqSpend, setAcqSpend] = useState<number | null>(() => {
@@ -52,6 +53,14 @@ const RevenueHealthSection = () => {
   });
 
   useEffect(() => { fetchData(); }, []);
+
+  // Animate the horizontal bars from 0 → value once data has loaded (double-rAF gate).
+  useEffect(() => {
+    if (loading) { setBarsReady(false); return; }
+    let r2 = 0;
+    const r1 = requestAnimationFrame(() => { r2 = requestAnimationFrame(() => setBarsReady(true)); });
+    return () => { cancelAnimationFrame(r1); if (r2) cancelAnimationFrame(r2); };
+  }, [loading]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -118,18 +127,13 @@ const RevenueHealthSection = () => {
     return (
       <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-12 text-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-3" />
-        <p className="text-sm text-gray-500">กำลังคำนวณสุขภาพรายได้...</p>
+        <p className="text-sm text-gray-500">กำลังคำนวณรายได้ประจำ...</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border px-4 py-2.5 text-xs flex items-center gap-2" style={{ color: KK.blue, backgroundColor: KK.blueLight, borderColor: '#bfdbfe' }}>
-        <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-        คำนวณจาก <span className="font-semibold">invoice จริง</span> (เทียบ MRR เดือนนี้ vs เดือนก่อน) · ค่าจะนิ่งขึ้นเมื่อมี billing หลายเดือน · "—" = ยังไม่มีฐานเทียบ
-      </div>
-
       {/* Retention row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Kpi title="NRR (รายได้คงเหลือสุทธิ)" value={fmtPct(d?.nrr ?? null)} sub="≥ 100% = โตจากลูกค้าเดิม" color={pctColor(d?.nrr ?? null)} bg={KK.greenLight} icon={RefreshCw} />
@@ -149,26 +153,32 @@ const RevenueHealthSection = () => {
           <span className="text-gray-300">→</span>
           <span className="text-gray-500">ปัจจุบัน <span className="font-semibold text-gray-800 tabular-nums">{fmtCompact(d?.currentMRR ?? 0)}</span></span>
         </div>
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={movement} margin={{ top: 6, right: 8, left: -8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-            <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => fmtCompact(Number(v))} />
-            <Tooltip contentStyle={kkTooltipStyle} formatter={((v: any) => [fmtCompact(Number(v)), '']) as any} cursor={{ fill: 'rgba(0,0,0,0.03)' }} />
-            <ReferenceLine y={0} stroke="#d1d5db" />
-            <Bar dataKey="v" radius={[5, 5, 0, 0]} maxBarSize={56}>
-              {movement.map((m, i) => <Cell key={i} fill={m.c} />)}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        <div className="space-y-3.5">
+          {(() => {
+            const maxAbs = Math.max(1, ...movement.map((mv) => Math.abs(mv.v)));
+            return movement.map((mv, i) => (
+              <div key={i}>
+                <div className="flex items-center justify-between text-sm mb-1.5">
+                  <span className="text-gray-600">{mv.name}</span>
+                  <span className="font-semibold tabular-nums" style={{ color: mv.v < 0 ? KK.red : mv.v > 0 ? KK.green : '#9ca3af' }}>
+                    {mv.v > 0 ? '+' : mv.v < 0 ? '−' : ''}{fmtCompact(Math.abs(mv.v))}
+                  </span>
+                </div>
+                <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
+                  <div className="h-full rounded-full transition-[width] duration-700 ease-out" style={{ width: barsReady ? `${Math.min((Math.abs(mv.v) / maxAbs) * 100, 100)}%` : '0%', backgroundColor: mv.c }} />
+                </div>
+              </div>
+            ));
+          })()}
+        </div>
       </div>
 
       {/* Who caused the drop — derived list of downgraded/churned tenants this month */}
       {d && (
         <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
           <div className="mb-3">
-            <h2 className="text-base font-bold text-gray-900">ตัวการที่ทำให้รายได้ลด (เดือนนี้)</h2>
-            <p className="text-xs text-gray-500 mt-0.5">บริษัทที่ดาวน์เกรดหรือเลิกใช้ · เรียงตามเงินที่หาย — ตอบ "ใครทำให้รายได้ดิ่ง"</p>
+            <h2 className="text-base font-bold text-gray-900">บริษัทที่ทำให้รายได้ลดลง (เดือนนี้)</h2>
+            <p className="text-xs text-gray-500 mt-0.5">บริษัทที่ดาวน์เกรดหรือเลิกใช้บริการ · เรียงตามมูลค่าที่ลดลง</p>
           </div>
           {d.decliners.length === 0 ? (
             <p className="text-sm text-gray-500 py-4 text-center">🎉 เดือนนี้ไม่มีบริษัทที่ทำให้รายได้ลด</p>
@@ -187,18 +197,6 @@ const RevenueHealthSection = () => {
         </div>
       )}
 
-      {/* Unit economics row */}
-      <div>
-        <h2 className="text-base font-bold text-gray-900 mb-1">เศรษฐศาสตร์ต่อลูกค้า (Unit Economics)</h2>
-        <p className="text-xs text-gray-500 mb-3">CAC กรอกเอง (ต้นทุนหาลูกค้าไม่อยู่ใน DB) · ที่เหลือคำนวณต่อจากรายได้จริง</p>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <Kpi title="ARPA (รายได้/บริษัท/เดือน)" value={fmtCompact(d?.arpa ?? 0)} sub="เฉลี่ยต่อบริษัทที่ใช้งาน" color={KK.blue} bg={KK.blueLight} icon={Users} />
-          <Kpi title="LTV (มูลค่าตลอดอายุ)" value={d?.ltv != null ? fmtCompact(d.ltv) : '—'} sub={d?.ltv == null ? 'churn 0 → คำนวณยังไม่ได้' : 'ARPA ÷ churn'} color={KK.green} bg={KK.greenLight} icon={TrendingUp} />
-          <Kpi title="CAC (ต้นทุนหาลูกค้า)" value={cac != null ? fmtCompact(cac) : 'ตั้งค่า'} sub={cac != null ? `งบ ${fmtCompact(acqSpend!)} ÷ ${totalTenants} บริษัท` : 'กดดินสอเพื่อกรอกงบ'} color={KK.purple} bg={KK.purpleLight} icon={Wallet} onEdit={editAcqSpend} />
-          <Kpi title="LTV : CAC" value={ltvCac != null ? `${ltvCac.toFixed(1)} : 1` : '—'} sub="ควร > 3 : 1" color={ltvCac != null && ltvCac >= 3 ? KK.green : KK.amber} bg={KK.amberLight} icon={Percent} />
-          <Kpi title="CAC Payback" value={paybackMonths != null ? `${Math.round(paybackMonths)} เดือน` : '—'} sub="คืนทุนค่าหาลูกค้า · ควร < 12" color={paybackMonths != null && paybackMonths <= 12 ? KK.green : KK.amber} bg={KK.greenLight} icon={RefreshCw} />
-        </div>
-      </div>
     </div>
   );
 };

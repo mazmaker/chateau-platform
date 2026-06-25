@@ -107,6 +107,7 @@ const OwnerDashboard = () => {
   const { isOwner } = usePermissions();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [barsReady, setBarsReady] = useState(false);
   const [stats, setStats] = useState<DashboardStats>({
     totalTenants: 0,
     activeTenants: 0,
@@ -187,6 +188,14 @@ const OwnerDashboard = () => {
       atRiskTenants, cancelledTenantNames, cancelledLast30DayNames, suspendedTenantNames,
     };
   }, [fetchSeq]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Animate the Retention bars from 0 → value once data has loaded (double-rAF gate).
+  useEffect(() => {
+    if (loading) { setBarsReady(false); return; }
+    let r2 = 0;
+    const r1 = requestAnimationFrame(() => { r2 = requestAnimationFrame(() => setBarsReady(true)); });
+    return () => { cancelAnimationFrame(r1); if (r2) cancelAnimationFrame(r2); };
+  }, [loading]);
 
   const fetchDashboardData = async (isBackground = false) => {
     if (!isBackground) setLoading(true);
@@ -902,7 +911,7 @@ const OwnerDashboard = () => {
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <RefreshCw className="w-4 h-4" style={{ color: KK.green }} />
-                    <h2 className="text-base font-bold text-gray-900">สุขภาพรายได้ (Retention)</h2>
+                    <h2 className="text-base font-bold text-gray-900">รายได้ประจำ (MRR)</h2>
                   </div>
                   <button onClick={() => navigate('/payments?tab=revenue-health')} className="text-xs font-semibold flex items-center gap-1 hover:opacity-70 transition-opacity" style={{ color: KK.red }}>
                     ดูรายละเอียด <ChevronRight className="w-3 h-3" />
@@ -964,7 +973,7 @@ const OwnerDashboard = () => {
                           <span className="text-lg font-bold tabular-nums leading-none" style={{ color: m.color }}>{m.v}%</span>
                         </div>
                         <div className="h-3 rounded-full bg-gray-100 overflow-hidden">
-                          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, m.v)}%`, background: m.color }} />
+                          <div className="h-full rounded-full transition-[width] duration-700 ease-out" style={{ width: barsReady ? `${Math.min(100, m.v)}%` : '0%', background: m.color }} />
                         </div>
                         <p className="text-xs text-gray-400 mt-1">{m.target}</p>
                       </div>

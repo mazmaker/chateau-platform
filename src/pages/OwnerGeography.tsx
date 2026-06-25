@@ -8,9 +8,10 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import TenantCombobox from '@/components/owner/TenantCombobox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { MapPin, TrendingUp, ChevronRight, Target } from 'lucide-react';
+import { MapPin, TrendingUp, ChevronRight, Target, Search } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
 import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 
@@ -87,10 +88,21 @@ const OwnerGeography = ({ embedded = false, period: periodProp, tenantFilter: te
   const tenantFilter = tenantFilterProp ?? tenantFilterState;
   // Drill-down: province → อำเภอ → โครงการ (read-only). "เรียก data ขึ้นมาดูได้" + เจาะอำเภอ.
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [provQuery, setProvQuery] = useState(''); // ค้นหาชื่อจังหวัดในตาราง
+  const [provSaleFilter, setProvSaleFilter] = useState<'all' | 'sold'>('all'); // ทุกจังหวัด / เฉพาะที่มียอดขาย
   const [deadModal, setDeadModal] = useState(false); // จังหวัดมีโครงการแต่ยังไม่ขาย
   const [regionModal, setRegionModal] = useState<string | null>(null); // เจาะจังหวัดในภาค
   const [provOpen, setProvOpen] = useState<string | null>(null); // จังหวัดที่กางดูโครงการในโมดัล
+  const [barsReady, setBarsReady] = useState(false);
   useEffect(() => { setExpanded(null); }, [period, tenantFilter]);
+
+  // Animate the region bars from 0 → value once data has loaded (double-rAF gate).
+  useEffect(() => {
+    if (loading) { setBarsReady(false); return; }
+    let r2 = 0;
+    const r1 = requestAnimationFrame(() => { r2 = requestAnimationFrame(() => setBarsReady(true)); });
+    return () => { cancelAnimationFrame(r1); if (r2) cancelAnimationFrame(r2); };
+  }, [loading]);
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
@@ -210,6 +222,15 @@ const OwnerGeography = ({ embedded = false, period: periodProp, tenantFilter: te
 
   // Drill: provinces that have projects/units but ZERO sales in the period (stuck markets).
   const deadProvinces = useMemo(() => provinces.filter((p) => p.sold === 0).sort((a, b) => b.gdv - a.gdv), [provinces]);
+  // Province table — search by name + optional "only with sales" filter (already sorted by value).
+  const tableProvinces = useMemo(() => {
+    const q = provQuery.trim().toLowerCase();
+    return provinces.filter((p) => {
+      if (provSaleFilter === 'sold' && p.sold === 0) return false;
+      if (q && !p.province.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [provinces, provQuery, provSaleFilter]);
   // Drill: provinces inside the clicked region.
   const provincesInRegion = useMemo(
     () => (regionModal ? provinces.filter((p) => regionOf(p.province) === regionModal).sort((a, b) => b.soldValue - a.soldValue) : []),
@@ -323,7 +344,7 @@ const OwnerGeography = ({ embedded = false, period: periodProp, tenantFilter: te
                             <span className="text-sm font-medium text-gray-700 truncate">{r.region}</span>
                             <span className="text-sm tabular-nums font-semibold text-gray-800 flex-shrink-0">{fmtCompact(r.soldValue)}</span>
                           </div>
-                          <div className="h-2 rounded-lg bg-gray-100 overflow-hidden"><div className="h-full rounded-lg" style={{ width: `${Math.max((r.soldValue / regionMax) * 100, 2)}%`, background: i === 0 ? KK.red : '#fca5a5' }} /></div>
+                          <div className="h-2 rounded-lg bg-gray-100 overflow-hidden"><div className="h-full rounded-lg transition-[width] duration-700 ease-out" style={{ width: barsReady ? `${Math.max((r.soldValue / regionMax) * 100, 2)}%` : '0%', background: i === 0 ? KK.red : '#fca5a5' }} /></div>
                           <p className="text-xs text-gray-400 mt-1">{r.provinces} จังหวัด · {r.sold} ยูนิต</p>
                         </button>
                       ))}
@@ -333,9 +354,24 @@ const OwnerGeography = ({ embedded = false, period: periodProp, tenantFilter: te
 
                 {/* Province table */}
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-                  <div className="mb-4">
-                    <h2 className="text-base font-bold text-gray-900">รายละเอียดตามจังหวัด</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">เรียงตามมูลค่าขาย · คลิกจังหวัด → อำเภอ → โครงการ · <span style={{ color: KK.red }}>กดโครงการเพื่อดูรายละเอียด</span></p>
+                  <div className="mb-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+                    <div>
+                      <h2 className="text-base font-bold text-gray-900">รายละเอียดตามจังหวัด</h2>
+                      <p className="text-xs text-gray-500 mt-0.5">เรียงตามมูลค่าขาย · คลิกจังหวัด → อำเภอ → โครงการ · <span style={{ color: KK.red }}>กดโครงการเพื่อดูรายละเอียด</span></p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                        <Input value={provQuery} onChange={(e) => setProvQuery(e.target.value)} placeholder="ค้นหาจังหวัด..." className="h-9 w-full sm:w-[170px] pl-8 text-sm" />
+                      </div>
+                      <Select value={provSaleFilter} onValueChange={(v) => setProvSaleFilter(v as 'all' | 'sold')}>
+                        <SelectTrigger className="h-9 w-[150px] text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">ทุกจังหวัด</SelectItem>
+                          <SelectItem value="sold">เฉพาะที่มียอดขาย</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div className="overflow-x-auto">
                     <Table>
@@ -349,7 +385,7 @@ const OwnerGeography = ({ embedded = false, period: periodProp, tenantFilter: te
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {provinces.map((r) => {
+                        {tableProvinces.map((r) => {
                           const isOpen = expanded === r.province;
                           const groups = distByProvince[r.province] || [];
                           return (
@@ -404,6 +440,11 @@ const OwnerGeography = ({ embedded = false, period: periodProp, tenantFilter: te
                             </Fragment>
                           );
                         })}
+                        {tableProvinces.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center text-sm text-gray-400 py-8">ไม่พบจังหวัดที่ตรงเงื่อนไข</TableCell>
+                          </TableRow>
+                        )}
                       </TableBody>
                     </Table>
                   </div>

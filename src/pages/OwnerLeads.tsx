@@ -605,7 +605,7 @@ const OwnerLeads = () => {
                   <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="แพ็กเกจ" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">ทุกแพ็กเกจ</SelectItem>
-                    {Object.entries(PLAN_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                    {Object.entries(PLAN_LABELS).filter(([v]) => v !== 'free').map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <Select value={sourceFilter} onValueChange={(v) => { setSourceFilter(v); setCurrentPage(1); }}>
@@ -834,7 +834,7 @@ const OwnerLeads = () => {
                 <Select value={form.interested_plan} onValueChange={(v) => setF('interested_plan', v)}>
                   <SelectTrigger><SelectValue placeholder="เลือก" /></SelectTrigger>
                   <SelectContent>
-                    {Object.entries(PLAN_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                    {Object.entries(PLAN_LABELS).filter(([v]) => v !== 'free').map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

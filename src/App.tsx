@@ -12,7 +12,6 @@ import OwnerSupport from "./pages/OwnerSupport";
 import OwnerProjects from "./pages/OwnerProjects";
 import OwnerUnitDetail from "./pages/OwnerUnitDetail";
 import OwnerMarketOverview from "./pages/OwnerMarketOverview";
-import OwnerBuyerOverview from "./pages/OwnerBuyerOverview";
 import OwnerSalesBreakdown from "./pages/OwnerSalesBreakdown";
 import OwnerCompanies from "./pages/OwnerCompanies";
 import OwnerCustomers from "./pages/OwnerCustomers";
@@ -269,13 +268,8 @@ const App = () => (
 
           {/* Owner ANALYTICS — cross-tenant real-estate intelligence (HQ lens).
               See documents/owner-hq-dashboard-plan.md. */}
-          <Route path="/owner-buyer-overview" element={
-            <ErrorBoundary showRetry={true} showHome={true} errorMessage="ไม่สามารถโหลดหน้าภาพรวมผู้ซื้อได้" context={{ page: 'owner-buyer-overview' }}>
-              <ProtectedRouteSimple requireRole="owner">
-                <OwnerBuyerOverview />
-              </ProtectedRouteSimple>
-            </ErrorBoundary>
-          } />
+          {/* ภาพรวมผู้ซื้อ รวมเข้ากับ ฐานข้อมูลผู้สนใจ → /owner-customers (overview เดิมบางกว่า drill เลยรวมเป็นหน้าเดียวที่ครบ 2026-06-25). ไฟล์ OwnerBuyerOverview.tsx ยังอยู่ใน git เผื่อ rollback */}
+          <Route path="/owner-buyer-overview" element={<Navigate to="/owner-customers" replace />} />
           <Route path="/owner-customers" element={
             <ErrorBoundary showRetry={true} showHome={true} errorMessage="ไม่สามารถโหลดหน้า Customer Intelligence ได้" context={{ page: 'owner-customers' }}>
               <ProtectedRouteSimple requireRole="owner">
@@ -284,7 +278,7 @@ const App = () => (
             </ErrorBoundary>
           } />
           {/* Funnel & คะแนนผู้สนใจ ถูกตัดออกจาก Owner console (KPI ซ้ำ ภาพรวมผู้ซื้อ + กรวยเป็น tenant-operational ไม่ใช่ SaaS-owner metric) — รีไดเรกต์กันลิงก์เก่าพัง. ไฟล์ OwnerFunnel.tsx ยังอยู่ใน git เผื่อ rollback */}
-          <Route path="/owner-funnel" element={<Navigate to="/owner-buyer-overview" replace />} />
+          <Route path="/owner-funnel" element={<Navigate to="/owner-customers" replace />} />
           {/* Inventory & Absorption ถูกตัดออกจาก Owner console (เป็น tenant-operational ไม่ใช่ SaaS-owner metric) — รีไดเรกต์กันลิงก์เก่าพัง. ไฟล์ OwnerInventory.tsx ยังอยู่ใน git เผื่อ rollback */}
           <Route path="/owner-inventory" element={<Navigate to="/owner-market-overview" replace />} />
           <Route path="/owner-marketing" element={
@@ -305,7 +299,7 @@ const App = () => (
             <ErrorBoundary
               showRetry={true}
               showHome={true}
-              errorMessage="ไม่สามารถโหลดหน้าภาพรวมตลาดได้"
+              errorMessage="ไม่สามารถโหลดหน้าภาพรวมการขายได้"
               context={{ page: 'owner-market-overview' }}
             >
               <ProtectedRouteSimple requireRole="owner">

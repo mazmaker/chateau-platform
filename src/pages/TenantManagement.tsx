@@ -462,12 +462,15 @@ const TenantManagement = () => {
 
   const handleCreateTenant = async () => {
     try {
-      // Determine status based on subscription plan
-      // Free plan = Trial (7 days), other plans = Active
-      const isFreePlan = formData.subscription_plan === 'free';
-      const status = isFreePlan ? 'trial' : 'active';
+      // "free" in the create form = start a 7-day TRIAL. Owner policy (2026-06):
+      // a trial runs on the STARTER package (a real paid tier to evaluate), not the
+      // 'free' plan — so force the inserted plan + limits to Starter for trials.
+      const isTrial = formData.subscription_plan === 'free';
+      const status = isTrial ? 'trial' : 'active';
+      const starterPkg = packageConfig.find((p) => p.id === 'starter');
+      const effectivePlan = isTrial ? 'starter' : formData.subscription_plan;
 
-      // Calculate trial end date (7 days from now) only for free plan
+      // Calculate trial end date (7 days from now) only for trials
       const trialEndsAt = new Date();
       trialEndsAt.setDate(trialEndsAt.getDate() + 7);
 
@@ -553,21 +556,21 @@ const TenantManagement = () => {
         name: formData.name,
         slug: uniqueSlug,
         status: status,
-        subscription_plan: formData.subscription_plan,
+        subscription_plan: effectivePlan,
       };
 
-      // Only add max_properties if it exists in the database
+      // Only add max_properties if it exists in the database (trials use Starter limits)
       if (dbColumns.has('max_properties')) {
-        insertData.max_properties = formData.max_properties;
+        insertData.max_properties = isTrial ? (starterPkg?.properties ?? formData.max_properties) : formData.max_properties;
       }
 
-      // Only add max_users if it exists in the database
+      // Only add max_users if it exists in the database (trials use Starter limits)
       if (dbColumns.has('max_users')) {
-        insertData.max_users = formData.max_users;
+        insertData.max_users = isTrial ? (starterPkg?.users ?? formData.max_users) : formData.max_users;
       }
 
-      // Only add trial_ends_at for free plan
-      if (isFreePlan && dbColumns.has('trial_ends_at')) {
+      // Only add trial_ends_at for trials
+      if (isTrial && dbColumns.has('trial_ends_at')) {
         insertData.trial_ends_at = trialEndsAt.toISOString();
       }
 
@@ -1921,7 +1924,9 @@ const TenantManagement = () => {
                         <SelectContent>
                           {packageConfig.map((pkg) => (
                             <SelectItem key={pkg.id} value={pkg.id}>
-                              {pkg.name} (฿{pkg.price}) - Admin {pkg.adminCount} + Sales {pkg.salesCount}
+                              {pkg.id === 'free'
+                                ? 'ทดลองฟรี 7 วัน (บนแพ็ก Starter)'
+                                : `${pkg.name} (฿${pkg.price}) - Admin ${pkg.adminCount} + Sales ${pkg.salesCount}`}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1939,7 +1944,7 @@ const TenantManagement = () => {
                       <div className="px-3 py-2 bg-gray-100 text-gray-700 text-xs rounded-md">
                         {(() => {
                           if (formData.subscription_plan === 'free') {
-                            return 'Trial 7 วัน - หลังจากนั้นจะระงับการใช้งาน';
+                            return 'ทดลองฟรี 7 วัน บนแพ็ก Starter — หลังหมดช่วงทดลองต่อเป็น Starter';
                           }
                           return 'Active - พร้อมใช้งานทันที';
                         })()}

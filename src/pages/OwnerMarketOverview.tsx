@@ -126,6 +126,15 @@ const OwnerMarketOverview = () => {
   const [depthSearch, setDepthSearch] = useState('');
   // Customer-segment filter — scope the whole page to a plan / lifecycle status.
   const [segment, setSegment] = useState<'all' | 'active' | 'trial' | 'enterprise' | 'professional' | 'starter'>('all');
+  const [barsReady, setBarsReady] = useState(false);
+
+  // Grow the horizontal ranking bars from 0 → full on entry (CSS width transition).
+  useEffect(() => {
+    if (loading) { setBarsReady(false); return; }
+    let r2 = 0;
+    const r1 = requestAnimationFrame(() => { r2 = requestAnimationFrame(() => setBarsReady(true)); });
+    return () => { cancelAnimationFrame(r1); if (r2) cancelAnimationFrame(r2); };
+  }, [loading]);
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
@@ -434,7 +443,7 @@ const OwnerMarketOverview = () => {
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
               <div>
                 <span className="inline-block text-xs font-semibold uppercase tracking-wide mb-2 px-2.5 py-1 rounded-md" style={{ color: KK.red, backgroundColor: KK.redLight }}>Analytics</span>
-                <h1 className="text-2xl font-bold text-gray-900">ภาพรวมตลาด</h1>
+                <h1 className="text-2xl font-bold text-gray-900">ภาพรวมการขาย</h1>
                 <p className="text-sm text-gray-500 mt-1.5">บริษัทผู้เช่า (อสังหาฯ) ใช้แพลตฟอร์มทำธุรกรรมมากแค่ไหน — ยิ่งขายผ่านเรา ยิ่งขาดเราไม่ได้</p>
               </div>
               <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
@@ -495,7 +504,7 @@ const OwnerMarketOverview = () => {
                     <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => fmtCompact(v)} width={58} />
                     <Tooltip contentStyle={kkTooltipStyle} cursor={{ fill: KK.redLight }} formatter={((v: any) => [fmtCompact(Number(v ?? 0)), 'GMV']) as any} />
-                    <Bar dataKey="gmv" fill="url(#overviewGmvGrad)" radius={[8, 8, 0, 0]} maxBarSize={80} />
+                    <Bar dataKey="gmv" fill="url(#overviewGmvGrad)" radius={[8, 8, 0, 0]} maxBarSize={80} isAnimationActive animationBegin={120} animationDuration={900} animationEasing="ease-out" />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
@@ -602,7 +611,7 @@ const OwnerMarketOverview = () => {
                                   </div>
                                 </div>
                                 <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                                  <div className="h-full rounded-full transition-all" style={{ width: `${(c.soldValue / maxVal) * 100}%`, backgroundColor: KK.red }} />
+                                  <div className="h-full rounded-full transition-[width] duration-700 ease-out" style={{ width: barsReady ? `${(c.soldValue / maxVal) * 100}%` : '0%', backgroundColor: KK.red }} />
                                 </div>
                               </div>
                               <ChevronRight className={`w-4 h-4 text-gray-300 flex-shrink-0 group-hover:text-gray-400 transition-transform ${open ? 'rotate-90' : ''}`} />
@@ -686,7 +695,7 @@ const OwnerMarketOverview = () => {
                                   </div>
                                 </div>
                                 <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                                  <div className="h-full rounded-full transition-all" style={{ width: `${(p.soldValue / maxVal) * 100}%`, backgroundColor: i === 0 ? KK.red : '#fca5a5' }} />
+                                  <div className="h-full rounded-full transition-[width] duration-700 ease-out" style={{ width: barsReady ? `${(p.soldValue / maxVal) * 100}%` : '0%', backgroundColor: i === 0 ? KK.red : '#fca5a5' }} />
                                 </div>
                               </div>
                               <ChevronRight className={`w-4 h-4 text-gray-300 flex-shrink-0 group-hover:text-gray-400 transition-transform ${open ? 'rotate-90' : ''}`} />

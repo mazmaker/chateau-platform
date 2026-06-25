@@ -106,9 +106,9 @@ const OwnerBuyerOverview = () => {
   const bands = useMemo(() => {
     const scored = leads.filter((l) => l.potential_score != null);
     const def = [
-      { key: 'hot', label: 'ร้อน', range: 'สกอร์ 70+', color: KK.red, test: (s: number) => s >= 70 },
-      { key: 'warm', label: 'อุ่น', range: 'สกอร์ 40–69', color: KK.amber, test: (s: number) => s >= 40 && s < 70 },
-      { key: 'cold', label: 'เย็น', range: 'สกอร์ < 40', color: KK.gray, test: (s: number) => s < 40 },
+      { key: 'hot', label: 'HOT', range: 'สกอร์ 70+', color: KK.red, test: (s: number) => s >= 70 },
+      { key: 'warm', label: 'WARM', range: 'สกอร์ 40–69', color: KK.amber, test: (s: number) => s >= 40 && s < 70 },
+      { key: 'cold', label: 'COOL', range: 'สกอร์ < 40', color: KK.gray, test: (s: number) => s < 40 },
     ];
     return def.map((b) => {
       const rows = scored.filter((l) => b.test(Number(l.potential_score)));
@@ -185,9 +185,9 @@ const OwnerBuyerOverview = () => {
     },
     {
       icon: Brain, color: KK.red, bg: KK.redLight,
-      title: 'AI score 4 ปัจจัย',
-      value: 'การเงิน · engagement · urgency · fit',
-      desc: 'รวมเป็น potential score + โอกาสปิด · คำนวณสดทุกครั้งที่บันทึกลีด',
+      title: 'สกอร์ AI 4 ปัจจัย',
+      value: 'การเงิน · การมีส่วนร่วม · ความเร่งด่วน · ความเหมาะสม',
+      desc: 'รวมเป็นคะแนนรวม + โอกาสปิด · คำนวณสดทุกครั้งที่บันทึกลีด',
     },
   ];
 
@@ -216,9 +216,9 @@ const OwnerBuyerOverview = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {[
                     { label: 'ผู้สนใจในระบบ', value: kpis.total.toLocaleString(), icon: Users, color: KK.blue, href: '/owner-customers', sub: `${kpis.tenantsActive} บริษัทที่ใช้ระบบ · ระบบให้สกอร์อัตโนมัติ` },
-                    { label: 'AI คัดเป็นลีดคุณภาพสูง', value: kpis.hot.toLocaleString(), icon: Flame, color: KK.red, sub: 'potential score ≥ 70 (กลุ่มร้อน)' },
-                    { label: 'อัตราแปลงรวม (Conversion)', value: `${kpis.conversion}%`, icon: Percent, color: KK.green, sub: 'ปิดได้ / ลีดทั้งหมด' },
-                    { label: 'มูลค่าดีลในไปป์ไลน์', value: fmtCompact(kpis.pipeline), icon: Banknote, color: KK.amber, sub: 'ลีดที่ยังเปิดอยู่' },
+                    { label: 'ลีดคุณภาพสูง (AI ประเมิน)', value: kpis.hot.toLocaleString(), icon: Flame, color: KK.red, sub: 'สกอร์ ≥ 70 (กลุ่ม HOT)' },
+                    { label: 'อัตราปิดการขาย', value: `${kpis.conversion}%`, icon: Percent, color: KK.green, sub: 'ปิดได้ / ลีดทั้งหมด' },
+                    { label: 'มูลค่าดีลที่ยังเปิด', value: fmtCompact(kpis.pipeline), icon: Banknote, color: KK.amber, sub: 'ลีดที่ยังไม่ปิด' },
                   ].map(renderKpiCard)}
                 </div>
 
@@ -226,7 +226,7 @@ const OwnerBuyerOverview = () => {
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                   <div className="flex items-center gap-2 mb-1">
                     <Brain className="w-4 h-4 flex-shrink-0" style={{ color: KK.red }} />
-                    <h2 className="text-base font-bold text-gray-900">AI Scoring แม่นแค่ไหน</h2>
+                    <h2 className="text-base font-bold text-gray-900">AI ให้คะแนนแม่นแค่ไหน</h2>
                   </div>
                   <p className="text-xs text-gray-500 mb-4">สกอร์ที่ระบบให้แต่ละลีด เทียบ<span className="font-semibold text-gray-700">อัตราปิดจริง</span> · ยิ่งสกอร์สูง ยิ่งปิดได้ = สมองที่เราขาย</p>
                   <div className="space-y-4">
@@ -234,7 +234,7 @@ const OwnerBuyerOverview = () => {
                       <div key={b.key}>
                         <div className="flex items-center justify-between text-sm mb-1.5">
                           <span className="font-medium text-gray-700">
-                            {b.label} <span className="text-xs text-gray-400">· {b.range} · {b.leads.toLocaleString()} ลีด</span>
+                            <span className="font-bold tracking-wide" style={{ color: b.color }}>{b.label}</span> <span className="text-xs text-gray-400">· {b.range} · {b.leads.toLocaleString()} ลีด</span>
                           </span>
                           <span className="tabular-nums font-bold" style={{ color: b.color }}>{b.winPct}% <span className="text-xs font-normal text-gray-400">ปิดได้</span></span>
                         </div>
@@ -249,7 +249,7 @@ const OwnerBuyerOverview = () => {
                   </div>
                   {hot && cold && (
                     <p className="text-xs text-gray-500 mt-4 leading-relaxed">
-                      ลีดที่ระบบบอกว่า <span className="font-semibold" style={{ color: KK.red }}>ร้อน ปิดได้ {hot.winPct}%</span> เทียบ <span className="font-semibold text-gray-600">เย็น {cold.winPct}%</span> — ทีมขายโฟกัสถูกตัว ไม่เสียเวลา = คุณค่าที่ลูกค้าจ่ายค่าระบบ
+                      ลีดที่ระบบบอกว่า <span className="font-semibold" style={{ color: KK.red }}>HOT ปิดได้ {hot.winPct}%</span> เทียบ <span className="font-semibold text-gray-600">COOL {cold.winPct}%</span> — ทีมขายโฟกัสถูกตัว ไม่เสียเวลา = คุณค่าที่ลูกค้าจ่ายค่าระบบ
                     </p>
                   )}
                 </div>

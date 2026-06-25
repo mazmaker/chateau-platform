@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { Megaphone, Send, Target, Percent } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
+import TenantCombobox from '@/components/owner/TenantCombobox';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Marketing & Campaign Overview — the real "Marketing" (เฮีย: ส่งมอบคุณค่า,
@@ -55,17 +56,29 @@ const OwnerMarketing = () => {
   const [period, setPeriod] = useState<PeriodKey>('all');
   const [loading, setLoading] = useState(true);
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
+  const [tenants, setTenants] = useState<{ id: string; name: string }[]>([]);
+  const [selectedTenant, setSelectedTenant] = useState('all');
+  const [barsReady, setBarsReady] = useState(false);
 
   useEffect(() => {
     if (!isOwner) { navigate('/'); return; }
     fetchAll();
   }, [isOwner, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Animate the campaign-reach bars from 0 → value once data has loaded (double-rAF gate).
+  useEffect(() => {
+    if (loading) { setBarsReady(false); return; }
+    let r2 = 0;
+    const r1 = requestAnimationFrame(() => { r2 = requestAnimationFrame(() => setBarsReady(true)); });
+    return () => { cancelAnimationFrame(r1); if (r2) cancelAnimationFrame(r2); };
+  }, [loading]);
+
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const { data: tenants } = await supabase.from('tenants').select('id').eq('is_platform' as any, false);
-      const ids = ((tenants || []) as { id: string }[]).map((t) => t.id);
+      const { data: tenantRows } = await supabase.from('tenants').select('id, name').eq('is_platform' as any, false);
+      const ids = ((tenantRows || []) as { id: string }[]).map((t) => t.id);
+      setTenants(((tenantRows || []) as any[]).map((t) => ({ id: t.id, name: t.name })).sort((a, b) => a.name.localeCompare(b.name, 'th')));
       if (ids.length > 0) {
         const { data } = await supabase
           .from('campaigns')
@@ -80,18 +93,23 @@ const OwnerMarketing = () => {
     }
   };
 
-  // Scope by period (start_date within range; 'all' = every campaign).
+  const selectedTenantName = selectedTenant === 'all' ? null : (tenants.find((t) => t.id === selectedTenant)?.name ?? null);
+
+  // Scope by company (selectedTenant) AND period (start_date within range).
   const scoped = useMemo(() => {
-    if (period === 'all') return campaigns;
-    const { from, to } = periodToRange(period);
-    return campaigns.filter((c) => {
-      if (!c.start_date) return false;
-      const d = new Date(c.start_date);
-      if (from && d < from) return false;
-      if (d > to) return false;
-      return true;
-    });
-  }, [campaigns, period]);
+    let list = selectedTenant === 'all' ? campaigns : campaigns.filter((c) => c.tenant_id === selectedTenant);
+    if (period !== 'all') {
+      const { from, to } = periodToRange(period);
+      list = list.filter((c) => {
+        if (!c.start_date) return false;
+        const d = new Date(c.start_date);
+        if (from && d < from) return false;
+        if (d > to) return false;
+        return true;
+      });
+    }
+    return list;
+  }, [campaigns, period, selectedTenant]);
 
   const m = useMemo(() => {
     const totalCampaigns = scoped.length;
@@ -175,9 +193,16 @@ const OwnerMarketing = () => {
                   Intelligence
                 </span>
                 <h1 className="text-2xl font-bold text-gray-900">Marketing &amp; Campaign</h1>
-                <p className="text-sm text-gray-500 mt-1.5">ภาพรวมแคมเปญของบริษัทที่ใช้ระบบ · ประเภทไหน/segment ไหนได้ผลดีสุด · ช่วง <span className="font-semibold text-gray-700">{periodRangeLabel(period)}</span></p>
+                <p className="text-sm text-gray-500 mt-1.5">
+                  {selectedTenantName
+                    ? <>แคมเปญของ <span className="font-semibold text-gray-700">{selectedTenantName}</span> · ประเภทไหน/segment ไหนได้ผลดีสุด · ช่วง <span className="font-semibold text-gray-700">{periodRangeLabel(period)}</span></>
+                    : <>ภาพรวมแคมเปญของบริษัทที่ใช้ระบบ · ประเภทไหน/segment ไหนได้ผลดีสุด · ช่วง <span className="font-semibold text-gray-700">{periodRangeLabel(period)}</span></>}
+                </p>
               </div>
-              <PeriodFilter value={period} onChange={setPeriod} tier="operational" className="self-start sm:self-auto" />
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 self-start sm:self-auto">
+                <TenantCombobox value={selectedTenant} onChange={setSelectedTenant} options={tenants} placeholder="เลือกบริษัท" className="w-full sm:w-[220px]" />
+                <PeriodFilter value={period} onChange={setPeriod} tier="operational" />
+              </div>
             </div>
 
             {campaigns.length === 0 ? (
@@ -188,15 +213,15 @@ const OwnerMarketing = () => {
             ) : m.totalCampaigns === 0 ? (
               <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-12 text-center">
                 <Megaphone className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-                <p className="text-sm text-gray-500">ไม่มีแคมเปญในช่วงเวลานี้ — ลองเลือกช่วงอื่น</p>
+                <p className="text-sm text-gray-500">{selectedTenantName ? `ไม่มีแคมเปญของ ${selectedTenantName} ในช่วงนี้ — ลองเปลี่ยนบริษัทหรือช่วงเวลา` : 'ไม่มีแคมเปญในช่วงเวลานี้ — ลองเลือกช่วงอื่น'}</p>
               </div>
             ) : (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <KpiCard title="แคมเปญทั้งหมด" value={m.totalCampaigns.toLocaleString()} sub={`จาก ${m.tenants} บริษัทที่ใช้ระบบ`} icon={Megaphone} color={KK.red} bg={KK.redLight} />
+                  <KpiCard title="แคมเปญทั้งหมด" value={m.totalCampaigns.toLocaleString()} sub={selectedTenantName ? 'ในบริษัทนี้' : `จาก ${m.tenants} บริษัทที่ใช้ระบบ`} icon={Megaphone} color={KK.red} bg={KK.redLight} />
                   <KpiCard title="ส่งถึงผู้รับ" value={m.recipients.toLocaleString()} sub="รวมทุกแคมเปญ" icon={Send} color={KK.blue} bg={KK.blueLight} />
-                  <KpiCard title="คลิกรวม" value={m.clicks.toLocaleString()} sub={`${m.impressions.toLocaleString()} อิมเพรสชัน`} icon={Target} color={KK.green} bg={KK.greenLight} />
-                  <KpiCard title="CTR เฉลี่ย" value={`${m.ctr.toFixed(1)}%`} sub="คลิก / อิมเพรสชัน" icon={Percent} color={KK.amber} bg={KK.amberLight} />
+                  <KpiCard title="คลิกรวม" value={m.clicks.toLocaleString()} sub={`${m.impressions.toLocaleString()} การมองเห็น`} icon={Target} color={KK.green} bg={KK.greenLight} />
+                  <KpiCard title="อัตราคลิกเฉลี่ย" value={`${m.ctr.toFixed(1)}%`} sub="คลิก / การมองเห็น" icon={Percent} color={KK.amber} bg={KK.amberLight} />
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -207,7 +232,7 @@ const OwnerMarketing = () => {
                     <div className="relative" style={{ height: 200 }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                          <Pie data={m.typeData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={58} outerRadius={86} paddingAngle={2}>
+                          <Pie data={m.typeData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={58} outerRadius={86} paddingAngle={0} stroke="none">
                             {m.typeData.map((d, i) => <Cell key={i} fill={d.color} />)}
                           </Pie>
                           <Tooltip contentStyle={kkTooltipStyle} formatter={((v: any, n: any) => [`${v} แคมเปญ`, n]) as any} />
@@ -236,7 +261,7 @@ const OwnerMarketing = () => {
                             <span className="text-gray-700 font-medium truncate">{c.name}</span>
                             <span className="tabular-nums text-gray-500 flex-shrink-0">{c.reach.toLocaleString()} ส่งถึง · <span className="text-gray-700 font-semibold">{c.clicks.toLocaleString()} คลิก</span></span>
                           </div>
-                          <div className="h-3 rounded-lg bg-gray-100 overflow-hidden"><div className="h-full rounded-lg" style={{ width: `${Math.max((c.reach / reachMax) * 100, 3)}%`, background: `linear-gradient(90deg, ${KK.red} 0%, #f87171 100%)` }} /></div>
+                          <div className="h-3 rounded-lg bg-gray-100 overflow-hidden"><div className="h-full rounded-lg transition-[width] duration-700 ease-out" style={{ width: barsReady ? `${Math.max((c.reach / reachMax) * 100, 3)}%` : '0%', background: `linear-gradient(90deg, ${KK.red} 0%, #f87171 100%)` }} /></div>
                         </div>
                       ))}
                     </div>
@@ -247,10 +272,10 @@ const OwnerMarketing = () => {
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <h2 className="text-base font-bold text-gray-900">กลุ่มเป้าหมายที่เข้าถึงมากสุด</h2>
-                      <p className="text-xs text-gray-500 mb-4 mt-0.5">ผู้รับตาม segment · คลิกที่ได้</p>
+                      <h2 className="text-base font-bold text-gray-900">เจาะกลุ่มลูกค้าไหนมากสุด</h2>
+                      <p className="text-xs text-gray-500 mb-4 mt-0.5">ยอดผู้รับ · คลิก แยกตามกลุ่มลูกค้า</p>
                     </div>
-                    {m.topSeg && <span className="text-xs font-semibold px-2.5 py-1 rounded-md flex-shrink-0" style={{ color: KK.green, backgroundColor: KK.greenLight }}>เด่นสุด: {m.topSeg.name}</span>}
+                    {m.topSeg && <span className="text-xs font-semibold px-2.5 py-1 rounded-md flex-shrink-0" style={{ color: KK.red, backgroundColor: KK.redLight }}>เด่นสุด: {m.topSeg.name}</span>}
                   </div>
                   <ResponsiveContainer width="100%" height={260}>
                     <BarChart data={m.segData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
@@ -258,7 +283,7 @@ const OwnerMarketing = () => {
                       <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} interval={0} />
                       <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
                       <Tooltip contentStyle={kkTooltipStyle} cursor={{ fill: 'rgba(0,0,0,0.03)' }} formatter={((v: any, _n: any, p: any) => [`${Number(v).toLocaleString()} ผู้รับ · ${(p?.payload?.clicks ?? 0).toLocaleString()} คลิก`, 'ผลตอบรับ']) as any} />
-                      <Bar dataKey="reach" radius={[6, 6, 0, 0]} maxBarSize={64}>{m.segData.map((_, i) => <Cell key={i} fill={i === 0 ? KK.green : '#86efac'} />)}</Bar>
+                      <Bar dataKey="reach" radius={[6, 6, 0, 0]} maxBarSize={64} isAnimationActive animationBegin={120} animationDuration={900} animationEasing="ease-out">{m.segData.map((_, i) => <Cell key={i} fill={i === 0 ? KK.red : '#fca5a5'} />)}</Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

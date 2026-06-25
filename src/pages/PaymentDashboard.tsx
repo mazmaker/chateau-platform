@@ -375,7 +375,7 @@ const PaymentDashboard = () => {
     { id: 'payments', label: 'ติดตามการชำระ', icon: CreditCard },
     { id: 'calendar', label: 'ปฎิทินแจ้งเตือน', icon: Calendar },
     { id: 'overdue', label: 'ค้างชำระ', icon: AlertCircle },
-    { id: 'revenue-health', label: 'สุขภาพรายได้', icon: TrendingUp }
+    { id: 'revenue-health', label: 'รายได้ประจำ (MRR)', icon: TrendingUp }
   ];
 
   // Fetch all invoices for payment tracking
@@ -1442,13 +1442,16 @@ const PaymentDashboard = () => {
   const initializeAutomation = async () => {
     console.log('🚀 Initializing automation services...');
 
-    // Start billing scheduler
-    billingScheduler.start();
+    // Auto-runs by default and persists across reloads. The scheduler stays ON unless
+    // the Owner explicitly clicks "หยุดระบบ" (saved as 'off' in localStorage).
+    let enabled = true;
+    try { enabled = localStorage.getItem('chateau_billing_auto') !== 'off'; } catch { /* no storage */ }
+    if (enabled) billingScheduler.start(); else billingScheduler.stop();
 
     // Update automation status
     await updateAutomationStatus();
 
-    console.log('✅ Automation services initialized');
+    console.log(`✅ Automation services initialized (${enabled ? 'ON' : 'OFF'})`);
   };
 
   // Update automation status
@@ -1697,9 +1700,11 @@ const PaymentDashboard = () => {
   const toggleScheduler = () => {
     if (automationStatus.scheduler_running) {
       billingScheduler.stop();
+      try { localStorage.setItem('chateau_billing_auto', 'off'); } catch { /* no storage */ }
       console.log('⏹️ Stopped billing scheduler');
     } else {
       billingScheduler.start();
+      try { localStorage.setItem('chateau_billing_auto', 'on'); } catch { /* no storage */ }
       console.log('▶️ Started billing scheduler');
     }
     updateAutomationStatus();
@@ -1730,6 +1735,29 @@ const PaymentDashboard = () => {
       clearInterval(statusInterval);
     };
   }, [timeRange]);
+
+  // Live billing enforcement loop — while automation is ON, run the rules on a short
+  // cycle (not only at the daily scheduled time): mark past-due invoices overdue →
+  // suspend active tenants > grace period (7 วัน) → restore is handled on payment.
+  // Then refresh the dashboard so the change shows immediately. Stops the moment the
+  // Owner turns automation off (scheduler_running becomes false → cleanup clears it).
+  useEffect(() => {
+    if (!automationStatus.scheduler_running) return;
+    let cancelled = false;
+    const runCycle = async () => {
+      if (cancelled || document.hidden) return;
+      try {
+        await billingScheduler.runJob('update_invoice_status'); // pending → overdue
+        await suspensionService.processSuspensions();           // suspend > 7 วัน (active เท่านั้น)
+        if (!cancelled) await Promise.all([fetchPaymentOverview(), fetchOverdueData(), fetchTenants()]);
+      } catch (e) {
+        console.error('Billing auto-cycle error:', e);
+      }
+    };
+    runCycle();                               // enforce immediately on turn-on / page load
+    const id = setInterval(runCycle, 60000);  // re-check every minute while ON
+    return () => { cancelled = true; clearInterval(id); };
+  }, [automationStatus.scheduler_running]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('th-TH', {
@@ -2447,7 +2475,7 @@ const PaymentDashboard = () => {
               </div>
               <div>
                 <p className="text-2xl font-bold">{formatCurrency(paymentOverview.totalOutstanding)}</p>
-                <p className="text-sm text-muted-foreground">ยอดค้างรับทั้งหมด (AR)</p>
+                <p className="text-sm text-muted-foreground">ยอดรอเก็บเงิน</p>
               </div>
             </div>
           </CardContent>
@@ -2471,11 +2499,11 @@ const PaymentDashboard = () => {
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-gradient-to-br from-chateau to-chateau-600 rounded-xl flex items-center justify-center shadow-xl">
-                <CheckCircle className="w-6 h-6 text-white" strokeWidth={2} />
+                <AlertTriangle className="w-6 h-6 text-white" strokeWidth={2} />
               </div>
               <div>
-                <p className="text-2xl font-bold">{((allPayments.filter(p => p.payment_status === 'completed').length / (allPayments.filter(p => p.payment_status !== 'cancelled').length || 1)) * 100).toFixed(1)}%</p>
-                <p className="text-sm text-muted-foreground">อัตราเก็บเงินสำเร็จ</p>
+                <p className="text-2xl font-bold">{paymentOverview.overdueInvoices} <span className="text-base font-semibold text-muted-foreground">ใบ</span></p>
+                <p className="text-sm text-muted-foreground">ใบแจ้งหนี้เกินกำหนด</p>
               </div>
             </div>
           </CardContent>
@@ -2621,7 +2649,7 @@ const PaymentDashboard = () => {
                           {automationStatus.scheduler_running ? 'Auto ON' : 'Auto OFF'}
                         </span>
                         {automationStatus.scheduler_running && (
-                          <p className="text-xs opacity-60 leading-tight">ตรวจสอบทุกวัน 09:00</p>
+                          <p className="text-xs opacity-60 leading-tight">ตรวจสอบอัตโนมัติทุกนาที</p>
                         )}
                       </div>
                     </div>

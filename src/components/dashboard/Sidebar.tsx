@@ -86,7 +86,7 @@ const OWNER_NAV_GROUPS: NavGroup[] = [
   // aggregate end-customer funnel/CDP = tenant-operational data, low Owner value (per SaaS-owner
   // lens). The one useful number (deals tenants closed on-platform = product-value/retention proof)
   // surfaced on ภาพรวมผู้เช่า instead. Routes still exist (URL-reachable) for rollback.
-  { id: "intelligence", label: "Buyer Intelligence", icon: Contact, hrefs: ["/owner-buyer-overview", "/owner-marketing"] },
+  { id: "intelligence", label: "Buyer Intelligence", icon: Contact, hrefs: ["/owner-customers", "/owner-marketing"] },
   // FINANCE — Payments pulled out of TENANTS to its own domain group (P&L of the
   // Owner). The page already holds Financial Overview (สุขภาพรายได้ tab) + billing automation.
   { id: "finance",   label: "การเงิน",   icon: CreditCard, hrefs: ["/payments"] },
@@ -102,10 +102,9 @@ const getAllNavItems = (): NavItem[] => [
   // Owner ANALYTICS group — cross-tenant real-estate intelligence (HQ lens).
   // Data: units→properties→tenants via live Owner RLS; no migration needed.
   // See documents/owner-hq-dashboard-plan.md.
-  { icon: PieChart,        label: "ภาพรวมผู้ซื้อ",        href: "/owner-buyer-overview", requiredRoles: ["OWNER"] },
-  { icon: Contact,         label: "ฐานข้อมูลผู้สนใจ",    href: "/owner-customers", requiredRoles: ["OWNER"] },
+  { icon: PieChart,        label: "ภาพรวมผู้ซื้อ",        href: "/owner-customers", requiredRoles: ["OWNER"] },
   { icon: Megaphone,       label: "Marketing & Campaign", href: "/owner-marketing", requiredRoles: ["OWNER"] },
-  { icon: PieChart,        label: "ภาพรวมตลาด",          href: "/owner-market-overview", requiredRoles: ["OWNER"] },
+  { icon: PieChart,        label: "ภาพรวมการขาย",        href: "/owner-market-overview", requiredRoles: ["OWNER"] },
   { icon: TrendingUp,      label: "สัดส่วนยอดขาย",     href: "/owner-sales-breakdown", requiredRoles: ["OWNER"] },
   { icon: BarChart3,       label: "อันดับยอดขาย",        href: "/owner-companies", requiredRoles: ["OWNER"] },
   { icon: Trophy,          label: "My Dashboard",        href: "/my-dashboard",  requiredRoles: ["SALES", "AGENT"] },
@@ -125,7 +124,7 @@ const getAllNavItems = (): NavItem[] => [
   // Payments — Owner finance hub (invoices · AR · สุขภาพรายได้ tab · billing automation). FINANCE group.
   { icon: CreditCard,      label: "Payments",            href: "/payments",      requiredRoles: ["OWNER"] },
   { icon: Building2,       label: "Projects",            href: "/properties",    requiredRoles: ["ADMIN", "SALES", "AGENT"] },
-  { icon: FileText,        label: "ผู้สนใจ",             href: "/leads",         requiredRoles: ["ADMIN", "SALES", "AGENT"] },
+  { icon: FileText,        label: "Leads",              href: "/leads",         requiredRoles: ["ADMIN", "SALES", "AGENT"] },
   // Tenant-ops menus — Admin's application-plane work, NOT the platform Owner's.
   // Deliberately ADMIN-only (cut from Owner) so the Owner menu stays a clean
   // control-plane. Owner can still reach them by URL for support if ever needed.
@@ -141,7 +140,9 @@ const getAllNavItems = (): NavItem[] => [
   // and the label is overridden to "User Management" for Admin below. Do not re-add here.
   { icon: MessageSquare,   label: "Support",             href: "/owner-support", requiredRoles: ["OWNER"] },
   { icon: Shield,          label: "Audit Log",           href: "/owner-audit",   requiredRoles: ["OWNER"] },
-  { icon: Server,          label: "สถานะระบบ",           href: "/owner-system",  requiredRoles: ["OWNER"] },
+  // สถานะระบบ (System Health) ซ่อนจากเมนู — ข้อมูล MOCK ทั้งหมด (infra/ops), ไม่เกี่ยวกับเดโม่.
+  // route /owner-system + หน้า OwnerSystemHealth.tsx ยังอยู่ — เปิดคืนได้เมื่อต่อ monitoring จริง.
+  // { icon: Server,          label: "สถานะระบบ",           href: "/owner-system",  requiredRoles: ["OWNER"] },
   { icon: Lock,            label: "Permissions",         href: "/permissions",   requiredRoles: ["ADMIN"] },
   { icon: Settings,        label: "Settings",            href: "/settings",      requiredRoles: ["OWNER", "ADMIN", "SALES", "AGENT", "CUSTOMER"] },
   { icon: LogOut,          label: "Log Out",             href: "/logout",        isLogout: true },

@@ -17,7 +17,7 @@ import { HeartPulse, AlertTriangle, TrendingDown, ChevronRight, Package, Clock, 
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 import { committedMRR } from '@/lib/mrr';
 
@@ -221,14 +221,21 @@ const OwnerTenantHealth = () => {
     { name: HEALTH_META.churned.label, value: churned, color: KK.gray,  status: 'churned' as HealthStatus },
   ]).filter(d => d.value > 0);
 
-  const PLAN_KEYS = ['enterprise', 'professional', 'starter', 'free'] as const;
+  // Free ตัดออกจากสรุป MRR — free plan = ฿0 เสมอ (ไม่ใช่ revenue tier). Enterprise คงไว้ (tier ขายได้ แม้ยัง 0 ลูกค้า).
+  const PLAN_KEYS = ['enterprise', 'professional', 'starter'] as const;
   const planStats = PLAN_KEYS.reduce((acc, p) => {
     const pr = rows.filter(r => r.plan === p);
     acc[p] = { companies: pr.length, users: pr.reduce((s, r) => s + r.users, 0), mrr: pr.reduce((s, r) => s + r.mrr, 0) };
     return acc;
   }, {} as Record<string, { companies: number; users: number; mrr: number }>);
   const totalPaidMRR = rows.reduce((s, r) => s + r.mrr, 0);
-  const maxCompanies = Math.max(1, ...PLAN_KEYS.map(p => planStats[p].companies));
+  // Bars = MRR by package, red theme (dominant plan = full red, others lighter — same
+  // pattern as the marketing/geography ranking bars). Click a bar/row → company list.
+  const maxMrr = Math.max(0, ...PLAN_KEYS.map(p => planStats[p].mrr));
+  const planBars = PLAN_KEYS.map(p => ({
+    name: PLAN_TH[p], mrr: planStats[p].mrr, users: planStats[p].users, companies: planStats[p].companies, plan: p,
+    color: (planStats[p].mrr > 0 && planStats[p].mrr === maxMrr) ? KK.red : '#fca5a5',
+  }));
 
   const filtered = rows.filter(r => {
     if (statusFilter !== 'all' && r.healthStatus !== statusFilter) return false;
@@ -388,7 +395,7 @@ const OwnerTenantHealth = () => {
 
             {/* Two donuts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex flex-col">
+              <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                 <div className="flex items-start justify-between mb-0.5">
                   <div className="flex items-center gap-2">
                     <Package className="w-4 h-4" style={{ color: KK.blue }} />
@@ -399,31 +406,32 @@ const OwnerTenantHealth = () => {
                     <div className="text-sm font-bold text-gray-900 tabular-nums">{fmtMRR(totalPaidMRR) === '—' ? '฿0' : fmtMRR(totalPaidMRR)}</div>
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 mb-5">จำนวนบริษัท · ผู้ใช้งาน · MRR รายเดือน · <span className="text-gray-400">กดเพื่อดูบริษัท</span></p>
-                <div className="flex-1 flex flex-col justify-between">
-                  {PLAN_KEYS.map(p => {
-                    const s = planStats[p];
-                    const barW = maxCompanies > 0 ? Math.round((s.companies / maxCompanies) * 100) : 0;
-                    const mrrPct = totalPaidMRR > 0 ? Math.round((s.mrr / totalPaidMRR) * 100) : 0;
+                <p className="text-xs text-gray-500 mb-2">รายได้ (MRR) ตามแพ็กเกจ · <span className="text-gray-400">กดเพื่อดูบริษัท</span></p>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={planBars} margin={{ top: 16, right: 8, left: -8, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={44} tickFormatter={(v: any) => (v === 0 ? '฿0' : (fmtMRR(v) === '—' ? '฿0' : fmtMRR(v)))} />
+                    <Tooltip contentStyle={kkTooltipStyle} cursor={{ fill: 'rgba(0,0,0,0.03)' }} formatter={((v: any, _n: any, pl: any) => [`${fmtMRR(Number(v)) === '—' ? '฿0' : fmtMRR(Number(v))} · ${pl?.payload?.companies ?? 0} บริษัท`, 'MRR']) as any} />
+                    <Bar dataKey="mrr" radius={[6, 6, 0, 0]} maxBarSize={64} animationDuration={800} onClick={(d: any) => { const pl = d?.plan || d?.payload?.plan; if (pl && planStats[pl]?.companies > 0) setPlanModal(pl); }}>
+                      {planBars.map((d, i) => <Cell key={i} fill={d.color} cursor={d.companies > 0 ? 'pointer' : 'default'} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="space-y-1 mt-3 pt-3 border-t border-gray-100">
+                  {planBars.map(b => {
+                    const mrrPct = totalPaidMRR > 0 ? Math.round((b.mrr / totalPaidMRR) * 100) : 0;
                     return (
                       <button
-                        key={p}
+                        key={b.plan}
                         type="button"
-                        onClick={() => { if (s.companies > 0) setPlanModal(p); }}
-                        className={`flex items-center gap-3 w-full text-left rounded-lg -mx-1.5 px-1.5 py-1 transition-colors ${s.companies > 0 ? 'hover:bg-gray-50 cursor-pointer' : 'cursor-default'}`}
+                        onClick={() => { if (b.companies > 0) setPlanModal(b.plan); }}
+                        className={`flex items-center gap-2 text-xs w-full text-left rounded px-1.5 py-1 transition-colors ${b.companies > 0 ? 'hover:bg-gray-50 cursor-pointer' : 'cursor-default'}`}
                       >
-                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: PLAN_COLOR[p] }} />
-                        <span className="text-sm text-gray-600 w-24 flex-shrink-0">{PLAN_TH[p]}</span>
-                        <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
-                          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${barW}%`, backgroundColor: PLAN_COLOR[p] }} />
-                        </div>
-                        <span className="text-xs text-gray-500 w-24 text-right flex-shrink-0 tabular-nums">
-                          {s.companies} บริษัท · {s.users} ผู้ใช้
-                        </span>
-                        <div className="text-right flex-shrink-0 w-20">
-                          <div className="text-sm font-semibold text-gray-900 tabular-nums">{s.mrr > 0 ? fmtMRR(s.mrr) : '฿0'}</div>
-                          <div className="text-xs text-gray-400">{mrrPct}% ของ MRR</div>
-                        </div>
+                        <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: b.color }} />
+                        <span className="text-gray-600 flex-1">{b.name}</span>
+                        <span className="text-gray-400 tabular-nums">{b.companies} บริษัท · {b.users} ผู้ใช้</span>
+                        <span className="font-semibold text-gray-800 tabular-nums w-24 text-right">{(b.mrr > 0 && fmtMRR(b.mrr) !== '—') ? fmtMRR(b.mrr) : '฿0'} · {mrrPct}%</span>
                       </button>
                     );
                   })}
