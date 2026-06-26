@@ -77,7 +77,7 @@ const NAV_GROUPS: NavGroup[] = [
 // NOT here: those are the Admin's application-plane work, not the platform owner's.
 // NOTE: within-group order follows the master getAllNavItems() order, not hrefs order.
 const OWNER_NAV_GROUPS: NavGroup[] = [
-  { id: "top",       label: null,                hrefs: ["/owner"] },
+  { id: "top",       label: null,                hrefs: ["/owner", "/owner-insights"] },
   // TENANTS — lands on ภาพรวมผู้เช่า (overview, ยุบ Tenant Health เข้ามา) → prospect →
   // active tenant → projects → global users (Owner support tool, moved in from SETTINGS).
   { id: "tenants",   label: "TENANTS",   icon: Building,  hrefs: ["/owner-health", "/owner-leads", "/tenants", "/owner-projects", "/users"] },
@@ -99,6 +99,9 @@ const getAllNavItems = (): NavItem[] => [
   //   Owner → "/owner" platform-wide view (MRR, churn, tenants) = the Owner's own Executive Dashboard
   { icon: LayoutDashboard, label: "Executive Dashboard", href: "/",            requiredRoles: ["ADMIN"] },
   { icon: LayoutDashboard, label: "Executive Dashboard",  href: "/owner",         requiredRoles: ["OWNER"] },
+  // ข้อมูลเชิงลึก (Insights) — cross-domain narrative action feed. Top-tier executive
+  // surface, peer of the Dashboard (Dashboard = numbers; Insights = what to act on).
+  { icon: Sparkles,        label: "ข้อมูลเชิงลึก",         href: "/owner-insights", requiredRoles: ["OWNER"] },
   // Owner ANALYTICS group — cross-tenant real-estate intelligence (HQ lens).
   // Data: units→properties→tenants via live Owner RLS; no migration needed.
   // See documents/owner-hq-dashboard-plan.md.

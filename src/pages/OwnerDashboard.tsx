@@ -49,7 +49,7 @@ interface DashboardStats {
   totalUsers: number;
   totalProjects: number;
   monthlyRevenue: number;
-  annualRunRate: number;
+  ytdRevenue: number;
   churnRate: number;
   churnLastMonth: number;
   mrrGrowth: number;
@@ -59,6 +59,7 @@ interface RevenueData {
   month: string;
   fullLabel: string;
   revenue: number;
+  mrr: number;
   arr: number;
   tenants: number;
 }
@@ -116,7 +117,7 @@ const OwnerDashboard = () => {
     totalUsers: 0,
     totalProjects: 0,
     monthlyRevenue: 0,
-    annualRunRate: 0,
+    ytdRevenue: 0,
     churnRate: 0,
     churnLastMonth: 0,
     mrrGrowth: 0
@@ -307,7 +308,7 @@ const OwnerDashboard = () => {
           totalUsers: 0, // Will fetch from users table
           totalProjects: 0, // Will fetch from properties table
           monthlyRevenue: mrr,
-          annualRunRate: mrr * 12,
+          ytdRevenue: 0, // YTD จริงคำนวณด้านล่าง (รวม paid invoices ม.ค.–ปัจจุบัน) แล้ว setStats ทับ
           churnRate: realChurnRate,
           churnLastMonth: lastMonthChurnRate,
           mrrGrowth: Math.round(realMrrGrowth * 100) / 100
@@ -410,6 +411,9 @@ const OwnerDashboard = () => {
             month: monthName,
             fullLabel: `${monthName} ${year}`,
             revenue: monthRevenue,
+            // committed MRR run-rate ที่สิ้นเดือนนั้น (เดือนปัจจุบัน = MRR ปัจจุบัน) —
+            // เป็นเส้นเดียวกับ KPI MRR/ARR ไม่ใช่เงินสดเก็บได้รายเดือนที่กระเด้งขึ้นลง
+            mrr: i === 0 ? mrr : mrrAtMonth,
             arr: i === 0 ? mrr * 12 : mrrAtMonth * 12,
             tenants: uniqueTenants
           });
@@ -428,7 +432,7 @@ const OwnerDashboard = () => {
           });
           ytdTotal += mRevenue;
         }
-        setStats(prev => ({ ...prev, annualRunRate: ytdTotal }));
+        setStats(prev => ({ ...prev, ytdRevenue: ytdTotal }));
 
         // Revenue by plan — each active tenant's current monthly rate, grouped by plan
         // (same recurring basis as the MRR card, so the parts sum to MRR).
@@ -654,7 +658,7 @@ const OwnerDashboard = () => {
     actionItems.push({ tone: 'amber', title: `Support ค้าง ${opsStats.openTickets} เคส → แก้ไข`, sub: 'ผู้เช่าแจ้งปัญหารอการตอบกลับ', href: '/owner-support' });
   const trialEndingSoon = atRiskTenants.filter(t => t.status === 'trial');
   if (trialEndingSoon.length > 0)
-    actionItems.push({ tone: 'amber', title: `${trialEndingSoon.length} บริษัท Trial ใกล้หมด → ปิดการขาย`, sub: trialEndingSoon.map(t => t.name || t.id).slice(0, 2).join(', '), href: '/owner-health' });
+    actionItems.push({ tone: 'amber', title: `${trialEndingSoon.length} บริษัท Trial ใกล้หมด → ปิดการขาย`, sub: trialEndingSoon.map(t => t.name || t.id).slice(0, 2).join(', '), href: '/payments?tab=calendar' });
 
   // Low platform engagement — only surface when it's a problem (an action), not as a standing metric.
   const loginRatio = activeUsers.total > 0 ? activeUsers.active7d / activeUsers.total : 0;
@@ -674,7 +678,7 @@ const OwnerDashboard = () => {
       bg: KK.redLight,
       trend: arrYoY !== null ? { value: Math.abs(arrYoY), up: arrYoY >= 0 } : undefined,
       trendLabel: 'YoY',
-      sub: `YTD รวม ${fmtCompact(stats.annualRunRate)}`,
+      sub: `YTD รวม ${fmtCompact(stats.ytdRevenue)}`,
       spark: revenueData.map((d) => ({ m: d.month, v: d.arr })),
       sparkId: 'arr',
       sparkLabel: 'ARR',
@@ -827,8 +831,8 @@ const OwnerDashboard = () => {
                     <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: KK.red + '99' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                     <Tooltip contentStyle={kkTooltipStyle} cursor={{ stroke: KK.red, strokeWidth: 1, strokeDasharray: '4 4' }} labelFormatter={(_, payload) => (payload?.[0]?.payload as any)?.fullLabel || ''} formatter={((v: any) => [formatCurrency(Number(v ?? 0)), 'MRR']) as any} />
-                    <Area type="monotone" dataKey="revenue" stroke={KK.red} strokeWidth={2.5} fill="url(#ownerRevGrad)" dot={false} activeDot={{ r: 4, fill: KK.red, stroke: '#fff', strokeWidth: 2 }} animationDuration={1300} animationEasing="ease-in-out" />
-                    {revenueData.length > 0 && (() => { const d = revenueData.slice(-trendWindow); return d.length > 0 ? <ReferenceDot x={d[d.length - 1].month} y={d[d.length - 1].revenue} r={5} fill={KK.red} stroke="#fff" strokeWidth={2} /> : null; })()}
+                    <Area type="monotone" dataKey="mrr" stroke={KK.red} strokeWidth={2.5} fill="url(#ownerRevGrad)" dot={false} activeDot={{ r: 4, fill: KK.red, stroke: '#fff', strokeWidth: 2 }} animationDuration={1300} animationEasing="ease-in-out" />
+                    {revenueData.length > 0 && (() => { const d = revenueData.slice(-trendWindow); return d.length > 0 ? <ReferenceDot x={d[d.length - 1].month} y={d[d.length - 1].mrr} r={5} fill={KK.red} stroke="#fff" strokeWidth={2} /> : null; })()}
                   </AreaChart>
                 </ResponsiveContainer>
               </div>

@@ -7,6 +7,7 @@ import UserManagement from "./pages/UserManagement";
 import { SimpleLogin } from "./pages/SimpleLogin";
 import NotFound from "./pages/NotFound";
 import OwnerDashboard from "./pages/OwnerDashboard";
+import OwnerInsights from "./pages/OwnerInsights";
 import OwnerLeads from "./pages/OwnerLeads";
 import OwnerSupport from "./pages/OwnerSupport";
 import OwnerProjects from "./pages/OwnerProjects";
@@ -186,6 +187,19 @@ const App = () => (
             >
               <ProtectedRouteSimple requireRole="owner">
                 <OwnerDashboard />
+              </ProtectedRouteSimple>
+            </ErrorBoundary>
+          } />
+
+          <Route path="/owner-insights" element={
+            <ErrorBoundary
+              showRetry={true}
+              showHome={true}
+              errorMessage="ไม่สามารถโหลดหน้าข้อมูลเชิงลึกได้"
+              context={{ page: 'owner-insights' }}
+            >
+              <ProtectedRouteSimple requireRole="owner">
+                <OwnerInsights />
               </ProtectedRouteSimple>
             </ErrorBoundary>
           } />

@@ -148,7 +148,7 @@ interface CalendarEvent {
   id: string;
   title: string;
   date: string;
-  type: 'due' | 'overdue' | 'reminder' | 'payment';
+  type: 'due' | 'overdue' | 'reminder' | 'payment' | 'trial';
   invoice_number?: string;
   invoice_id?: string;
   tenant_id?: string;
@@ -519,25 +519,23 @@ const PaymentDashboard = () => {
 
       });
 
-      // ถ้าเดือนปัจจุบันไม่มี event เลย เพิ่มข้อมูลตัวอย่างให้เห็นภาพ UI
-      const y = now.getFullYear();
-      const m = now.getMonth();
-      const hasCurrentMonthEvents = events.some(e => {
-        const d = new Date(e.date);
-        return d.getFullYear() === y && d.getMonth() === m;
+      // เพิ่ม "ทดลองหมด" (trial expiry) — จุดต่ออายุ/แปลงเป็นลูกค้าจ่ายเงิน (รายได้ที่จะเข้า)
+      const { data: trialTenants } = await supabase
+        .from('tenants')
+        .select('id, name, subscription_plan, trial_ends_at')
+        .eq('status', 'trial')
+        .not('trial_ends_at', 'is', null);
+      (trialTenants || []).forEach((t: any) => {
+        events.push({
+          id: `trial-${t.id}`,
+          title: t.name,
+          date: t.trial_ends_at,
+          type: 'trial',
+          tenant_id: t.id,
+          amount: PACKAGE_PRICES[t.subscription_plan]?.monthly || 0,
+          tenant_name: t.name,
+        });
       });
-      if (!hasCurrentMonthEvents) {
-        events.push(
-          { id: 'd1', title: 'Test Company',                   date: new Date(y, m, 12).toISOString(), type: 'due',      invoice_number: 'INV-202606-001', invoice_id: 'd1', amount: 5900, tenant_name: 'Test Company' },
-          { id: 'd2', title: 'ชาญอิสระ',                       date: new Date(y, m, 15).toISOString(), type: 'due',      invoice_number: 'INV-202606-002', invoice_id: 'd2', amount: 5900, tenant_name: 'ชาญอิสระ' },
-          { id: 'd3', title: 'เมืองทอง เอสเทท',                date: new Date(y, m, 18).toISOString(), type: 'due',      invoice_number: 'INV-202606-003', invoice_id: 'd3', amount: 5900, tenant_name: 'เมืองทอง เอสเทท จำกัด (มหาชน)' },
-          { id: 'd4', title: 'บ.เอเอส เวนเจอร์',               date: new Date(y, m, 20).toISOString(), type: 'due',      invoice_number: 'INV-202606-004', invoice_id: 'd4', amount: 2900, tenant_name: 'บริษัท เอเอส เวนเจอร์ แคปปิตอล จำกัด' },
-          { id: 'd5', title: 'บริษัท ใหม่',                     date: new Date(y, m, 25).toISOString(), type: 'due',      invoice_number: 'INV-202606-005', invoice_id: 'd5', amount: 5900, tenant_name: 'บริษัท ใหม่ จำกัด' },
-          { id: 'd6', title: 'แจ้งเตือน: ชาญอิสระ',            date: new Date(y, m, 8).toISOString(),  type: 'reminder', invoice_number: 'INV-202606-002', invoice_id: 'd2', amount: 5900, tenant_name: 'ชาญอิสระ' },
-          { id: 'd7', title: 'แจ้งเตือน: เมืองทอง',             date: new Date(y, m, 11).toISOString(), type: 'reminder', invoice_number: 'INV-202606-003', invoice_id: 'd3', amount: 5900, tenant_name: 'เมืองทอง เอสเทท จำกัด (มหาชน)' },
-          { id: 'd8', title: 'Test Company (เกินกำหนด)',         date: new Date(y, m, 3).toISOString(),  type: 'overdue',  invoice_number: 'INV-202605-009', invoice_id: 'd8', amount: 5900, tenant_name: 'Test Company' }
-        );
-      }
 
       setCalendarEvents(events);
     } catch (error) {
@@ -2073,6 +2071,46 @@ const PaymentDashboard = () => {
           </Card>
         </div>
 
+        {/* ทดลองใกล้ครบกำหนด → ต่ออายุ — unique จาก trial (ไม่มีใบแจ้งหนี้ จึงไม่โผล่แท็บอื่น).
+            บิล due/overdue ดูที่แท็บ ค้างชำระ + ติดตามการชำระ แทน */}
+        {(() => {
+          const trials = [...calendarEvents]
+            .filter((e) => e.type === 'trial')
+            .map((e) => ({ ...e, days: Math.ceil((new Date(e.date).getTime() - Date.now()) / 86400000) }))
+            .filter((e) => e.days >= -14 && e.days <= 30)
+            .sort((a, b) => a.days - b.days);
+          if (trials.length === 0) return null;
+          return (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-violet-600" />
+                  ทดลองใกล้ครบกำหนด → ต่ออายุ
+                </CardTitle>
+                <CardDescription>บริษัททดลองใช้ที่ใกล้/เพิ่งหมดอายุ — ปิดการขาย/แปลงเป็นลูกค้าก่อนหลุด · {trials.length} บริษัท</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {trials.map((e) => {
+                    const daysLabel = e.days < 0 ? `เลยมา ${Math.abs(e.days)} วัน` : e.days === 0 ? 'วันนี้' : `อีก ${e.days} วัน`;
+                    const urgent = e.days <= 3;
+                    return (
+                      <div key={e.id} onClick={() => e.tenant_id && navigate(`/tenants/${e.tenant_id}`)}
+                        className={`flex items-center justify-between gap-2 rounded-xl border p-3 cursor-pointer hover:shadow-soft transition ${urgent ? 'border-red-100 bg-red-50/40' : 'border-gray-100 bg-white'}`}>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{e.tenant_name}</p>
+                          <p className="text-xs text-gray-400">หมดอายุ {new Date(e.date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} · {formatCurrency(e.amount || 0)}/ด. ถ้าต่อ</p>
+                        </div>
+                        <div className={`text-sm font-bold tabular-nums flex-shrink-0 ${e.days < 0 ? 'text-red-600' : e.days <= 3 ? 'text-amber-600' : 'text-gray-700'}`}>{daysLabel}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })()}
+
         {/* Calendar */}
         <Card>
           <CardContent className="pt-6">
@@ -2119,6 +2157,10 @@ const PaymentDashboard = () => {
                 <div className="w-3 h-3 bg-red-500 rounded-full"></div>
                 <span>เลยกำหนด</span>
               </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-violet-500 rounded-full"></div>
+                <span>ทดลองหมด</span>
+              </div>
             </div>
 
             {/* Calendar Grid */}
@@ -2161,6 +2203,7 @@ const PaymentDashboard = () => {
                                 onClick={() => handleCalendarEventClick(event)}
                                 className={`text-xs px-2 py-1 rounded text-white truncate cursor-pointer hover:opacity-80 transition-opacity ${
                                   event.type === 'paid' ? 'bg-green-500' :
+                                  event.type === 'trial' ? 'bg-violet-500' :
                                   event.type === 'due' ? 'bg-orange-500' :
                                   event.type === 'overdue' ? 'bg-red-500' :
                                   'bg-gray-500'

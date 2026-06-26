@@ -5,7 +5,7 @@ import { usePermissions, OwnerGuard } from '@/components/auth/PermissionGuard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import { supabase } from '@/lib/supabase';
-import { Megaphone, Send, Target, Percent } from 'lucide-react';
+import { Megaphone, Send, Target, Percent, Search } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 import TenantCombobox from '@/components/owner/TenantCombobox';
@@ -95,6 +95,8 @@ const OwnerMarketing = () => {
 
   const selectedTenantName = selectedTenant === 'all' ? null : (tenants.find((t) => t.id === selectedTenant)?.name ?? null);
 
+  const [campaignSearch, setCampaignSearch] = useState('');
+
   // Scope by company (selectedTenant) AND period (start_date within range).
   const scoped = useMemo(() => {
     let list = selectedTenant === 'all' ? campaigns : campaigns.filter((c) => c.tenant_id === selectedTenant);
@@ -125,11 +127,6 @@ const OwnerMarketing = () => {
       .map(([k, v], i) => ({ name: TYPE_TH[k] || k, value: v, color: TYPE_COLORS[i % TYPE_COLORS.length] }))
       .sort((a, b) => b.value - a.value);
 
-    const top = [...scoped]
-      .sort((a, b) => (Number(b.recipients_count) || 0) - (Number(a.recipients_count) || 0))
-      .slice(0, 6)
-      .map((c) => ({ name: c.campaign_name || '(ไม่ระบุชื่อ)', reach: Number(c.recipients_count) || 0, clicks: Number(c.clicks_count) || 0 }));
-
     const segMap = new Map<string, { reach: number; clicks: number }>();
     scoped.forEach((c) => {
       (c.segments || []).forEach((s) => {
@@ -143,10 +140,22 @@ const OwnerMarketing = () => {
       .map(([k, v]) => ({ name: SEG_TH[k] || k, reach: v.reach, clicks: v.clicks }))
       .sort((a, b) => b.reach - a.reach);
 
-    return { totalCampaigns, tenants, recipients, impressions, clicks, ctr, typeData, top, segData, topSeg: segData[0] };
+    return { totalCampaigns, tenants, recipients, impressions, clicks, ctr, typeData, segData, topSeg: segData[0] };
   }, [scoped]);
 
-  const reachMax = Math.max(1, ...m.top.map((c) => c.reach));
+  // Top campaigns by reach — filterable by name/type (real-time search on this list)
+  const topCampaigns = useMemo(() => {
+    const q = campaignSearch.trim().toLowerCase();
+    const list = q
+      ? scoped.filter((c) => (c.campaign_name || '').toLowerCase().includes(q) || (TYPE_TH[c.campaign_type || ''] || c.campaign_type || '').toLowerCase().includes(q))
+      : scoped;
+    return [...list]
+      .sort((a, b) => (Number(b.recipients_count) || 0) - (Number(a.recipients_count) || 0))
+      .slice(0, 6)
+      .map((c) => ({ name: c.campaign_name || '(ไม่ระบุชื่อ)', reach: Number(c.recipients_count) || 0, clicks: Number(c.clicks_count) || 0 }));
+  }, [scoped, campaignSearch]);
+
+  const reachMax = Math.max(1, ...topCampaigns.map((c) => c.reach));
 
   const KpiCard = ({ title, value, sub, icon: Icon, color, bg }: { title: string; value: string; sub?: string; icon: React.ElementType; color: string; bg: string; }) => (
     <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all duration-200">
@@ -252,19 +261,36 @@ const OwnerMarketing = () => {
 
                   {/* Top campaigns by reach */}
                   <div className="lg:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-soft p-5 flex flex-col">
-                    <h2 className="text-base font-bold text-gray-900">แคมเปญที่เข้าถึงมากสุด</h2>
-                    <p className="text-xs text-gray-500 mb-4 mt-0.5">ส่งถึงผู้รับ · จำนวนคลิกที่ได้</p>
-                    <div className="flex-1 flex flex-col justify-between gap-3">
-                      {m.top.map((c) => (
-                        <div key={c.name}>
-                          <div className="flex justify-between text-sm mb-1 gap-2">
-                            <span className="text-gray-700 font-medium truncate">{c.name}</span>
-                            <span className="tabular-nums text-gray-500 flex-shrink-0">{c.reach.toLocaleString()} ส่งถึง · <span className="text-gray-700 font-semibold">{c.clicks.toLocaleString()} คลิก</span></span>
-                          </div>
-                          <div className="h-3 rounded-lg bg-gray-100 overflow-hidden"><div className="h-full rounded-lg transition-[width] duration-700 ease-out" style={{ width: barsReady ? `${Math.max((c.reach / reachMax) * 100, 3)}%` : '0%', background: `linear-gradient(90deg, ${KK.red} 0%, #f87171 100%)` }} /></div>
-                        </div>
-                      ))}
+                    <div className="flex items-start justify-between gap-3 mb-4">
+                      <div>
+                        <h2 className="text-base font-bold text-gray-900">แคมเปญที่เข้าถึงมากสุด</h2>
+                        <p className="text-xs text-gray-500 mt-0.5">ส่งถึงผู้รับ · จำนวนคลิกที่ได้</p>
+                      </div>
+                      <div className="relative w-44 flex-shrink-0">
+                        <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          value={campaignSearch}
+                          onChange={(e) => setCampaignSearch(e.target.value)}
+                          placeholder="ค้นหาแคมเปญ..."
+                          className="w-full text-sm pl-8 pr-2 py-1.5 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-100 focus:border-red-200"
+                        />
+                      </div>
                     </div>
+                    {topCampaigns.length === 0 ? (
+                      <p className="flex-1 flex items-center justify-center text-sm text-gray-400 text-center py-8">ไม่พบแคมเปญที่ตรงกับ "{campaignSearch}"</p>
+                    ) : (
+                      <div className="flex-1 flex flex-col justify-between gap-3">
+                        {topCampaigns.map((c) => (
+                          <div key={c.name}>
+                            <div className="flex justify-between text-sm mb-1 gap-2">
+                              <span className="text-gray-700 font-medium truncate">{c.name}</span>
+                              <span className="tabular-nums text-gray-500 flex-shrink-0">{c.reach.toLocaleString()} ส่งถึง · <span className="text-gray-700 font-semibold">{c.clicks.toLocaleString()} คลิก</span></span>
+                            </div>
+                            <div className="h-3 rounded-lg bg-gray-100 overflow-hidden"><div className="h-full rounded-lg transition-[width] duration-700 ease-out" style={{ width: barsReady ? `${Math.max((c.reach / reachMax) * 100, 3)}%` : '0%', background: `linear-gradient(90deg, ${KK.red} 0%, #f87171 100%)` }} /></div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 

@@ -157,7 +157,6 @@ const TenantManagement = () => {
   const [sortKey, setSortKey] = useState<'created' | 'name' | 'plan' | 'users' | 'status'>('created');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   // Renewal alert — collapse to 3 by default, expand to show all.
-  const [showAllRenewals, setShowAllRenewals] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -213,77 +212,6 @@ const TenantManagement = () => {
   }, [tenantId, tenants, selectedTenantFromUrl, navigate]);
 
   // Fetch payment history for current tenant
-  const fetchPaymentHistory = async (currentTenantId: string) => {
-    if (!currentTenantId) return;
-
-    setLoadingPayments(true);
-    try {
-      // First, try to fetch from payments table if exists
-      const { data: paymentsData, error: paymentsError } = await supabase
-        .from('payments')
-        .select(`
-          *,
-          invoices (
-            invoice_number
-          )
-        `)
-        .eq('tenant_id', currentTenantId)
-        .order('paid_at', { ascending: false });
-
-      if (paymentsError && paymentsError.code !== 'PGRST116') {
-        throw paymentsError;
-      }
-
-      if (paymentsData && paymentsData.length > 0) {
-        // Format payments data
-        const formattedPayments: PaymentHistory[] = paymentsData.map(payment => ({
-          id: payment.id,
-          tenant_id: payment.tenant_id,
-          invoice_id: payment.invoice_id,
-          invoice_number: payment.invoices?.invoice_number || payment.invoice_number || '',
-          amount: payment.amount,
-          currency: payment.currency || 'THB',
-          payment_method: payment.payment_method,
-          payment_status: payment.payment_status,
-          paid_at: payment.paid_at,
-          transaction_id: payment.transaction_id
-        }));
-        setPaymentHistory(formattedPayments);
-      } else {
-        // Fallback: Use paid invoices as payment history
-        const { data: invoicesData, error: invoicesError } = await supabase
-          .from('invoices')
-          .select('*')
-          .eq('tenant_id', currentTenantId)
-          .eq('status', 'paid')
-          .order('paid_at', { ascending: false });
-
-        if (invoicesError) throw invoicesError;
-
-        if (invoicesData) {
-          const paymentFromInvoices: PaymentHistory[] = invoicesData.map(invoice => ({
-            id: invoice.id + '_payment',
-            tenant_id: invoice.tenant_id,
-            invoice_id: invoice.id,
-            invoice_number: invoice.invoice_number,
-            amount: invoice.amount,
-            currency: invoice.currency || 'THB',
-            payment_method: 'bank_transfer', // Default since we don't have payment method in invoices
-            payment_status: 'completed',
-            paid_at: invoice.paid_at || invoice.created_at,
-            transaction_id: undefined
-          }));
-          setPaymentHistory(paymentFromInvoices);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching payment history:', error);
-      setPaymentHistory([]);
-    } finally {
-      setLoadingPayments(false);
-    }
-  };
-
   // Fetch billing history for current tenant
   const fetchBillingHistory = async (currentTenantId: string) => {
     if (!currentTenantId) return;
@@ -310,7 +238,6 @@ const TenantManagement = () => {
   // Fetch payment and billing history when tenantId changes
   useEffect(() => {
     if (tenantId) {
-      fetchPaymentHistory(tenantId);
       fetchBillingHistory(tenantId);
     } else {
       setPaymentHistory([]);
@@ -1002,27 +929,6 @@ const TenantManagement = () => {
     );
   };
 
-  const getPaymentMethodLabel = (method: string) => {
-    const labels: Record<string, string> = {
-      credit_card: 'บัตรเครดิต',
-      bank_transfer: 'โอนผ่านธนาคาร',
-      paypal: 'PayPal',
-      cash: 'เงินสด'
-    };
-    return labels[method] || method;
-  };
-
-  const getPaymentStatusBadge = (status: string) => {
-    const badges: Record<string, { label: string; className: string }> = {
-      completed: { label: 'สำเร็จ', className: 'bg-green-100 text-green-800' },
-      pending: { label: 'รอดำเนินการ', className: 'bg-red-100 text-red-800' },
-      failed: { label: 'ล้มเหลว', className: 'bg-red-100 text-red-800' },
-      refunded: { label: 'คืนเงินแล้ว', className: 'bg-gray-100 text-gray-700' }
-    };
-    const badge = badges[status] || badges.pending;
-    return <Badge className={badge.className}>{badge.label}</Badge>;
-  };
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('th-TH', {
       year: 'numeric',
@@ -1121,18 +1027,6 @@ const TenantManagement = () => {
     );
   };
 
-  // Companies whose trial ends within 30 days — surfaced so the owner can follow up
-  // before they lapse. Moved here from the Executive Dashboard: tenant lifecycle
-  // belongs with company management, not the platform overview.
-  const daysUntilEnd = (d?: string) => (d ? Math.floor((new Date(d).getTime() - Date.now()) / 86400000) : null);
-  const upcomingRenewals = tenants
-    .filter((t) => {
-      if (t.status !== 'trial' || !t.trial_ends_at) return false;
-      const d = daysUntilEnd(t.trial_ends_at);
-      return d !== null && d >= 0 && d <= 30;
-    })
-    .sort((a, b) => new Date(a.trial_ends_at || 0).getTime() - new Date(b.trial_ends_at || 0).getTime());
-
   const getPlanPrice = (plan: string): number => {
     const pkg = packageConfig.find(p => p.id === plan);
     return pkg ? parseInt(pkg.price.replace(/,/g, ''), 10) : 0;
@@ -1142,59 +1036,6 @@ const TenantManagement = () => {
   // Render Tenants List Tab
   const renderTenantsTab = () => (
     <div className="space-y-6">
-      {/* Upcoming renewals — trials ending within 30 days. Moved from the Executive
-          Dashboard; tenant lifecycle belongs with company management. */}
-      {upcomingRenewals.length > 0 && (
-        <Card className="border-amber-200 bg-amber-50/40">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Clock className="w-4 h-4 text-amber-600" /> ใกล้ครบกำหนดต่ออายุ
-              <Badge variant="outline" className="ml-1">{upcomingRenewals.length}</Badge>
-            </CardTitle>
-            <CardDescription>บริษัทที่ทดลองใช้จะครบกำหนดภายใน 30 วัน — ติดตามก่อนหลุด</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {(showAllRenewals ? upcomingRenewals : upcomingRenewals.slice(0, 3)).map((t) => {
-                const d = daysUntilEnd(t.trial_ends_at);
-                const urgent = d !== null && d <= 7;
-                return (
-                  <div key={t.id} className={`flex items-center justify-between p-3 rounded-lg border ${urgent ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'}`}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Building2 className={`w-4 h-4 flex-shrink-0 ${urgent ? 'text-red-500' : 'text-gray-400'}`} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{t.name}</p>
-                        <p className="text-xs text-gray-500 capitalize">{t.subscription_plan}</p>
-                      </div>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className={`text-sm font-bold tabular-nums ${urgent ? 'text-red-600' : 'text-gray-700'}`}>
-                        {d === 0 ? 'วันนี้' : d === 1 ? 'พรุ่งนี้' : `อีก ${d} วัน`}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {t.trial_ends_at && new Date(t.trial_ends_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {upcomingRenewals.length > 3 && (
-              <div className="mt-3 text-center">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-sm text-amber-700 hover:text-amber-800 hover:bg-amber-100"
-                  onClick={() => setShowAllRenewals(v => !v)}
-                >
-                  {showAllRenewals ? 'ย่อ ↑' : `ดูทั้งหมด ${upcomingRenewals.length} →`}
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
@@ -1579,11 +1420,6 @@ const TenantManagement = () => {
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium text-muted-foreground">Slug</p>
-                              <span className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">/{selectedTenantFromUrl.slug}</span>
-                            </div>
-
                             <div className="space-y-2">
                               <p className="text-sm font-medium text-muted-foreground">ผู้ใช้</p>
                               <span className="text-xl font-bold text-gray-900">
@@ -1772,108 +1608,77 @@ const TenantManagement = () => {
                     </Card>
                   </div>
 
-                  {/* Payment History */}
+                  {/* ประวัติการเงิน — บล็อกเดียว (ยุบ "ประวัติการชำระเงิน" ที่ซ้ำกับ "ประวัติบิล") + ลิงก์ไปหน้าการเงินสำหรับรายละเอียดเต็ม */}
                   <Card>
                     <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <CreditCard className="w-5 h-5" />
-                        ประวัติการชำระเงิน
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        {loadingPayments ? (
-                          <div className="flex justify-center items-center py-8">
-                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-violet-600"></div>
-                          </div>
-                        ) : paymentHistory.length > 0 ? (
-                          <div className="space-y-3">
-                            {paymentHistory.map((payment) => (
-                              <div key={payment.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                                    <CreditCard className="w-5 h-5 text-green-600" />
-                                  </div>
-                                  <div>
-                                    <p className="font-medium">{payment.invoice_number}</p>
-                                    <p className="text-sm text-gray-500">
-                                      {getPaymentMethodLabel(payment.payment_method)} • {formatDate(payment.paid_at)}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="text-right">
-                                  <p className="font-semibold text-green-600">{formatCurrency(payment.amount)}</p>
-                                  {getPaymentStatusBadge(payment.payment_status)}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-center py-8">
-                            <CreditCard className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                            <p className="text-gray-500">ไม่มีประวัติการชำระเงิน</p>
-                          </div>
-                        )}
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="flex items-center gap-2">
+                          <CreditCard className="w-5 h-5" />
+                          ประวัติการเงิน
+                        </CardTitle>
+                        <Button variant="ghost" size="sm" onClick={() => navigate('/payments')} className="text-violet-600 hover:text-violet-700">
+                          ดูทั้งหมดใน Payments →
+                        </Button>
                       </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Billing History */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Package className="w-5 h-5" />
-                        ประวัติบิล
-                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       {loadingBilling ? (
                         <div className="flex justify-center items-center py-8">
                           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-violet-600"></div>
                         </div>
+                      ) : billingHistory.length === 0 ? (
+                        <div className="text-center py-8">
+                          <CreditCard className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                          <p className="text-gray-500">ไม่มีประวัติการเงิน</p>
+                        </div>
                       ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="border-b">
-                                <th className="text-left py-3 px-2">เลขที่บิล</th>
-                                <th className="text-left py-3 px-2">วันที่ออกบิล</th>
-                                <th className="text-left py-3 px-2">วันครบกำหนด</th>
-                                <th className="text-right py-3 px-2">จำนวนเงิน</th>
-                                <th className="text-center py-3 px-2">สถานะ</th>
-                                <th className="text-left py-3 px-2">แพ็คเกจ</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {billingHistory.map((invoice) => (
-                              <tr key={invoice.id} className="border-b hover:bg-gray-50">
-                                <td className="py-3 px-2 font-medium">{invoice.invoice_number}</td>
-                                <td className="py-3 px-2 text-gray-600">
-                                  {new Date(invoice.created_at).toLocaleDateString('th-TH')}
-                                </td>
-                                <td className="py-3 px-2 text-gray-600">
-                                  {new Date(invoice.due_date).toLocaleDateString('th-TH')}
-                                </td>
-                                <td className="py-3 px-2 text-right font-semibold">
-                                  {formatCurrency(invoice.amount)}
-                                </td>
-                                <td className="py-3 px-2 text-center">
-                                  {getBillStatusBadge(invoice.status)}
-                                </td>
-                                <td className="py-3 px-2">
-                                  <span className="text-xs bg-gray-100 px-2 py-1 rounded">
-                                    {invoice.subscription_plan}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                          {billingHistory.length === 0 && (
-                            <div className="text-center py-8">
-                              <Package className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                              <p className="text-gray-500">ไม่มีประวัติบิล</p>
+                        <div className="space-y-4">
+                          {/* สรุป 3 ตัวเลข (เหมือน Bill dialog เดิม) */}
+                          <div className="grid grid-cols-3 gap-4">
+                            <div className="text-center">
+                              <p className="text-2xl font-bold text-gray-900">{formatCurrency(billingHistory.reduce((s, b) => s + b.amount, 0))}</p>
+                              <p className="text-xs text-gray-500">ยอดออกบิลรวม</p>
                             </div>
+                            <div className="text-center">
+                              <p className="text-2xl font-bold text-orange-600">{billingHistory.filter(b => b.status === 'pending' || b.status === 'overdue').length}</p>
+                              <p className="text-xs text-gray-500">บิลค้างชำระ</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-2xl font-bold text-green-600">{formatCurrency(billingHistory.filter(b => b.status === 'paid').reduce((s, b) => s + b.amount, 0))}</p>
+                              <p className="text-xs text-gray-500">จ่ายแล้ว</p>
+                            </div>
+                          </div>
+
+                          {/* 5 รายการล่าสุด — ดูเต็มที่หน้า Payments */}
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b">
+                                  <th className="text-left py-3 px-2">เลขที่บิล</th>
+                                  <th className="text-left py-3 px-2">วันที่ออกบิล</th>
+                                  <th className="text-left py-3 px-2">วันครบกำหนด</th>
+                                  <th className="text-right py-3 px-2">จำนวนเงิน</th>
+                                  <th className="text-center py-3 px-2">สถานะ</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {billingHistory.slice(0, 5).map((invoice) => (
+                                  <tr key={invoice.id} className="border-b hover:bg-gray-50">
+                                    <td className="py-3 px-2 font-medium">{invoice.invoice_number}</td>
+                                    <td className="py-3 px-2 text-gray-600">{new Date(invoice.created_at).toLocaleDateString('th-TH')}</td>
+                                    <td className="py-3 px-2 text-gray-600">{new Date(invoice.due_date).toLocaleDateString('th-TH')}</td>
+                                    <td className="py-3 px-2 text-right font-semibold">{formatCurrency(invoice.amount)}</td>
+                                    <td className="py-3 px-2 text-center">{getBillStatusBadge(invoice.status)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+
+                          {billingHistory.length > 5 && (
+                            <button onClick={() => navigate('/payments')} className="w-full text-center text-sm text-violet-600 hover:text-violet-700 py-2">
+                              และอีก {billingHistory.length - 5} รายการ — ดูทั้งหมดใน Payments →
+                            </button>
                           )}
                         </div>
                       )}
@@ -2217,10 +2022,6 @@ const TenantManagement = () => {
                         <div>
                           <p className="text-gray-500">ชื่อบริษัท</p>
                           <p className="font-medium">{selectedTenant.name}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">Slug</p>
-                          <p className="font-medium font-mono">{selectedTenant.slug}</p>
                         </div>
                         <div>
                           <p className="text-gray-500">สถานะ</p>

@@ -6,9 +6,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trophy, TrendingUp, Percent, Users, ChevronRight, Search, Phone, Mail, Building2, Calendar, Clock, Tag } from 'lucide-react';
-import { PieChart, Pie, Cell, Tooltip } from 'recharts';
-import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
+import { Trophy, TrendingUp, Percent, Users, ChevronRight, Search, Phone, Mail, Building2, Calendar, Clock, Tag, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { type PeriodKey, periodToRange, periodRangeLabel } from '@/components/dashboard/PeriodFilter';
 
@@ -49,11 +47,6 @@ const fmtPhone = (p: string | null): string | null => {
   return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}` : p;
 };
 const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) : '–');
-const kkTooltipStyle = {
-  backgroundColor: 'white', border: `1px solid ${KK.border}`, borderRadius: '8px',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: '11px', padding: '4px 8px',
-};
-const PIE_COLORS = ['#1e3a5f', '#ef4444', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#475569'];
 
 // Labelled contact/meta row for the detail panel.
 const InfoItem = ({ icon: Icon, label, value, muted }: { icon: React.ElementType; label: string; value: string; muted?: boolean }) => (
@@ -87,6 +80,8 @@ interface PerfRow {
   email: string | null; phone: string | null; isActive: boolean | null;
   lastLogin: string | null; joined: string | null; referralCode: string | null;
 }
+// สัดส่วน (share) เรียงตาม wonValue เหมือนกัน (มันคือ % ของ wonValue) — แค่ key แยกเพื่อให้ลูกศรขึ้นถูกคอลัมน์
+type SortKey = 'name' | 'company' | 'assigned' | 'won' | 'conversion' | 'wonValue' | 'share' | 'referrals';
 
 const SalesAgentsSection = ({ period }: { period: PeriodKey }) => {
   const [loading, setLoading] = useState(true);
@@ -99,6 +94,8 @@ const SalesAgentsSection = ({ period }: { period: PeriodKey }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [sortKey, setSortKey] = useState<SortKey>('wonValue');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => { fetchAll(); }, []);
   useEffect(() => { setCurrentPage(1); }, [searchQuery, roleFilter, period]);
@@ -153,7 +150,8 @@ const SalesAgentsSection = ({ period }: { period: PeriodKey }) => {
         if (!p) return null;
         return {
           id: u.id,
-          name: u.full_name || 'ไม่ระบุชื่อ',
+          // Fallback แยกได้: แทน "ไม่ระบุชื่อ" ซ้ำๆ ด้วย role (บวกคอลัมน์บริษัทในตารางช่วยแยกอีกชั้น)
+          name: u.full_name?.trim() || `${ROLE_TH[u.role || ''] || 'ทีมขาย'} (ยังไม่ตั้งชื่อ)`,
           role: u.role || 'unknown',
           company: tenantNameMap.get(u.tenant_id || '') || '–',
           assigned: p.assigned, won: p.won, wonValue: p.wonValue, referrals: p.referrals,
@@ -190,20 +188,6 @@ const SalesAgentsSection = ({ period }: { period: PeriodKey }) => {
     return { people: rows.length, won, wonValue, conversion: assigned > 0 ? Math.round((won / assigned) * 100) : 0 };
   }, [rows]);
 
-  const pieData = useMemo(() => {
-    const withVal = rows.filter((r) => r.wonValue > 0);
-    const grand = withVal.reduce((s, r) => s + r.wonValue, 0) || 1;
-    const TOP = 8;
-    const head = withVal.slice(0, TOP);
-    const restVal = withVal.slice(TOP).reduce((s, r) => s + r.wonValue, 0);
-    const items = head.map((r, i) => ({
-      name: r.name, value: r.wonValue, color: PIE_COLORS[i % PIE_COLORS.length],
-      pct: Math.round((r.wonValue / grand) * 100),
-    }));
-    if (restVal > 0) items.push({ name: 'อื่น ๆ', value: restVal, color: KK.gray, pct: Math.round((restVal / grand) * 100) });
-    return items;
-  }, [rows]);
-
   const KpiCard = ({ title, value, sub, icon: Icon, color, bg }: {
     title: string; value: string; sub?: string; icon: React.ElementType; color: string; bg: string;
   }) => (
@@ -220,15 +204,45 @@ const SalesAgentsSection = ({ period }: { period: PeriodKey }) => {
     </div>
   );
 
+  const toggleSort = (k: SortKey) => {
+    if (sortKey === k) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortKey(k); setSortDir(k === 'name' || k === 'company' ? 'asc' : 'desc'); }
+    setCurrentPage(1);
+  };
+
   const q = searchQuery.trim().toLowerCase();
   const filtered = rows.filter((r) =>
     (roleFilter === 'all' || r.role === roleFilter) &&
     (!q || r.name.toLowerCase().includes(q) || r.company.toLowerCase().includes(q))
   );
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const sorted = [...filtered].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    switch (sortKey) {
+      case 'name': return a.name.localeCompare(b.name, 'th') * dir;
+      case 'company': return a.company.localeCompare(b.company, 'th') * dir;
+      case 'assigned': return (a.assigned - b.assigned) * dir;
+      case 'won': return (a.won - b.won) * dir;
+      case 'conversion': return (a.conversion - b.conversion) * dir;
+      case 'referrals': return (a.referrals - b.referrals) * dir;
+      default: return (a.wonValue - b.wonValue) * dir; // wonValue + share
+    }
+  });
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const pageStart = (safePage - 1) * pageSize;
-  const paginated = filtered.slice(pageStart, pageStart + pageSize);
+  const paginated = sorted.slice(pageStart, pageStart + pageSize);
+
+  // Clickable, sortable column header (matches OwnerTenantHealth pattern).
+  const SortHead = ({ k, label, align = 'right', className = '' }: { k: SortKey; label: string; align?: 'left' | 'right'; className?: string }) => (
+    <TableHead className={`cursor-pointer select-none ${align === 'right' ? 'text-right' : ''} ${className}`} onClick={() => toggleSort(k)}>
+      <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'justify-end w-full' : ''}`}>
+        {label}
+        {sortKey === k
+          ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)
+          : <ArrowUpDown className="w-3 h-3 text-gray-300" />}
+      </span>
+    </TableHead>
+  );
 
   return (
     <div className="space-y-7">
@@ -253,46 +267,11 @@ const SalesAgentsSection = ({ period }: { period: PeriodKey }) => {
             <KpiCard title="Conversion เฉลี่ย" value={`${totals.conversion}%`} sub="ปิดได้ / ดูแลทั้งหมด" icon={Percent} color={KK.amber} bg={KK.amberLight} />
           </div>
 
-          {pieData.length > 0 && (
-            <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
-              <div className="mb-4">
-                <h2 className="text-base font-bold text-gray-900">สัดส่วนมูลค่าดีลที่ปิดได้ตามทีมขาย</h2>
-                <p className="text-xs text-gray-500 mt-0.5">ก้อนใหญ่สุด = คนในทีมขายที่ปิดดีลได้มูลค่ามากสุด · ชี้ที่กราฟเพื่อดูมูลค่า</p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-                <div className="h-[260px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={62} outerRadius={100} paddingAngle={2} stroke="white" strokeWidth={2}>
-                        {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                      </Pie>
-                      <Tooltip contentStyle={kkTooltipStyle} formatter={((v: any, n: any) => [fmtCompact(Number(v)), n]) as any} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="space-y-2">
-                  {pieData.map((d, i) => (
-                    <div key={i} className="flex items-center justify-between gap-3 text-sm">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: d.color }} />
-                        <span className="truncate text-gray-700">{d.name}</span>
-                      </div>
-                      <div className="flex items-center gap-3 flex-shrink-0 tabular-nums">
-                        <span className="text-gray-900 font-semibold">{fmtCompact(d.value)}</span>
-                        <span className="text-gray-400 w-10 text-right">{d.pct}%</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
           <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
               <div>
                 <h2 className="text-base font-bold text-gray-900">อันดับทีมขาย</h2>
-                <p className="text-xs text-gray-500 mt-0.5">เรียงตามมูลค่าดีลที่ปิดได้</p>
+                <p className="text-xs text-gray-500 mt-0.5">เรียงตามมูลค่าดีลที่ปิดได้ · กดหัวคอลัมน์เพื่อเรียงเอง</p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="relative">
@@ -320,13 +299,14 @@ const SalesAgentsSection = ({ period }: { period: PeriodKey }) => {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10">#</TableHead>
-                    <TableHead>รายชื่อ</TableHead>
-                    <TableHead>บริษัท</TableHead>
-                    <TableHead className="text-right">Lead ดูแล</TableHead>
-                    <TableHead className="text-right">ปิดได้</TableHead>
-                    <TableHead className="text-right">Conversion</TableHead>
-                    <TableHead className="text-right">มูลค่าดีล</TableHead>
-                    <TableHead className="text-right">แนะนำ</TableHead>
+                    <SortHead k="name" label="รายชื่อ" align="left" />
+                    <SortHead k="company" label="บริษัท" align="left" />
+                    <SortHead k="assigned" label="Lead ดูแล" />
+                    <SortHead k="won" label="ปิดได้" />
+                    <SortHead k="conversion" label="Conversion" />
+                    <SortHead k="wonValue" label="มูลค่าดีล" />
+                    <SortHead k="share" label="สัดส่วน" className="w-[140px]" />
+                    <SortHead k="referrals" label="แนะนำ" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -345,12 +325,26 @@ const SalesAgentsSection = ({ period }: { period: PeriodKey }) => {
                       <TableCell className="text-right tabular-nums font-semibold" style={{ color: KK.green }}>{r.won}</TableCell>
                       <TableCell className="text-right tabular-nums">{r.conversion}%</TableCell>
                       <TableCell className="text-right tabular-nums">{fmtCompact(r.wonValue)}</TableCell>
+                      {/* สัดส่วน = % ของมูลค่าดีลรวมทั้งแพลตฟอร์ม (สิ่งที่ donut เคยบอก ย้ายมาเป็นคอลัมน์) */}
+                      <TableCell className="text-right">
+                        {(() => {
+                          const pct = totals.wonValue > 0 ? Math.round((r.wonValue / totals.wonValue) * 100) : 0;
+                          return (
+                            <div className="flex items-center justify-end gap-2">
+                              <div className="h-1.5 w-16 rounded-full bg-gray-100 overflow-hidden">
+                                <div className="h-full rounded-full" style={{ width: `${Math.min(100, pct)}%`, background: KK.red }} />
+                              </div>
+                              <span className="tabular-nums text-gray-600 w-9 text-right">{pct}%</span>
+                            </div>
+                          );
+                        })()}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums text-gray-500">{r.referrals || '–'}</TableCell>
                     </TableRow>
                   ))}
                   {paginated.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-sm text-gray-400 py-8">ไม่พบรายชื่อที่ตรงเงื่อนไข</TableCell>
+                      <TableCell colSpan={9} className="text-center text-sm text-gray-400 py-8">ไม่พบรายชื่อที่ตรงเงื่อนไข</TableCell>
                     </TableRow>
                   )}
                 </TableBody>

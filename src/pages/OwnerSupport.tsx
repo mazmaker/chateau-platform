@@ -6,6 +6,7 @@ import PeriodFilter, { type PeriodKey, DEFAULT_PERIOD } from '@/components/dashb
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { MessageSquare, Clock, CheckCircle2, AlertTriangle, RefreshCw, User } from 'lucide-react';
@@ -48,6 +49,8 @@ const OwnerSupport = () => {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'open' | 'in_progress' | 'resolved'>('open');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [responseDraft, setResponseDraft] = useState<Record<string, string>>({});
+  const [savingResponse, setSavingResponse] = useState(false);
 
   const fetchTickets = async () => {
     setLoading(true);
@@ -78,6 +81,24 @@ const OwnerSupport = () => {
       .eq('id', id);
     if (error) { toast.error('อัปเดตไม่สำเร็จ'); return; }
     toast.success('อัปเดตสถานะแล้ว');
+    fetchTickets();
+  };
+
+  // ตอบกลับ/บันทึกการแก้ไข — เก็บลง context jsonb (ไม่มีคอลัมน์เฉพาะ จึงไม่ต้อง migration)
+  const saveResponse = async (t: Ticket) => {
+    const text = (responseDraft[t.id] ?? '').trim();
+    if (!text) { toast.error('กรุณาพิมพ์ข้อความตอบกลับก่อน'); return; }
+    setSavingResponse(true);
+    const nextContext = { ...(t.context || {}), owner_response: text, responded_at: new Date().toISOString() };
+    // ตอบกลับครั้งแรกบนเรื่องที่ยัง "รอดำเนินการ" → ขยับเป็น "กำลังแก้ไข" อัตโนมัติ
+    const nextStatus: Ticket['status'] = t.status === 'open' ? 'in_progress' : t.status;
+    const { error } = await (supabase as any)
+      .from('support_tickets')
+      .update({ context: nextContext, status: nextStatus })
+      .eq('id', t.id);
+    setSavingResponse(false);
+    if (error) { toast.error('บันทึกการตอบกลับไม่สำเร็จ'); return; }
+    toast.success('บันทึกการตอบกลับแล้ว');
     fetchTickets();
   };
 
@@ -160,7 +181,13 @@ const OwnerSupport = () => {
                   <Card key={t.id} className="overflow-hidden">
                     <button
                       className="w-full text-left p-5 hover:bg-gray-50 transition-colors"
-                      onClick={() => setExpanded(isOpen ? null : t.id)}
+                      onClick={() => {
+                        const willOpen = !isOpen;
+                        setExpanded(willOpen ? t.id : null);
+                        if (willOpen && responseDraft[t.id] === undefined) {
+                          setResponseDraft(prev => ({ ...prev, [t.id]: (t.context?.owner_response as string) || '' }));
+                        }
+                      }}
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
@@ -196,6 +223,34 @@ const OwnerSupport = () => {
                         {t.context?.page && (
                           <p className="text-xs text-gray-400">หน้าที่แจ้ง: <span className="font-mono">{t.context.page}</span></p>
                         )}
+
+                        {/* การตอบกลับ / บันทึกการแก้ไข (เก็บลง context jsonb) */}
+                        <div>
+                          <p className="text-xs font-semibold text-gray-400 uppercase mb-1">การตอบกลับ / บันทึกการแก้ไข</p>
+                          {t.context?.owner_response && (
+                            <div className="mb-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2">
+                              <p className="text-sm text-gray-700 whitespace-pre-wrap">{t.context.owner_response}</p>
+                              {t.context?.responded_at && (
+                                <p className="text-xs text-gray-400 mt-1">
+                                  ตอบเมื่อ {new Date(t.context.responded_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                          <Textarea
+                            value={responseDraft[t.id] ?? ''}
+                            onChange={(e) => setResponseDraft(prev => ({ ...prev, [t.id]: e.target.value }))}
+                            placeholder="พิมพ์คำตอบหรือบันทึกการแก้ไขถึงผู้เช่า..."
+                            rows={3}
+                            className="text-sm bg-white"
+                          />
+                          <div className="mt-2">
+                            <Button size="sm" variant="outline" disabled={savingResponse} onClick={() => saveResponse(t)}>
+                              {savingResponse ? 'กำลังบันทึก...' : (t.context?.owner_response ? 'อัปเดตการตอบกลับ' : 'บันทึกการตอบกลับ')}
+                            </Button>
+                          </div>
+                        </div>
+
                         <div className="flex gap-2 pt-1 flex-wrap">
                           {t.status !== 'in_progress' && t.status !== 'resolved' && (
                             <Button size="sm" variant="outline" onClick={() => updateStatus(t.id, 'in_progress')}>

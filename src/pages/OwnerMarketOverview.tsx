@@ -116,9 +116,7 @@ const OwnerMarketOverview = () => {
   const [tenantNameById, setTenantNameById] = useState<Map<string, string>>(new Map());
   const [tenantStatusById, setTenantStatusById] = useState<Map<string, string>>(new Map());
   const [provById, setProvById] = useState<Map<string, string>>(new Map());
-  const [salesStaffByTenant, setSalesStaffByTenant] = useState<Record<string, number>>({});
   const [tenantPlanById, setTenantPlanById] = useState<Map<string, string>>(new Map());
-  const [expandedCompany, setExpandedCompany] = useState<string | null>(null);
   const [expandedProvince, setExpandedProvince] = useState<string | null>(null);
   const [adoptionModalOpen, setAdoptionModalOpen] = useState(false);
   const [adoptionSearch, setAdoptionSearch] = useState('');
@@ -152,20 +150,16 @@ const OwnerMarketOverview = () => {
       setTenantStatusById(new Map(tList.map((t) => [t.id, t.status || 'active'])));
       setTenantPlanById(new Map(tList.map((t) => [t.id, t.subscription_plan || ''])));
       if (ids.length > 0) {
-        const [uRes, lRes, pRes, sRes] = await Promise.all([
+        const [uRes, lRes, pRes] = await Promise.all([
           supabase.from('units').select('tenant_id, project_id, price, status, sold_at, created_at, unit_type, area_sqm').in('tenant_id', ids),
           supabase.from('leads').select('tenant_id, created_at, status').in('tenant_id', ids),
           supabase.from('properties').select('id, address').in('tenant_id', ids),
-          supabase.from('users').select('tenant_id, role').in('tenant_id', ids).in('role', ['sales', 'agent']),
         ]);
         setUnits((uRes.data || []) as UnitRow[]);
         setLeads((lRes.data || []) as LeadRow[]);
         const pm = new Map<string, string>();
         ((pRes.data || []) as PropRow[]).forEach((p) => { pm.set(p.id, p.address?.province || 'ไม่ระบุ'); });
         setProvById(pm);
-        const staff: Record<string, number> = {};
-        ((sRes.data || []) as { tenant_id: string }[]).forEach((u) => { staff[u.tenant_id] = (staff[u.tenant_id] || 0) + 1; });
-        setSalesStaffByTenant(staff);
       }
     } catch (e) {
       console.error('OwnerMarketOverview fetch error:', e);
@@ -270,35 +264,6 @@ const OwnerMarketOverview = () => {
 
   // Per-company "ปัจจัยการขาย" — descriptive profile (ทำเล/ราคา/ประเภท/ทีมขาย/sell-through)
   // shown when a leaderboard row is expanded. Profile only — NOT a causal explanation.
-  const factorsByTenant = useMemo(() => {
-    const byT = new Map<string, UnitRow[]>();
-    units.forEach((u) => { const a = byT.get(u.tenant_id) || []; a.push(u); byT.set(u.tenant_id, a); });
-    const out = new Map<string, {
-      provinces: string[]; minP: number; maxP: number; avgArea: number;
-      topType: string; sellThrough: number; sold: number; total: number; staff: number;
-    }>();
-    byT.forEach((us, tid) => {
-      const provinces = Array.from(new Set(us.map((u) => provById.get(u.project_id)).filter((p): p is string => !!p && p !== 'ไม่ระบุ')));
-      const priced = us.map((u) => Number(u.price) || 0).filter((n) => n > 0);
-      const areas = us.map((u) => Number(u.area_sqm) || 0).filter((n) => n > 0);
-      const typeCount = new Map<string, number>();
-      us.forEach((u) => { const t = u.unit_type || '–'; typeCount.set(t, (typeCount.get(t) || 0) + 1); });
-      const topTypeRaw = Array.from(typeCount.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || '–';
-      const sold = us.filter((u) => u.status === 'sold').length;
-      out.set(tid, {
-        provinces,
-        minP: priced.length ? Math.min(...priced) : 0,
-        maxP: priced.length ? Math.max(...priced) : 0,
-        avgArea: areas.length ? Math.round(areas.reduce((s, n) => s + n, 0) / areas.length) : 0,
-        topType: TYPE_TH[topTypeRaw] || topTypeRaw,
-        sellThrough: us.length ? Math.round((sold / us.length) * 100) : 0,
-        sold, total: us.length,
-        staff: salesStaffByTenant[tid] || 0,
-      });
-    });
-    return out;
-  }, [units, provById, salesStaffByTenant]);
-
   // Inventory mini-summary — cumulative sell-through + status mix (all units, not period-scoped).
   const inventory = useMemo(() => {
     const total = scopedUnits.length;
@@ -537,8 +502,8 @@ const OwnerMarketOverview = () => {
                         </Pie>
                       </PieChart>
                       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        <div className="text-2xl font-bold tabular-nums leading-none" style={{ color: KK.green }}>{inventory.sellThrough}%</div>
-                        <div className="text-xs text-gray-400 mt-1">Sell-through</div>
+                        <div className="text-2xl font-bold tabular-nums leading-none text-gray-900">{inventory.total.toLocaleString()}</div>
+                        <div className="text-xs text-gray-400 mt-1">ยูนิตในระบบ</div>
                       </div>
                     </div>
                     <div className="flex-1 min-w-0 space-y-2.5">
@@ -550,9 +515,6 @@ const OwnerMarketOverview = () => {
                           <span className="text-xs text-gray-400 w-9 text-right">{Math.round((s.value / inventory.total) * 100)}%</span>
                         </div>
                       ))}
-                      <div className="pt-2 mt-1 border-t border-gray-100">
-                        <span className="text-xs text-gray-400">จาก {inventory.total.toLocaleString()} ยูนิตทั้งหมด</span>
-                      </div>
                     </div>
                   </div>
                 );
@@ -569,7 +531,7 @@ const OwnerMarketOverview = () => {
                     <Trophy className="w-4 h-4 flex-shrink-0" style={{ color: KK.amber }} />
                     <div>
                       <h2 className="text-base font-bold text-gray-900">บริษัทที่ขายผ่านระบบมากสุด</h2>
-                      <p className="text-xs text-gray-500 mt-0.5">Top 5 · มูลค่าขายผ่านระบบมากสุด ({periodRangeLabel(period)}) · กดดูปัจจัย</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Top 5 · มูลค่าขายผ่านระบบมากสุด ({periodRangeLabel(period)}) · กดดูโครงการ</p>
                     </div>
                   </div>
                   <button onClick={() => navigate('/owner-companies')} className="inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap" style={{ color: KK.red }}>
@@ -582,79 +544,36 @@ const OwnerMarketOverview = () => {
                   const maxVal = Math.max(...topCompanies.map((c) => c.soldValue), 1);
                   return (
                     <div className="space-y-1">
-                      {topCompanies.map((c, i) => {
-                        const open = expandedCompany === c.id;
-                        const f = factorsByTenant.get(c.id);
-                        return (
-                          <div key={c.id} className="rounded-lg -mx-2">
-                            {/* Row — click to expand the factor profile in place */}
-                            <div onClick={() => setExpandedCompany(open ? null : c.id)}
-                              className="flex items-center gap-3 cursor-pointer rounded-lg px-2 py-1.5 hover:bg-gray-50 transition-colors group">
-                              <span className="w-5 text-sm font-bold tabular-nums text-gray-300 flex-shrink-0 text-center">{i + 1}</span>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between gap-2 mb-1">
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <span className="text-sm font-semibold text-gray-800 truncate group-hover:text-gray-900">{c.name}</span>
-                                    {(() => { const b = getBadge(tenantStatusById.get(c.id) || 'active'); return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ color: b.color, backgroundColor: b.bg }}>{b.label}</span>; })()}
-                                    {(() => {
-                                      const plan = tenantPlanById.get(c.id) || '';
-                                      if (!plan) return null;
-                                      const label = plan.charAt(0).toUpperCase() + plan.slice(1);
-                                      return (
-                                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 border whitespace-nowrap" style={{ color: '#e11d48', backgroundColor: '#fff', borderColor: '#fda4af' }}>{label}</span>
-                                      );
-                                    })()}
-                                  </div>
-                                  <div className="text-right flex-shrink-0">
-                                    <span className="text-sm font-bold tabular-nums block" style={{ color: KK.red }}>{fmtCompact(c.soldValue)}</span>
-                                    <span className="text-xs text-gray-400">{c.sold} ยูนิต</span>
-                                  </div>
-                                </div>
-                                <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                                  <div className="h-full rounded-full transition-[width] duration-700 ease-out" style={{ width: barsReady ? `${(c.soldValue / maxVal) * 100}%` : '0%', backgroundColor: KK.red }} />
-                                </div>
+                      {topCompanies.map((c, i) => (
+                        <div key={c.id} onClick={() => navigate(`/owner-projects/${c.id}`)}
+                          className="flex items-center gap-3 cursor-pointer rounded-lg px-2 py-1.5 -mx-2 hover:bg-gray-50 transition-colors group">
+                          <span className="w-5 text-sm font-bold tabular-nums text-gray-300 flex-shrink-0 text-center">{i + 1}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="text-sm font-semibold text-gray-800 truncate group-hover:text-gray-900">{c.name}</span>
+                                {(() => { const b = getBadge(tenantStatusById.get(c.id) || 'active'); return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ color: b.color, backgroundColor: b.bg }}>{b.label}</span>; })()}
+                                {(() => {
+                                  const plan = tenantPlanById.get(c.id) || '';
+                                  if (!plan) return null;
+                                  const label = plan.charAt(0).toUpperCase() + plan.slice(1);
+                                  return (
+                                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 border whitespace-nowrap" style={{ color: '#e11d48', backgroundColor: '#fff', borderColor: '#fda4af' }}>{label}</span>
+                                  );
+                                })()}
                               </div>
-                              <ChevronRight className={`w-4 h-4 text-gray-300 flex-shrink-0 group-hover:text-gray-400 transition-transform ${open ? 'rotate-90' : ''}`} />
+                              <div className="text-right flex-shrink-0">
+                                <span className="text-sm font-bold tabular-nums block" style={{ color: KK.red }}>{fmtCompact(c.soldValue)}</span>
+                                <span className="text-xs text-gray-400">{c.sold} ยูนิต</span>
+                              </div>
                             </div>
-
-                            {/* Expanded — descriptive sales-factor profile */}
-                            {open && (
-                              <div className="mx-2 mb-2 mt-1 rounded-xl bg-gray-50 border border-gray-100 p-3.5">
-                                <p className="text-xs font-semibold text-gray-500 mb-2.5">ปัจจัยการขาย <span className="font-normal text-gray-400">· โปรไฟล์ประกอบ ไม่ใช่สาเหตุที่พิสูจน์แล้ว</span></p>
-                                {!f ? (
-                                  <p className="text-xs text-gray-400">ไม่มีข้อมูลยูนิต</p>
-                                ) : (
-                                  <>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                                      {[
-                                        { label: 'ทำเล', value: f.provinces.length ? (f.provinces.length === 1 ? f.provinces[0] : `${f.provinces.length} จังหวัด`) : '–', icon: MapPin, color: KK.green },
-                                        { label: 'ช่วงราคา', value: f.minP > 0 ? `${fmtCompact(f.minP)}–${fmtCompact(f.maxP)}` : '–', icon: TrendingUp, color: KK.red },
-                                        { label: 'ประเภทหลัก', value: f.topType, icon: Building, color: KK.blue },
-                                        { label: 'พื้นที่เฉลี่ย', value: f.avgArea ? `${f.avgArea.toLocaleString()} ตร.ม.` : '–', icon: Layers, color: KK.purple },
-                                        { label: 'ทีมขาย', value: `${f.staff} คน`, icon: UserPlusIcon, color: KK.amber },
-                                        { label: 'Sell-through', value: `${f.sellThrough}%`, icon: Trophy, color: KK.green },
-                                      ].map((x) => (
-                                        <div key={x.label} className="bg-white rounded-lg p-2.5 border border-gray-100">
-                                          <div className="flex items-center gap-1 mb-1">
-                                            <x.icon className="w-3 h-3 flex-shrink-0" style={{ color: x.color }} />
-                                            <span className="text-[11px] text-gray-400">{x.label}</span>
-                                          </div>
-                                          <p className="text-xs font-bold text-gray-800 tabular-nums truncate" title={String(x.value)}>{x.value}</p>
-                                        </div>
-                                      ))}
-                                    </div>
-                                    {f.provinces.length > 1 && <p className="text-[11px] text-gray-400 mt-2 truncate">ทำเล: {f.provinces.join(' · ')}</p>}
-                                    <button onClick={(e) => { e.stopPropagation(); navigate(`/owner-projects/${c.id}`); }}
-                                      className="mt-3 inline-flex items-center gap-1 text-xs font-semibold" style={{ color: KK.red }}>
-                                      ดูโครงการทั้งหมด <ChevronRight className="w-3.5 h-3.5" />
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            )}
+                            <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                              <div className="h-full rounded-full transition-[width] duration-700 ease-out" style={{ width: barsReady ? `${(c.soldValue / maxVal) * 100}%` : '0%', backgroundColor: KK.red }} />
+                            </div>
                           </div>
-                        );
-                      })}
+                          <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0 group-hover:text-gray-400" />
+                        </div>
+                      ))}
                     </div>
                   );
                 })()}

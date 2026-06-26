@@ -20,6 +20,7 @@ import {
 import { PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 import { committedMRR } from '@/lib/mrr';
+import { HealthStatus, NEVER_LOGGED_IN, daysSince, computeHealth, toHealthStatus, trialDaysLeft } from '@/lib/tenantHealth';
 
 // ──────────────────────────────────────────────────────────────────────────
 // ภาพรวมผู้เช่า — SaaS owner view: health, MRR per tenant, trial expiry,
@@ -39,7 +40,6 @@ const kkTooltipStyle = {
   boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: '12px', padding: '8px 12px',
 };
 
-type HealthStatus = 'healthy' | 'at_risk' | 'dormant' | 'churned';
 const HEALTH_META: Record<HealthStatus, { label: string; color: string; bg: string }> = {
   healthy: { label: 'ใช้งานอยู่',    color: KK.green, bg: KK.greenLight },
   at_risk: { label: 'เสี่ยงเลิกใช้', color: KK.amber, bg: KK.amberLight },
@@ -57,32 +57,12 @@ const fmtMRR = (v: number) => {
   return `฿${v.toLocaleString()}`;
 };
 
-const computeHealth = (tenantStatus: string, lastLoginDays: number): number => {
-  if (tenantStatus === 'cancelled') return 0;
-  if (tenantStatus === 'suspended') return 15;
-  // วัดจากวันใช้งานล่าสุดอย่างเดียว — นี่คือสัญญาณ churn ที่แม่นที่สุด
-  let score: number;
-  if (lastLoginDays <= 3)       score = 90;
-  else if (lastLoginDays <= 7)  score = 75;
-  else if (lastLoginDays <= 14) score = 65;
-  else if (lastLoginDays <= 30) score = 50;
-  else if (lastLoginDays <= 60) score = 30;
-  else                          score = 15;
-  return score;
-};
-const toHealthStatus = (score: number): HealthStatus =>
-  score >= 70 ? 'healthy' : score >= 40 ? 'at_risk' : 'dormant';
-
-const daysSince = (dateStr: string | null | undefined): number => {
-  if (!dateStr) return 999;
-  const diff = Date.now() - new Date(dateStr).getTime();
-  return Math.floor(diff / (1000 * 60 * 60 * 24));
-};
-
-const trialDaysLeft = (trial_ends_at: string | null): number | null => {
-  if (!trial_ends_at) return null;
-  return Math.ceil((new Date(trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-};
+// Health scoring (computeHealth/toHealthStatus), daysSince, NEVER_LOGGED_IN and
+// trialDaysLeft now live in @/lib/tenantHealth (single source — shared with the
+// Insights engine). Only the color-coded display helpers stay here (they need KK).
+const loginColorOf = (d: number) => (d <= 14 ? KK.green : d <= 30 ? KK.amber : KK.red);
+const loginLabelOf = (d: number) =>
+  d >= NEVER_LOGGED_IN ? 'ไม่เคยเข้าใช้' : d === 0 ? 'วันนี้' : d === 1 ? 'เมื่อวาน' : `${d} วันก่อน`;
 
 interface TenantRow {
   id: string;
@@ -123,12 +103,15 @@ const OwnerTenantHealth = () => {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [{ data: tenants }, { data: usersList }, { data: projects }, { data: invoices }, { data: planRows }] = await Promise.all([
+      const [{ data: tenants }, { data: usersList }, { data: projects }, { data: invoices }, { data: planRows }, { data: loginRows }] = await Promise.all([
         supabase.from('tenants').select('id, name, subscription_plan, status, trial_ends_at, owner_notes').eq('is_platform' as any, false).order('created_at', { ascending: false }),
-        supabase.from('users').select('id, tenant_id, updated_at'),
+        supabase.from('users').select('id, tenant_id'),
         supabase.from('projects').select('id, tenant_id'),
         supabase.from('invoices').select('tenant_id, amount, paid_at, created_at, status').eq('status', 'paid'),
         supabase.from('plans').select('id, price_monthly'),
+        // last-login จริงต่อ user (auth.users.last_sign_in_at) ผ่าน SECURITY DEFINER RPC —
+        // แหล่งเดียวกับ Executive Dashboard + /users → at-risk / ใช้งานล่าสุด ตรงกันทุกหน้า
+        (supabase as any).rpc('owner_users_last_sign_in'),
       ]);
 
       // Plan list prices from the `plans` catalog (single source — no hardcode drift).
@@ -136,13 +119,18 @@ const OwnerTenantHealth = () => {
       ((planRows || []) as any[]).forEach((p) => { planPrices[p.id] = Number(p.price_monthly) || 0; });
 
       // Build lookup maps
+      // last-login จริงต่อ user — ข้าม user ที่ไม่เคยล็อกอิน (last_sign_in_at = null) ไม่ให้นับเป็น active
+      const loginByUser: Record<string, string> = {};
+      ((loginRows || []) as any[]).forEach((r) => { if (r?.last_sign_in_at) loginByUser[r.id] = r.last_sign_in_at; });
+
       const usersByTenant: Record<string, number> = {};
       const lastActiveByTenant: Record<string, string> = {};
       (usersList || []).forEach((p: any) => {
         if (!p.tenant_id) return;
         usersByTenant[p.tenant_id] = (usersByTenant[p.tenant_id] || 0) + 1;
-        if (!lastActiveByTenant[p.tenant_id] || p.updated_at > lastActiveByTenant[p.tenant_id])
-          lastActiveByTenant[p.tenant_id] = p.updated_at;
+        const login = loginByUser[p.id];
+        if (login && (!lastActiveByTenant[p.tenant_id] || login > lastActiveByTenant[p.tenant_id]))
+          lastActiveByTenant[p.tenant_id] = login;
       });
 
       const projectsByTenant: Record<string, number> = {};
@@ -166,8 +154,9 @@ const OwnerTenantHealth = () => {
       const built: TenantRow[] = (tenants || []).map((t: any) => {
         const users = usersByTenant[t.id] || 0;
         const projs = projectsByTenant[t.id] || 0;
-        const lastDays = daysSince(lastActiveByTenant[t.id]);
-        const health = computeHealth(t.status || 'active', lastDays >= 999 ? 999 : lastDays);
+        const lastLogin = lastActiveByTenant[t.id];                       // undefined = ไม่เคยเข้าใช้
+        const lastDays = lastLogin ? daysSince(lastLogin) : NEVER_LOGGED_IN;
+        const health = computeHealth(t.status || 'active', lastDays);
         return {
           id: t.id,
           name: t.name || t.id,
@@ -176,7 +165,7 @@ const OwnerTenantHealth = () => {
           trial_ends_at: t.trial_ends_at || null,
           users,
           projects: projs,
-          lastLoginDays: lastDays >= 999 ? 0 : lastDays,
+          lastLoginDays: lastDays,
           health,
           healthStatus: t.status === 'cancelled' ? 'churned' : toHealthStatus(health),
           // MRR counts ACTIVE tenants only (committed run-rate) — same population as /owner.
@@ -309,10 +298,10 @@ const OwnerTenantHealth = () => {
 
   // Health signal chips — inline below company name
   const HealthChips = ({ row }: { row: TenantRow }) => {
-    const loginColor = row.lastLoginDays <= 3 ? KK.green : row.lastLoginDays <= 14 ? KK.amber : KK.red;
+    const loginColor = loginColorOf(row.lastLoginDays);
     const userColor  = row.users >= 5 ? KK.green : row.users >= 2 ? KK.amber : KK.red;
     const projColor  = row.projects >= 2 ? KK.green : row.projects >= 1 ? KK.amber : KK.red;
-    const loginLabel = row.lastLoginDays === 0 ? 'วันนี้' : `${row.lastLoginDays} วันก่อน`;
+    const loginLabel = loginLabelOf(row.lastLoginDays);
     return (
       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
         <span className="text-xs font-medium" style={{ color: loginColor }}>{loginLabel}</span>
@@ -374,11 +363,7 @@ const OwnerTenantHealth = () => {
                 value={loading ? '—' : trialExpiringSoon.length.toLocaleString()}
                 sub={trialExpiringSoon.length > 0 ? `${trialExpiringSoon.map(r => r.name.replace(/^บริษัท\s+/, '').split(' ')[0]).slice(0,2).join(', ')}${trialExpiringSoon.length > 2 ? ` +${trialExpiringSoon.length - 2}` : ''}` : 'ไม่มี Trial ที่ใกล้หมด'}
                 icon={Clock} color={KK.red} bg={KK.redLight}
-                onClick={() => {
-                  if (tenantStatusFilter === 'trial') { setTenantStatusFilter('all'); }
-                  else { setTenantStatusFilter('trial'); setStatusFilter('all'); }
-                  setCurrentPage(1);
-                }}
+                onClick={() => navigate('/payments?tab=calendar')}
               />
               <KpiCard
                 title="เสี่ยงเลิกใช้"
@@ -652,10 +637,8 @@ const OwnerTenantHealth = () => {
 
                             {/* ใช้งานล่าสุด — color-coded */}
                             <TableCell>
-                              <span className="text-sm tabular-nums" style={{
-                                color: r.lastLoginDays <= 3 ? KK.green : r.lastLoginDays <= 14 ? KK.amber : KK.red,
-                              }}>
-                                {r.lastLoginDays === 0 ? 'วันนี้' : r.lastLoginDays === 1 ? 'เมื่อวาน' : `${r.lastLoginDays} วันก่อน`}
+                              <span className="text-sm tabular-nums" style={{ color: loginColorOf(r.lastLoginDays) }}>
+                                {loginLabelOf(r.lastLoginDays)}
                               </span>
                             </TableCell>
 

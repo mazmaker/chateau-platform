@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Building2, TrendingUp, Percent, ArrowUpRight, ChevronRight, Search } from 'lucide-react';
+import { Building2, TrendingUp, Percent, ArrowUpRight, ChevronRight, Search, Sparkles } from 'lucide-react';
 import { Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { ResponsiveContainer } from '@/components/charts/SmoothResponsiveContainer';
 import SalesAgentsSection from '@/components/owner/SalesAgentsSection';
@@ -264,7 +264,11 @@ const OwnerCompanies = () => {
                   <KpiCard title="Sell-through รวม" value={`${totals.sellThrough}%`} sub="ขายแล้ว / ทั้งหมด" icon={Percent} color={KK.amber} bg={KK.amberLight} />
                 </div>
 
-                {/* Overview donut: share of sold value by company (เฮีย: ภาพรวมต้องเป็นวงกลม เห็นก้อนใหญ่สุด) */}
+                {/* Overview donut: share of sold value by company. Donut (not a line-per-company)
+                    because lines get unreadable as companies grow. The old right-side legend was
+                    removed — it duplicated the ranking table below (name + value + %); the exact %
+                    now lives in the table's สัดส่วน column, and the donut keeps only a concentration
+                    caption (top company / top-3 share) — an insight the table doesn't give. */}
                 {pieData.length > 0 && (
                   <div className="bg-white border border-gray-100 rounded-2xl shadow-soft p-5">
                     <div className="mb-4">
@@ -282,19 +286,26 @@ const OwnerCompanies = () => {
                           </PieChart>
                         </ResponsiveContainer>
                       </div>
-                      <div className="space-y-2">
-                        {pieData.map((d, i) => (
-                          <div key={i} className="flex items-center justify-between gap-3 text-xs">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: d.color }} />
-                              <span className="truncate text-gray-700">{d.name}</span>
+                      {/* Concentration caption — replaces the duplicate legend; says what the
+                          table can't (how concentrated sales value is in the top companies). */}
+                      <div className="space-y-3">
+                        {(() => {
+                          const grand = totals.soldValue || 1;
+                          const top = rows[0];
+                          const topPct = Math.round((top.soldValue / grand) * 100);
+                          const top3Pct = Math.round((rows.slice(0, 3).reduce((s, r) => s + r.soldValue, 0) / grand) * 100);
+                          return (
+                            <div className="flex items-start gap-2.5 rounded-xl px-4 py-3.5" style={{ backgroundColor: KK.grayLight, border: `1px solid ${KK.border}` }}>
+                              <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: KK.red }} />
+                              <p className="text-sm text-gray-600 leading-relaxed">
+                                <span className="font-semibold text-gray-900">{top.name}</span> ครองยอดขาย{' '}
+                                <span className="font-semibold" style={{ color: KK.red }}>{topPct}%</span> ของแพลตฟอร์ม · 3 บริษัทแรกรวม{' '}
+                                <span className="font-semibold text-gray-900">{top3Pct}%</span> ของมูลค่าขายทั้งหมด
+                              </p>
                             </div>
-                            <div className="flex items-center gap-3 flex-shrink-0 tabular-nums">
-                              <span className="text-gray-900 font-semibold">{fmtCompact(d.value)}</span>
-                              <span className="text-gray-400 w-10 text-right">{d.pct}%</span>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })()}
+                        <p className="text-xs text-gray-400">ดูมูลค่า/สัดส่วนรายบริษัทได้ในตารางด้านล่าง · ชี้ที่วงกลมเพื่อดูตัวเลข</p>
                       </div>
                     </div>
                   </div>
@@ -338,6 +349,7 @@ const OwnerCompanies = () => {
                           <TableHead>บริษัท</TableHead>
                           <TableHead>สถานะ</TableHead>
                           <TableHead className="text-right">มูลค่าขาย</TableHead>
+                          <TableHead className="text-right w-[140px]">สัดส่วน</TableHead>
                           <TableHead className="text-right">ยูนิต (ขาย/ทั้งหมด)</TableHead>
                           <TableHead className="text-right">Sell-through</TableHead>
                           <TableHead className="text-right">Leads</TableHead>
@@ -366,6 +378,20 @@ const OwnerCompanies = () => {
                               })()}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">{fmtCompact(r.soldValue)}</TableCell>
+                            {/* สัดส่วน = % ของมูลค่าขายรวม (ย้ายมาจาก legend วงกลมที่ตัดออก) */}
+                            <TableCell className="text-right">
+                              {(() => {
+                                const pct = totals.soldValue > 0 ? Math.round((r.soldValue / totals.soldValue) * 100) : 0;
+                                return (
+                                  <div className="flex items-center justify-end gap-2">
+                                    <div className="h-1.5 w-16 rounded-full bg-gray-100 overflow-hidden">
+                                      <div className="h-full rounded-full" style={{ width: `${Math.min(100, pct)}%`, background: KK.red }} />
+                                    </div>
+                                    <span className="tabular-nums text-gray-600 w-9 text-right">{pct}%</span>
+                                  </div>
+                                );
+                              })()}
+                            </TableCell>
                             <TableCell className="text-right tabular-nums">{r.sold}/{r.total}</TableCell>
                             <TableCell className="text-right tabular-nums">{r.sellThrough}%</TableCell>
                             <TableCell className="text-right tabular-nums">{r.leads}</TableCell>
@@ -375,7 +401,7 @@ const OwnerCompanies = () => {
                         ))}
                         {paginated.length === 0 && (
                           <TableRow>
-                            <TableCell colSpan={9} className="text-center text-sm text-gray-400 py-8">ไม่พบบริษัทที่ตรงเงื่อนไข</TableCell>
+                            <TableCell colSpan={10} className="text-center text-sm text-gray-400 py-8">ไม่พบบริษัทที่ตรงเงื่อนไข</TableCell>
                           </TableRow>
                         )}
                       </TableBody>
