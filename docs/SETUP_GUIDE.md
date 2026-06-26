@@ -49,6 +49,15 @@ Option 2: Using Supabase CLI (requires Docker)
 ./scripts/setup-supabase.sh
 ```
 
+> ⚠️ **Schema vs data:** the migrations in `supabase/migrations/` recreate the database
+> **structure only** — they do NOT include the demo/seed rows. That data lives in the
+> live Supabase project, not in git. So a brand-new Supabase project will have **empty
+> tables**, and data-driven pages (e.g. Insights, อันดับยอดขาย, dashboards) will render
+> empty until you seed it.
+> - To work with the existing data, point `.env` at the **same Supabase project** the
+>   team already uses (ask a teammate for the URL + anon key — never share via git).
+> - To start fresh, run the migrations above, then seed your own sample rows.
+
 ### Step 3: Start the Application
 
 ```bash
@@ -68,6 +77,24 @@ The app will be available at: http://localhost:5173
 3. Enter your email and password
 4. Verify your email if prompted
 5. You should see the dashboard after successful signup/login
+
+### Step 5: AI-Assisted Development (Claude Code / MCP) — optional
+
+Only needed if you want the same AI tooling the team uses (Supabase / Playwright /
+Context7 / shadcn via Claude Code). The app runs fine without this.
+
+```bash
+# Copy the template, then fill in your own keys
+cp .mcp.json.example .mcp.json
+```
+
+Edit `.mcp.json` and replace the placeholders:
+- `CONTEXT7_API_KEY` → your Context7 key (https://context7.com)
+- supabase `--access-token` → your Supabase **Personal Access Token** (Account → Access Tokens)
+- supabase `--project-ref` → your project ref (the `xxxx` in `https://xxxx.supabase.co`)
+
+> `.mcp.json` is gitignored (it holds live secrets) — never commit it. The Windows
+> config uses `npx.cmd` for the supabase server; on macOS/Linux change it to `npx`.
 
 ## 📋 Next Steps
 
